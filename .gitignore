@@ -1,0 +1,66 @@
+# Binaries
+git-hop
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Build artifacts
+/build/
+dist/
+bin/
+out/
+*.log
+
+# Go build cache
+*.test
+*.tmp
+*.prof
+*.cover
+*.coverprofile
+
+# IDE/project metadata
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# AI/LLM agent tools
+.tlc/
+.opencode/
+.xray
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Dependency/vendor directories (if using go mod vendor)
+vendor/
+
+# Local environment/config caches
+.git-hop/
+.git-hop-cache/
+git-hop-cache/
+tmp/
+
+# Test artifacts
+coverage.out
+coverage.html
+
+# Auto-generated completions or manpages (if any)
+completions/
+manpages/
+
+# Debug files
+debug/
+trace.out
+
+# Docker artifacts
+docker-data/
+*.pid
+
+# Prevent committing local dev overrides
+*.local.json
+*.local.yaml
+*.override.json
+*.override.yaml

@@ -1,0 +1,17 @@
+version: '3'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "${HOP_PORT_WEB}:80"
+    volumes:
+      - "${HOP_VOLUME_WEB_DATA}:/usr/share/nginx/html"
+  db:
+    image: redis:alpine
+    ports:
+      - "${HOP_PORT_DB}:6379"
+    volumes:
+      - "${HOP_VOLUME_DB_DATA}:/data"
+volumes:
+  web_data:
+  db_data:

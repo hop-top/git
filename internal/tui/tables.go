@@ -1,0 +1,43 @@
+package tui
+
+import (
+	"os"
+
+	"github.com/jedib0t/go-pretty/v6/table"
+)
+
+// Table wraps go-pretty table
+type Table struct {
+	t table.Writer
+}
+
+// NewTable creates a new table
+func NewTable(headers []interface{}) *Table {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+
+	// Convert headers to table.Row
+	row := make(table.Row, len(headers))
+	for i, h := range headers {
+		row[i] = h
+	}
+	t.AppendHeader(row)
+
+	// Style
+	t.SetStyle(table.StyleRounded)
+	return &Table{t: t}
+}
+
+// AddRow adds a row
+func (t *Table) AddRow(row ...interface{}) {
+	r := make(table.Row, len(row))
+	for i, v := range row {
+		r[i] = v
+	}
+	t.t.AppendRow(r)
+}
+
+// Render prints the table
+func (t *Table) Render() {
+	t.t.Render()
+}
