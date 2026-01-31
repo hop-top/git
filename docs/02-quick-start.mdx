@@ -1,0 +1,119 @@
+---
+title: Quick Start
+description: Get git-hop running in 5 minutes
+---
+
+# Quick Start
+
+This guide will get you running with git-hop in just a few minutes.
+
+## Create Your First Hub
+
+A *hub* is a directory that contains symlinks to all your worktrees. Create one for any repository:
+
+```bash
+git hop https://github.com/org/repo.git
+```
+
+git-hop will:
+
+1. Detect the server and organization
+2. Create a hub directory in the current working directory
+3. Create a hopspace under `$GIT_HOP_DATA_HOME/org/repo`
+4. Clone the repo into the hopspace (default branch only)
+5. Symlink the worktree back into the hub
+6. Auto-start the environment if services are defined
+
+You'll see output like:
+
+```
+Creating hub for org/repo
+Created hopspace for 'main'
+Worktree: ./org/repo/main
+Ports: 10100-10102
+Services: api, db
+```
+
+## Switch to a Feature Branch
+
+Navigate to the hub and create a worktree for a feature branch:
+
+```bash
+cd org/repo
+git hop feature-x
+```
+
+Output:
+
+```
+Created hopspace for 'feature-x'
+Worktree: ./feature-x
+Ports: 11500-11505
+Services: api, db
+```
+
+## List All Hopspaces
+
+See all your active hopspaces:
+
+```bash
+git hop
+```
+
+Output:
+
+```
+Branch        Path                Status    Ports        Services
+────────────────────────────────────────────────────────────────
+main          ./main              active    10100-10102  api, db
+feature-x     ./feature-x         active    11500-11503  api, db, cache
+```
+
+## Check Status
+
+Get detailed information about the current worktree:
+
+```bash
+cd feature-x
+git hop status
+```
+
+Output:
+
+```
+On branch feature-x
+nothing to commit, working tree clean
+
+Services:
+  api    running  http://localhost:11500
+  db     running  postgresql://localhost:11501
+  cache  running  redis://localhost:11502
+```
+
+## Stop Services
+
+When you're done, stop the environment:
+
+```bash
+git hop env stop
+```
+
+## Remove a Worktree
+
+Clean up a branch you no longer need:
+
+```bash
+git hop remove feature-x
+```
+
+This removes:
+- The worktree
+- Hopspace data
+- Port and volume allocations
+- Containers and networks
+
+## What's Next?
+
+- [Core Concepts](/docs/03-core-concepts) - Learn about hubs, hopspaces, and worktrees
+- [Commands](/docs/04-commands) - Explore all available commands
+- [Configuration](/docs/05-configuration) - Customize git-hop to your needs

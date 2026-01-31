@@ -1,0 +1,325 @@
+---
+title: Commands
+description: Complete reference for all git-hop commands
+---
+
+# Commands
+
+git-hop provides a set of commands for managing hubs, hopspaces, and worktrees.
+
+## git hop `&lt;uri&gt;`
+
+Create a new hub and hopspace for a remote repository.
+
+### Usage
+
+```bash
+git hop &lt;uri&gt; [flags]
+```
+
+### Examples
+
+```bash tab="HTTPS"
+git hop https://github.com/org/repo.git
+```
+
+```bash tab="SSH"
+git hop git@github.com:org/repo.git
+```
+
+```bash tab="File Protocol"
+git hop file:///path/to/local/repo
+```
+
+### What Happens
+
+1. Detects server and organization
+2. Creates hub directory in current working directory
+3. Creates hopspace under `$GIT_HOP_DATA_HOME/org/repo`
+4. Clones repo into hopspace (default branch only)
+5. Symlinks worktree back into hub
+6. Auto-starts environment if services defined
+
+### Output
+
+```
+Creating hub for org/repo
+Created hopspace for 'main'
+Worktree: ./org/repo/main
+Ports: 10100-10102
+Services: api, db
+```
+
+## git hop `&lt;branch&gt;`
+
+Inside a hub: create a worktree for a branch.
+
+### Usage
+
+```bash
+git hop &lt;branch&gt; [flags]
+```
+
+### Examples
+
+```bash
+git hop feature-x
+```
+
+```bash tab="From Remote"
+git hop origin/pr-123
+```
+
+```bash tab="Local Branch"
+git hop my-local-branch
+```
+
+### What Happens
+
+1. Validates current directory is a hub
+2. Creates hopspace (if missing) under `$GIT_HOP_DATA_HOME/org/repo`
+3. Creates worktree for specified branch
+4. Generates deterministic ports and volumes
+5. Auto-starts environment (if configured)
+
+### Output
+
+```
+Created hopspace for 'feature-x'
+Worktree: ./feature-x
+Ports: 11500-11505
+Services: api, db, cache
+```
+
+## git hop
+
+List all hopspaces in the current hub.
+
+### Usage
+
+```bash
+git hop [flags]
+```
+
+### Examples
+
+```bash
+git hop
+```
+
+```bash tab="JSON Format"
+git hop --format json
+```
+
+```bash tab="Raw Format"
+git hop --format raw
+```
+
+### Output
+
+```
+Branch        Path                Status    Ports        Services
+────────────────────────────────────────────────────────────────
+main          ./main              active    10100-10102  api, db
+feature-x     ./feature-x         active    11500-11503  api, db, cache
+```
+
+## git hop status
+
+Show detailed environment state for current worktree.
+
+### Usage
+
+```bash
+git hop status [flags]
+```
+
+### Examples
+
+```bash
+git hop status
+```
+
+### Output
+
+```
+On branch feature-x
+nothing to commit, working tree clean
+
+Services:
+  api    running  http://localhost:11500
+  db     running  postgresql://localhost:11501
+  cache  running  redis://localhost:11502
+```
+
+## git hop env
+
+Control environment services.
+
+### Usage
+
+```bash
+git hop env &lt;subcommand&gt; [flags]
+```
+
+### Subcommands
+
+#### start
+
+Start services for current worktree.
+
+```bash
+git hop env start
+```
+
+Output:
+
+```
+Starting environment for branch: feature-x
+  ✓ api started on port 11500
+  ✓ db started on port 11501
+  ✓ cache started on port 11502
+```
+
+#### stop
+
+Stop services for current worktree.
+
+```bash
+git hop env stop
+```
+
+Output:
+
+```
+Stopping environment...
+  ✓ api stopped
+  ✓ db stopped
+  ✓ cache stopped
+```
+
+#### restart
+
+Restart services for current worktree.
+
+```bash
+git hop env restart
+```
+
+## git hop remove
+
+Remove a hub, hopspace, or branch.
+
+### Usage
+
+```bash
+git hop remove &lt;target&gt; [flags]
+```
+
+### Examples
+
+```bash tab="Remove Branch"
+git hop remove feature-x
+```
+
+```bash tab="Remove Hub"
+cd ..
+git hop remove my-project
+```
+
+```bash tab="Force Remove"
+git hop remove feature-x --force
+```
+
+### What Gets Removed
+
+- Worktree
+- Hopspace data
+- Port and volume allocations
+- Containers
+- Networks
+
+## git hop prune
+
+Remove orphaned or broken hopspaces.
+
+### Usage
+
+```bash
+git hop prune [flags]
+```
+
+### Examples
+
+```bash
+git hop prune
+```
+
+```bash tab="Dry Run"
+git hop prune --dry-run
+```
+
+### What It Does
+
+- Detects worktrees without corresponding Git refs
+- Identifies containers without hopspaces
+- Finds orphaned volumes
+- Cleans up broken symlinks
+
+## git hop doctor
+
+Check for inconsistencies and print diagnostics.
+
+### Usage
+
+```bash
+git hop doctor [flags]
+```
+
+### Examples
+
+```bash
+git hop doctor
+```
+
+### Output
+
+```
+Checking git-hop installation...
+  ✓ git-hop version 0.1.0
+  ✓ Git 2.7.0 or higher
+
+Checking hopspaces...
+  ✓ main: healthy
+  ⚠ feature-x: container stopped
+  ✗ pr-123: missing worktree
+
+Checking resources...
+  ✓ Port allocations: consistent
+  ⚠ Volumes: 2 orphaned volumes found
+
+Run 'git hop prune' to clean up orphaned resources.
+```
+
+## Global Flags
+
+These flags work with all commands:
+
+| Flag | Description |
+|------|-------------|
+| `--json` | Output in JSON format (shorthand for `--format json`) |
+| `--format <format>` | Output format: `table`, `json`, `porcelain`, `raw` |
+| `--quiet, -q` | Suppress output |
+| `--verbose, -v` | Enable verbose output |
+| `--force` | Force operation (use with caution) |
+| `--hub &lt;name|path&gt;` | Specify hub name or path |
+| `--hopspace &lt;name|path&gt;` | Specify hopspace name or path |
+| `--dry-run` | Show what would happen without making changes |
+| `--help, -h` | Show help for command |
+| `--version` | Show git-hop version |
+
+## What's Next?
+
+- [Configuration](/docs/05-configuration) - Learn how to configure git-hop
+- [Workflows](/docs/06-workflows) - See git-hop in action
+- [Integration](/docs/07-integration) - Integrate with other tools

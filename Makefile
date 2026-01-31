@@ -10,7 +10,7 @@ LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DA
 all: build
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) main.go
+	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) .
 
 run: build
 	./$(BINARY_NAME)

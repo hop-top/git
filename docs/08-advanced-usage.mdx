@@ -1,0 +1,293 @@
+---
+title: Advanced Usage
+description: Explore advanced git-hop features
+---
+
+# Advanced Usage
+
+git-hop offers advanced features for power users and complex workflows.
+
+## Custom Hooks
+
+Create custom Git hooks to automate workflows.
+
+### Hook Locations
+
+git-hop looks for hooks in these locations (in priority order):
+
+1. `.git-hop/hooks/` in your worktree
+2. `.git-hop/hooks/` in your hopspace
+3. `$GIT_HOP_CONFIG_HOME/hooks/`
+
+### Example: Pre-Commit Checks
+
+```bash
+# .git-hop/hooks/pre-commit
+#!/bin/bash
+
+# Run linter
+make lint || exit 1
+
+# Run tests
+make test || exit 1
+
+echo "✓ Pre-commit checks passed"
+```
+
+### Example: Post-Environment Start
+
+```bash
+# .git-hop/hooks/post-env-start
+#!/bin/bash
+
+# Install dependencies
+npm install
+
+# Run migrations
+make db-migrate
+
+# Start background services
+npm run dev &
+```
+
+## Port Manual Allocation
+
+Override automatic port allocation for specific branches.
+
+### Per-Branch Port Configuration
+
+```bash tab="hop.json"
+{
+  "ports": {
+    "main": {
+      "web": 8080,
+      "db": 5432,
+      "cache": 6379
+    },
+    "feature-x": {
+      "web": 8081,
+      "db": 5433,
+      "cache": 6380
+    }
+  }
+}
+```
+
+### Port Range Override
+
+```bash tab="hop.json"
+{
+  "port_base": 20000,
+  "port_limit": 10000
+}
+```
+
+This allocates ports from 20000 to 29999.
+
+## Service Templates
+
+Create reusable service configurations.
+
+### Template Variables
+
+Templates support variable substitution:
+
+```bash tab="Template"
+# .git-hop/services.template.yml
+version: '3.8'
+services:
+  ${SERVICE_NAME}:
+    image: ${IMAGE_NAME}:${VERSION}
+    ports:
+      - "${PORT}:80"
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CACHE_URL=${CACHE_URL}
+```
+
+```bash tab="Variables"
+# hop.json
+{
+  "services": {
+    "template": "services.template.yml",
+    "variables": {
+      "SERVICE_NAME": "web",
+      "IMAGE_NAME": "myapp",
+      "VERSION": "latest",
+      "PORT": 8080,
+      "DATABASE_URL": "postgresql://localhost:5432",
+      "CACHE_URL": "redis://localhost:6379"
+    }
+  }
+}
+```
+
+## Cross-Repo Workflows
+
+Work with multiple repositories simultaneously.
+
+### Shared Dependencies
+
+```bash
+# Create hub for main project
+git hop https://github.com/org/main-project.git
+cd main-project
+
+# Create hub for dependency
+cd ..
+git hop https://github.com/org/shared-lib.git
+cd shared-lib
+
+# Both projects have isolated environments
+cd ../main-project
+git hop feature-x
+
+cd ../shared-lib
+git hop bugfix-123
+```
+
+### Service Communication
+
+Configure services to communicate across hopspaces:
+
+```bash tab="Main Project"
+# main-project/hop.json
+{
+  "services": {
+    "main_project": {
+      "ports": {
+        "api": 8080
+      }
+    }
+  }
+}
+```
+
+```bash tab="Dependency"
+# shared-lib/hop.json
+{
+  "services": {
+    "shared_lib": {
+      "ports": {
+        "api": 8081
+      },
+      "environment": {
+        "DEPENDENCY_URL": "http://localhost:8080"
+      }
+    }
+  }
+}
+```
+
+## Troubleshooting
+
+### Debug Mode
+
+Enable verbose logging:
+
+```bash
+export GIT_HOP_LOG_LEVEL=debug
+git hop feature-x
+```
+
+### Check Configuration
+
+Validate your configuration:
+
+```bash
+git hop doctor
+```
+
+### Inspect Hopspace
+
+View hopspace details:
+
+```bash
+cat ~/.local/share/git-hop/github.com/org/my-project/hop.json
+```
+
+### List All Hopspaces
+
+Find all hopspaces across repositories:
+
+```bash
+find ~/.local/share/git-hop -name "hop.json" -exec dirname {} \;
+```
+
+### Orphaned Resources
+
+Clean up orphaned containers and volumes:
+
+```bash
+# Dry run first
+git hop prune --dry-run
+
+# Actual cleanup
+git hop prune
+```
+
+### Port Conflicts
+
+Resolve port conflicts manually:
+
+```bash
+# Check what's using a port
+lsof -i :8080
+
+# Kill the process
+kill -9 <PID>
+
+# Or reallocate ports in hop.json
+vim ~/.local/share/git-hop/github.com/org/my-project/hop.json
+```
+
+### Worktree Corruption
+
+Repair a corrupted worktree:
+
+```bash
+# Remove worktree
+git worktree remove feature-x
+
+# Re-create with git-hop
+cd my-project
+git hop feature-x
+```
+
+## Performance Tips
+
+### Speed Up Environment Creation
+
+1. **Use Docker volumes**: Avoid rebuilding images
+2. **Pre-build images**: Build images once, reuse across branches
+3. **Disable auto-start**: Start services only when needed
+
+```bash tab="Config"
+{
+  "auto_env_start": false
+}
+```
+
+### Reduce Disk Usage
+
+1. **Regular pruning**: Run `git hop prune` regularly
+2. **Shared volumes**: Use named volumes for large data
+3. **Compress logs**: Rotate and compress service logs
+
+### Optimize Docker
+
+```bash tab="docker-compose.yml"
+version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    volumes:
+      - web-data:/app/data  # Use named volume
+    tmpfs:
+      - /tmp              # Use tmpfs for temp files
+```
+
+## What's Next?
+
+- [Reference](/docs/09-reference) - Complete command and config reference
+- [FAQ](/docs/10-faq) - Common questions and answers

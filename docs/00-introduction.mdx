@@ -1,0 +1,65 @@
+---
+title: Introduction
+description: What is git-hop and why should you use it?
+---
+
+# Introduction
+
+git-hop is a Git subcommand that wraps `git worktree` with deterministic, isolated, and reproducible multi-branch development environments.
+
+## Why git-hop?
+
+Git worktrees are powerful, but using them in real projects quickly becomes painful. Most teams don't use them to their full potential because the real-world workflows around worktrees require tedious manual setup, conflicting services, and fragile environments.
+
+If you've ever thought:
+
+- "I wish every branch had its own dev environment"
+- "I need main + feature-x + PR-123 running at the same time"
+- "I'm afraid to clean up worktrees"
+- "Why does every branch need a different `docker-compose.override.yml`?"
+- "Which environment is using port 5437 again?"
+- "Why did this migration break my dev DB?"
+
+Then git-hop is exactly the tool built for you.
+
+## Key Benefits
+
+- **Git-native**: `git hop` behaves like standard Git commands
+- **Isolated environments**: Each branch gets its own ports, volumes, and networks
+- **Deterministic allocation**: Same branch = same ports (reproducible anywhere)
+- **Service orchestration**: Auto-start Docker services when definitions exist
+- **Zero config needed**: Works out of the box for most use cases
+- **Self-healing**: `git hop doctor` detects and fixes inconsistencies
+
+## When to Use git-hop
+
+### ✅ Use git-hop if you want to:
+
+- Run multiple branches simultaneously
+- Test PRs in isolated environments
+- Switch between features without stopping services
+- Collaborate with team members on different branches
+- Maintain clean, reproducible development workflows
+
+### ❌ Don't use git-hop if you need:
+
+- Distributed team coordination (use a platform instead)
+- Production orchestration (use proper devops tools)
+- Multi-tenant setups (git-hop is for local dev only)
+- Remote access to environments (git-hop runs locally)
+
+## Quick Comparison
+
+| Feature | Manual Worktrees | git-hop |
+|---------|-----------------|---------|
+| Port management | Manual, error-prone | Automatic, deterministic |
+| Service isolation | Requires custom scripts | Built-in |
+| Branch switching | Stop/start services | Keep all running |
+| Cleanup | Fear of breaking things | Safe, automatic |
+| Collaboration | Manual coordination | Isolated by default |
+
+## What's Next?
+
+- [Installation Guide](/docs/01-installation) - Get git-hop running on your machine
+- [Quick Start](/docs/02-quick-start) - 5-minute guide to your first hop
+- [Core Concepts](/docs/03-core-concepts) - Understand hubs, hopspaces, and worktrees

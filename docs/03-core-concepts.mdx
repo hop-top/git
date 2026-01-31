@@ -1,0 +1,201 @@
+---
+title: Core Concepts
+description: Understand hubs, hopspaces, and worktrees
+---
+
+# Core Concepts
+
+git-hop builds on Git worktrees with a few key abstractions. Understanding these will help you use git-hop effectively.
+
+## Architecture Overview
+
+```mermaid
+graph TD
+    A[Hub] --> B[Worktree A]
+    A --> C[Worktree B]
+    A --> D[Worktree C]
+    
+    B --> E[Hopspace]
+    C --> E
+    D --> E
+    
+    E --> F[hop.json]
+    E --> G[ports/]
+    E --> H[volumes/]
+    E --> I[services/]
+    
+    G --> J[Port Allocation]
+    H --> K[Volume Allocation]
+    I --> L[Service Orchestration]
+    
+    style A fill:#e1f5e1
+    style E fill:#fff4e1
+    style F fill:#e1f0ff
+```
+
+## Hubs
+
+A *hub* is a directory that acts as the workspace for a single repository. It contains symlinks to all your worktrees, making it easy to switch between branches.
+
+### When to Create a Hub
+
+Create a hub when you:
+- Want to work with a new repository
+- Need to manage multiple branches simultaneously
+- Want a clean, organized workspace
+
+### Hub Structure
+
+```
+my-project/
+  main -> ~/.local/share/git-hop/github.com/org/my-project/main
+  feature-x -> ~/.local/share/git-hop/github.com/org/my-project/feature-x
+  feature-y -> ~/.local/share/git-hop/github.com/org/my-project/feature-y
+  hop.json
+```
+
+### Hub Configuration
+
+Each hub has a `hop.json` file for configuration:
+
+```json
+{
+  "auto_env_start": "detect",
+  "port_base": 10000,
+  "port_limit": 5000
+}
+```
+
+## Hopspaces
+
+A *hopspace* is the canonical storage location for all worktrees of a single repository. It contains the actual git objects, configuration, and service data.
+
+### Location
+
+Hopspaces are stored at:
+
+```
+$GIT_HOP_DATA_HOME/<server>/<org>/<repo>/
+```
+
+Default `$GIT_HOP_DATA_HOME` is `~/.local/share/git-hop`.
+
+### Hopspace Structure
+
+```
+~/.local/share/git-hop/github.com/org/my-project/
+  hop.json
+  ports/
+    main.json
+    feature-x.json
+  volumes/
+    main/
+    feature-x/
+  services/
+    docker-compose.main.yml
+    docker-compose.feature-x.yml
+  main/
+  feature-x/
+```
+
+## Worktrees
+
+A *worktree* is a Git worktree created and managed by git-hop. Each worktree is linked to a branch and has its own isolated environment.
+
+### Worktree Isolation
+
+Each worktree has:
+- **Unique ports**: Deterministic allocation prevents conflicts
+- **Isolated volumes**: Separate data per branch
+- **Independent services**: Run different service versions per branch
+- **Symlinked access**: Accessible via hub for convenience
+
+### Worktree Lifecycle
+
+```mermaid
+stateDiagram-v2
+    [*] --> Created: git hop <branch>
+    Created --> Active: env start
+    Active --> Active: git operations
+    Active --> Stopped: env stop
+    Stopped --> Active: env start
+    Stopped --> Removed: git hop remove
+    Created --> Removed: git hop remove
+    Removed --> [*]
+```
+
+## Deterministic Allocation
+
+git-hop uses stable hashing to allocate resources:
+
+- **Same branch** = **same ports** (reproducible anywhere)
+- **Different branches** = **different ports** (no conflicts)
+- **Predictable allocation** = **no manual config**
+
+### Port Allocation Algorithm
+
+```mermaid
+flowchart TD
+    A[Branch Name] --> B[SHA-256 Hash]
+    B --> C[Modulo port range]
+    C --> D[Port Assignment]
+    D --> E{Port Available?}
+    E -->|Yes| F[Allocated]
+    E -->|No| G[Next Hash Iteration]
+    G --> C
+    
+    style F fill:#c8e6c9
+    style D fill:#fff9c4
+```
+
+### Example
+
+| Branch | Ports |
+|--------|-------|
+| main | 10100-10102 |
+| feature-x | 11500-11502 |
+| pr-123 | 12300-12302 |
+
+The same branch always gets the same ports, even across different machines.
+
+## Services
+
+git-hop automatically detects and orchestrates Docker services when service definitions exist.
+
+### Service Detection
+
+git-hop looks for:
+- `docker-compose.yml`
+- `docker-compose.yaml`
+- `docker-compose.<branch>.yml`
+- `.git-hop/services.yml`
+
+### Service Lifecycle
+
+```bash
+# Auto-start when creating worktree
+git hop feature-x
+
+# Manual start
+git hop env start
+
+# Stop services
+git hop env stop
+
+# Restart
+git hop env restart
+```
+
+### Service Isolation
+
+Each branch gets:
+- **Unique container names**: `my-project-feature-x-db-1`
+- **Isolated networks**: No cross-branch communication
+- **Separate volumes**: Data doesn't leak between branches
+- **Independent lifecycles**: Stop one without affecting others
+
+## What's Next?
+
+- [Commands](/docs/04-commands) - Learn how to use git-hop commands
+- [Configuration](/docs/05-configuration) - Customize behavior
+- [Workflows](/docs/06-workflows) - See git-hop in action

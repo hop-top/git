@@ -1,0 +1,44 @@
+{
+  "$schema": "https://fumadocs.vercel.app/schema.json",
+  "name": "git-hop docs",
+  "logo": {
+    "light": "/logo-light.svg",
+    "dark": "/logo-dark.svg",
+    "text": "git-hop"
+  },
+  "topnav": [
+    {
+      "title": "Docs",
+      "url": "/docs"
+    },
+    {
+      "title": "GitHub",
+      "url": "https://github.com/jadb/git-hop"
+    },
+    {
+      "title": "Releases",
+      "url": "https://github.com/jadb/git-hop/releases"
+    }
+  ],
+  "footer": {
+    "links": [
+      {
+        "title": "Project",
+        "links": [
+          {
+            "title": "GitHub",
+            "url": "https://github.com/jadb/git-hop"
+          },
+          {
+            "title": "Releases",
+            "url": "https://github.com/jadb/git-hop/releases"
+          },
+          {
+            "title": "License",
+            "url": "https://github.com/jadb/git-hop/blob/main/LICENSE"
+          }
+        ]
+      }
+    ]
+  }
+}

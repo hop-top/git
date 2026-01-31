@@ -1,0 +1,399 @@
+---
+title: Reference
+description: Complete command and configuration reference
+---
+
+# Reference
+
+Complete reference for git-hop commands, configuration, and APIs.
+
+## Commands Reference
+
+### Global Flags
+
+| Flag | Type | Description |
+|------|-------|-------------|
+| `--json` | bool | Output in JSON format (shorthand for `--format json`) |
+| `--format &lt;format&gt;` | string | Output format: `table`, `json`, `porcelain`, `raw` |
+| `--quiet, -q` | bool | Suppress output |
+| `--verbose, -v` | bool | Enable verbose output |
+| `--force` | bool | Force operation (use with caution) |
+| `--hub &lt;name|path&gt;` | string | Specify hub name or path |
+| `--hopspace &lt;name|path&gt;` | string | Specify hopspace name or path |
+| `--dry-run` | bool | Show what would happen without making changes |
+| `--help, -h` | bool | Show help for command |
+| `--version` | bool | Show git-hop version |
+
+### git hop `&lt;uri&gt;`
+
+Create a new hub and hopspace.
+
+**Synopsis:**
+```bash
+git hop &lt;uri&gt; [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--hub &lt;name&gt;` | Set custom hub name |
+| `--config &lt;key=value&gt;` | Set config option |
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Invalid URI |
+| 3 | Hub already exists |
+
+### git hop `&lt;branch&gt;`
+
+Create a worktree for a branch.
+
+**Synopsis:**
+```bash
+git hop &lt;branch&gt; [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--create` | Create branch if it doesn't exist |
+| `--force` | Force create even if conflicts exist |
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Not in a hub |
+| 3 | Branch not found |
+
+### git hop
+
+List all hopspaces.
+
+**Synopsis:**
+```bash
+git hop [flags]
+```
+
+**Output Formats:**
+
+Table (default):
+```
+Branch        Path                Status    Ports        Services
+────────────────────────────────────────────────────────────────
+main          ./main              active    10100-10102  api, db
+feature-x     ./feature-x         active    11500-11503  api, db, cache
+```
+
+JSON:
+```json
+[
+  {
+    "branch": "main",
+    "path": "./main",
+    "status": "active",
+    "ports": ["10100", "10101", "10102"],
+    "services": ["api", "db"]
+  }
+]
+```
+
+Porcelain:
+```
+main	./main	active	10100-10102	api, db
+feature-x	./feature-x	active	11500-11503	api, db, cache
+```
+
+### git hop status
+
+Show detailed status of current worktree.
+
+**Synopsis:**
+```bash
+git hop status [flags]
+```
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Not in a hopspace |
+
+### git hop env start
+
+Start environment services.
+
+**Synopsis:**
+```bash
+git hop env start [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--detach, -d` | Run services in detached mode |
+| `--build` | Rebuild images before starting |
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Service start failed |
+| 2 | No services defined |
+
+### git hop env stop
+
+Stop environment services.
+
+**Synopsis:**
+```bash
+git hop env stop [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--remove, -r` | Also remove containers |
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Service stop failed |
+
+### git hop env restart
+
+Restart environment services.
+
+**Synopsis:**
+```bash
+git hop env restart [flags]
+```
+
+Combines stop and start with same flags.
+
+### git hop remove
+
+Remove a hub, hopspace, or branch.
+
+**Synopsis:**
+```bash
+git hop remove &lt;target&gt; [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--force` | Force removal without confirmation |
+| `--all` | Remove all hopspaces in hub |
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Removal failed |
+| 2 | Target not found |
+
+### git hop prune
+
+Remove orphaned hopspaces and resources.
+
+**Synopsis:**
+```bash
+git hop prune [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--dry-run` | Show what would be removed without action |
+| `--force` | Remove without confirmation |
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | Prune failed |
+
+### git hop doctor
+
+Check for inconsistencies.
+
+**Synopsis:**
+```bash
+git hop doctor [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--fix` | Automatically fix issues found |
+
+**Exit Codes:**
+| Code | Description |
+|------|-------------|
+| 0 | Healthy |
+| 1 | Issues found |
+| 2 | Fatal errors |
+
+## Configuration Reference
+
+### hop.json Schema
+
+```json
+{
+  "auto_env_start": boolean | "detect",
+  "port_base": number,
+  "port_limit": number,
+  "ports": object,
+  "volumes": object,
+  "services": object,
+  "docker": object
+}
+```
+
+### Fields
+
+#### auto_env_start
+
+**Type:** `boolean | "detect"`  
+**Default:** `"detect"`
+
+Control automatic environment startup.
+
+| Value | Behavior |
+|-------|----------|
+| `true` | Always start environment |
+| `false` | Never start automatically |
+| `"detect"` | Start only if service config exists |
+
+#### port_base / port_limit
+
+**Type:** `number`  
+**Default:** `10000 / 5000`
+
+Configure port allocation range.
+
+**Example:**
+```json
+{
+  "port_base": 20000,
+  "port_limit": 10000
+}
+```
+Allocates ports from 20000 to 29999.
+
+#### ports
+
+**Type:** `object`
+
+Manual port allocation per branch.
+
+**Example:**
+```json
+{
+  "ports": {
+    "main": {
+      "web": 8080,
+      "db": 5432
+    },
+    "feature-x": {
+      "web": 8081,
+      "db": 5433
+    }
+  }
+}
+```
+
+#### volumes
+
+**Type:** `object`
+
+Named volume definitions.
+
+**Example:**
+```json
+{
+  "volumes": {
+    "main": "myproject_main_db",
+    "feature-x": "myproject_featurex_db"
+  }
+}
+```
+
+#### services
+
+**Type:** `object`
+
+Service configuration.
+
+**Example:**
+```json
+{
+  "services": {
+    "template": "services.template.yml",
+    "variables": {
+      "WEB_IMAGE": "nginx:alpine",
+      "WEB_PORT": 8080
+    }
+  }
+}
+```
+
+#### docker
+
+**Type:** `object`
+
+Docker-specific configuration.
+
+**Fields:**
+| Field | Type | Default | Description |
+|--------|-------|----------|-------------|
+| `compose` | string | `docker-compose` | Docker Compose command |
+| `project_prefix` | string | `git-hop` | Project name prefix |
+| `network` | string | `git-hop` | Default network |
+| `remove_orphans` | boolean | `true` | Remove orphaned containers |
+
+**Example:**
+```json
+{
+  "docker": {
+    "compose": "docker-compose",
+    "project_prefix": "myproject",
+    "network": "myproject",
+    "remove_orphans": true
+  }
+}
+```
+
+## Environment Variables
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `GIT_HOP_DATA_HOME` | Data directory | `$XDG_DATA_HOME/git-hop` |
+| `GIT_HOP_CONFIG_HOME` | Config directory | `$XDG_CONFIG_HOME/git-hop` |
+| `GIT_HOP_CACHE_DIR` | Cache directory | `$XDG_CACHE_HOME/git-hop` |
+| `GIT_HOP_LOG_LEVEL` | Log level | `info` |
+| `GIT_HOP_AUTO_ENV_START` | Auto-start behavior | `detect` |
+
+## Exit Codes
+
+| Code | Description |
+|------|-------------|
+| 0 | Success |
+| 1 | General error |
+| 2 | Invalid input |
+| 3 | Resource not found |
+| 4 | Resource already exists |
+| 5 | Permission denied |
+| 6 | Configuration error |
+| 7 | Service error |
+| 8 | Git error |
+
+## What's Next?
+
+- [FAQ](/docs/10-faq) - Common questions and answers

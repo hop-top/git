@@ -1,0 +1,79 @@
+---
+title: Installation
+description: Install git-hop on your system
+---
+
+# Installation
+
+git-hop is a single binary with minimal dependencies. Get it running in seconds.
+
+## Requirements
+
+- **Git**: 2.7 or higher
+- **Go**: 1.21 or higher (for building from source)
+- **Docker**: Optional (for service orchestration)
+- **Operating System**: Linux, macOS, or Windows
+
+## Install from Source
+
+Build git-hop from source:
+
+```bash
+# Clone the repository
+git clone https://github.com/jadb/git-hop.git
+cd git-hop
+
+# Build the binary
+go build -o git-hop ./cmd/git-hop
+
+# Install to your PATH
+sudo mv git-hop /usr/local/bin/
+```
+
+### Alternative: Install to $HOME
+
+If you don't have sudo access:
+
+```bash
+go build -o git-hop ./cmd/git-hop
+mkdir -p ~/.local/bin
+mv git-hop ~/.local/bin/
+
+# Add to your PATH if not already there
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
+source ~/.bashrc
+```
+
+## Verify Installation
+
+Check that git-hop is installed correctly:
+
+```bash
+git hop --version
+```
+
+Expected output:
+
+```
+git-hop version 0.1.0
+```
+
+## Using git-hop as a Git Subcommand
+
+git-hop installs itself as a Git subcommand. Run it via:
+
+```bash
+git hop [command] [flags]
+```
+
+You can also invoke it directly:
+
+```bash
+git-hop [command] [flags]
+```
+
+Both methods work identically.
+
+## Next Steps
+
+Once installed, check out the [Quick Start](/docs/02-quick-start) guide to create your first hopspace.

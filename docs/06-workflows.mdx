@@ -1,0 +1,275 @@
+---
+title: Workflows
+description: Common git-hop workflows and use cases
+---
+
+# Workflows
+
+git-hop enables several common development workflows. Here's how to use it effectively.
+
+## Multi-Branch Development
+
+Work on multiple branches simultaneously without switching environments.
+
+### Setup
+
+```bash
+# Create hub for your repository
+git hop https://github.com/org/my-project.git
+cd my-project
+
+# Create worktrees for multiple branches
+git hop main
+git hop feature-a
+git hop feature-b
+git hop bugfix-123
+```
+
+### Switch Between Branches
+
+```bash
+# Work on feature-a
+cd feature-a
+# Make changes, run tests
+
+# Switch to feature-b
+cd ../feature-b
+# Work independently, no conflicts
+
+# Check main branch
+cd ../main
+# Verify everything still works
+```
+
+### Benefits
+
+- All environments running simultaneously
+- No service port conflicts
+- Instant branch switching
+- Compare branches side-by-side
+
+## PR Review
+
+Review pull requests in isolated environments.
+
+### Clone PR
+
+```bash
+# Create hub for the repository
+git hop https://github.com/org/my-project.git
+cd my-project
+
+# Create worktree for the PR branch
+git hop origin/pr-123
+
+# Enter the PR environment
+cd pr-123
+```
+
+### Test Changes
+
+```bash
+# Check PR description
+git hop status
+
+# Run tests in isolated environment
+make test
+
+# Start services if needed
+git hop env start
+
+# Test manually
+make test-integration
+```
+
+### Approve Merge
+
+```bash
+# If everything works, approve in GitHub
+gh pr view 123 --web
+
+# Clean up after merge
+cd ..
+git hop remove pr-123
+```
+
+## Collaboration
+
+Multiple developers working on the same repository with isolated environments.
+
+### Developer A: Feature Development
+
+```bash
+# Clone repository
+git hop https://github.com/org/my-project.git
+cd my-project
+
+# Create feature branch
+git hop feature-auth
+
+# Work on feature
+cd feature-auth
+# Make changes, commit
+
+# Push to remote
+git push origin feature-auth
+```
+
+### Developer B: Bug Fix
+
+```bash
+# Clone same repository
+git hop https://github.com/org/my-project.git
+cd my-project
+
+# Create bugfix branch
+git hop bugfix-login
+
+# Work on fix independently
+cd bugfix-login
+# Different ports, no conflicts
+git hop status
+```
+
+### Merging Changes
+
+```bash
+# Developer A pulls latest changes
+cd feature-auth
+git pull origin main
+
+# Merge or rebase
+git rebase main
+
+# Resolve conflicts if needed
+git rebase --continue
+
+# Push updated feature
+git push origin feature-auth --force-with-lease
+```
+
+## Testing
+
+Run tests in isolated environments for each branch.
+
+### Parallel Testing
+
+```bash
+# Create worktrees for multiple branches
+git hop main
+git hop feature-x
+git hop feature-y
+
+# Run tests in parallel
+cd main && make test &
+cd ../feature-x && make test &
+cd ../feature-y && make test &
+wait
+```
+
+### Integration Tests with Services
+
+```bash
+# Branch A: Test with Postgres 14
+cd feature-a
+git hop env start
+# Services started on ports 11500-11502
+make test-integration
+
+# Branch B: Test with Postgres 15
+cd ../feature-b
+git hop env start
+# Services started on ports 12000-12002 (different!)
+make test-integration
+```
+
+## Cleanup
+
+Regularly maintain your hopspaces to save disk space.
+
+### Check Disk Usage
+
+```bash
+# List all hopspaces
+git hop
+
+# Check individual hopspace size
+du -sh ~/.local/share/git-hop/github.com/org/*
+```
+
+### Remove Old Branches
+
+```bash
+# Remove merged branches
+git hop remove feature-x
+
+# Remove all but main
+cd ..
+for branch in $(ls | grep -v main); do
+  git hop remove "$branch"
+done
+```
+
+### Prune Orphaned Resources
+
+```bash
+# Clean up orphaned hopspaces
+git hop prune
+
+# Dry run first
+git hop prune --dry-run
+```
+
+### Check Health
+
+```bash
+# Run diagnostics
+git hop doctor
+
+# Fix issues
+git hop doctor --fix
+```
+
+## Complete Workflow Example
+
+Here's a complete workflow from start to finish:
+
+```bash
+# 1. Create hub for repository
+git hop https://github.com/org/my-project.git
+cd my-project
+
+# 2. Create worktree for new feature
+git hop feature-new-api
+cd feature-new-api
+
+# 3. Start environment
+git hop env start
+
+# 4. Make changes
+# ... edit files ...
+
+# 5. Run tests
+make test
+
+# 6. Commit and push
+git add .
+git commit -m "Add new API endpoint"
+git push origin feature-new-api
+
+# 7. Create PR
+gh pr create --title "Add new API endpoint"
+
+# 8. After merge, clean up
+cd ..
+git hop remove feature-new-api
+
+# 9. Prune orphaned resources
+git hop prune
+```
+
+## What's Next?
+
+- [Integration](/docs/07-integration) - Integrate with other tools
+- [Advanced Usage](/docs/08-advanced-usage) - Explore advanced features
+- [FAQ](/docs/10-faq) - Common questions and answers

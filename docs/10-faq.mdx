@@ -1,0 +1,278 @@
+---
+title: FAQ
+description: Frequently asked questions
+---
+
+# FAQ
+
+Common questions and answers about git-hop.
+
+## General
+
+### What is git-hop?
+
+git-hop is a Git subcommand that wraps `git worktree` with deterministic, isolated, and reproducible multi-branch development environments. It manages ports, volumes, and Docker services automatically.
+
+### Do I need Docker?
+
+Docker is optional for basic git-hop usage. However, if you want automatic service orchestration, Docker is required.
+
+### Is git-hop a replacement for git worktree?
+
+No, git-hop builds on top of git worktree. It enhances worktrees with environment management, resource allocation, and service orchestration.
+
+### Can I use git-hop with existing worktrees?
+
+Yes! git-hop can manage worktrees you've already created. Run `git hop` in a directory with existing worktrees to have git-hop manage them.
+
+## Installation
+
+### How do I install git-hop?
+
+The easiest way is from source:
+
+```bash
+go install github.com/jadb/git-hop@latest
+```
+
+Or build from the repository:
+
+```bash
+git clone https://github.com/jadb/git-hop.git
+cd git-hop
+go build -o git-hop ./cmd/git-hop
+sudo mv git-hop /usr/local/bin/
+```
+
+### What are the requirements?
+
+- Git 2.7 or higher
+- Go 1.21 or higher (for building)
+- Docker (optional, for services)
+
+### Can I install git-hop without Go?
+
+Yes, download pre-built binaries from the [releases page](https://github.com/jadb/git-hop/releases).
+
+## Usage
+
+### How do ports get allocated?
+
+Ports are allocated using a deterministic hashing algorithm based on the branch name. The same branch always gets the same ports, even across different machines.
+
+```bash
+# Same branch = same ports
+git hop feature-x  # Gets ports 11500-11502
+git hop feature-x  # Still gets ports 11500-11502
+```
+
+### Can I manually set ports?
+
+Yes! Configure them in `hop.json`:
+
+```json
+{
+  "ports": {
+    "feature-x": {
+      "web": 8080,
+      "db": 5432
+    }
+  }
+}
+```
+
+### What if there's a port conflict?
+
+git-hop automatically detects conflicts and allocates alternative ports. Run `git hop doctor` to check for issues.
+
+### How do I clean up old branches?
+
+```bash
+# Remove a specific branch
+git hop remove feature-x
+
+# Prune all orphaned hopspaces
+git hop prune
+```
+
+## Troubleshooting
+
+### git hop command not found
+
+Make sure git-hop is in your PATH:
+
+```bash
+# Check installation
+which git-hop
+
+# Add to PATH if needed
+export PATH="$PATH:/usr/local/bin"
+
+# Verify
+git hop --version
+```
+
+### Environment won't start
+
+Check Docker is running:
+
+```bash
+docker ps
+
+# Start Docker
+sudo systemctl start docker  # Linux
+open -a Docker            # macOS
+```
+
+Then check service configuration:
+
+```bash
+cd your-branch
+cat hop.json
+git hop doctor
+```
+
+### Services are conflicting
+
+Ensure each branch has unique ports:
+
+```bash
+git hop
+# Check ports column for duplicates
+```
+
+If conflicts exist, manually configure in `hop.json` or run:
+
+```bash
+git hop prune --force
+```
+
+### Worktree is broken
+
+Repair a corrupted worktree:
+
+```bash
+# Remove the broken worktree
+git worktree remove feature-x
+
+# Re-create with git-hop
+cd my-project
+git hop feature-x
+```
+
+## Performance
+
+### Does git-hop slow down Git operations?
+
+No, git-hop is very lightweight. It only adds minimal overhead for resource allocation and service management.
+
+### How much disk space does git-hop use?
+
+Each hopspace shares the git object database with the hub. Only working files are duplicated, typically 10-100MB per branch.
+
+### Can I limit disk usage?
+
+Yes! Regular pruning and shared volumes help:
+
+```bash
+# Regular pruning
+git hop prune
+
+# Use shared volumes
+# In hop.json:
+{
+  "volumes": {
+    "shared": "myproject_data"
+  }
+}
+```
+
+## Advanced
+
+### Can I use git-hop in CI/CD?
+
+Yes! git-hop works great in CI/CD pipelines:
+
+```yaml
+# GitHub Actions
+- name: Install git-hop
+  run: go install github.com/jadb/git-hop@latest
+  
+- name: Create environment
+  run: |
+    git hop origin/main
+    cd main
+    git hop env start
+    make test
+```
+
+### Can I integrate git-hop with my editor?
+
+Yes! git-hop works with all editors. Configure your editor to recognize worktrees:
+
+**VS Code:**
+```json
+{
+  "git.openRepositoryInParentFolders": "always"
+}
+```
+
+**Vim/Neovim:**
+```vim
+autocmd BufEnter * silent! lcd %:p:h:gs/^.*my-project\///:h
+```
+
+### Can I use custom hooks?
+
+Yes! git-hop supports custom Git hooks:
+
+```bash
+# .git-hop/hooks/post-env-start
+#!/bin/bash
+npm install
+make db-migrate
+```
+
+See [Integration](/docs/07-integration) for more details.
+
+## Security
+
+### Is git-hop safe?
+
+Yes! git-hop only manages local resources and doesn't expose any network services. All operations run on your local machine.
+
+### Does git-hop access my Git credentials?
+
+git-hop uses your existing Git configuration. It doesn't store or access credentials directly—it delegates all Git operations to your installed git binary.
+
+### Can I use git-hop with private repositories?
+
+Yes! git-hop works with any Git repository, public or private. It uses your existing Git authentication.
+
+## Support
+
+### Where can I get help?
+
+- [GitHub Issues](https://github.com/jadb/git-hop/issues) - Report bugs
+- [GitHub Discussions](https://github.com/jadb/git-hop/discussions) - Ask questions
+- [Documentation](/docs) - Full documentation
+
+### How do I report a bug?
+
+When reporting bugs, include:
+
+1. git-hop version (`git hop --version`)
+2. Operating system
+3. Steps to reproduce
+4. Error messages
+5. `git hop doctor` output
+
+### How can I contribute?
+
+Contributions are welcome! See the [contributing guide](https://github.com/jadb/git-hop/blob/main/CONTRIBUTING.md) on GitHub.
+
+## What's Next?
+
+- [Introduction](/docs/00-introduction) - Start here if you're new
+- [Quick Start](/docs/02-quick-start) - Get running in 5 minutes
+- [Workflows](/docs/06-workflows) - Common use cases
