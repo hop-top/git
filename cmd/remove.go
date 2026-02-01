@@ -29,8 +29,9 @@ var removeCmd = &cobra.Command{
 		}
 
 		// Check if we are in a hub
-		if hop.IsHub(fs, cwd) {
-			hub, err := hop.LoadHub(fs, cwd)
+		hubPath, err := hop.FindHub(fs, cwd)
+		if err == nil {
+			hub, err := hop.LoadHub(fs, hubPath)
 			if err != nil {
 				output.Fatal("Failed to load hub: %v", err)
 			}

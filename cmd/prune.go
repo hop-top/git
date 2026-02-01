@@ -21,9 +21,10 @@ var pruneCmd = &cobra.Command{
 			output.Fatal("Failed to get current directory: %v", err)
 		}
 
-		if hop.IsHub(fs, cwd) {
-			output.Info("Pruning Hub at %s...", cwd)
-			hub, err := hop.LoadHub(fs, cwd)
+		hubPath, err := hop.FindHub(fs, cwd)
+		if err == nil {
+			output.Info("Pruning Hub at %s...", hubPath)
+			hub, err := hop.LoadHub(fs, hubPath)
 			if err != nil {
 				output.Fatal("Failed to load hub: %v", err)
 			}

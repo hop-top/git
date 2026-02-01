@@ -131,6 +131,34 @@ func TestCommands(t *testing.T) {
 		}
 	})
 
+	// --- Test: Commands from within worktree ---
+	t.Run("CommandsFromWorktree", func(t *testing.T) {
+		// Add feature-2 for this test
+		env.RunGitHop(t, env.HubPath, "add", "feature-2")
+
+		// Navigate to the worktree symlink and run commands from there
+		feature2Path := filepath.Join(env.HubPath, "feature-2")
+
+		// Test: git hop list from within worktree
+		out := env.RunGitHop(t, feature2Path, "list")
+		if !strings.Contains(out, "feature-2") {
+			t.Errorf("List from worktree should work: %s", out)
+		}
+		if !strings.Contains(out, "main") {
+			t.Errorf("List from worktree should show main: %s", out)
+		}
+
+		// Test: git hop status from within worktree
+		out = env.RunGitHop(t, feature2Path, "status")
+		if !strings.Contains(out, "Hub:") {
+			t.Errorf("Status from worktree should show hub info: %s", out)
+		}
+
+		// The key success is that these commands found the hub
+		// from within the worktree directory, which proves FindHub works
+		// If FindHub didn't work, we would get "Not in a git-hop hub" error
+	})
+
 	// --- Test: git hop <uri> --branch main (Fork-Attach from main) ---
 	t.Run("ForkAttachMain", func(t *testing.T) {
 		// Create a fork repo

@@ -32,12 +32,13 @@ var addCmd = &cobra.Command{
 			output.Fatal("Failed to get current directory: %v", err)
 		}
 
-		// Detect if we are in a hub
-		if !hop.IsHub(fs, cwd) {
+		// Find the hub by searching up the directory tree
+		hubPath, err := hop.FindHub(fs, cwd)
+		if err != nil {
 			output.Fatal("Not in a git-hop hub. Please run 'git hop <uri>' to clone first, or initialize a hub.")
 		}
 
-		hub, err := hop.LoadHub(fs, cwd)
+		hub, err := hop.LoadHub(fs, hubPath)
 		if err != nil {
 			output.Fatal("Failed to load hub: %v", err)
 		}

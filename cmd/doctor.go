@@ -25,9 +25,10 @@ var doctorCmd = &cobra.Command{
 		issuesFound := false
 
 		// Check Hub
-		if hop.IsHub(fs, cwd) {
-			output.Info("Checking Hub at %s...", cwd)
-			hub, err := hop.LoadHub(fs, cwd)
+		hubPath, err := hop.FindHub(fs, cwd)
+		if err == nil {
+			output.Info("Checking Hub at %s...", hubPath)
+			hub, err := hop.LoadHub(fs, hubPath)
 			if err != nil {
 				output.Error("Failed to load hub config: %v", err)
 				issuesFound = true

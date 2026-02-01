@@ -83,8 +83,9 @@ Worktree Mode:
 				if branch != "" {
 					// Fork-Attach Mode (Inside Repo + URI + Branch)
 					// Check if we are in a hub
-					if hop.IsHub(fs, cwd) {
-						if err := hop.ForkAttach(fs, g, arg, branch, cwd); err != nil {
+					hubPath, err := hop.FindHub(fs, cwd)
+					if err == nil {
+						if err := hop.ForkAttach(fs, g, arg, branch, hubPath); err != nil {
 							output.Fatal("Fork-Attach failed: %v", err)
 						}
 						return

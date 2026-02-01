@@ -31,16 +31,18 @@ var statusCmd = &cobra.Command{
 
 		if len(args) > 0 {
 			target := args[0]
-			if hop.IsHub(fs, cwd) {
-				showTargetStatus(fs, d, cwd, target)
+			hubPath, err := hop.FindHub(fs, cwd)
+			if err == nil {
+				showTargetStatus(fs, d, hubPath, target)
 				return
 			}
 			output.Fatal("Target status only available inside a hub")
 		}
 
 		// Check context
-		if hop.IsHub(fs, cwd) {
-			showHubStatus(fs, cwd)
+		hubPath, err := hop.FindHub(fs, cwd)
+		if err == nil {
+			showHubStatus(fs, hubPath)
 			return
 		}
 
