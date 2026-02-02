@@ -50,11 +50,7 @@ func Clone(fs afero.Fs, g *git.Git, uri, hubPath string) error {
 		return fmt.Errorf("could not parse org/repo from URI: %s", uri)
 	}
 
-	dataHome := os.Getenv("GIT_HOP_DATA_HOME")
-	if dataHome == "" {
-		home, _ := os.UserHomeDir()
-		dataHome = filepath.Join(home, ".local", "share", "git-hop")
-	}
+	dataHome := GetGitHopDataHome()
 	hopspacePath := GetHopspacePath(dataHome, org, repo)
 
 	output.Info("Cloning %s...", uri)

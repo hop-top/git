@@ -135,11 +135,7 @@ func showTargetStatus(fs afero.Fs, d *docker.Docker, hubPath, target string) {
 	output.Info("Worktree: %s", branch.Path)
 
 	// Load ports
-	dataHome := os.Getenv("GIT_HOP_DATA_HOME")
-	if dataHome == "" {
-		home, _ := os.UserHomeDir()
-		dataHome = filepath.Join(home, ".local", "share", "git-hop")
-	}
+	dataHome := hop.GetGitHopDataHome()
 	hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 	portsLoader := config.NewLoader(fs)

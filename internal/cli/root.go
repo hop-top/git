@@ -171,14 +171,17 @@ func initConfig() {
 }
 
 func setupOutputMode() {
-	output.Verbose = verbose
+	var mode output.Mode
 	if jsonOut {
-		output.CurrentMode = output.ModeJSON
+		mode = output.ModeJSON
 	} else if porcelain {
-		output.CurrentMode = output.ModePorcelain
+		mode = output.ModePorcelain
 	} else if quiet {
-		output.CurrentMode = output.ModeQuiet
+		mode = output.ModeQuiet
 	} else {
-		output.CurrentMode = output.ModeHuman
+		mode = output.ModeHuman
 	}
+
+	// Setup the logger with charmbracelet/log
+	output.SetupLogger(mode, verbose)
 }

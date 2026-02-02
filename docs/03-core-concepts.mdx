@@ -78,7 +78,10 @@ Hopspaces are stored at:
 $GIT_HOP_DATA_HOME/<server>/<org>/<repo>/
 ```
 
-Default `$GIT_HOP_DATA_HOME` is `~/.local/share/git-hop`.
+Default `$GIT_HOP_DATA_HOME` by OS:
+- **Linux/Unix**: `~/.local/share/git-hop`
+- **macOS**: `~/Library/Application Support/git-hop`
+- **Windows**: `%LOCALAPPDATA%\git-hop`
 
 ### Hopspace Structure
 
@@ -196,6 +199,6 @@ Each branch gets:
 
 ## What's Next?
 
-- [Commands](/docs/04-commands) - Learn how to use git-hop commands
-- [Configuration](/docs/05-configuration) - Customize behavior
-- [Workflows](/docs/06-workflows) - See git-hop in action
+- [Commands](./04-commands) - Learn how to use git-hop commands
+- [Configuration](./05a-basics) - Customize behavior
+- [Workflows](./06-workflows) - See git-hop in action

@@ -1,9 +1,9 @@
 ---
-title: Configuration
-description: Configure git-hop to your needs
+title: Configuration Basics
+description: Core configuration options for git-hop
 ---
 
-# Configuration
+# Configuration Basics
 
 git-hop is configured through a hierarchical system of configuration files and environment variables.
 
@@ -42,17 +42,13 @@ export GIT_HOP_CONFIG_HOME="$HOME/.config/git-hop"
 export GIT_HOP_CACHE_DIR="$HOME/.cache/git-hop"
 ```
 
-### Logging
-
-```bash
-export GIT_HOP_LOG_LEVEL="info"  # debug, info, warn, error
-```
-
 ### Service Control
 
 ```bash
 export GIT_HOP_AUTO_ENV_START="detect"  # true, false, detect
 ```
+
+For logging configuration, see [Logging](./05b-logging).
 
 ## Global Configuration
 
@@ -63,7 +59,6 @@ Create a global configuration file at `$GIT_HOP_CONFIG_HOME/global.json`:
   "auto_env_start": "detect",
   "port_base": 10000,
   "port_limit": 5000,
-  "log_level": "info",
   "docker": {
     "compose": "docker-compose",
     "network": "git-hop"
@@ -131,7 +126,7 @@ Control automatic environment startup:
 |-------|----------|
 | `true` | Always start environment when creating worktree |
 | `false` | Never start environment automatically |
-| `detect` (default) | Start only if service config exists |
+| `"detect"` (default) | Start only if service config exists |
 
 ### port_base / port_limit
 
@@ -145,17 +140,6 @@ Configure port allocation range:
 ```
 
 This allocates ports from `10000` to `14999`.
-
-### log_level
-
-Set logging verbosity:
-
-| Level | Description |
-|-------|-------------|
-| `debug` | Detailed output for troubleshooting |
-| `info` | Normal operational messages |
-| `warn` | Warnings and errors only |
-| `error` | Errors only |
 
 ## Docker Configuration
 
@@ -241,7 +225,6 @@ Optimized for CI/CD:
 ```json
 {
   "auto_env_start": true,
-  "log_level": "info",
   "docker": {
     "remove_orphans": true,
     "timeout": 300
@@ -265,6 +248,6 @@ This will:
 
 ## What's Next?
 
-- [Workflows](/docs/06-workflows) - See configuration in action
-- [Integration](/docs/07-integration) - Integrate with other tools
-- [Advanced Usage](/docs/08-advanced-usage) - Deep dive into configuration
+- [Logging](./05b-logging) - Configure logging and output
+- [Workflows](./06-workflows) - See configuration in action
+- [Integration](./07-integration) - Integrate with other tools

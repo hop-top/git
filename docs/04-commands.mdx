@@ -268,7 +268,7 @@ git hop prune --dry-run
 
 ## git hop doctor
 
-Check for inconsistencies and print diagnostics.
+Check for inconsistencies and print diagnostics. Use `--fix` to automatically repair issues.
 
 ### Usage
 
@@ -282,24 +282,55 @@ git hop doctor [flags]
 git hop doctor
 ```
 
+```bash tab="Auto-fix Issues"
+git hop doctor --fix
+```
+
+### What It Checks
+
+- Path configuration (data, config, cache directories)
+- Hub configuration and symlinks
+- Hopspace existence and consistency
+- Orphaned worktrees
+
 ### Output
 
 ```
-Checking git-hop installation...
-  ✓ git-hop version 0.1.0
-  ✓ Git 2.7.0 or higher
+Running git-hop diagnostics...
 
-Checking hopspaces...
-  ✓ main: healthy
-  ⚠ feature-x: container stopped
-  ✗ pr-123: missing worktree
+=== Checking Paths ===
+Data home:   /home/user/.local/share/git-hop
+Config home: /home/user/.config
+Cache home:  /home/user/.cache
 
-Checking resources...
-  ✓ Port allocations: consistent
-  ⚠ Volumes: 2 orphaned volumes found
+=== Checking Hub ===
+Hub found at: /projects/my-repo
+Expected hopspace: /home/user/.local/share/git-hop/org/repo
+✓ Hopspace exists
 
-Run 'git hop prune' to clean up orphaned resources.
+=== Summary ===
+✓ No issues found. Your git-hop installation is healthy!
 ```
+
+### Auto-fix
+
+When issues are found, use `--fix` to automatically repair them:
+
+```bash
+git hop doctor --fix
+```
+
+The `--fix` flag will:
+- Create missing directories
+- Initialize missing hopspaces
+- Register branches from hub to hopspace
+- Sync hub-hopspace configurations
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--fix` | Automatically fix issues |
 
 ## Global Flags
 
@@ -320,6 +351,6 @@ These flags work with all commands:
 
 ## What's Next?
 
-- [Configuration](/docs/05-configuration) - Learn how to configure git-hop
-- [Workflows](/docs/06-workflows) - See git-hop in action
-- [Integration](/docs/07-integration) - Integrate with other tools
+- [Configuration](./05a-basics) - Learn how to configure git-hop
+- [Workflows](./06-workflows) - See git-hop in action
+- [Integration](./07-integration) - Integrate with other tools

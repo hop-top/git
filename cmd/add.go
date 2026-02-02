@@ -47,11 +47,7 @@ var addCmd = &cobra.Command{
 		// We need to know where the hopspace is.
 		// The hub config should have the repo info to derive it, or we can look at an existing branch.
 		// But wait, the hub config has `Repo` info.
-		dataHome := os.Getenv("GIT_HOP_DATA_HOME")
-		if dataHome == "" {
-			home, _ := os.UserHomeDir()
-			dataHome = filepath.Join(home, ".local", "share", "git-hop")
-		}
+		dataHome := hop.GetGitHopDataHome()
 
 		hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 		hopspace, err := hop.LoadHopspace(fs, hopspacePath)

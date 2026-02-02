@@ -38,11 +38,7 @@ var listCmd = &cobra.Command{
 			t := tui.NewTable([]interface{}{"Branch", "Path", "Status", "Ports", "Services"})
 
 			// Load ports config
-			dataHome := os.Getenv("GIT_HOP_DATA_HOME")
-			if dataHome == "" {
-				home, _ := os.UserHomeDir()
-				dataHome = filepath.Join(home, ".local", "share", "git-hop")
-			}
+			dataHome := hop.GetGitHopDataHome()
 			hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 			portsLoader := config.NewLoader(fs)
@@ -87,11 +83,7 @@ var listCmd = &cobra.Command{
 		// TODO: List all hubs/hopspaces if not in a hub
 		output.Info("Not in a hub. Listing all hopspaces...")
 
-		dataHome := os.Getenv("GIT_HOP_DATA_HOME")
-		if dataHome == "" {
-			home, _ := os.UserHomeDir()
-			dataHome = filepath.Join(home, ".local", "share", "git-hop")
-		}
+		dataHome := hop.GetGitHopDataHome()
 
 		// Walk dataHome to find hopspaces
 		// This is a bit expensive, but fine for list.

@@ -1,0 +1,179 @@
+---
+title: Logging
+description: Configure logging and output modes
+---
+
+# Logging in git-hop
+
+git-hop uses [charmbracelet/log](https://github.com/charmbracelet/log) for beautiful, structured logging with a Git-like style.
+
+## Log Levels
+
+git-hop supports the following log levels:
+
+- **debug** - Detailed diagnostic information
+- **info** - General informational messages (default)
+- **warn** - Warning messages
+- **error** - Error messages
+- **fatal** - Fatal errors that cause program exit
+
+## Configuration
+
+### Environment Variable
+
+Set the log level using the `GIT_HOP_LOG_LEVEL` environment variable:
+
+```bash
+export GIT_HOP_LOG_LEVEL=debug
+git hop doctor
+```
+
+Supported values: `debug`, `info`, `warn`, `warning`, `error`, `fatal`
+
+### Command-Line Flags
+
+Use the `--verbose` or `-v` flag for debug-level logging:
+
+```bash
+git hop --verbose doctor
+```
+
+Use the `--quiet` or `-q` flag to suppress all output except errors:
+
+```bash
+git hop --quiet doctor
+```
+
+## Output Modes
+
+git-hop supports different output modes:
+
+### Human Mode (Default)
+
+Clean, Git-like output for humans:
+
+```
+✓ Hopspace exists
+error: failed to create worktree
+```
+
+### JSON Mode
+
+Structured JSON output for automation:
+
+```bash
+git hop --json doctor
+```
+
+Output:
+```json
+{"level":"error","msg":"failed to create worktree"}
+```
+
+### Porcelain Mode
+
+Machine-readable, stable output format:
+
+```bash
+git hop --format porcelain status
+```
+
+### Quiet Mode
+
+Suppress all non-error output:
+
+```bash
+git hop --quiet doctor
+```
+
+## Structured Logging (For Developers)
+
+When developing git-hop commands, you can use structured logging with fields:
+
+```go
+import "github.com/jadb/git-hop/internal/output"
+
+// Basic logging
+output.Info("Creating worktree")
+output.Debug("Verbose information")
+output.Error("Operation failed: %s", err)
+
+// Structured logging with fields
+logger := output.WithFields(map[string]interface{}{
+    "branch": "feature-x",
+    "repo":   "my-repo",
+})
+logger.Info("worktree created")
+
+// Single field
+output.WithField("port", 8080).Info("service started")
+
+// Chaining fields
+output.WithField("service", "api").
+    With("status", "running").
+    Info("health check passed")
+```
+
+### Available Functions
+
+- `output.Info(msg, args...)` - Info-level message (human mode only)
+- `output.Debug(msg, args...)` - Debug-level message (verbose mode only)
+- `output.Warn(msg, args...)` - Warning message
+- `output.Error(msg, args...)` - Error message (goes to stderr)
+- `output.Fatal(msg, args...)` - Fatal error and exit
+- `output.Success(msg, args...)` - Success message
+
+### Structured Logging Functions
+
+- `output.WithField(key, value)` - Add a single field
+- `output.WithFields(map[string]interface{})` - Add multiple fields
+- `output.GetLogger()` - Get the underlying charmbracelet/log logger
+
+## Examples
+
+### Debug Logging
+
+```bash
+GIT_HOP_LOG_LEVEL=debug git hop add feature-x
+```
+
+### JSON Output for CI/CD
+
+```bash
+git hop --json status | jq .
+```
+
+### Quiet Mode for Scripts
+
+```bash
+if git hop --quiet doctor; then
+    echo "Healthy"
+else
+    echo "Issues found"
+fi
+```
+
+## Git-like Styling
+
+git-hop maintains Git's minimal, professional aesthetic:
+
+- Errors use `error:` prefix and go to stderr
+- Fatal errors use `fatal:` prefix and exit with code 1
+- Info messages have no prefix in human mode
+- Debug messages use `debug:` prefix in verbose mode
+- Colors are minimal and consistent with Git
+
+## Best Practices
+
+1. **Use Info for user-facing messages** in human mode
+2. **Use Debug for diagnostic information** that helps troubleshoot issues
+3. **Use Error for recoverable errors** that don't stop execution
+4. **Use Fatal for unrecoverable errors** that require exit
+5. **Use structured logging** when context is important (branch, repo, etc.)
+6. **Respect the current mode** - don't output info in JSON/porcelain mode
+
+## See Also
+
+- [charmbracelet/log documentation](https://github.com/charmbracelet/log)
+- [Output modes documentation](./09-reference#output-modes)
+- [Environment variables](./09-reference#environment-variables)

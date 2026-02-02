@@ -54,7 +54,16 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		return err
 	}
 
-	if err := registerProject(fs, org, repo, defaultBranch, filepath.Join(projectRoot, "main")); err != nil {
+	// Initialize hopspace in data directory
+	dataHome := GetGitHopDataHome()
+	hopspacePath := GetHopspacePath(dataHome, org, repo)
+	mainWorktreePath := filepath.Join(projectRoot, "main")
+
+	if err := initializeHopspace(fs, hopspacePath, uri, org, repo, defaultBranch, mainWorktreePath); err != nil {
+		return fmt.Errorf("failed to initialize hopspace: %v", err)
+	}
+
+	if err := registerProject(fs, org, repo, defaultBranch, mainWorktreePath); err != nil {
 		fmt.Printf("Warning: failed to register in global registry: %v\n", err)
 	}
 
@@ -161,5 +170,22 @@ func registerProject(fs afero.Fs, org, repo, branch, worktreePath string) error 
 
 	fmt.Printf("Registered in global registry: %s:%s\n", repoKey, branch)
 
+	return nil
+}
+
+// initializeHopspace creates the hopspace directory structure and config
+func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch, worktreePath string) error {
+	// Use InitHopspace function which creates the directory and config
+	hopspace, err := InitHopspace(fs, hopspacePath, uri, org, repo, defaultBranch)
+	if err != nil {
+		return fmt.Errorf("failed to initialize hopspace: %w", err)
+	}
+
+	// Register the initial branch (main) in the hopspace
+	if err := hopspace.RegisterBranch(defaultBranch, worktreePath); err != nil {
+		return fmt.Errorf("failed to register default branch: %w", err)
+	}
+
+	fmt.Printf("Initialized hopspace at %s\n", hopspacePath)
 	return nil
 }

@@ -31,11 +31,7 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 		return fmt.Errorf("could not parse org/repo from URI: %s", uri)
 	}
 
-	dataHome := os.Getenv("GIT_HOP_DATA_HOME")
-	if dataHome == "" {
-		home, _ := os.UserHomeDir()
-		dataHome = filepath.Join(home, ".local", "share", "git-hop")
-	}
+	dataHome := GetGitHopDataHome()
 	forkHopspacePath := GetHopspacePath(dataHome, org, repo)
 
 	output.Info("Attaching fork branch %s from %s...", branch, uri)

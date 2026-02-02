@@ -64,7 +64,7 @@ Services: api, db
 - `git hop env start|stop` — Start or stop Docker services
 - `git hop remove <target>` — Remove a hub, hopspace, or branch
 - `git hop prune` — Remove orphaned or broken hopspaces
-- `git hop doctor` — Check for inconsistencies and print diagnostics
+- `git hop doctor [--fix]` — Check for inconsistencies and optionally fix them
 
 ---
 
@@ -126,11 +126,16 @@ Example config:
 Environment variables:
 
 ```bash
-GIT_HOP_DATA_HOME      # defaults to $XDG_DATA_HOME/git-hop
+GIT_HOP_DATA_HOME      # defaults to OS-specific location (see below)
 GIT_HOP_CONFIG_HOME    # defaults to $XDG_CONFIG_HOME/git-hop
 GIT_HOP_CACHE_DIR      # defaults to $XDG_CACHE_HOME/git-hop
 GIT_HOP_LOG_LEVEL      # debug, info, warn, error
 ```
+
+Data directory defaults by OS:
+- **Linux/Unix**: `~/.local/share/git-hop`
+- **macOS**: `~/Library/Application Support/git-hop`
+- **Windows**: `%LOCALAPPDATA%\git-hop`
 
 ---
 
@@ -202,7 +207,8 @@ Available to all commands:
 - **Port conflicts** → Run `git hop doctor` to detect and clean up
 - **Orphaned worktrees** → Run `git hop prune` to remove dead hop data
 - **Services won't start** → Check Docker is running and `git hop status`
-- **Can't find hopspace** → Verify you're in a hub directory (`git hop`)
+- **Can't find hopspace** → Run `git hop doctor --fix` to initialize missing hopspace
+- **Missing directories** → Run `git hop doctor --fix` to create required paths
 
 ---
 

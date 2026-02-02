@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"os"
-	"path/filepath"
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/git"
@@ -59,11 +58,7 @@ var removeCmd = &cobra.Command{
 				// So yes.
 
 				// Load Hopspace
-				dataHome := os.Getenv("GIT_HOP_DATA_HOME")
-				if dataHome == "" {
-					home, _ := os.UserHomeDir()
-					dataHome = filepath.Join(home, ".local", "share", "git-hop")
-				}
+				dataHome := hop.GetGitHopDataHome()
 				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 				hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 				if err != nil {

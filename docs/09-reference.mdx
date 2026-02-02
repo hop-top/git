@@ -374,11 +374,22 @@ Docker-specific configuration.
 
 | Variable | Description | Default |
 |----------|-------------|----------|
-| `GIT_HOP_DATA_HOME` | Data directory | `$XDG_DATA_HOME/git-hop` |
+| `GIT_HOP_DATA_HOME` | Data directory | `$XDG_DATA_HOME/git-hop` (Linux/Unix: `~/.local/share/git-hop`, macOS: `~/Library/Application Support/git-hop`, Windows: `%LOCALAPPDATA%\git-hop`) |
 | `GIT_HOP_CONFIG_HOME` | Config directory | `$XDG_CONFIG_HOME/git-hop` |
 | `GIT_HOP_CACHE_DIR` | Cache directory | `$XDG_CACHE_HOME/git-hop` |
 | `GIT_HOP_LOG_LEVEL` | Log level | `info` |
 | `GIT_HOP_AUTO_ENV_START` | Auto-start behavior | `detect` |
+
+### Data Directory Resolution
+
+git-hop uses the following priority for determining the data directory:
+
+1. `$GIT_HOP_DATA_HOME` (if set)
+2. `$XDG_DATA_HOME/git-hop` (if `$XDG_DATA_HOME` is set)
+3. OS-specific defaults:
+   - **Linux/Unix**: `~/.local/share/git-hop`
+   - **macOS**: `~/Library/Application Support/git-hop`
+   - **Windows**: `%LOCALAPPDATA%\git-hop`
 
 ## Exit Codes
 
@@ -396,4 +407,4 @@ Docker-specific configuration.
 
 ## What's Next?
 
-- [FAQ](/docs/10-faq) - Common questions and answers
+- [FAQ](./10-faq) - Common questions and answers
