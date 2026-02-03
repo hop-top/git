@@ -206,6 +206,42 @@ Restart services for current worktree.
 git hop env restart
 ```
 
+#### gc
+
+Garbage collect orphaned dependencies.
+
+```bash
+git hop env gc [flags]
+```
+
+**Flags:**
+- `--dry-run` - Preview what will be deleted without actually deleting
+- `--force` - Skip confirmation prompt
+
+**What it does:**
+- Scans all worktrees to identify orphaned dependencies
+- Shows dependency info including last used time and size
+- Prompts for confirmation before deletion (unless `--force`)
+- Reports total space reclaimed
+
+**Output:**
+
+```
+Running dependency audit...
+  ✓ Scanned 3 worktrees
+  ✓ Updated dependency registry
+
+Orphaned dependencies:
+  node_modules.def456  (last used: 7 days ago)  ~120MB
+  venv.jkl012         (last used: 2 days ago)   ~45MB
+
+Total reclaimable: 165MB
+
+Delete these dependencies? [y/N]: y
+  ✓ Deleted 2 orphaned dependencies
+  ✓ Reclaimed 165MB
+```
+
 ## git hop remove
 
 Remove a hub, hopspace, or branch.
@@ -286,12 +322,17 @@ git hop doctor
 git hop doctor --fix
 ```
 
+### Flags
+
+- `--fix` - Automatically repair detected issues
+
 ### What It Checks
 
 - Path configuration (data, config, cache directories)
 - Hub configuration and symlinks
 - Hopspace existence and consistency
 - Orphaned worktrees
+- Dependency health (symlinks, shared storage, orphaned deps)
 
 ### Output
 
@@ -308,8 +349,20 @@ Hub found at: /projects/my-repo
 Expected hopspace: /home/user/.local/share/git-hop/org/repo
 ✓ Hopspace exists
 
+=== Checking Dependencies ===
+Dependencies Status:
+  ✓ node_modules.abc123 used by: main, feature-x
+  ✓ vendor.789ghi used by: main
+  ⚠ venv.jkl012 orphaned (no branches use it) - run 'git hop env gc' to clean
+  ✗ feature-y: broken symlink node_modules → (missing abc999)
+  ⚠ feature-z: has local node_modules (720MB) instead of symlink
+
+Recommendations:
+  - Run 'git hop doctor --fix' to restore shared deps
+  - Run 'git hop env gc' to reclaim 45MB from orphaned deps
+
 === Summary ===
-✓ No issues found. Your git-hop installation is healthy!
+Issues found. Run 'git hop doctor --fix' to automatically repair them.
 ```
 
 ### Auto-fix

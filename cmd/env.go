@@ -2,11 +2,16 @@ package cmd
 
 import (
 	"os"
+	"path/filepath"
 
 	"github.com/jadb/git-hop/internal/cli"
+	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/docker"
 	"github.com/jadb/git-hop/internal/git"
+	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
+	"github.com/jadb/git-hop/internal/services"
+	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
 
@@ -34,6 +39,7 @@ var envStopCmd = &cobra.Command{
 }
 
 func runEnvCommand(action string) {
+	fs := afero.NewOsFs()
 	g := git.New()
 	d := docker.New()
 
@@ -53,6 +59,41 @@ func runEnvCommand(action string) {
 
 	switch action {
 	case "start":
+		// Load global config
+		globalLoader := config.NewGlobalLoader()
+		globalConfig, err := globalLoader.Load()
+		if err != nil {
+			output.Warn("Failed to load global config, using defaults: %v", err)
+			globalConfig = globalLoader.GetDefaults()
+		}
+
+		// Try to find hub and get repo path
+		hubPath, err := hop.FindHub(fs, cwd)
+		if err == nil {
+			hub, err := hop.LoadHub(fs, hubPath)
+			if err == nil {
+				// Get hopspace path
+				dataHome := hop.GetGitHopDataHome()
+				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+				// Get branch name from worktree path
+				branch := filepath.Base(root)
+
+				// Setup dependencies before starting services
+				output.Info("Ensuring dependencies...")
+				depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
+				if err != nil {
+					output.Warn("Failed to initialize dependency manager: %v", err)
+				} else {
+					if err := depsManager.EnsureDeps(root, branch); err != nil {
+						output.Warn("Failed to ensure dependencies: %v", err)
+					} else {
+						output.Info("Dependencies ready.")
+					}
+				}
+			}
+		}
+
 		output.Info("Starting services...")
 		if err := d.ComposeUp(root, true); err != nil {
 			output.Fatal("Failed to start services: %v", err)

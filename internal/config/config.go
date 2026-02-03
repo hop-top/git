@@ -103,9 +103,19 @@ type HopEntry struct {
 
 // GlobalConfig represents $XDG_CONFIG_HOME/git-hop/global.json
 type GlobalConfig struct {
-	Defaults   DefaultSettings    `json:"defaults"`
-	Backup     BackupSettings     `json:"backup,omitempty"`
-	Conversion ConversionSettings `json:"conversion,omitempty"`
+	Defaults        DefaultSettings          `json:"defaults"`
+	PackageManagers []PackageManagerConfig   `json:"packageManagers,omitempty"`
+	Backup          BackupSettings           `json:"backup,omitempty"`
+	Conversion      ConversionSettings       `json:"conversion,omitempty"`
+}
+
+// PackageManagerConfig represents a custom package manager configuration
+type PackageManagerConfig struct {
+	Name        string   `json:"name"`
+	DetectFiles []string `json:"detectFiles"`
+	LockFiles   []string `json:"lockFiles"`
+	DepsDir     string   `json:"depsDir"`
+	InstallCmd  []string `json:"installCmd"`
 }
 
 // DefaultSettings represents global default settings

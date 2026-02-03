@@ -197,6 +197,92 @@ Each branch gets:
 - **Separate volumes**: Data doesn't leak between branches
 - **Independent lifecycles**: Stop one without affecting others
 
+## Dependency Sharing
+
+git-hop automatically shares dependencies across worktrees to save disk space and installation time. When you have multiple branches with the same lockfile, dependencies are installed once and symlinked to each worktree.
+
+### How It Works
+
+1. **Lockfile Hashing**: git-hop hashes your lockfile (package-lock.json, go.sum, etc.) using SHA256
+2. **Centralized Storage**: Dependencies are installed to `$GIT_HOP_DATA_HOME/org/repo/deps/{depsdir}.{hash}/`
+3. **Symlink Creation**: Each worktree gets a symlink pointing to the shared storage
+4. **Usage Tracking**: A registry tracks which branches use which dependencies
+
+### Supported Package Managers
+
+git-hop supports these package managers out of the box:
+
+| Package Manager | Detect File | Lockfile | Deps Directory |
+|----------------|-------------|----------|----------------|
+| npm | package.json | package-lock.json | node_modules |
+| pnpm | pnpm-lock.yaml | pnpm-lock.yaml | node_modules |
+| yarn | yarn.lock | yarn.lock | node_modules |
+| Go | go.mod | go.sum | vendor |
+| pip | requirements.txt | requirements.txt | venv |
+| cargo | Cargo.toml | Cargo.lock | target |
+| composer | composer.json | composer.lock | vendor |
+| bundler | Gemfile | Gemfile.lock | vendor/bundle |
+
+### Custom Package Managers
+
+You can define custom package managers in `$XDG_CONFIG_HOME/git-hop/global.json`:
+
+```json
+{
+  "packageManagers": [
+    {
+      "name": "bun",
+      "detectFiles": ["bun.lockb"],
+      "lockFiles": ["bun.lockb"],
+      "depsDir": "node_modules",
+      "installCmd": ["bun", "install", "--frozen-lockfile"]
+    }
+  ]
+}
+```
+
+Custom package managers can override built-in ones by using the same `name`.
+
+### Benefits
+
+- **Space Savings**: Install once per lockfile instead of per branch
+- **Time Savings**: No reinstall when switching to a branch with the same lockfile
+- **Multi-PM Support**: Handles repos with npm + Go + pip simultaneously
+- **Safe Cleanup**: Manual garbage collection prevents accidental deletion
+
+### Maintenance
+
+#### Check Dependency Health
+
+```bash
+git hop doctor
+```
+
+This checks for:
+- Broken symlinks (pointing to missing deps)
+- Stale symlinks (lockfile changed but symlink outdated)
+- Local folders (user ran `rm -rf node_modules && npm install`)
+- Orphaned dependencies (no branches using them)
+
+#### Auto-fix Issues
+
+```bash
+git hop doctor --fix
+```
+
+Automatically repairs:
+- Recreates missing dependencies
+- Updates stale symlinks
+- Replaces local folders with shared symlinks
+
+#### Clean Up Orphaned Dependencies
+
+```bash
+git hop env gc
+```
+
+Removes dependencies that are no longer used by any branch.
+
 ## What's Next?
 
 - [Commands](./04-commands) - Learn how to use git-hop commands
