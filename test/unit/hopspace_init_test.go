@@ -145,7 +145,7 @@ func TestHopspaceRegisterBranch(t *testing.T) {
 
 	// Register a branch
 	branchName := "feature-x"
-	worktreePath := "/worktrees/feature-x"
+	worktreePath := "/hops/feature-x"
 
 	err = hopspace.RegisterBranch(branchName, worktreePath)
 	if err != nil {
@@ -197,7 +197,7 @@ func TestHopspaceUnregisterBranch(t *testing.T) {
 
 	// Register a branch
 	branchName := "feature-x"
-	err = hopspace.RegisterBranch(branchName, "/worktrees/feature-x")
+	err = hopspace.RegisterBranch(branchName, "/hops/feature-x")
 	if err != nil {
 		t.Fatalf("RegisterBranch failed: %v", err)
 	}
@@ -240,10 +240,10 @@ func TestHopspaceRegisterMultipleBranches(t *testing.T) {
 
 	// Register multiple branches
 	branches := map[string]string{
-		"main":      "/worktrees/main",
-		"feature-a": "/worktrees/feature-a",
-		"feature-b": "/worktrees/feature-b",
-		"bugfix-1":  "/worktrees/bugfix-1",
+		"main":      "/hops/main",
+		"feature-a": "/hops/feature-a",
+		"feature-b": "/hops/feature-b",
+		"bugfix-1":  "/hops/bugfix-1",
 	}
 
 	for name, path := range branches {

@@ -66,9 +66,16 @@ var addCmd = &cobra.Command{
 
 		output.Info("Adding branch %s...", branch)
 
+		// Load global config for worktree location
+		globalLoader := config.NewGlobalLoader()
+		globalConfig, err := globalLoader.Load()
+		if err != nil {
+			globalConfig = globalLoader.GetDefaults()
+		}
+
 		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
-		worktreePath, err := wm.CreateWorktree(hopspace, hubPath, branch)
+		worktreePath, err := wm.CreateWorktree(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 		if err != nil {
 			output.Fatal("Failed to create worktree: %v", err)
 		}

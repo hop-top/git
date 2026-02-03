@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jadb/git-hop/internal/cli"
@@ -203,12 +204,38 @@ Or register current structure: git hop init --current`)
 		os.Exit(1)
 	}
 
+	// Load hub config to get actual worktree path
+	hub, err := hop.LoadHub(fs, repoPath)
+	var mainWorktreePath string
+	var worktreeDir string
+	if err == nil {
+		// Find main branch worktree
+		for name, branch := range hub.Config.Branches {
+			if name == "main" || name == "master" {
+				// Resolve symlink to get actual path
+				linkPath := filepath.Join(repoPath, branch.Path)
+				target, err := os.Readlink(linkPath)
+				if err == nil {
+					mainWorktreePath = target
+					relPath, _ := filepath.Rel(repoPath, mainWorktreePath)
+					worktreeDir = filepath.Dir(relPath)
+				}
+				break
+			}
+		}
+	}
+	// Fallback if we couldn't determine the path
+	if worktreeDir == "" {
+		worktreeDir = "hops"
+		mainWorktreePath = filepath.Join(repoPath, worktreeDir, "main")
+	}
+
 	fmt.Println("\nConversion successful!")
 	fmt.Printf("Project structure:\n")
 	fmt.Printf("  %s/\n", repoPath)
 	fmt.Printf("    .git/              (bare repository)\n")
 	fmt.Printf("    hop.json\n")
-	fmt.Printf("    worktrees/\n")
+	fmt.Printf("    %s/\n", worktreeDir)
 	fmt.Printf("      main/            (worktree for current branch)\n")
 
 	if len(result.Warnings) > 0 {
@@ -225,7 +252,7 @@ Or register current structure: git hop init --current`)
 	}
 
 	output.Info("\nYou can now:")
-	fmt.Println("  cd worktrees/main         # Work on current branch")
+	fmt.Printf("  cd %s   # Work on current branch\n", mainWorktreePath)
 	fmt.Println("  git hop add <branch>       # Add new branch")
 	fmt.Println("  git hop <branch>           # Jump to worktree")
 	fmt.Println("  git hop                    # List all worktrees")

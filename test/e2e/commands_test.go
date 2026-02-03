@@ -24,23 +24,23 @@ func TestCommands(t *testing.T) {
 	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main")
 
 	// Create branches
-	for _, branch := range []string{"feature-1", "feature-2", "staging"} {
+	for _, branch := range []string{"feature-1", "feature-2", "staging", "feat/slash-branch"} {
 		env.RunCommand(t, env.SeedRepoPath, "git", "checkout", "-b", branch)
 		env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", branch)
 	}
 
-	// Initialize Hub manually with worktrees/ structure
+	// Initialize Hub manually with hops/ structure
 	os.MkdirAll(env.HubPath, 0755)
-	worktreesDir := filepath.Join(env.HubPath, "worktrees")
-	os.MkdirAll(worktreesDir, 0755)
-	mainWorktreePath := filepath.Join(worktreesDir, "main")
-	env.RunCommand(t, worktreesDir, "git", "clone", env.BareRepoPath, "main")
+	hopsDir := filepath.Join(env.HubPath, "hops")
+	os.MkdirAll(hopsDir, 0755)
+	mainWorktreePath := filepath.Join(hopsDir, "main")
+	env.RunCommand(t, hopsDir, "git", "clone", env.BareRepoPath, "main")
 
 	// Configs
 	createConfigs(t, env, mainWorktreePath)
 
 	// Verify main worktree exists initially
-	if _, err := os.Stat(filepath.Join(env.HubPath, "worktrees", "main")); err != nil {
+	if _, err := os.Stat(filepath.Join(env.HubPath, "hops", "main")); err != nil {
 		t.Fatalf("Main worktree missing after setup: %v", err)
 	}
 
@@ -49,13 +49,48 @@ func TestCommands(t *testing.T) {
 		// ...
 		// Add feature-1
 		out := env.RunGitHop(t, env.HubPath, "add", "feature-1")
-		if !strings.Contains(out, "Successfully added feature-1") {
+		if !strings.Contains(out, "Created hopspace for 'feature-1'") {
 			t.Errorf("Expected success message, got: %s", out)
 		}
-		// Verify worktree directory exists under worktrees/
-		wtPath := filepath.Join(env.HubPath, "worktrees", "feature-1")
+		// Verify worktree directory exists under hops/
+		wtPath := filepath.Join(env.HubPath, "hops", "feature-1")
 		if _, err := os.Stat(wtPath); err != nil {
-			t.Errorf("Worktree feature-1 not created at worktrees/feature-1: %v", err)
+			t.Errorf("Worktree feature-1 not created at hops/feature-1: %v", err)
+		}
+	})
+
+	// --- Test: git hop add with slash in branch name ---
+	t.Run("AddBranchWithSlash", func(t *testing.T) {
+		// Add feat/slash-branch
+		out := env.RunGitHop(t, env.HubPath, "add", "feat/slash-branch")
+		if !strings.Contains(out, "feat/slash-branch") {
+			t.Errorf("Expected success message for feat/slash-branch, got: %s", out)
+		}
+
+		// Verify worktree directory exists at correct path: hops/feat/slash-branch
+		expectedPath := filepath.Join(env.HubPath, "hops", "feat", "slash-branch")
+		if _, err := os.Stat(expectedPath); err != nil {
+			t.Errorf("Worktree not created at expected path %s: %v", expectedPath, err)
+		}
+
+		// Verify NO orphaned directory at hops/slash-branch
+		orphanedPath := filepath.Join(env.HubPath, "hops", "slash-branch")
+		if _, err := os.Stat(orphanedPath); err == nil {
+			t.Errorf("Orphaned worktree directory found at %s (should not exist)", orphanedPath)
+		}
+
+		// Verify hops/ only has expected subdirectories
+		hopsDir := filepath.Join(env.HubPath, "hops")
+		entries, err := os.ReadDir(hopsDir)
+		if err != nil {
+			t.Fatalf("Failed to read hops directory: %v", err)
+		}
+
+		expectedDirs := map[string]bool{"main": true, "feature-1": true, "feat": true}
+		for _, entry := range entries {
+			if entry.IsDir() && !expectedDirs[entry.Name()] {
+				t.Errorf("Unexpected directory in hops/: %s", entry.Name())
+			}
 		}
 	})
 
@@ -81,7 +116,7 @@ func TestCommands(t *testing.T) {
 
 	// --- Test: git hop env ---
 	t.Run("Env", func(t *testing.T) {
-		branchPath := filepath.Join(env.HubPath, "worktrees", "feature-1")
+		branchPath := filepath.Join(env.HubPath, "hops", "feature-1")
 
 		// Generate (implicit in add, but test explicit)
 		env.RunGitHop(t, branchPath, "env", "generate")
@@ -117,9 +152,9 @@ func TestCommands(t *testing.T) {
 		}
 
 		// Verify worktree gone
-		wtPath := filepath.Join(env.HubPath, "worktrees", "feature-1")
+		wtPath := filepath.Join(env.HubPath, "hops", "feature-1")
 		if _, err := os.Stat(wtPath); err == nil {
-			t.Errorf("Worktree feature-1 should be gone at worktrees/feature-1")
+			t.Errorf("Worktree feature-1 should be gone at hops/feature-1")
 		}
 	})
 
@@ -129,7 +164,7 @@ func TestCommands(t *testing.T) {
 		env.RunGitHop(t, env.HubPath, "add", "feature-2")
 
 		// Navigate to the worktree directory and run commands from there
-		feature2Path := filepath.Join(env.HubPath, "worktrees", "feature-2")
+		feature2Path := filepath.Join(env.HubPath, "hops", "feature-2")
 
 		// Test: git hop list from within worktree
 		out := env.RunGitHop(t, feature2Path, "list")
@@ -167,8 +202,8 @@ func TestCommands(t *testing.T) {
 
 		// Verify worktree directory
 		// Look for fork worktree starting with "main-fork-"
-		worktreesDir := filepath.Join(env.HubPath, "worktrees")
-		files, _ := os.ReadDir(worktreesDir)
+		hopsDir := filepath.Join(env.HubPath, "hops")
+		files, _ := os.ReadDir(hopsDir)
 		found := false
 		var wtName string
 		for _, f := range files {
@@ -179,10 +214,10 @@ func TestCommands(t *testing.T) {
 			}
 		}
 		if !found {
-			t.Errorf("Fork worktree for main not found in worktrees/ directory")
+			t.Errorf("Fork worktree for main not found in hops/ directory")
 		} else {
 			// Verify the worktree directory exists
-			wtPath := filepath.Join(worktreesDir, wtName)
+			wtPath := filepath.Join(hopsDir, wtName)
 			if _, err := os.Stat(wtPath); err != nil {
 				t.Errorf("Fork worktree directory does not exist: %v", err)
 			}

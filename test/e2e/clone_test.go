@@ -48,8 +48,8 @@ func TestClone_OutsideRepo(t *testing.T) {
 		t.Errorf("hop.json not found in hub")
 	}
 
-	// Verify worktree directory exists under worktrees/
-	if _, err := os.Stat(filepath.Join(expectedHubPath, "worktrees", "main")); err != nil {
-		t.Errorf("main worktree not found at worktrees/main: %v", err)
+	// Verify worktree directory exists under hops/
+	if _, err := os.Stat(filepath.Join(expectedHubPath, "hops", "main")); err != nil {
+		t.Errorf("main worktree not found at hops/main: %v", err)
 	}
 }

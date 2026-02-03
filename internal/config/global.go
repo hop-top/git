@@ -63,6 +63,7 @@ func (l *GlobalLoader) GetDefaults() *GlobalConfig {
 			BareRepo:                  true,
 			EnforceCleanForConversion: true,
 			ConventionWarning:         true,
+			WorktreeLocation:          "{hubPath}/hops/{branch}",
 		},
 		Backup: BackupSettings{
 			Enabled:         true,

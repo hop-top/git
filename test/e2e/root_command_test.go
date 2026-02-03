@@ -25,12 +25,12 @@ func TestRootCommand_NonExistentBranch(t *testing.T) {
 	env.RunCommand(t, env.SeedRepoPath, "git", "commit", "-m", "Initial commit")
 	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main")
 
-	// Initialize Hub manually with worktrees/ structure
+	// Initialize Hub manually with hops/ structure
 	os.MkdirAll(env.HubPath, 0755)
-	worktreesDir := filepath.Join(env.HubPath, "worktrees")
-	os.MkdirAll(worktreesDir, 0755)
-	mainWorktreePath := filepath.Join(worktreesDir, "main")
-	env.RunCommand(t, worktreesDir, "git", "clone", env.BareRepoPath, "main")
+	hopsDir := filepath.Join(env.HubPath, "hops")
+	os.MkdirAll(hopsDir, 0755)
+	mainWorktreePath := filepath.Join(hopsDir, "main")
+	env.RunCommand(t, hopsDir, "git", "clone", env.BareRepoPath, "main")
 
 	// Create minimal config
 	createConfigs(t, env, mainWorktreePath)
@@ -41,7 +41,7 @@ func TestRootCommand_NonExistentBranch(t *testing.T) {
 	result := runCommandExpectError(t, env, env.HubPath, env.BinPath, "lsit")
 
 	// Verify it did NOT create a worktree
-	lsitWorktreePath := filepath.Join(worktreesDir, "lsit")
+	lsitWorktreePath := filepath.Join(hopsDir, "lsit")
 	if _, err := os.Stat(lsitWorktreePath); err == nil {
 		t.Errorf("BUG CONFIRMED: Worktree 'lsit' was created when it should not have been")
 	}
@@ -78,10 +78,10 @@ func TestRootCommand_ExistingWorktree(t *testing.T) {
 
 	// Initialize Hub
 	os.MkdirAll(env.HubPath, 0755)
-	worktreesDir := filepath.Join(env.HubPath, "worktrees")
-	os.MkdirAll(worktreesDir, 0755)
-	mainWorktreePath := filepath.Join(worktreesDir, "main")
-	env.RunCommand(t, worktreesDir, "git", "clone", env.BareRepoPath, "main")
+	hopsDir := filepath.Join(env.HubPath, "hops")
+	os.MkdirAll(hopsDir, 0755)
+	mainWorktreePath := filepath.Join(hopsDir, "main")
+	env.RunCommand(t, hopsDir, "git", "clone", env.BareRepoPath, "main")
 
 	createConfigs(t, env, mainWorktreePath)
 
@@ -89,7 +89,7 @@ func TestRootCommand_ExistingWorktree(t *testing.T) {
 	env.RunGitHop(t, env.HubPath, "add", "feature-1")
 
 	// Verify worktree exists
-	feature1Path := filepath.Join(worktreesDir, "feature-1")
+	feature1Path := filepath.Join(hopsDir, "feature-1")
 	if _, err := os.Stat(feature1Path); err != nil {
 		t.Fatalf("Feature-1 worktree should exist: %v", err)
 	}

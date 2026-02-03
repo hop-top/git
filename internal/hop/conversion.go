@@ -250,8 +250,8 @@ func (c *Converter) swapDirectories(parentDir, projectName, bareRepoPath string)
 }
 
 func (c *Converter) getWorktreePathForBranch(branch, repoPath string) string {
-	// All worktrees go under worktrees/ subdirectory
-	return filepath.Join(repoPath, "worktrees", branch)
+	// All worktrees go under hops/ subdirectory
+	return filepath.Join(repoPath, "hops", branch)
 }
 
 func (c *Converter) createHopConfig(repoPath string, useBare bool, result *config.ConversionResult) error {

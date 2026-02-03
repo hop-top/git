@@ -240,8 +240,8 @@ func getDepsPath(repoPath, depsKey string) string {
 }
 
 // getRepoPathFromWorktree extracts the repo path from a worktree path
-// This is a helper that assumes worktrees are in {repoPath}/worktrees/{branch}
+// This is a helper that assumes worktrees are in {repoPath}/hops/{branch}
 func getRepoPathFromWorktree(worktreePath string) string {
-	// Go up two levels: worktrees/{branch} -> worktrees -> repo
+	// Go up two levels: hops/{branch} -> hops -> repo
 	return filepath.Dir(filepath.Dir(worktreePath))
 }

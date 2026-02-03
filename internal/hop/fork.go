@@ -151,7 +151,8 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 
 		wm := NewWorktreeManager(fs, g)
 		// For forks, the hopspace path acts as the hub path (worktrees are stored in hopspace)
-		worktreePath, err := wm.CreateWorktree(forkHopspace, forkHopspacePath, branch)
+		locationPattern := "{hubPath}/hops/{branch}"
+		worktreePath, err := wm.CreateWorktree(forkHopspace, forkHopspacePath, branch, locationPattern, forkHopspace.Config.Repo.Org, forkHopspace.Config.Repo.Repo)
 		if err != nil {
 			return fmt.Errorf("failed to create worktree in fork: %v", err)
 		}

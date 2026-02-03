@@ -127,6 +127,7 @@ type DefaultSettings struct {
 	EnforceCleanForConversion bool `json:"enforceCleanForConversion"`
 	ConventionWarning         bool `json:"conventionWarning"`
 	GitDomain                 string `json:"gitDomain"`
+	WorktreeLocation          string `json:"worktreeLocation,omitempty"`
 }
 
 // UserConfig represents global config.json (legacy)

@@ -51,8 +51,8 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		}
 	}
 
-	// All worktrees are under worktrees/ subdirectory
-	mainWorktreePath := filepath.Join(projectRoot, "worktrees", defaultBranch)
+	// All worktrees are under hops/ subdirectory (default pattern)
+	mainWorktreePath := filepath.Join(projectRoot, "hops", defaultBranch)
 
 	// Ensure we use absolute path for hopspace registration
 	absMainWorktreePath, err := filepath.Abs(mainWorktreePath)
@@ -83,6 +83,13 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		fmt.Printf("Warning: failed to register in global registry: %v\n", err)
 	}
 
+	// Get relative path from projectRoot to mainWorktreePath for display
+	relWorktreePath, err := filepath.Rel(projectRoot, mainWorktreePath)
+	if err != nil {
+		relWorktreePath = mainWorktreePath
+	}
+	worktreeDir := filepath.Dir(relWorktreePath)
+
 	fmt.Printf("\nSuccessfully cloned to %s\n", projectRoot)
 	fmt.Printf("\nProject structure:\n")
 	fmt.Printf("  %s/\n", projectRoot)
@@ -90,11 +97,11 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		fmt.Printf("    .git/              (bare repository)\n")
 	}
 	fmt.Printf("    hop.json\n")
-	fmt.Printf("    worktrees/\n")
+	fmt.Printf("    %s/\n", worktreeDir)
 	fmt.Printf("      %s/           (worktree for current branch)\n", defaultBranch)
 
 	fmt.Printf("\nYou can now:\n")
-	fmt.Printf("  cd %s/worktrees/%s    # Work on current branch\n", projectRoot, defaultBranch)
+	fmt.Printf("  cd %s         # Work on current branch\n", mainWorktreePath)
 	fmt.Printf("  git hop add <branch>  # Add new branch\n")
 	fmt.Printf("  git hop <branch>      # Jump to worktree\n")
 	fmt.Printf("  git hop              # List all worktrees\n")
@@ -109,14 +116,14 @@ func cloneBareRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch stri
 		return fmt.Errorf("failed to create bare repository: %w", err)
 	}
 
-	// Create worktrees directory
-	worktreesDir := filepath.Join(projectRoot, "worktrees")
-	if err := fs.MkdirAll(worktreesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create worktrees directory: %w", err)
+	// Create hops directory
+	hopsDir := filepath.Join(projectRoot, "hops")
+	if err := fs.MkdirAll(hopsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create hops directory: %w", err)
 	}
 
-	// Create main worktree under worktrees/
-	mainPath := filepath.Join(worktreesDir, defaultBranch)
+	// Create main worktree under hops/
+	mainPath := filepath.Join(hopsDir, defaultBranch)
 	_, err := g.Runner.Run("git", "-C", projectRoot, "worktree", "add", mainPath, defaultBranch)
 	if err != nil {
 		os.RemoveAll(projectRoot)
@@ -133,14 +140,14 @@ func cloneRegularRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch s
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
-	// Create worktrees directory
-	worktreesDir := filepath.Join(projectRoot, "worktrees")
-	if err := fs.MkdirAll(worktreesDir, 0755); err != nil {
-		return fmt.Errorf("failed to create worktrees directory: %w", err)
+	// Create hops directory
+	hopsDir := filepath.Join(projectRoot, "hops")
+	if err := fs.MkdirAll(hopsDir, 0755); err != nil {
+		return fmt.Errorf("failed to create hops directory: %w", err)
 	}
 
-	// Create main worktree under worktrees/
-	mainPath := filepath.Join(worktreesDir, defaultBranch)
+	// Create main worktree under hops/
+	mainPath := filepath.Join(hopsDir, defaultBranch)
 	if err := g.WorktreeAddCreate(projectRoot, defaultBranch, mainPath, defaultBranch); err != nil {
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
