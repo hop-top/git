@@ -18,8 +18,6 @@ type ServiceConfig struct {
 func (d *Docker) GetConfig(dir string) (*ServiceConfig, error) {
 	out, err := d.Runner.RunInDir(dir, "docker", "compose", "config")
 	if err != nil {
-		fmt.Printf("DEBUG: docker compose config failed: %v\n", err)
-		// Fallback to raw parsing if config fails (e.g. missing env vars)
 		return d.getConfigRaw(dir)
 	}
 
@@ -32,7 +30,6 @@ func (d *Docker) GetConfig(dir string) (*ServiceConfig, error) {
 }
 
 func (d *Docker) getConfigRaw(dir string) (*ServiceConfig, error) {
-	// Try docker-compose.yml and docker-compose.yaml
 	candidates := []string{"docker-compose.yml", "docker-compose.yaml"}
 	var content []byte
 	var err error
@@ -41,7 +38,6 @@ func (d *Docker) getConfigRaw(dir string) (*ServiceConfig, error) {
 		p := filepath.Join(dir, f)
 		content, err = os.ReadFile(p)
 		if err == nil {
-			fmt.Printf("DEBUG: Read docker-compose from %s\n", p)
 			break
 		}
 	}
@@ -50,14 +46,10 @@ func (d *Docker) getConfigRaw(dir string) (*ServiceConfig, error) {
 		return nil, fmt.Errorf("failed to read docker-compose file: %v", err)
 	}
 
-	fmt.Printf("DEBUG: Parsing raw docker-compose content: %s\n", string(content))
-
 	var config ServiceConfig
 	if err := yaml.Unmarshal(content, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse raw docker-compose file: %w", err)
 	}
-
-	fmt.Printf("DEBUG: Parsed raw config: %+v\n", config)
 
 	return &config, nil
 }

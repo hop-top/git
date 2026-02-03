@@ -33,13 +33,10 @@ func (t *Trash) Move(path string) (string, error) {
 		return "", fmt.Errorf("failed to create backup directory: %w", err)
 	}
 
-	// Calculate destination path
 	destPath := filepath.Join(backupDir, filepath.Base(path))
 
-	// For OS filesystem, use os.Rename for efficiency
 	if _, ok := t.fs.(*afero.OsFs); ok {
 		if err := os.Rename(path, destPath); err != nil {
-			// Fallback to copy+delete if rename fails (cross-device link)
 			if err := t.copyPath(path, destPath); err != nil {
 				return "", fmt.Errorf("failed to copy to backup: %w", err)
 			}
@@ -48,7 +45,6 @@ func (t *Trash) Move(path string) (string, error) {
 			}
 		}
 	} else {
-		// For other filesystems, use copy+delete
 		if err := t.copyPath(path, destPath); err != nil {
 			return "", fmt.Errorf("failed to copy to backup: %w", err)
 		}
@@ -80,16 +76,13 @@ func (t *Trash) Restore(backupPath, originalPath string) error {
 		return fmt.Errorf("original path already exists: %s", originalPath)
 	}
 
-	// Ensure parent directory exists
 	parentDir := filepath.Dir(originalPath)
 	if err := t.fs.MkdirAll(parentDir, 0755); err != nil {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	// For OS filesystem, use os.Rename for efficiency
 	if _, ok := t.fs.(*afero.OsFs); ok {
 		if err := os.Rename(backupPath, originalPath); err != nil {
-			// Fallback to copy+delete if rename fails
 			if err := t.copyPath(backupPath, originalPath); err != nil {
 				return fmt.Errorf("failed to copy from backup: %w", err)
 			}
@@ -98,7 +91,6 @@ func (t *Trash) Restore(backupPath, originalPath string) error {
 			}
 		}
 	} else {
-		// For other filesystems, use copy+delete
 		if err := t.copyPath(backupPath, originalPath); err != nil {
 			return fmt.Errorf("failed to copy from backup: %w", err)
 		}
@@ -253,7 +245,6 @@ func (t *Trash) copyFile(src, dst string) error {
 	}
 	defer srcFile.Close()
 
-	// Get source file info for permissions
 	srcInfo, err := t.fs.Stat(src)
 	if err != nil {
 		return err
@@ -279,7 +270,6 @@ func (t *Trash) copyDir(src, dst string) error {
 			return err
 		}
 
-		// Calculate destination path
 		relPath, err := filepath.Rel(src, path)
 		if err != nil {
 			return err

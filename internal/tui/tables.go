@@ -16,14 +16,12 @@ func NewTable(headers []interface{}) *Table {
 	t := table.NewWriter()
 	t.SetOutputMirror(os.Stdout)
 
-	// Convert headers to table.Row
 	row := make(table.Row, len(headers))
 	for i, h := range headers {
 		row[i] = h
 	}
 	t.AppendHeader(row)
 
-	// Style
 	t.SetStyle(table.StyleRounded)
 	return &Table{t: t}
 }

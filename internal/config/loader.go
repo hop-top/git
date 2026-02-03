@@ -42,7 +42,7 @@ func (l *Loader) LoadVolumesConfig(path string) (*VolumesConfig, error) {
 	return loadConfig[VolumesConfig](l.fs, configPath)
 }
 
-// Helper generic function to load config
+// loadConfig is a generic function to load and unmarshal JSON configuration files
 func loadConfig[T any](fs afero.Fs, path string) (*T, error) {
 	data, err := afero.ReadFile(fs, path)
 	if err != nil {

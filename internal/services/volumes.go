@@ -23,11 +23,6 @@ func NewVolumeManager(fs afero.Fs, cfg *config.VolumesConfig) *VolumeManager {
 func (m *VolumeManager) CreateVolumes(branch string, volumeNames []string) (map[string]string, error) {
 	volumes := make(map[string]string)
 	for _, name := range volumeNames {
-		// Format: <basePath>/<branch>_<name>
-		// Or <basePath>/<branch>/<name>?
-		// Specs say: "Deterministic volume prefixes (`hop_<branch>_`)" in checklist.
-		// And "Implement base volume directory creation".
-
 		volName := fmt.Sprintf("hop_%s_%s", branch, name)
 		volPath := filepath.Join(m.Config.BasePath, volName)
 

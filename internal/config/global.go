@@ -18,7 +18,6 @@ func NewGlobalLoader() *GlobalLoader {
 func (l *GlobalLoader) Load() (*GlobalConfig, error) {
 	path := getGlobalConfigPath()
 
-	// Return defaults if file doesn't exist
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		return l.GetDefaults(), nil
 	}

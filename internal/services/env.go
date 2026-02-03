@@ -30,32 +30,11 @@ func NewEnvManager(fs afero.Fs, portsCfg *config.PortsConfig, volsCfg *config.Vo
 
 // Generate ensures ports and volumes exist for a branch
 func (m *EnvManager) Generate(branch, worktreePath string) (*config.BranchPorts, *config.BranchVolumes, error) {
-	// Detect services
 	serviceNames, err := m.Docker.GetServiceNames(worktreePath)
 	if err != nil {
-		// If no docker-compose, maybe empty services?
-		// Or error?
-		// Let's assume empty if file not found, but GetServiceNames returns error if config fails.
-		// For now, propagate error.
 		return nil, nil, err
 	}
 
-	// Update global services list if needed?
-	// The PortsConfig has a global `Services` list.
-	// If this branch has new services, should we add them?
-	// Yes, usually.
-	// But for now let's just use what we found.
-
-	// Allocate Ports
-	// We need to update the PortsConfig with the detected services first if we want to be consistent.
-	// But `AllocatePorts` uses `m.Config.Services`.
-	// We should probably pass the services to AllocatePorts.
-	// Refactor `AllocatePorts` to take `services []string`?
-	// Or update `m.Ports.Config.Services` here.
-
-	// Let's update the config in memory.
-	// Note: This modifies the shared config object.
-	// We should probably merge unique services.
 	existingSvcs := make(map[string]bool)
 	for _, s := range m.Ports.Config.Services {
 		existingSvcs[s] = true
@@ -71,20 +50,16 @@ func (m *EnvManager) Generate(branch, worktreePath string) (*config.BranchPorts,
 		return nil, nil, err
 	}
 
-	// Create Volumes
 	volNames, err := m.Docker.GetVolumeNames(worktreePath)
 	if err != nil {
 		return nil, nil, err
 	}
-	fmt.Printf("DEBUG: GetVolumeNames returned: %v\n", volNames)
 
 	vols, err := m.Volumes.CreateVolumes(branch, volNames)
 	if err != nil {
 		return nil, nil, err
 	}
-	fmt.Printf("DEBUG: CreateVolumes returned: %v\n", vols)
 
-	// Write .env file
 	envPath := filepath.Join(worktreePath, ".env")
 	if err := m.writeEnvFile(envPath, ports, vols); err != nil {
 		return nil, nil, fmt.Errorf("failed to write .env file: %w", err)
@@ -105,11 +80,7 @@ func (m *EnvManager) writeEnvFile(path string, ports map[string]int, vols map[st
 	for vol, path := range vols {
 		key := fmt.Sprintf("HOP_VOLUME_%s", strings.ToUpper(vol))
 		lines = append(lines, fmt.Sprintf("%s=%s", key, path))
-		fmt.Printf("DEBUG: Writing env var: %s=%s\n", key, path)
 	}
 
-	// We use os.WriteFile because we want to write to the worktree directly
-	// But we should use m.fs if possible.
-	// afero.WriteFile is available.
 	return afero.WriteFile(m.fs, path, []byte(strings.Join(lines, "\n")), 0644)
 }

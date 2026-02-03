@@ -90,10 +90,8 @@ func (m *DepsManager) EnsureDeps(worktreePath, branch string) error {
 
 // ensurePMDeps ensures deps for a specific package manager
 func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManager) error {
-	// Find lockfile
 	lockfilePath, err := pm.FindLockfile(m.fs, worktreePath)
 	if err != nil {
-		// No lockfile - skip sharing
 		return nil
 	}
 

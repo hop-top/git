@@ -24,9 +24,6 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	t.Helper()
 
 	rootDir := CreateTempDir(t)
-	// Do not defer remove here, let the test manage it or cleanup at end of test function if needed.
-	// Actually, usually we want to cleanup. But if we return it, caller should probably defer.
-	// Let's register cleanup on t.
 	t.Cleanup(func() {
 		os.RemoveAll(rootDir)
 	})
@@ -37,28 +34,23 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	dataHome := filepath.Join(rootDir, "data")
 	binPath := filepath.Join(rootDir, "git-hop")
 
-	// Build git-hop binary
 	projectRoot, err := os.Getwd()
 	if err != nil {
 		t.Fatalf("Failed to get current working directory: %v", err)
 	}
-	// Go up two levels if we are in test/e2e
 	if filepath.Base(projectRoot) == "e2e" {
 		projectRoot = filepath.Dir(filepath.Dir(projectRoot))
 	}
 	RunCommand(t, projectRoot, "go", "build", "-o", binPath, "main.go")
 
-	// Create custom git config
 	gitConfigPath := filepath.Join(rootDir, "gitconfig")
 	WriteFile(t, gitConfigPath, "[user]\n\tname = Test User\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n")
 
-	// Create temp Docker config
 	dockerConfigDir := filepath.Join(rootDir, "docker-config")
 	cliPluginsDir := filepath.Join(dockerConfigDir, "cli-plugins")
 	os.MkdirAll(cliPluginsDir, 0755)
 	WriteFile(t, filepath.Join(dockerConfigDir, "config.json"), "{}")
 
-	// Symlink docker-compose plugin if available
 	home, err := os.UserHomeDir()
 	if err == nil {
 		pluginPath := filepath.Join(home, ".docker", "cli-plugins", "docker-compose")
@@ -112,7 +104,7 @@ func (e *TestEnv) RunCommand(t *testing.T, dir, name string, args ...string) str
 	return stdout.String()
 }
 
-// RunCommand runs a command in the given directory (legacy helper, kept for compatibility if needed, but better to use TestEnv methods)
+// RunCommand runs a command in the given directory
 func RunCommand(t *testing.T, dir, name string, args ...string) {
 	t.Helper()
 	cmd := exec.Command(name, args...)
@@ -127,7 +119,7 @@ func RunCommand(t *testing.T, dir, name string, args ...string) {
 	}
 }
 
-// RunCommandOutput runs a command and returns stdout (legacy helper)
+// RunCommandOutput runs a command and returns stdout
 func RunCommandOutput(t *testing.T, dir, name string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command(name, args...)

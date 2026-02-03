@@ -77,10 +77,5 @@ func (a *PortAllocator) allocateHash(branch string) (map[string]int, error) {
 		ports[svc] = startPort + i
 	}
 
-	// Check for collisions?
-	// Hash mode implies potential collisions.
-	// We could check and re-hash or shift, but for now let's stick to simple hash.
-	// The user chose hash mode knowing this.
-
 	return ports, nil
 }

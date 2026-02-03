@@ -77,10 +77,8 @@ func GetStateHome() string {
 
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS: ~/Library/Application Support/git-hop/state
 		return filepath.Join(home, "Library", "Application Support", "git-hop", "state")
 	default:
-		// Linux/Unix: ~/.local/state/git-hop
 		return filepath.Join(home, ".local", "state", "git-hop")
 	}
 }
@@ -89,7 +87,6 @@ func GetStateHome() string {
 func LoadState(fs afero.Fs) (*State, error) {
 	statePath := filepath.Join(GetStateHome(), "state.json")
 
-	// Return new empty state if file doesn't exist
 	exists, err := afero.Exists(fs, statePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check state file: %w", err)
@@ -118,15 +115,12 @@ func SaveState(fs afero.Fs, state *State) error {
 	statePath := filepath.Join(stateDir, "state.json")
 	tmpPath := filepath.Join(stateDir, "state.json.tmp")
 
-	// Ensure directory exists
 	if err := fs.MkdirAll(stateDir, 0755); err != nil {
 		return fmt.Errorf("failed to create state directory: %w", err)
 	}
 
-	// Update timestamp
 	state.LastUpdated = time.Now()
 
-	// Write to temp file
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal state: %w", err)
@@ -136,7 +130,6 @@ func SaveState(fs afero.Fs, state *State) error {
 		return fmt.Errorf("failed to write temp state file: %w", err)
 	}
 
-	// Atomic rename
 	if err := fs.Rename(tmpPath, statePath); err != nil {
 		return fmt.Errorf("failed to save state file: %w", err)
 	}
@@ -197,12 +190,10 @@ func (s *State) UpdateLastAccessed(repoID, branch, hubPath string) error {
 		return fmt.Errorf("repository not found: %s", repoID)
 	}
 
-	// Update worktree last accessed
 	if worktree, exists := repo.Worktrees[branch]; exists {
 		worktree.LastAccessed = time.Now()
 	}
 
-	// Update hub last accessed
 	for _, hub := range repo.Hubs {
 		if hub.Path == hubPath {
 			hub.LastAccessed = time.Now()
@@ -226,10 +217,9 @@ func (s *State) AddHub(repoID string, hub *HubState) error {
 		repo.Hubs = make([]*HubState, 0)
 	}
 
-	// Check if hub already exists
 	for _, existingHub := range repo.Hubs {
 		if existingHub.Path == hub.Path {
-			return nil // Already exists
+			return nil
 		}
 	}
 

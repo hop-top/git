@@ -15,7 +15,6 @@ type Status struct {
 
 // GetStatus returns the status of the repo at dir
 func (g *Git) GetStatus(dir string) (*Status, error) {
-	// git status --porcelain=v2 --branch
 	out, err := g.Runner.RunInDir(dir, "git", "status", "--porcelain=v2", "--branch")
 	if err != nil {
 		return nil, err
@@ -37,13 +36,10 @@ func (g *Git) GetStatus(dir string) (*Status, error) {
 
 		switch parts[0] {
 		case "#":
-			// Header lines
 			if parts[1] == "branch.head" {
 				s.Branch = parts[2]
 			}
-			// Parse ahead/behind if needed (branch.ab)
 		case "1", "2", "?":
-			// Changed files
 			s.Clean = false
 			s.Files = append(s.Files, line)
 		}

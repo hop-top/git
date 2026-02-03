@@ -23,10 +23,13 @@ type CommandRunner interface {
 // RealRunner implements CommandRunner using os/exec
 type RealRunner struct{}
 
+// Run executes a command in the current directory
 func (r *RealRunner) Run(cmd string, args ...string) (string, error) {
 	return r.RunInDir("", cmd, args...)
 }
 
+// RunInDir executes a command in the specified directory.
+// If dir is empty, runs in the current directory.
 func (r *RealRunner) RunInDir(dir string, cmd string, args ...string) (string, error) {
 	c := exec.Command(cmd, args...)
 	if dir != "" {

@@ -23,14 +23,12 @@ var (
 )
 
 func init() {
-	// Initialize charmbracelet/log with Git-like styling
 	logger = log.NewWithOptions(os.Stderr, log.Options{
 		ReportCaller:    false,
 		ReportTimestamp: false,
 		Prefix:          "",
 	})
 
-	// Set default level to Info, but check GIT_HOP_LOG_LEVEL env var
 	level := log.InfoLevel
 	if envLevel := os.Getenv("GIT_HOP_LOG_LEVEL"); envLevel != "" {
 		switch envLevel {
@@ -175,4 +173,14 @@ func WithFields(fields map[string]interface{}) *log.Logger {
 		l = l.With(k, v)
 	}
 	return l
+}
+
+// IsModeHuman returns true if current mode is human-readable
+func IsModeHuman() bool {
+	return CurrentMode == ModeHuman
+}
+
+// IsVerbose returns true if verbose logging is enabled
+func IsVerbose() bool {
+	return Verbose
 }

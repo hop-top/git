@@ -57,9 +57,7 @@ func (r *Runner) FindHookFile(hookName string, worktreePath string, repoID strin
 		return repoHook
 	}
 
-	// Priority 2: Hopspace-level hook
 	dataHome := getDataHome()
-	// repoID format: github.com/org/repo -> github.com, org, repo
 	parts := strings.Split(repoID, "/")
 	if len(parts) >= 3 {
 		hopspaceHook := filepath.Join(dataHome, "git-hop", parts[0], parts[1], parts[2], "hooks", hookName)
@@ -100,19 +98,14 @@ func (r *Runner) ExecuteHook(hookName string, worktreePath string, repoID string
 		return fmt.Errorf("failed to stat hook file: %w", err)
 	}
 
-	// Check executable permission (Unix-like systems)
 	if runtime.GOOS != "windows" {
 		if info.Mode()&0111 == 0 {
 			return fmt.Errorf("hook file is not executable: %s", hookFile)
 		}
 	}
 
-	// Prepare environment
 	env := r.GetHookEnv(hookName, worktreePath, repoID, branch)
 
-	// Execute hook
-	// Note: We need to use the real filesystem for execution
-	// afero.Fs doesn't support executing commands
 	cmd := exec.Command(hookFile, args...)
 	cmd.Env = append(os.Environ(), env...)
 	cmd.Stdout = os.Stdout
@@ -170,10 +163,8 @@ func getDataHome() string {
 
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS: ~/Library/Application Support
 		return filepath.Join(home, "Library", "Application Support")
 	default:
-		// Linux/Unix: ~/.local/share
 		return filepath.Join(home, ".local", "share")
 	}
 }
@@ -195,10 +186,8 @@ func getConfigHome() string {
 
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS: ~/Library/Preferences
 		return filepath.Join(home, "Library", "Preferences")
 	default:
-		// Linux/Unix: ~/.config
 		return filepath.Join(home, ".config")
 	}
 }

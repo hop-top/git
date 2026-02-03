@@ -94,10 +94,8 @@ func getDataHome() string {
 
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS: ~/Library/Application Support
 		return filepath.Join(home, "Library", "Application Support")
 	default:
-		// Linux/Unix: ~/.local/share
 		return filepath.Join(home, ".local", "share")
 	}
 }
@@ -171,10 +169,8 @@ func GetConfigHome() string {
 
 	switch runtime.GOOS {
 	case "darwin":
-		// macOS: ~/Library/Preferences/git-hop
 		return filepath.Join(home, "Library", "Preferences", "git-hop")
 	default:
-		// Linux/Unix: ~/.config/git-hop
 		return filepath.Join(home, ".config", "git-hop")
 	}
 }
@@ -183,7 +179,6 @@ func GetConfigHome() string {
 func LoadSchemaConfig(fs afero.Fs) (*SchemaConfig, error) {
 	configPath := filepath.Join(GetConfigHome(), "config.json")
 
-	// Return defaults if file doesn't exist
 	exists, err := afero.Exists(fs, configPath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check config file: %w", err)
@@ -211,12 +206,10 @@ func SaveSchemaConfig(fs afero.Fs, cfg *SchemaConfig) error {
 	configDir := GetConfigHome()
 	configPath := filepath.Join(configDir, "config.json")
 
-	// Ensure directory exists
 	if err := fs.MkdirAll(configDir, 0755); err != nil {
 		return fmt.Errorf("failed to create config directory: %w", err)
 	}
 
-	// Write config file
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
@@ -229,8 +222,7 @@ func SaveSchemaConfig(fs afero.Fs, cfg *SchemaConfig) error {
 	return nil
 }
 
-// ExpandVariables expands environment variables in a string
-// Supports ${VAR} syntax
+// ExpandVariables expands environment variables in a string using ${VAR} syntax
 func ExpandVariables(s string) string {
 	return os.Expand(s, func(key string) string {
 		return os.Getenv(key)
