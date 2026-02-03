@@ -1,15 +1,15 @@
-package hop_test
+package cmd_test
 
 import (
 	"strings"
 	"testing"
 
-	_ "github.com/jadb/git-hop/cmd" // Import to trigger init() which registers commands
+	"github.com/jadb/git-hop/cmd"
 	"github.com/jadb/git-hop/internal/cli"
 )
 
 func TestDoctorCommand_Help(t *testing.T) {
-	output, err := executeCommand(cli.RootCmd, "doctor", "--help")
+	output, err := cmd.ExecuteCommand(cli.RootCmd, "doctor", "--help")
 
 	if err != nil {
 		t.Errorf("Help should not error, got: %v", err)
@@ -140,7 +140,7 @@ func TestDoctorCommand_FlagCombinations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := executeCommand(cli.RootCmd, tt.args...)
+			output, err := cmd.ExecuteCommand(cli.RootCmd, tt.args...)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -191,7 +191,7 @@ func TestDoctorCommand_ExecutionWithoutSetup(t *testing.T) {
 
 	// Execute doctor - it will likely fail because we're not in a hub
 	// but it shouldn't panic
-	_, err := executeCommand(cli.RootCmd, "doctor")
+	_, err := cmd.ExecuteCommand(cli.RootCmd, "doctor")
 
 	// We expect it might error (not in a hub), but it shouldn't panic
 	// The important part is that the command structure is valid
@@ -232,7 +232,7 @@ func TestDoctorCommand_OutputModes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, _ := executeCommand(cli.RootCmd, tt.args...)
+			output, _ := cmd.ExecuteCommand(cli.RootCmd, tt.args...)
 
 			if tt.checkOutput != nil {
 				tt.checkOutput(t, output)

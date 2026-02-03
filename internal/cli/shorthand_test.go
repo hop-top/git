@@ -1,4 +1,4 @@
-package hop_test
+package cli_test
 
 import (
 	"testing"

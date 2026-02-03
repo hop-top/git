@@ -1,15 +1,15 @@
-package hop_test
+package cmd_test
 
 import (
 	"strings"
 	"testing"
 
-	_ "github.com/jadb/git-hop/cmd"
+	"github.com/jadb/git-hop/cmd"
 	"github.com/jadb/git-hop/internal/cli"
 )
 
 func TestEnvCommand_Help(t *testing.T) {
-	output, err := executeCommand(cli.RootCmd, "env", "--help")
+	output, err := cmd.ExecuteCommand(cli.RootCmd, "env", "--help")
 
 	if err != nil {
 		t.Errorf("Help should not error, got: %v", err)
@@ -115,7 +115,7 @@ func TestEnvCommand_Subcommands(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := executeCommand(cli.RootCmd, tt.args...)
+			output, err := cmd.ExecuteCommand(cli.RootCmd, tt.args...)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")

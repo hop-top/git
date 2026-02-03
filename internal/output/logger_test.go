@@ -1,4 +1,4 @@
-package hop_test
+package output_test
 
 import (
 	"bytes"

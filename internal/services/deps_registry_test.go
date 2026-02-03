@@ -1,4 +1,4 @@
-package hop_test
+package services_test
 
 import (
 	"encoding/json"
