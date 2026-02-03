@@ -1,15 +1,15 @@
-package hop_test
+package cmd_test
 
 import (
 	"strings"
 	"testing"
 
-	_ "github.com/jadb/git-hop/cmd"
+	"github.com/jadb/git-hop/cmd"
 	"github.com/jadb/git-hop/internal/cli"
 )
 
 func TestRemoveCommand_Help(t *testing.T) {
-	output, err := executeCommand(cli.RootCmd, "remove", "--help")
+	output, err := cmd.ExecuteCommand(cli.RootCmd, "remove", "--help")
 
 	if err != nil {
 		t.Errorf("Help should not error, got: %v", err)
@@ -92,7 +92,7 @@ func TestRemoveCommand_Structure(t *testing.T) {
 }
 
 func TestRemoveCommand_RequiresArgument(t *testing.T) {
-	output, err := executeCommand(cli.RootCmd, "remove")
+	output, err := cmd.ExecuteCommand(cli.RootCmd, "remove")
 
 	// Cobra shows help or error when required args are missing
 	if err == nil && !strings.Contains(output, "Usage:") {

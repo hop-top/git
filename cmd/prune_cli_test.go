@@ -1,15 +1,15 @@
-package hop_test
+package cmd_test
 
 import (
 	"strings"
 	"testing"
 
-	_ "github.com/jadb/git-hop/cmd"
+	"github.com/jadb/git-hop/cmd"
 	"github.com/jadb/git-hop/internal/cli"
 )
 
 func TestPruneCommand_Help(t *testing.T) {
-	output, err := executeCommand(cli.RootCmd, "prune", "--help")
+	output, err := cmd.ExecuteCommand(cli.RootCmd, "prune", "--help")
 
 	if err != nil {
 		t.Errorf("Help should not error, got: %v", err)
@@ -105,7 +105,7 @@ func TestPruneCommand_InheritsGlobalFlags(t *testing.T) {
 func TestPruneCommand_ExecutionWithoutSetup(t *testing.T) {
 	// Execute prune - will likely print message about not being in a hub
 	// but shouldn't panic
-	_, err := executeCommand(cli.RootCmd, "prune")
+	_, err := cmd.ExecuteCommand(cli.RootCmd, "prune")
 
 	// Error is acceptable (not in a hub)
 	_ = err

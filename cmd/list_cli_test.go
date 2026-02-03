@@ -1,15 +1,15 @@
-package hop_test
+package cmd_test
 
 import (
 	"strings"
 	"testing"
 
-	_ "github.com/jadb/git-hop/cmd" // Import to trigger init() which registers commands
+	"github.com/jadb/git-hop/cmd"
 	"github.com/jadb/git-hop/internal/cli"
 )
 
 func TestListCommand_Help(t *testing.T) {
-	output, err := executeCommand(cli.RootCmd, "list", "--help")
+	output, err := cmd.ExecuteCommand(cli.RootCmd, "list", "--help")
 
 	if err != nil {
 		t.Errorf("Help should not error, got: %v", err)
@@ -112,7 +112,7 @@ func TestListCommand_FlagCombinations(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			output, err := executeCommand(cli.RootCmd, tt.args...)
+			output, err := cmd.ExecuteCommand(cli.RootCmd, tt.args...)
 
 			if tt.expectError && err == nil {
 				t.Error("Expected error but got none")
@@ -161,7 +161,7 @@ func TestListCommand_ExecutionWithoutSetup(t *testing.T) {
 
 	// Execute list - it will likely print a message about not being in a hub
 	// but it shouldn't panic
-	_, err := executeCommand(cli.RootCmd, "list")
+	_, err := cmd.ExecuteCommand(cli.RootCmd, "list")
 
 	// Error is acceptable in this test (not in a hub)
 	// The important part is that the command structure is valid
