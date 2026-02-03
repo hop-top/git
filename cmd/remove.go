@@ -102,10 +102,8 @@ var removeCmd = &cobra.Command{
 				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 				hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 				if err == nil {
-					// Unregister from hopspace
-					if err := hopspace.UnregisterBranch(target); err != nil {
-						output.Warn("Failed to unregister branch from hopspace: %v", err)
-					}
+					// Unregister from hopspace (silent if branch doesn't exist)
+					hopspace.UnregisterBranch(target)
 
 					// Prune stale git metadata
 					cleanup := hop.NewCleanupManager(fs, g)

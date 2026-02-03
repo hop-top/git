@@ -80,6 +80,11 @@ func (h *Hopspace) RegisterBranch(branch, worktreePath string) error {
 
 // UnregisterBranch removes a branch from the hopspace config
 func (h *Hopspace) UnregisterBranch(branch string) error {
+	if _, exists := h.Config.Branches[branch]; !exists {
+		// Branch doesn't exist in hopspace - this is not an error since it may have
+		// already been cleaned up or only existed in the hub config
+		return nil
+	}
 	delete(h.Config.Branches, branch)
 	return h.Save()
 }

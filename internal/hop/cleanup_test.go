@@ -83,6 +83,10 @@ func TestPruneWorktrees(t *testing.T) {
 	g := &git.Git{Runner: mockRunner}
 	cleanup := NewCleanupManager(fs, g)
 
+	// Create the directory structure in the memory filesystem
+	require.NoError(t, fs.MkdirAll("/test/hopspace/hops/main", 0755))
+	require.NoError(t, fs.MkdirAll("/test/hopspace/hops/feature", 0755))
+
 	// Create a hopspace with branches
 	hopspace := &Hopspace{
 		Path: "/test/hopspace",
@@ -105,7 +109,8 @@ func TestPruneWorktrees(t *testing.T) {
 	require.NoError(t, err)
 
 	// Verify git worktree prune was called with correct arguments
-	assert.Equal(t, "/test/hopspace/hops/main", capturedDir)
+	// Note: map iteration is non-deterministic, so either path is valid
+	assert.Contains(t, []string{"/test/hopspace/hops/main", "/test/hopspace/hops/feature"}, capturedDir)
 	assert.Equal(t, "git", capturedCmd)
 	assert.Equal(t, []string{"worktree", "prune"}, capturedArgs)
 }

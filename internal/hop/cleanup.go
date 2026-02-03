@@ -39,17 +39,21 @@ func (c *CleanupManager) CleanupOrphanedDirectory(path string) error {
 
 // PruneWorktrees removes stale git worktree metadata
 func (c *CleanupManager) PruneWorktrees(hopspace *Hopspace) error {
-	// Find a base path to run git commands from
+	// Find a valid base path to run git commands from
 	var basePath string
 	for _, branch := range hopspace.Config.Branches {
 		if branch.Exists && branch.Path != "" {
-			basePath = branch.Path
-			break
+			// Verify the path actually exists before using it
+			exists, err := afero.DirExists(c.fs, branch.Path)
+			if err == nil && exists {
+				basePath = branch.Path
+				break
+			}
 		}
 	}
 
 	if basePath == "" {
-		// No worktrees to prune from
+		// No valid worktrees to prune from - this is not an error
 		return nil
 	}
 
