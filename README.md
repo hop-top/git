@@ -5,7 +5,7 @@
 <p align="center">
   <a href="#commands">Commands</a> •
   <a href="#quick-start">Quick Start</a> •
-  <a href="#configuration">Configuration</a>
+  <a href="#documentation">Documentation</a>
 </p>
 
 ---
@@ -199,6 +199,17 @@ Available to all commands:
 --help, -h
 --version
 ```
+
+---
+
+## Documentation
+
+Comprehensive guides for git-hop features:
+
+- **[Configuration](docs/configuration.md)** - Directory structure, config files, environment variables, and XDG compliance
+- **[Dependency Sharing](docs/dependency-sharing.md)** - How git-hop shares dependencies across worktrees to save disk space
+- **[Hooks System](docs/hooks.md)** - Lifecycle hooks for customizing worktree and environment behavior
+- **[Error Recovery](docs/error-recovery.md)** - Understanding and fixing state issues with the doctor command
 
 ---
 
