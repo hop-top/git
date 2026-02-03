@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jadb/git-hop/internal/git"
+	"github.com/jadb/git-hop/internal/state"
 	"github.com/spf13/afero"
 )
 
@@ -88,6 +89,49 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 
 	if err := registerProject(fs, org, repo, defaultBranch, absMainWorktreePath); err != nil {
 		fmt.Printf("Warning: failed to register in global registry: %v\n", err)
+	}
+
+	// Update global state
+	st, err := state.LoadState(fs)
+	if err != nil {
+		st = state.NewState()
+	}
+
+	repoID := fmt.Sprintf("github.com/%s/%s", org, repo)
+
+	// Add repository and initial worktree to state
+	if st.Repositories[repoID] == nil {
+		st.AddRepository(repoID, &state.RepositoryState{
+			URI:           uri,
+			Org:           org,
+			Repo:          repo,
+			DefaultBranch: defaultBranch,
+			Worktrees:     make(map[string]*state.WorktreeState),
+			Hubs:          []*state.HubState{},
+		})
+	}
+
+	// Add hub to state
+	st.AddHub(repoID, &state.HubState{
+		Path:         projectRoot,
+		Mode:         "local",
+		CreatedAt:    time.Now(),
+		LastAccessed: time.Now(),
+	})
+
+	// Add main worktree to state
+	if err := st.AddWorktree(repoID, defaultBranch, &state.WorktreeState{
+		Path:         absMainWorktreePath,
+		Type:         "bare",
+		HubPath:      projectRoot,
+		CreatedAt:    time.Now(),
+		LastAccessed: time.Now(),
+	}); err != nil {
+		fmt.Printf("Warning: failed to add worktree to state: %v\n", err)
+	} else {
+		if err := state.SaveState(fs, st); err != nil {
+			fmt.Printf("Warning: failed to save state: %v\n", err)
+		}
 	}
 
 	// Get relative path from projectRoot to mainWorktreePath for display

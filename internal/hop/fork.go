@@ -4,11 +4,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/output"
+	"github.com/jadb/git-hop/internal/state"
 	"github.com/spf13/afero"
 )
 
@@ -163,18 +165,39 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 		}
 	}
 
-	// 4. Create Symlink in Hub
+	// 4. Create worktree in hub's hops directory
 	// Name: <branch>-fork-<org>
-	symlinkName := fmt.Sprintf("%s-fork-%s", branch, org)
-	worktreePath := filepath.Join(forkHopspacePath, branch)
+	forkBranchName := fmt.Sprintf("%s-fork-%s", branch, org)
+	forkWorktreePath := filepath.Join(hubPath, "hops", forkBranchName)
 
-	if err := os.Symlink(worktreePath, filepath.Join(hubPath, symlinkName)); err != nil {
-		return fmt.Errorf("failed to create symlink in hub: %v", err)
+	// We need to add a worktree from the fork hopspace.
+	// Since the branch is already checked out there, we need to:
+	// 1. Add a remote to the main repo pointing to the fork
+	// 2. Fetch from the fork
+	// 3. Create a worktree tracking the fork branch
+
+	// For now, let's use a simpler approach: use the fork hopspace as source
+	// and create a worktree for the same branch
+	// The issue is that git won't let us checkout the same branch twice.
+	// Solution: Create a detached worktree from the commit
+
+	// Get the commit hash from the fork branch
+	sourceWorktreePath := filepath.Join(forkHopspacePath, branch)
+	commitHash, err := g.Runner.RunInDir(sourceWorktreePath, "git", "rev-parse", "HEAD")
+	if err != nil {
+		return fmt.Errorf("failed to get commit hash from fork: %v", err)
+	}
+	commitHash = strings.TrimSpace(commitHash)
+
+	// Create a detached worktree at that commit in the main repo
+	// We use the main repo worktree as the base
+	if _, err := g.Runner.RunInDir(mainRepoPath, "git", "worktree", "add", "--detach", forkWorktreePath, commitHash); err != nil {
+		return fmt.Errorf("failed to add fork worktree: %v", err)
 	}
 
 	// 5. Update Hub Config
-	hub.Config.Branches[symlinkName] = config.HubBranch{
-		Path:           symlinkName,
+	hub.Config.Branches[forkBranchName] = config.HubBranch{
+		Path:           forkWorktreePath,
 		HopspaceBranch: branch,
 		Fork:           &org,
 	}
@@ -184,6 +207,42 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 		return fmt.Errorf("failed to update hub config: %v", err)
 	}
 
-	output.Info("Successfully attached fork branch as %s", symlinkName)
+	// Update global state
+	st, err := state.LoadState(fs)
+	if err != nil {
+		st = state.NewState()
+	}
+
+	// Get the main repo ID
+	mainRepoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+	// Ensure repository exists in state
+	if st.Repositories[mainRepoID] == nil {
+		st.AddRepository(mainRepoID, &state.RepositoryState{
+			URI:           hub.Config.Repo.URI,
+			Org:           hub.Config.Repo.Org,
+			Repo:          hub.Config.Repo.Repo,
+			DefaultBranch: hub.Config.Repo.DefaultBranch,
+			Worktrees:     make(map[string]*state.WorktreeState),
+			Hubs:          []*state.HubState{},
+		})
+	}
+
+	// Add fork worktree to state
+	if err := st.AddWorktree(mainRepoID, forkBranchName, &state.WorktreeState{
+		Path:         forkWorktreePath,
+		Type:         "linked",
+		HubPath:      hubPath,
+		CreatedAt:    time.Now(),
+		LastAccessed: time.Now(),
+	}); err != nil {
+		output.Warn("Failed to update state: %v", err)
+	} else {
+		if err := state.SaveState(fs, st); err != nil {
+			output.Warn("Failed to save state: %v", err)
+		}
+	}
+
+	output.Info("Successfully attached fork branch as %s", forkBranchName)
 	return nil
 }

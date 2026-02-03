@@ -1,10 +1,12 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/config"
@@ -13,6 +15,7 @@ import (
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
 	"github.com/jadb/git-hop/internal/services"
+	"github.com/jadb/git-hop/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -95,6 +98,49 @@ var addCmd = &cobra.Command{
 		// Add to Hub
 		if err := hub.AddBranch(branch, branch, worktreePath); err != nil {
 			output.Fatal("Failed to add branch to hub: %v", err)
+		}
+
+		// Update global state
+		st, err := state.LoadState(fs)
+		if err != nil {
+			st = state.NewState()
+		}
+
+		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+		// Ensure repository exists in state
+		if st.Repositories[repoID] == nil {
+			st.AddRepository(repoID, &state.RepositoryState{
+				URI:           hub.Config.Repo.URI,
+				Org:           hub.Config.Repo.Org,
+				Repo:          hub.Config.Repo.Repo,
+				DefaultBranch: hub.Config.Repo.DefaultBranch,
+				Worktrees:     make(map[string]*state.WorktreeState),
+				Hubs:          []*state.HubState{},
+			})
+
+			// Add the hub to state
+			st.AddHub(repoID, &state.HubState{
+				Path:         hubPath,
+				Mode:         "local",
+				CreatedAt:    time.Now(),
+				LastAccessed: time.Now(),
+			})
+		}
+
+		// Add worktree to state
+		if err := st.AddWorktree(repoID, branch, &state.WorktreeState{
+			Path:         worktreePath,
+			Type:         "linked",
+			HubPath:      hubPath,
+			CreatedAt:    time.Now(),
+			LastAccessed: time.Now(),
+		}); err != nil {
+			output.Error("Failed to update state: %v", err)
+		} else {
+			if err := state.SaveState(fs, st); err != nil {
+				output.Error("Failed to save state: %v", err)
+			}
 		}
 
 		// Generate Environment

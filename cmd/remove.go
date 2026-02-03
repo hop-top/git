@@ -1,12 +1,15 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
+	"github.com/jadb/git-hop/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -49,6 +52,10 @@ var removeCmd = &cobra.Command{
 
 				output.Info("Removing branch %s from hub...", target)
 
+				// Get the worktree path from the hub config BEFORE removing from config
+				branchConfig := hub.Config.Branches[target]
+				worktreePath := branchConfig.Path
+
 				// We need to remove the symlink and update config
 				if err := hub.RemoveBranch(target); err != nil {
 					output.Fatal("Failed to remove branch from hub: %v", err)
@@ -58,31 +65,66 @@ var removeCmd = &cobra.Command{
 				// The specs say: "Remove the symlink from the Hub. Remove the Worktree from the Hopspace."
 				// So yes.
 
-				// Load Hopspace
+				// Use main worktree as base for git worktree remove command
+				var basePath string
+				if mainBranch, exists := hub.Config.Branches[hub.Config.Repo.DefaultBranch]; exists {
+					basePath = mainBranch.Path
+				} else {
+					// Fallback: use any other worktree
+					for bn, bc := range hub.Config.Branches {
+						if bn != target && bc.Path != "" {
+							basePath = bc.Path
+							break
+						}
+					}
+				}
+
+				if basePath != "" {
+					absBasePath, err := filepath.Abs(basePath)
+					if err == nil {
+						// Try git worktree remove
+						if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
+							output.Warn("Failed to remove worktree via git: %v", err)
+						}
+					}
+				}
+
+				// Always try to remove the directory physically as well
+				output.Info("Removing worktree directory: %s", worktreePath)
+				if err := fs.RemoveAll(worktreePath); err != nil {
+					output.Error("Failed to remove worktree directory: %v", err)
+				} else {
+					output.Info("Successfully removed worktree directory")
+				}
+
+				// Load Hopspace to unregister
 				dataHome := hop.GetGitHopDataHome()
 				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 				hopspace, err := hop.LoadHopspace(fs, hopspacePath)
-				if err != nil {
-					output.Error("Failed to load hopspace to remove worktree: %v", err)
-					return
+				if err == nil {
+					// Unregister from hopspace
+					if err := hopspace.UnregisterBranch(target); err != nil {
+						output.Warn("Failed to unregister branch from hopspace: %v", err)
+					}
+
+					// Prune stale git metadata
+					cleanup := hop.NewCleanupManager(fs, g)
+					if err := cleanup.PruneWorktrees(hopspace); err != nil {
+						output.Warn("Failed to prune worktrees: %v", err)
+					}
 				}
 
-				wm := hop.NewWorktreeManager(fs, g)
-				if err := wm.RemoveWorktree(hopspace, target); err != nil {
-					output.Error("Failed to remove worktree: %v", err)
-					output.Info("Continuing with config cleanup...")
-					// Don't fatal - partial success is ok
-				}
-
-				// Always try to unregister (even if worktree removal failed)
-				if err := hopspace.UnregisterBranch(target); err != nil {
-					output.Error("Failed to unregister branch from hopspace: %v", err)
-				}
-
-				// Prune stale git metadata
-				cleanup := hop.NewCleanupManager(fs, g)
-				if err := cleanup.PruneWorktrees(hopspace); err != nil {
-					output.Warn("Failed to prune worktrees: %v", err)
+				// Update global state
+				st, err := state.LoadState(fs)
+				if err == nil {
+					repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+					if err := st.RemoveWorktree(repoID, target); err != nil {
+						output.Warn("Failed to update state: %v", err)
+					} else {
+						if err := state.SaveState(fs, st); err != nil {
+							output.Warn("Failed to save state: %v", err)
+						}
+					}
 				}
 
 				output.Info("Successfully removed %s", target)
