@@ -16,9 +16,8 @@ func TestListCommand_Help(t *testing.T) {
 	}
 
 	expectedStrings := []string{
-		"List hubs",
-		"hopspaces",
-		"branches",
+		"List all",
+		"worktrees",
 		"Usage:",
 	}
 

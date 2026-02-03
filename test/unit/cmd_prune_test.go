@@ -16,8 +16,8 @@ func TestPruneCommand_Help(t *testing.T) {
 	}
 
 	expectedStrings := []string{
-		"Remove orphaned",
-		"data",
+		"Remove",
+		"worktrees",
 		"Usage:",
 	}
 
