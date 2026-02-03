@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/state"
 	"github.com/spf13/afero"
@@ -199,7 +200,7 @@ func cloneRegularRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch s
 
 	// Create main worktree under hops/
 	mainPath := filepath.Join(hopsDir, defaultBranch)
-	if err := g.WorktreeAddCreate(projectRoot, defaultBranch, mainPath, defaultBranch); err != nil {
+	if err := g.CreateWorktree(projectRoot, defaultBranch, mainPath, defaultBranch, false); err != nil {
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 
@@ -220,7 +221,7 @@ func createProjectConfig(fs afero.Fs, g *git.Git, projectRoot, uri, org, repo, d
 		},
 		"branches": map[string]any{
 			defaultBranch: map[string]any{
-				"path":           "main",
+				"path":           config.MakeWorktreePath(defaultBranch),
 				"hopspaceBranch": defaultBranch,
 			},
 		},

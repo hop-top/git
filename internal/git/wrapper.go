@@ -22,17 +22,19 @@ type CommandRunner interface {
 // RealRunner implements CommandRunner using os/exec
 type RealRunner struct{}
 
+// Run executes a command in the current directory
 func (r *RealRunner) Run(cmd string, args ...string) (string, error) {
 	return r.RunInDir("", cmd, args...)
 }
 
+// RunInDir executes a command in the specified directory.
+// If dir is empty, runs in the current directory.
 func (r *RealRunner) RunInDir(dir string, cmd string, args ...string) (string, error) {
 	c := exec.Command(cmd, args...)
 	if dir != "" {
 		c.Dir = dir
 	}
 	c.Env = os.Environ()
-	// Avoid prompting for credentials or other interactive input
 	c.Env = append(c.Env, "GIT_TERMINAL_PROMPT=0")
 
 	var stdout, stderr bytes.Buffer
@@ -69,21 +71,34 @@ func (g *Git) CloneBare(uri, path string) error {
 	return err
 }
 
-// WorktreeAdd creates a new worktree
-func (g *Git) WorktreeAdd(hopspacePath, branch, path string) error {
-	// git worktree add <path> <branch>
-	_, err := g.Runner.RunInDir(hopspacePath, "git", "worktree", "add", path, branch)
-	return err
-}
+// CreateWorktree creates a new worktree.
+// If the branch exists and forceCreate is false, it links the existing branch.
+// If the branch doesn't exist or forceCreate is true, it creates a new branch from base (or HEAD if base is empty).
+func (g *Git) CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool) error {
+	args := []string{"worktree", "add"}
 
-// WorktreeAddCreate creates a new worktree and a new branch
-func (g *Git) WorktreeAddCreate(hopspacePath, branch, path, base string) error {
-	// git worktree add -b <branch> <path> <base>
-	args := []string{"worktree", "add", "-b", branch, path}
-	if base != "" {
-		args = append(args, base)
+	if forceCreate {
+		// Force create a new branch
+		args = append(args, "-b", branch, path)
+		if base != "" {
+			args = append(args, base)
+		}
+	} else {
+		// Try to link existing branch, or create if it doesn't exist
+		args = append(args, path, branch)
 	}
+
 	_, err := g.Runner.RunInDir(hopspacePath, "git", args...)
+
+	// If linking failed because branch doesn't exist, try creating it
+	if err != nil && !forceCreate {
+		args = []string{"worktree", "add", "-b", branch, path}
+		if base != "" {
+			args = append(args, base)
+		}
+		_, err = g.Runner.RunInDir(hopspacePath, "git", args...)
+	}
+
 	return err
 }
 
@@ -125,13 +140,13 @@ func (g *Git) MergeBase(dir, commit1, commit2 string) (string, error) {
 	return g.Runner.RunInDir(dir, "git", "merge-base", commit1, commit2)
 }
 
-// LsRemote returns the default branch for a remote URI
+// GetDefaultBranch returns the default branch for a remote URI using git ls-remote.
+// Parses the symref output to extract the branch name from refs/heads/.
 func (g *Git) GetDefaultBranch(uri string) (string, error) {
 	out, err := g.Runner.Run("git", "ls-remote", "--symref", uri, "HEAD")
 	if err != nil {
 		return "", err
 	}
-	// Output format: ref: refs/heads/main	HEAD
 	lines := strings.Split(out, "\n")
 	for _, line := range lines {
 		parts := strings.Fields(line)
@@ -207,7 +222,9 @@ func (g *Git) GetCurrentBranch(dir string) (string, error) {
 	return strings.TrimSpace(out), nil
 }
 
-// parseRepoFromURL parses org/repo from various git URL formats
+// parseRepoFromURL parses org and repo name from various git URL formats.
+// Supports file://, git@, and https:// URL formats.
+// Returns empty strings if the URL format is unrecognized.
 func parseRepoFromURL(uri string) (org, repo string) {
 	trimmed := strings.TrimSuffix(uri, ".git")
 

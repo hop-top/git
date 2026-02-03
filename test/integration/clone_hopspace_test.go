@@ -39,7 +39,7 @@ func TestCloneWorktreeCreatesHopspace(t *testing.T) {
 		},
 		"branches": map[string]interface{}{
 			defaultBranch: map[string]interface{}{
-				"path":   "main",
+				"path":   config.MakeWorktreePath(defaultBranch),
 				"exists": true,
 			},
 		},

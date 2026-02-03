@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/spf13/afero"
 )
@@ -96,9 +97,12 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 
 	for _, b := range hopspace.Config.Branches {
 		if b.Exists && b.Path != "" {
+			// Resolve the path relative to hub if it's not absolute
+			branchPath := config.ResolveWorktreePath(b.Path, hubPath)
+
 			// Check if this worktree belongs to the current hub
-			if strings.HasPrefix(b.Path, hubPath+string(filepath.Separator)) || strings.HasPrefix(b.Path, hubPath) {
-				baseWorktreePath = b.Path
+			if strings.HasPrefix(branchPath, hubPath+string(filepath.Separator)) || strings.HasPrefix(branchPath, hubPath) {
+				baseWorktreePath = branchPath
 				break
 			}
 		}
@@ -109,7 +113,9 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	if baseWorktreePath == "" {
 		for _, b := range hopspace.Config.Branches {
 			if b.Exists && b.Path != "" {
-				baseWorktreePath = b.Path
+				// Resolve the path relative to hub if it's not absolute
+				branchPath := config.ResolveWorktreePath(b.Path, hubPath)
+				baseWorktreePath = branchPath
 				break
 			}
 		}
@@ -136,17 +142,10 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 		return worktreePath, fmt.Errorf("worktree already exists at %s", worktreePath)
 	}
 
-	// Use absolute path for git commands
-	absBasePath, err := filepath.Abs(baseWorktreePath)
-	if err != nil {
-		return "", fmt.Errorf("failed to get absolute path: %w", err)
-	}
-
-	if err := m.git.WorktreeAdd(absBasePath, branch, worktreePath); err != nil {
-		// If failed, maybe branch doesn't exist? Try creating it.
-		if err2 := m.git.WorktreeAddCreate(absBasePath, branch, worktreePath, "HEAD"); err2 != nil {
-			return "", fmt.Errorf("failed to add worktree (and failed to create branch): %v / %v", err, err2)
-		}
+	// baseWorktreePath is already absolute after resolution by ResolveWorktreePath
+	// CreateWorktree will automatically try to link existing branch first, then create if needed
+	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, "HEAD", false); err != nil {
+		return "", fmt.Errorf("failed to create worktree: %w", err)
 	}
 
 	return worktreePath, nil

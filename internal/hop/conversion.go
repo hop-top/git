@@ -176,7 +176,7 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		}
 
 		mainPath := filepath.Join(worktreesDir, "main")
-		if err := c.git.WorktreeAddCreate(repoPath, "main", mainPath, currentBranch); err != nil {
+		if err := c.git.CreateWorktree(repoPath, "main", mainPath, currentBranch, true); err != nil {
 			return fmt.Errorf("failed to create main worktree: %w", err)
 		}
 	}
@@ -190,7 +190,7 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 				continue
 			}
 			worktreePath := c.getWorktreePathForBranch(branch, repoPath)
-			if err := c.git.WorktreeAdd(repoPath, branch, worktreePath); err != nil {
+			if err := c.git.CreateWorktree(repoPath, branch, worktreePath, "", false); err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("failed to create worktree for %s: %v", branch, err))
 			}
 		}
@@ -274,7 +274,7 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 		},
 		"branches": map[string]interface{}{
 			defaultBranch: map[string]interface{}{
-				"path":   "main",
+				"path":   config.MakeWorktreePath(defaultBranch),
 				"exists": true,
 			},
 		},

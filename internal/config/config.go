@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"time"
 )
 
@@ -192,4 +193,20 @@ type ConversionSettings struct {
 	EnforceClean    bool `json:"enforceClean"`
 	AllowDirtyForce bool `json:"allowDirtyForce"`
 	AutoRollback    bool `json:"autoRollback"`
+}
+
+// ResolveWorktreePath resolves a worktree path that may be relative or absolute.
+// If the path is relative, it resolves it relative to the hub path.
+// If the path is absolute, it returns it as-is.
+func ResolveWorktreePath(worktreePath, hubPath string) string {
+	if filepath.IsAbs(worktreePath) {
+		return worktreePath
+	}
+	return filepath.Join(hubPath, worktreePath)
+}
+
+// MakeWorktreePath creates the standard worktree path pattern for hub configs.
+// Returns "hops/{branchName}" as a relative path.
+func MakeWorktreePath(branchName string) string {
+	return filepath.Join("hops", branchName)
 }
