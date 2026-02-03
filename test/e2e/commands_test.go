@@ -1,12 +1,10 @@
 package e2e
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestCommands(t *testing.T) {
@@ -29,15 +27,8 @@ func TestCommands(t *testing.T) {
 		env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", branch)
 	}
 
-	// Initialize Hub manually with hops/ structure
-	os.MkdirAll(env.HubPath, 0755)
-	hopsDir := filepath.Join(env.HubPath, "hops")
-	os.MkdirAll(hopsDir, 0755)
-	mainWorktreePath := filepath.Join(hopsDir, "main")
-	env.RunCommand(t, hopsDir, "git", "clone", env.BareRepoPath, "main")
-
-	// Configs
-	createConfigs(t, env, mainWorktreePath)
+	// Initialize Hub using git hop clone
+	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
 
 	// Verify main worktree exists initially
 	if _, err := os.Stat(filepath.Join(env.HubPath, "hops", "main")); err != nil {
@@ -223,39 +214,4 @@ func TestCommands(t *testing.T) {
 			}
 		}
 	})
-}
-
-func createConfigs(t *testing.T, env *TestEnv, mainWorktreePath string) {
-	// Create merged local config (hub+hopspace in single hop.json)
-	// This simulates local mode (default, no --global flag)
-	mergedConfig := map[string]interface{}{
-		"repo": map[string]interface{}{
-			"uri":           env.BareRepoPath,
-			"org":           "local",
-			"repo":          "test-repo",
-			"defaultBranch": "main",
-			"structure":     "bare-worktree",
-			"isBare":        true,
-		},
-		"branches": map[string]interface{}{
-			"main": map[string]interface{}{
-				// Merged hub+hopspace fields
-				"path":           mainWorktreePath, // Absolute path for hopspace
-				"hopspaceBranch": "main",
-				"exists":         true,
-				"lastSync":       time.Now().Format(time.RFC3339),
-			},
-		},
-		"settings": map[string]interface{}{
-			"envPatterns": []string{"dev", "staging", "qa"},
-		},
-		"forks": map[string]interface{}{},
-	}
-
-	// Write merged config to hub directory
-	data, err := json.MarshalIndent(mergedConfig, "", "  ")
-	if err != nil {
-		t.Fatalf("Failed to marshal merged config: %v", err)
-	}
-	WriteFile(t, filepath.Join(env.HubPath, "hop.json"), string(data))
 }

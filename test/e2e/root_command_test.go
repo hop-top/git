@@ -25,15 +25,9 @@ func TestRootCommand_NonExistentBranch(t *testing.T) {
 	env.RunCommand(t, env.SeedRepoPath, "git", "commit", "-m", "Initial commit")
 	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main")
 
-	// Initialize Hub manually with hops/ structure
-	os.MkdirAll(env.HubPath, 0755)
+	// Initialize Hub using git hop clone
+	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
 	hopsDir := filepath.Join(env.HubPath, "hops")
-	os.MkdirAll(hopsDir, 0755)
-	mainWorktreePath := filepath.Join(hopsDir, "main")
-	env.RunCommand(t, hopsDir, "git", "clone", env.BareRepoPath, "main")
-
-	// Create minimal config
-	createConfigs(t, env, mainWorktreePath)
 
 	// Test: Try to run `git hop lsit` where `lsit` is a non-existent branch
 	// This should FAIL, not create a new worktree
@@ -76,14 +70,9 @@ func TestRootCommand_ExistingWorktree(t *testing.T) {
 	env.RunCommand(t, env.SeedRepoPath, "git", "checkout", "-b", "feature-1")
 	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "feature-1")
 
-	// Initialize Hub
-	os.MkdirAll(env.HubPath, 0755)
+	// Initialize Hub using git hop clone
+	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
 	hopsDir := filepath.Join(env.HubPath, "hops")
-	os.MkdirAll(hopsDir, 0755)
-	mainWorktreePath := filepath.Join(hopsDir, "main")
-	env.RunCommand(t, hopsDir, "git", "clone", env.BareRepoPath, "main")
-
-	createConfigs(t, env, mainWorktreePath)
 
 	// Explicitly create feature-1 worktree using `git hop add`
 	env.RunGitHop(t, env.HubPath, "add", "feature-1")

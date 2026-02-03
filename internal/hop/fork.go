@@ -26,7 +26,7 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 
 	// 2. Determine Fork Hopspace
 	// $GIT_HOP_DATA_HOME/<fork-org>/<fork-repo>/
-	org, repo := parseURI(uri)
+	org, repo := ParseRepoFromURL(uri)
 	if org == "" || repo == "" {
 		return fmt.Errorf("could not parse org/repo from URI: %s", uri)
 	}
@@ -58,15 +58,16 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 	output.Info("Searching for main repo in %d branches...", len(hub.Config.Branches))
 	for name, b := range hub.Config.Branches {
 		if b.Fork == nil { // Not a fork, likely part of main repo
-			// Resolve symlink
-			linkPath := filepath.Join(hubPath, b.Path)
-			target, err := os.Readlink(linkPath)
-			if err == nil {
-				output.Info("Found candidate main repo at %s (branch %s) -> %s", linkPath, name, target)
-				mainRepoPath = target
+			// With bare repo + worktree structure, b.Path is the full worktree path
+			// No symlinks are used in this structure
+			worktreePath := b.Path
+			// Verify the worktree exists
+			if _, err := os.Stat(worktreePath); err == nil {
+				output.Info("Found candidate main repo at %s (branch %s)", worktreePath, name)
+				mainRepoPath = worktreePath
 				break
 			} else {
-				output.Info("Failed to read link for %s: %v", name, err)
+				output.Info("Worktree not found for %s at %s: %v", name, worktreePath, err)
 			}
 		} else {
 			output.Info("Skipping fork branch %s", name)

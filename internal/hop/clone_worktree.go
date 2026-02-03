@@ -23,6 +23,13 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		projectRoot = filepath.Join(cwd, repoName)
 	}
 
+	// Ensure projectRoot is absolute to avoid path issues with git -C
+	absProjectRoot, err := filepath.Abs(projectRoot)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %v", err)
+	}
+	projectRoot = absProjectRoot
+
 	org, repo := ParseRepoFromURL(uri)
 	if org == "" || repo == "" {
 		return fmt.Errorf("could not parse org/repo from URI: %s", uri)
@@ -203,10 +210,10 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 			"structure":     "bare-worktree",
 			"isBare":        useBare,
 		},
-		// Hub branches (points to worktree paths relative to hub)
+		// Hub branches (points to worktree paths - full absolute paths)
 		"branches": map[string]any{
 			defaultBranch: map[string]any{
-				"path":           defaultBranch,
+				"path":           worktreePath,
 				"hopspaceBranch": defaultBranch,
 				// Hopspace fields (merged into same branches map)
 				"exists":   true,
