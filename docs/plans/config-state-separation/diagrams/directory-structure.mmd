@@ -1,0 +1,49 @@
+```mermaid
+graph TB
+    subgraph XDG_CONFIG[$XDG_CONFIG_HOME/git-hop]
+        Config[config.json<br/>user preferences, tool settings]
+        GlobalHooks[hooks/<br/>global user hooks]
+        
+        GlobalHooks --> HW1[pre-worktree-add]
+        GlobalHooks --> HW2[post-worktree-add]
+        GlobalHooks --> HW3[pre-env-start]
+        GlobalHooks --> HW4[post-env-start]
+        GlobalHooks --> HW5[pre-env-stop]
+        GlobalHooks --> HW6[post-env-stop]
+    end
+    
+    subgraph XDG_STATE[$XDG_STATE_HOME/git-hop]
+        State[state.json<br/>repository tracking, hub locations]
+    end
+    
+    subgraph XDG_DATA[$XDG_DATA_HOME/git-hop]
+        subgraph Repo[org/repo]
+            Hopspace[hop.json<br/>global hopspace config]
+            ProjectHooks[hooks/<br/>project-specific hooks]
+            
+            ProjectHooks --> PH1[pre-worktree-add]
+            ProjectHooks --> PH2[post-worktree-add]
+            ProjectHooks --> PH3[pre-env-start]
+            ProjectHooks --> PH4[post-env-start]
+            ProjectHooks --> PH5[pre-env-stop]
+            ProjectHooks --> PH6[post-env-stop]
+            
+            subgraph Volumes[volumes]
+                VolBranch[branch]
+            end
+        end
+    end
+    
+    Config -.->|portable| State
+    Config -.->|portable| Repo
+    State -.->|machine-specific| Repo
+    
+    classDef config fill:#e1f5fe,stroke:#0ea5e9,stroke-width:2px
+    classDef state fill:#fef3c7,stroke:#f59e0b,stroke-width:2px
+    classDef data fill:#dbeafe,stroke:#3b82f6,stroke-width:2px
+    classDef hook fill:#fff3e0,stroke:#f97316,stroke-width:2px
+    
+    class Config,State config
+    class Repo,Hopspace,Volumes data
+    class GlobalHooks,ProjectHooks hook
+```

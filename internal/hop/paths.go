@@ -104,3 +104,28 @@ func GetGitHopDataHome() string {
 	}
 	return filepath.Join(GetDataHome(), "git-hop")
 }
+
+// GetStateHome returns the XDG state home directory
+func GetStateHome() string {
+	if env := os.Getenv("XDG_STATE_HOME"); env != "" {
+		return env
+	}
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = os.Getenv("HOME")
+	}
+
+	if home == "" {
+		return ".local/state"
+	}
+
+	switch runtime.GOOS {
+	case "darwin":
+		// macOS: ~/Library/Application Support/state
+		return filepath.Join(home, "Library", "Application Support", "state")
+	default:
+		// Linux/Unix: ~/.local/state
+		return filepath.Join(home, ".local", "state")
+	}
+}

@@ -70,11 +70,19 @@ var removeCmd = &cobra.Command{
 				wm := hop.NewWorktreeManager(fs, g)
 				if err := wm.RemoveWorktree(hopspace, target); err != nil {
 					output.Error("Failed to remove worktree: %v", err)
-					// Don't fatal, partial success on hub removal
+					output.Info("Continuing with config cleanup...")
+					// Don't fatal - partial success is ok
 				}
 
+				// Always try to unregister (even if worktree removal failed)
 				if err := hopspace.UnregisterBranch(target); err != nil {
 					output.Error("Failed to unregister branch from hopspace: %v", err)
+				}
+
+				// Prune stale git metadata
+				cleanup := hop.NewCleanupManager(fs, g)
+				if err := cleanup.PruneWorktrees(hopspace); err != nil {
+					output.Warn("Failed to prune worktrees: %v", err)
 				}
 
 				output.Info("Successfully removed %s", target)

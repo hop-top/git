@@ -1,0 +1,77 @@
+```mermaid
+graph TD
+    Start[hop org/repo:branch]
+    
+    subgraph StateLookup[State Lookup]
+        Load[Load state.json]
+        Repo[Find repo state<br/>by repoID]
+        Worktree[Find worktree entry<br/>by branch name]
+    end
+    
+    Load --> Repo --> Worktree
+    
+    subgraph Verify[Verify Path]
+        CheckPath[Path exists?]
+        PathValid{Path exists}
+    end
+    
+    Worktree --> CheckPath
+    
+    subgraph UpdateState[Update LastAccessed]
+        Timestamp[Update LastAccessed<br/>time.Now]
+        Save[Save state.json]
+    end
+    
+    CheckPath -->|yes| GitCheck[Verify with git<br/>worktree list]
+    CheckPath -->|no| Rescan[Need to rescan]
+    
+    subgraph GitVerify[Git Verification]
+        ListRun[Run git worktree list]
+        FindMatch[Find matching branch<br/>in git output]
+        PathMatch{Path matches<br/>git worktree?}
+    end
+    
+    GitCheck --> ListRun --> FindMatch --> PathMatch
+    
+    PathMatch -->|yes| UpdateState
+    PathMatch -->|no| Rescan
+    
+    subgraph RescanOp[Rescan Operation]
+        ListRun2[Run git worktree list<br/>on hub path]
+        ScanBranches[Scan all branches]
+        FindBranch2[Find target branch]
+        UpdateMap[Update state.json<br/>with new path]
+    end
+    
+    Rescan --> ListRun2 --> ScanBranches --> FindBranch2 --> UpdateMap
+    
+    subgraph Success[Success]
+        Chdir[Change directory<br/>to worktree path]
+        Return[Return success]
+    end
+    
+    UpdateState --> Chdir
+    UpdateMap --> Chdir
+    
+    Chdir --> Return
+    
+    Repo -->|not found| Error1[Error: repo<br/>not registered]
+    Worktree -->|not found| Error2[Error: branch<br/>not registered]
+    FindBranch2 -->|not found| Error3[Error: worktree<br/>not found]
+    
+    classDef lookup fill:#e1f5fe,stroke:#0ea5e99
+    classDef verify fill:#fff3e0,stroke:#f97316
+    classDef update fill:#dbeafe,stroke:#3b82f6
+    classDef git fill:#fef3c7,stroke:#f59e0b
+    classDef rescan fill:#d1fae5,stroke:#1d3557
+    classDef success fill:#a7f3d0,stroke:#4caf50
+    classDef error fill:#ffebee,stroke:#f44336
+    
+    class Load,Repo,Worktree lookup
+    class CheckPath,PathValid verify
+    class Timestamp,Save update
+    class ListRun,FindMatch git
+    class ListRun2,ScanBranches,FindBranch2,UpdateMap rescan
+    class Chdir,Return success
+    class Error1,Error2,Error3 error
+```

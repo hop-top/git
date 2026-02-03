@@ -1,0 +1,53 @@
+```mermaid
+graph TD
+    Start[git-hop operation<br/>e.g., add, remove, env start/stop]
+    
+    subgraph Native[Git Native Hooks]
+        GitHook[.git/hooks/<hook-name>]
+    end
+    
+    subgraph Wrapper[Hop Wrapper]
+        Check[git-hop available?]
+    end
+    
+    Check -->|yes| Run[git-hop hook run<br/>$HOOK_NAME $@]
+    Check -->|no| End1[exit 0]
+    
+    subgraph Priority[Hook Priority System]
+        subgraph Repo[Priority 1: Repo Override]
+            RepoHook[.git-hop/hooks/<hook-name><br/>worktree-specific]
+        end
+        
+        subgraph Hopspace[Priority 2: Hopspace]
+            HopspaceHook[$XDG_DATA_HOME/git-hop/<br/>org/repo/hooks/<hook-name><br/>project-specific]
+        end
+        
+        subgraph Global[Priority 3: Global]
+            GlobalHook[$XDG_CONFIG_HOME/git-hop/<br/>hooks/<hook-name><br/>user preferences]
+        end
+        
+        subgraph BuiltIn[Priority 4: Built-in]
+            Default[git-hop internal<br/>default behavior]
+        end
+    end
+    
+    Run --> RepoHook
+    RepoHook -->|not found| HopspaceHook
+    HopspaceHook -->|not found| GlobalHook
+    GlobalHook -->|not found| BuiltIn
+    
+    Start --> GitHook
+    GitHook --> Wrapper
+    
+    classDef wrapper fill:#e1f5fe,stroke:#0ea5e9
+    classDef repo fill:#fff3e0,stroke:#f97316
+    classDef hopspace fill:#dbeafe,stroke:#3b82f6
+    classDef global fill:#fef3c7,stroke:#f59e0b
+    classDef builtin fill:#d1fae5,stroke:#1d3557
+    
+    class Check,Run wrapper
+    class RepoHook repo
+    class HopspaceHook hopspace
+    class GlobalHook global
+    class Default builtin
+```

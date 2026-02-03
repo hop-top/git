@@ -1,0 +1,61 @@
+```mermaid
+graph TD
+    subgraph Operations[Operations that modify state.json]
+        AddOp[git hop add<br/>new worktree]
+        CloneOp[git hop clone<br/>new repository]
+        RemoveOp[git hop remove<br/>remove worktree]
+        VerifyOp[git hop org/repo:branch<br/>access verification]
+    end
+    
+    subgraph StateUpdates[state.json Update Operations]
+        subgraph AddFlow[Add Branch to State]
+            CreateBranch{Create<br/>new branch?}
+            UpdateWt[Update Worktrees map]
+            SetTimestamp[Set CreatedAt<br/>time.Now]
+            SetLastAccess[Set LastAccessed<br/>time.Now]
+        end
+        
+        subgraph RemoveFlow[Remove Branch from State]
+            DeleteEntry[Delete from Worktrees map]
+            CheckBare{Is bare<br/>worktree?}
+            RemoveHub[Remove hub from<br/>Hubs array]
+        end
+        
+        subgraph CloneFlow[Clone Repository]
+            NewRepo[Create new repo entry<br/>in Repositories]
+            InitBranches[Initialize empty<br/>Worktrees map]
+            SetDefault[Set defaultBranch<br/>from git remote]
+            AddHub[Add path to<br/>Hubs array]
+        end
+        
+        subgraph VerifyFlow[Verify Access]
+            AccessCheck{Path valid?}
+            UpdateAccess[Update LastAccessed<br/>time.Now]
+        end
+    end
+    
+    subgraph WriteOp[Write Operation]
+        Atomic[Atomic write:<br/>tmp.json + rename]
+        Persist[Write to disk<br/>$XDG_STATE_HOME]
+    end
+    
+    AddOp --> AddFlow
+    RemoveOp --> RemoveFlow
+    CloneOp --> CloneFlow
+    VerifyOp --> VerifyFlow
+    
+    CreateBranch --> UpdateWt --> SetTimestamp --> SetLastAccess --> WriteOp
+    DeleteEntry --> CheckBare -->|yes| RemoveHub --> WriteOp
+    CheckBare -->|no| WriteOp
+    InitBranches --> SetDefault --> AddHub --> WriteOp
+    AccessCheck -->|yes| UpdateAccess --> WriteOp
+    AccessCheck -->|no| WriteOp
+    
+    classDef op fill:#e1f5fe,stroke:#0ea5e99
+    classDef flow fill:#fff3e0,stroke:#f97316
+    classDef write fill:#d1fae5,stroke:#1d3557
+    
+    class AddOp,RemoveOp,CloneOp,VerifyOp op
+    class AddFlow,RemoveFlow,CloneFlow,VerifyFlow flow
+    class Atomic,Persist write
+```

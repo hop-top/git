@@ -28,7 +28,7 @@ $GIT_HOP_DATA_HOME/org/repo/
 ### Worktree Symlinks
 
 ```
-.git/hop/worktrees/feature-xyz/
+.git/hop/hops/feature-xyz/
 ├── node_modules -> $GIT_HOP_DATA_HOME/org/repo/deps/node_modules.abc123
 ├── vendor -> $GIT_HOP_DATA_HOME/org/repo/deps/vendor.789ghi
 └── venv -> $GIT_HOP_DATA_HOME/org/repo/deps/venv.jkl012

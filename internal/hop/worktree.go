@@ -23,6 +23,55 @@ func NewWorktreeManager(fs afero.Fs, g *git.Git) *WorktreeManager {
 	}
 }
 
+// CreateWorktreeTransactional creates a git worktree with validation and auto-cleanup
+func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string) (string, error) {
+	// Validate inputs early (before path computation)
+	if hubPath == "" {
+		return "", fmt.Errorf("hubPath cannot be empty")
+	}
+	if branch == "" {
+		return "", fmt.Errorf("branch cannot be empty")
+	}
+
+	// Step 1: Expand worktree location using ExpandWorktreeLocation
+	dataHome := GetGitHopDataHome()
+	ctx := WorktreeLocationContext{
+		HubPath:  hubPath,
+		Branch:   branch,
+		Org:      org,
+		Repo:     repo,
+		DataHome: dataHome,
+	}
+	worktreePath := ExpandWorktreeLocation(locationPattern, ctx)
+
+	// Clean the path to resolve .. and . segments
+	worktreePath = filepath.Clean(worktreePath)
+
+	// Step 2: Pre-flight validation
+	validator := NewStateValidator(m.fs, m.git)
+	validation, err := validator.ValidateWorktreeAdd(hopspace, hubPath, branch, worktreePath)
+	if err != nil {
+		return worktreePath, fmt.Errorf("validation failed: %w", err)
+	}
+
+	// Step 3: Auto-cleanup orphaned directories if needed
+	if !validation.CanProceed && validation.RequiresCleanup {
+		cleanup := NewCleanupManager(m.fs, m.git)
+		if err := cleanup.CleanupOrphanedDirectory(worktreePath); err != nil {
+			return worktreePath, fmt.Errorf("failed to cleanup orphaned directory: %w", err)
+		}
+	}
+
+	// Step 4: Call existing CreateWorktree method to do the actual work
+	_, err = m.CreateWorktree(hopspace, hubPath, branch, locationPattern, org, repo)
+	if err != nil {
+		// Return our cleaned path on error
+		return worktreePath, err
+	}
+	// Return our cleaned path on success
+	return worktreePath, nil
+}
+
 // CreateWorktree creates a git worktree at the configured location
 func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string) (string, error) {
 	// Validate inputs

@@ -6,9 +6,11 @@ import (
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/config"
+	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
 	"github.com/jadb/git-hop/internal/services"
+	"github.com/jadb/git-hop/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +29,8 @@ Checks:
 - Path configuration (data home, config home, cache home)
 - Hub configuration and symlinks
 - Hopspace existence and consistency
-- Orphaned worktrees
+- Worktree state (orphaned directories)
+- Orphaned worktrees in state
 
 Use --fix to automatically repair issues.`,
 	Run: func(cmd *cobra.Command, args []string) {
@@ -274,6 +277,95 @@ Use --fix to automatically repair issues.`,
 			output.Info("Not in a hub. Skipping dependency checks.")
 		}
 
+		// Check Worktree State
+		output.Info("\n=== Checking Worktree State ===")
+		if hubPath != "" {
+			hub, err := hop.LoadHub(fs, hubPath)
+			if err == nil {
+				dataHome := hop.GetGitHopDataHome()
+				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+				// Load hopspace
+				hopspace, err := hop.LoadHopspace(fs, hopspacePath)
+				if err != nil {
+					output.Error("Failed to load hopspace: %v", err)
+					issuesFound = true
+				} else {
+					g := git.New()
+					validator := hop.NewStateValidator(fs, g)
+					cleanup := hop.NewCleanupManager(fs, g)
+
+					// Check for orphaned directories
+					orphanedDirs, err := validator.DetectOrphanedDirectories(hopspace)
+					if err != nil {
+						output.Error("Failed to detect orphaned directories: %v", err)
+					} else if len(orphanedDirs) > 0 {
+						issuesFound = true
+						output.Error("Found %d orphaned directories", len(orphanedDirs))
+						for _, dir := range orphanedDirs {
+							output.Error("  - %s", dir)
+							if doctorFix {
+								output.Info("    Cleaning up...")
+								fullPath := filepath.Join(hopspacePath, "hops", dir)
+								if err := cleanup.CleanupOrphanedDirectory(fullPath); err != nil {
+									output.Error("    Failed to remove: %v", err)
+								} else {
+									output.Info("    ✓ Removed")
+									fixedIssues++
+								}
+							}
+						}
+						if !doctorFix {
+							output.Info("  Run 'git hop doctor --fix' to clean up orphaned directories")
+						}
+					} else {
+						output.Info("✓ No orphaned directories found")
+					}
+				}
+			}
+		} else {
+			output.Info("Not in a hub. Skipping worktree state checks.")
+		}
+
+		// Check State Consistency
+		output.Info("\n=== Checking State ===")
+		st, err := state.LoadState(fs)
+		if err != nil {
+			output.Warn("Could not load state: %v", err)
+			output.Info("Run 'git hop migrate' if you have legacy data to migrate.")
+		} else if len(st.Repositories) > 0 {
+			stateIssues := checkStateConsistency(fs, st)
+			if len(stateIssues) > 0 {
+				issuesFound = true
+				output.Info("Found %d state consistency issue(s):", len(stateIssues))
+				for _, issue := range stateIssues {
+					output.Error("  %s", issue)
+				}
+
+				if doctorFix {
+					output.Info("\nPruning orphaned entries from state...")
+					// Use the prune functions
+					worktreesPruned := pruneOrphanedWorktrees(fs, st)
+					hubsPruned := pruneOrphanedHubs(fs, st)
+
+					if worktreesPruned > 0 || hubsPruned > 0 {
+						if err := state.SaveState(fs, st); err != nil {
+							output.Error("Failed to save state: %v", err)
+						} else {
+							output.Info("✓ Pruned %d worktree(s) and %d hub(s)", worktreesPruned, hubsPruned)
+							fixedIssues += worktreesPruned + hubsPruned
+						}
+					}
+				} else {
+					output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
+				}
+			} else {
+				output.Info("✓ State is consistent")
+			}
+		} else {
+			output.Info("No repositories in state. Skipping state checks.")
+		}
+
 		// Summary
 		output.Info("\n=== Summary ===")
 		if !issuesFound {
@@ -311,4 +403,20 @@ func getDirSize(fs afero.Fs, path string) int64 {
 		return nil
 	})
 	return size
+}
+
+// checkStateConsistency verifies all worktrees in state exist on filesystem
+func checkStateConsistency(fs afero.Fs, st *state.State) []string {
+	var issues []string
+
+	for repoID, repo := range st.Repositories {
+		for branch, wt := range repo.Worktrees {
+			if exists, _ := afero.DirExists(fs, wt.Path); !exists {
+				issues = append(issues,
+					"Worktree missing: "+repoID+":"+branch+" at "+wt.Path)
+			}
+		}
+	}
+
+	return issues
 }

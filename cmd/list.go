@@ -3,14 +3,12 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
-	"strings"
 
 	"github.com/jadb/git-hop/internal/cli"
-	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
+	"github.com/jadb/git-hop/internal/state"
 	"github.com/jadb/git-hop/internal/tui"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -19,80 +17,138 @@ import (
 var listCmd = &cobra.Command{
 	Use:     "list",
 	Aliases: []string{"ls", "all"},
-	Short:   "List hubs, hopspaces, and branches",
-	Run: func(cmd *cobra.Command, args []string) {
-		fs := afero.NewOsFs()
-		cwd, err := os.Getwd()
-		if err != nil {
-			output.Fatal("Failed to get current directory: %v", err)
+	Short:   "List all managed worktrees",
+	Long: `List all worktrees tracked by git-hop.
+
+Shows worktrees from the state file with their paths, types, and last access times.
+Can list worktrees for current repository or all repositories.
+`,
+	Run: runList,
+}
+
+func runList(cmd *cobra.Command, args []string) {
+	fs := afero.NewOsFs()
+
+	// Load state
+	st, err := loadStateOrLegacy(fs)
+	if err != nil {
+		output.Fatal("Failed to load state: %v", err)
+	}
+
+	// Check if we're in a hub to filter by current repo
+	cwd, _ := os.Getwd()
+	var currentRepoID string
+	if hubPath, err := hop.FindHub(fs, cwd); err == nil {
+		// Try to determine repo ID from hub
+		if hub, err := hop.LoadHub(fs, hubPath); err == nil {
+			currentRepoID = fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		}
+	}
+
+	if len(st.Repositories) == 0 {
+		output.Info("No worktrees found.")
+		output.Info("\nRun 'git hop migrate' if you have existing data to migrate.")
+		return
+	}
+
+	// If in a specific repo, show detailed view
+	if currentRepoID != "" && st.Repositories[currentRepoID] != nil {
+		showRepositoryWorktrees(fs, currentRepoID, st.Repositories[currentRepoID])
+		return
+	}
+
+	// Otherwise show all repositories
+	showAllRepositories(fs, st)
+}
+
+func showRepositoryWorktrees(fs afero.Fs, repoID string, repo *state.RepositoryState) {
+	output.Info("Repository: %s", repoID)
+	output.Info("")
+
+	if len(repo.Worktrees) == 0 {
+		output.Info("No worktrees found.")
+		return
+	}
+
+	t := tui.NewTable([]interface{}{"Branch", "Type", "Path", "Status"})
+
+	for branch, wt := range repo.Worktrees {
+		status := "missing"
+		if exists, _ := afero.DirExists(fs, wt.Path); exists {
+			status = "active"
 		}
 
-		hubPath, err := hop.FindHub(fs, cwd)
-		if err == nil {
-			hub, err := hop.LoadHub(fs, hubPath)
-			if err != nil {
-				output.Fatal("Failed to load hub: %v", err)
+		t.AddRow(branch, wt.Type, wt.Path, status)
+	}
+
+	t.Render()
+}
+
+func showAllRepositories(fs afero.Fs, st *state.State) {
+	output.Info("All Repositories:")
+	output.Info("")
+
+	t := tui.NewTable([]interface{}{"Repository", "Branch", "Type", "Path", "Status"})
+
+	// Sort repositories for consistent output
+	var repoIDs []string
+	for repoID := range st.Repositories {
+		repoIDs = append(repoIDs, repoID)
+	}
+	sort.Strings(repoIDs)
+
+	for _, repoID := range repoIDs {
+		repo := st.Repositories[repoID]
+
+		// Sort branches
+		var branches []string
+		for branch := range repo.Worktrees {
+			branches = append(branches, branch)
+		}
+		sort.Strings(branches)
+
+		for _, branch := range branches {
+			wt := repo.Worktrees[branch]
+			status := "missing"
+			if exists, _ := afero.DirExists(fs, wt.Path); exists {
+				status = "active"
 			}
 
-			output.Info("Hub: %s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+			t.AddRow(repoID, branch, wt.Type, wt.Path, status)
+		}
+	}
 
-			t := tui.NewTable([]interface{}{"Branch", "Path", "Status", "Ports", "Services"})
+	t.Render()
+}
 
-			// Load ports config
-			dataHome := hop.GetGitHopDataHome()
-			hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+// loadStateOrLegacy loads state.json, or falls back to legacy registry
+func loadStateOrLegacy(fs afero.Fs) (*state.State, error) {
+	// Try to load new state first
+	st, err := state.LoadState(fs)
+	if err == nil && len(st.Repositories) > 0 {
+		return st, nil
+	}
 
-			portsLoader := config.NewLoader(fs)
-			portsCfg, _ := portsLoader.LoadPortsConfig(hopspacePath)
-
-			for name, b := range hub.Config.Branches {
-				state := "missing"
-				if _, err := fs.Stat(filepath.Join(hub.Path, b.Path)); err == nil {
-					state = "active"
-				}
-
-				portsStr := ""
-				servicesStr := ""
-				if portsCfg != nil {
-					if bp, ok := portsCfg.Branches[b.HopspaceBranch]; ok && len(bp.Ports) > 0 {
-						var minPort, maxPort int
-						var servicesList []string
-						first := true
-						for svc, p := range bp.Ports {
-							if first || p < minPort {
-								minPort = p
-							}
-							if first || p > maxPort {
-								maxPort = p
-							}
-							first = false
-							servicesList = append(servicesList, svc)
-						}
-						sort.Strings(servicesList)
-						portsStr = fmt.Sprintf("%d-%d", minPort, maxPort)
-						servicesStr = strings.Join(servicesList, ", ")
-					}
-				}
-
-				t.AddRow(name, b.Path, state, portsStr, servicesStr)
-			}
-
-			t.Render()
-			return
+	// Fall back to legacy registry and auto-migrate
+	registry := hop.LoadRegistry(fs)
+	if registry.Config != nil && len(registry.Config.Hops) > 0 {
+		output.Warn("Found legacy data. Auto-migrating...")
+		newState := state.NewState()
+		if err := hop.MigrateRegistry(fs, registry, newState); err != nil {
+			return nil, fmt.Errorf("auto-migration failed: %w", err)
 		}
 
-		// TODO: List all hubs/hopspaces if not in a hub
-		output.Info("Not in a hub. Listing all hopspaces...")
+		// Save migrated state
+		if err := state.SaveState(fs, newState); err != nil {
+			return nil, fmt.Errorf("failed to save migrated state: %w", err)
+		}
 
-		dataHome := hop.GetGitHopDataHome()
+		output.Success("Auto-migration complete.")
+		return newState, nil
+	}
 
-		// Walk dataHome to find hopspaces
-		// This is a bit expensive, but fine for list.
-		// Structure: dataHome/org/repo/hop.json
-
-		// For now just print message
-		output.Info("Scanning %s", dataHome)
-	},
+	// Return empty state if nothing found
+	return state.NewState(), nil
 }
 
 func init() {

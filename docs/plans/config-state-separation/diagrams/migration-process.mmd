@@ -1,0 +1,87 @@
+```mermaid
+graph TD
+    Start[git hop migrate]
+    
+    subgraph Phase1[Phase 1: Load Old Data]
+        ReadRegistry[Read old<br/>registry.json]
+        ParseRegistry[Parse existing<br/>repository entries]
+        CheckRegistry{Registry<br/>exists?}
+    end
+    
+    CheckRegistry -->|no| NoData[No old data<br/>to migrate]
+    CheckRegistry -->|yes| ParseRegistry
+    
+    subgraph Phase2[Phase 2: Initialize New State]
+        InitState[Create empty<br/>state.json]
+        SetVersion[Set version 1.0.0]
+        SetTimestamp[Set lastUpdated<br/>time.Now]
+    end
+    
+    ParseRegistry --> InitState --> SetVersion --> SetTimestamp
+    
+    subgraph Phase3[Phase 3: Repository Migration]
+        ForRepos[For each repository<br/>in registry]
+        ScanWorktrees[Run git worktree list<br/>on each hub]
+        ConvertRepos[Convert to new<br/>Repositories format]
+    end
+    
+    ForRepos --> ScanWorktrees --> ConvertRepos
+    
+    subgraph Phase4[Phase 4: Worktree Migration]
+        ForWorktrees[For each worktree]
+        CheckType{Bare or<br/>linked?}
+        SetBare[Type: bare]
+        SetLinked[Type: linked]
+        AddEntry[Add to Worktrees map]
+    end
+    
+    ForWorktrees --> CheckType
+    CheckType -->|bare| SetBare --> AddEntry
+    CheckType -->|linked| SetLinked --> AddEntry
+    
+    subgraph Phase5[Phase 5: Hook Migration]
+        CheckHooks{Has .git/hooks/<br/>with git-hop hooks?}
+        ForGitHooks[For each git-hop hook]
+        CheckDir[Create .git-hop/hooks/<br/>directory]
+        MoveHooks[Move hooks to<br/>.git-hop/hooks/]
+        InstallWrappers[Install wrapper scripts<br/>in .git/hooks/]
+    end
+    
+    AddEntry --> CheckHooks
+    CheckHooks -->|yes| ForGitHooks --> CheckDir --> MoveHooks --> InstallWrappers
+    CheckHooks -->|no| WriteState
+    InstallWrappers --> WriteState
+    
+    subgraph Phase6[Phase 6: Backup & Write]
+        BackupOld[Backup old files<br/>.git-backup/]
+        WriteNew[Write state.json<br/>to $XDG_STATE_HOME]
+        BackupRegistry[Backup registry.json<br/>to .old]
+    end
+    
+    WriteState --> BackupOld --> WriteNew --> BackupRegistry
+    
+    subgraph Success[Migration Complete]
+        ShowSummary[Show migration<br/>summary]
+        ListRepos[List migrated<br/>repositories]
+        ListWorktrees[List migrated<br/>worktrees]
+        Confirm[Confirm migration<br/>success]
+    end
+    
+    BackupRegistry --> ShowSummary --> ListRepos --> ListWorktrees --> Confirm --> Done[Exit success]
+    
+    NoData --> Done
+    
+    classDef phase fill:#e1f5fe,stroke:#0ea5e9
+    classDef step fill:#fff3e0,stroke:#f97316
+    classDef write fill:#d1fae5,stroke:#1d3557
+    classDef success fill:#a7f3d0,stroke:#4caf50
+    
+    class Phase1,Phase2,Phase3,Phase4,Phase5,Phase6 phase
+    class ReadRegistry,ParseRegistry,InitState,SetVersion,
+    SetTimestamp,ForRepos,ScanWorktrees,ConvertRepos,
+    ForWorktrees,CheckType,SetBare,SetLinked,AddEntry,
+    CheckHooks,ForGitHooks,CheckDir,MoveHooks,
+    InstallWrappers,BackupOld,WriteNew,BackupRegistry step
+    class AtomicWrite,Persist write
+    class ShowSummary,ListRepos,ListWorktrees,Confirm success
+```

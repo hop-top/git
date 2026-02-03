@@ -1,0 +1,87 @@
+```mermaid
+graph TD
+    Start[User executes<br/>create-demo-repo.sh]
+    
+    subgraph Check[Phase 1: Dependencies]
+        CheckDeps[check_dependencies<br/>git, gh]
+        DepsOk{Tools found?}
+    end
+    
+    CheckDeps --> DepsOk
+    
+    subgraph Create[Phase 2: Skeleton]
+        CreateDirs[create_skeleton<br/>directories]
+        CreateFiles[create files<br/>go.mod, go.sum<br/>composer.json, etc.]
+        CreateHooks[create env hooks<br/>env-prestart.sh<br/>env-poststart.sh]
+        CreateIgnore[create .gitignore]
+    end
+    
+    DepsOk -->|yes| CreateDirs --> CreateFiles --> CreateHooks --> CreateIgnore
+    
+    subgraph Init[Phase 3: Git Init]
+        InitRepo[create_git_repo<br/>git init, config]
+        CommitSkeleton[commit skeleton<br/>git add, commit]
+    end
+    
+    CreateIgnore --> InitRepo --> CommitSkeleton
+    
+    subgraph GitHub[Phase 4: GitHub Repo]
+        CreateRepo[gh repo create<br/>--private, --push]
+        Remote[add remote origin]
+    end
+    
+    CommitSkeleton --> CreateRepo --> Remote
+    
+    subgraph Setup[Phase 5: Worktrees]
+        Clone[clone_repo<br/>git-hop clone]
+        CreateMain[create worktree main<br/>git-hop add]
+        CreateBug[create worktree bug<br/>git-hop add, commit]
+        CreateFix[create worktree fix<br/>git-hop add, commit]
+        CreateFeat[create worktree feat<br/>bump deps, commit]
+        CreateCI[create worktree ci<br/>bump deps, commit]
+    end
+    
+    Remote --> Clone --> CreateMain --> CreateBug --> CreateFix --> CreateFeat --> CreateCI
+    
+    subgraph Share[Phase 6: Dependency Sharing]
+        ShowDeps[show_dependency_sharing<br/>explain symlinks]
+        CalcSavings[calculate disk savings<br/>234MB vs 582MB]
+    end
+    
+    CreateCI --> ShowDeps --> CalcSavings
+    
+    subgraph Finish[Phase 7: Complete]
+        ShowSuccess[show success summary<br/>repo created, worktrees ready]
+        ShowNext[show next steps<br/>run setup script]
+    end
+    
+    CalcSavings --> ShowSuccess --> ShowNext
+    
+    subgraph Error[Error Handling]
+        NoGit[git not in PATH]
+        NoGitHub[gh not authenticated]
+        TargetExists[target exists]
+        DepFail[dependency install fails]
+        Exit1[exit with error]
+    end
+    
+    DepsOk -->|no| NoGit --> Exit1
+    GitHub -->|fail| NoGitHub --> Exit1
+    TargetExists --> Exit1
+    Setup -->|error| DepFail --> ShowNext
+    
+    classDef phase fill:#e1f5fe,stroke:#0ea5e9
+    classDef step fill:#fff3e0,stroke:#f97316
+    classDef flow fill:#dbeafe,stroke:#3b82f6
+    classDef success fill:#a7f3d0,stroke:#4caf50
+    classDef error fill:#ffebee,stroke:#f44336
+    
+    class CheckDeps,DepsOk phase
+    class CreateDirs,CreateFiles,CreateHooks,CreateIgnore step
+    class InitRepo,CommitSkeleton step
+    class GitHub,CreateRepo,Remote step
+    class Clone,CreateMain,CreateBug,CreateFix,CreateFeat,CreateCI step
+    class Share,ShowDeps,CalcSavings flow
+    class ShowSuccess,ShowNext,Exit1 success
+    class NoGit,NoGitHub,TargetExists,DepFail error
+```
