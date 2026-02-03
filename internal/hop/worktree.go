@@ -25,6 +25,23 @@ func NewWorktreeManager(fs afero.Fs, g *git.Git) *WorktreeManager {
 
 // CreateWorktree creates a git worktree in the hub (project root) under worktrees/ subdirectory
 func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string) (string, error) {
+	// Validate inputs
+	if hubPath == "" {
+		return "", fmt.Errorf("hubPath cannot be empty")
+	}
+	if branch == "" {
+		return "", fmt.Errorf("branch cannot be empty")
+	}
+
+	// Verify hubPath exists and is a valid git repository
+	exists, err := afero.DirExists(m.fs, hubPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to check hub path: %w", err)
+	}
+	if !exists {
+		return "", fmt.Errorf("hub path does not exist: %s", hubPath)
+	}
+
 	// Find an existing worktree in this hub to use as base for git commands
 	var baseWorktreePath string
 
@@ -49,8 +66,9 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 		}
 	}
 
+	// If no existing worktree found, use the hub path (bare repo) as base
 	if baseWorktreePath == "" {
-		return "", fmt.Errorf("no existing worktrees found in hopspace to derive from")
+		baseWorktreePath = hubPath
 	}
 
 	// Create new worktree under worktrees/ subdirectory in the specified hub

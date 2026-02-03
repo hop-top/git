@@ -64,7 +64,7 @@ var addCmd = &cobra.Command{
 			hopspacePath = localHopspacePath
 		}
 
-		output.Info("Adding branch %s (v2)...", branch)
+		output.Info("Adding branch %s...", branch)
 
 		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
