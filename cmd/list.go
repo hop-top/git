@@ -62,33 +62,119 @@ func runList(cmd *cobra.Command, args []string) {
 }
 
 func showRepositoryWorktrees(fs afero.Fs, repoID string, repo *state.RepositoryState) {
-	output.Info("Repository: %s", repoID)
-	output.Info("")
+	if output.CurrentMode == output.ModeHuman {
+		fmt.Println(output.RenderHeader("Repository: " + repoID))
+		fmt.Println()
+	} else {
+		output.Info("Repository: %s", repoID)
+		output.Info("")
+	}
 
 	if len(repo.Worktrees) == 0 {
 		output.Info("No worktrees found.")
 		return
 	}
 
-	t := tui.NewTable([]interface{}{"Branch", "Type", "Path", "Status"})
-
-	for branch, wt := range repo.Worktrees {
-		status := "missing"
-		if exists, _ := afero.DirExists(fs, wt.Path); exists {
-			status = "active"
+	if output.CurrentMode != output.ModeHuman {
+		// Use old table for non-human modes
+		t := tui.NewTable([]interface{}{"Branch", "Type", "Path", "Status"})
+		for branch, wt := range repo.Worktrees {
+			status := "missing"
+			if exists, _ := afero.DirExists(fs, wt.Path); exists {
+				status = "active"
+			}
+			t.AddRow(branch, wt.Type, wt.Path, status)
 		}
-
-		t.AddRow(branch, wt.Type, wt.Path, status)
+		t.Render()
+		return
 	}
 
-	t.Render()
+	// Enhanced table for human mode
+	table := output.NewStatusTable("Branch", "Type", "Path", "Status")
+
+	// Sort branches for consistent output
+	var branches []string
+	for branch := range repo.Worktrees {
+		branches = append(branches, branch)
+	}
+	sort.Strings(branches)
+
+	activeCount := 0
+	missingCount := 0
+
+	for _, branch := range branches {
+		wt := repo.Worktrees[branch]
+		exists, _ := afero.DirExists(fs, wt.Path)
+
+		status := "error"
+		statusText := "missing"
+		if exists {
+			status = "success"
+			statusText = "active"
+			activeCount++
+		} else {
+			missingCount++
+		}
+
+		table.AddRow(status, branch, wt.Type, wt.Path, statusText)
+	}
+
+	table.Print()
+
+	// Summary
+	fmt.Println()
+	summary := fmt.Sprintf("Summary: %d worktrees", len(repo.Worktrees))
+	if activeCount > 0 {
+		summary += fmt.Sprintf(" · %d active", activeCount)
+	}
+	if missingCount > 0 {
+		summary += output.StyleWarning.Render(fmt.Sprintf(" · %d missing", missingCount))
+	}
+	fmt.Println(summary)
 }
 
 func showAllRepositories(fs afero.Fs, st *state.State) {
-	output.Info("All Repositories:")
-	output.Info("")
+	if output.CurrentMode == output.ModeHuman {
+		fmt.Println(output.RenderHeader("All Repositories"))
+		fmt.Println()
+	} else {
+		output.Info("All Repositories:")
+		output.Info("")
+	}
 
-	t := tui.NewTable([]interface{}{"Repository", "Branch", "Type", "Path", "Status"})
+	if output.CurrentMode != output.ModeHuman {
+		// Use old table for non-human modes
+		t := tui.NewTable([]interface{}{"Repository", "Branch", "Type", "Path", "Status"})
+
+		var repoIDs []string
+		for repoID := range st.Repositories {
+			repoIDs = append(repoIDs, repoID)
+		}
+		sort.Strings(repoIDs)
+
+		for _, repoID := range repoIDs {
+			repo := st.Repositories[repoID]
+			var branches []string
+			for branch := range repo.Worktrees {
+				branches = append(branches, branch)
+			}
+			sort.Strings(branches)
+
+			for _, branch := range branches {
+				wt := repo.Worktrees[branch]
+				status := "missing"
+				if exists, _ := afero.DirExists(fs, wt.Path); exists {
+					status = "active"
+				}
+				t.AddRow(repoID, branch, wt.Type, wt.Path, status)
+			}
+		}
+		t.Render()
+		return
+	}
+
+	// Enhanced table for human mode
+	table := output.NewStatusTable("Repository", "Branch", "Type", "Status")
 
 	// Sort repositories for consistent output
 	var repoIDs []string
@@ -96,6 +182,10 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 		repoIDs = append(repoIDs, repoID)
 	}
 	sort.Strings(repoIDs)
+
+	totalWorktrees := 0
+	activeCount := 0
+	missingCount := 0
 
 	for _, repoID := range repoIDs {
 		repo := st.Repositories[repoID]
@@ -109,16 +199,49 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 
 		for _, branch := range branches {
 			wt := repo.Worktrees[branch]
-			status := "missing"
-			if exists, _ := afero.DirExists(fs, wt.Path); exists {
-				status = "active"
+			totalWorktrees++
+
+			exists, _ := afero.DirExists(fs, wt.Path)
+			status := "error"
+			statusText := "missing"
+			if exists {
+				status = "success"
+				statusText = "active"
+				activeCount++
+			} else {
+				missingCount++
 			}
 
-			t.AddRow(repoID, branch, wt.Type, wt.Path, status)
+			// Shorten repo ID for display
+			shortRepo := repoID
+			if len(shortRepo) > 30 {
+				shortRepo = "..." + shortRepo[len(shortRepo)-27:]
+			}
+
+			table.AddRow(status, shortRepo, branch, wt.Type, statusText)
 		}
 	}
 
-	t.Render()
+	table.Print()
+
+	// Summary
+	fmt.Println()
+	summary := fmt.Sprintf("Summary: %d worktrees across %d repositories", totalWorktrees, len(repoIDs))
+	if activeCount > 0 {
+		summary += fmt.Sprintf(" · %d active", activeCount)
+	}
+	if missingCount > 0 {
+		summary += output.StyleWarning.Render(fmt.Sprintf(" · %d missing", missingCount))
+	}
+	fmt.Println(summary)
+
+	// Legend
+	fmt.Println()
+	legend := output.Legend(map[string]string{
+		output.ColorizeIcon(output.IconSuccess, "success"): "Active",
+		output.ColorizeIcon(output.IconError, "error"):     "Missing",
+	})
+	fmt.Println(legend)
 }
 
 // loadStateOrLegacy loads state.json, or falls back to legacy registry

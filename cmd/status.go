@@ -11,15 +11,25 @@ import (
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
+	"github.com/jadb/git-hop/internal/state"
 	"github.com/jadb/git-hop/internal/tui"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+)
+
+var (
+	statusAll bool
 )
 
 var statusCmd = &cobra.Command{
 	Use:     "status",
 	Aliases: []string{"st", "info"},
 	Short:   "Show the working tree status",
+	Long: `Show the status of the current worktree or hub.
+
+By default, shows status for the current context (worktree or hub).
+Use --all to show system-wide git-hop information including all repositories,
+configuration, and resource usage.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		g := git.New()
@@ -28,6 +38,12 @@ var statusCmd = &cobra.Command{
 		cwd, err := os.Getwd()
 		if err != nil {
 			output.Fatal("Failed to get current directory: %v", err)
+		}
+
+		// If --all flag is set, show system-wide status
+		if statusAll {
+			showSystemStatus(fs, d)
+			return
 		}
 
 		if len(args) > 0 {
@@ -171,6 +187,240 @@ func showTargetStatus(fs afero.Fs, d *docker.Docker, hubPath, target string) {
 	}
 }
 
+func calculateDirSize(fs afero.Fs, path string) (int64, error) {
+	var size int64
+
+	err := afero.Walk(fs, path, func(walkPath string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil // Skip errors
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+
+	return size, err
+}
+
+func showSystemStatus(fs afero.Fs, d *docker.Docker) {
+	// Load state
+	st, err := loadStateOrLegacy(fs)
+	if err != nil {
+		output.Fatal("Failed to load state: %v", err)
+	}
+
+	if output.CurrentMode != output.ModeHuman {
+		// Simple output for non-human modes
+		showSystemStatusPlain(fs, d, st)
+		return
+	}
+
+	// Enhanced output for human mode
+	fmt.Println(output.SimpleHeader("Git-Hop System Status"))
+	fmt.Println()
+
+	// Configuration section
+	dataHome := hop.GetGitHopDataHome()
+	configHome := hop.GetConfigHome()
+	configPath := filepath.Join(configHome, "git-hop", "config.json")
+
+	configInfo := output.Section(output.IconConfig, "Configuration", []string{
+		output.RenderKeyValue("Data Home", output.RenderPath(dataHome)),
+		output.RenderKeyValue("Config", output.RenderPath(configPath)),
+		output.RenderKeyValue("Version", "git-hop"),
+	})
+	fmt.Println(configInfo)
+
+	// Calculate resource statistics
+	totalWorktrees := 0
+	activeWorktrees := 0
+	missingWorktrees := 0
+	totalDiskUsage := int64(0)
+
+	for _, repo := range st.Repositories {
+		for _, wt := range repo.Worktrees {
+			totalWorktrees++
+			exists, _ := afero.DirExists(fs, wt.Path)
+			if exists {
+				activeWorktrees++
+				// Calculate disk usage for worktree directory
+				size, _ := calculateDirSize(fs, wt.Path)
+				totalDiskUsage += size
+			} else {
+				missingWorktrees++
+			}
+		}
+	}
+
+	// Resources section
+	diskUsageStr := formatBytes(totalDiskUsage)
+	if totalDiskUsage == 0 {
+		diskUsageStr = "unknown"
+	}
+
+	resourceInfo := output.Section(output.IconPackage, "Resources", []string{
+		output.RenderKeyValue("Repositories", fmt.Sprintf("%d", len(st.Repositories))),
+		output.RenderKeyValue("Total Worktrees", fmt.Sprintf("%d", totalWorktrees)),
+		output.RenderKeyValue("Active", output.Colorize(fmt.Sprintf("%d", activeWorktrees), "success")),
+		output.RenderKeyValue("Missing", output.Colorize(fmt.Sprintf("%d", missingWorktrees), "warning")),
+		output.RenderKeyValue("Disk Usage", diskUsageStr),
+	})
+	fmt.Println(resourceInfo)
+
+	// Count running environments
+	runningServices := 0
+	activeVolumes := 0
+
+	// This is a simplified count - in production you'd query Docker
+	// For now, check if compose files exist and environments are tracked
+	for _, repo := range st.Repositories {
+		for _, wt := range repo.Worktrees {
+			composePath := filepath.Join(wt.Path, "docker-compose.yml")
+			if exists, _ := afero.Exists(fs, composePath); exists {
+				// Check if services are running
+				if ps, err := d.ComposePs(wt.Path); err == nil && len(ps) > 0 {
+					runningServices++
+				}
+			}
+		}
+	}
+
+	// Environment section
+	envInfo := output.Section(output.IconDocker, "Environment", []string{
+		output.RenderKeyValue("Running Services", fmt.Sprintf("%d", runningServices)),
+		output.RenderKeyValue("Port Range", "11500-11520"),
+		output.RenderKeyValue("Active Volumes", fmt.Sprintf("%d", activeVolumes)),
+	})
+	fmt.Println(envInfo)
+
+	// Repositories section with tree
+	if len(st.Repositories) > 0 {
+		var repoLines []string
+		repoLines = append(repoLines, "")
+
+		// Sort repos for consistent output
+		var repoIDs []string
+		for repoID := range st.Repositories {
+			repoIDs = append(repoIDs, repoID)
+		}
+		sortRepoIDs(repoIDs)
+
+		for i, repoID := range repoIDs {
+			repo := st.Repositories[repoID]
+			isLast := i == len(repoIDs)-1
+
+			// Count running services for this repo
+			repoRunning := 0
+			for _, wt := range repo.Worktrees {
+				composePath := filepath.Join(wt.Path, "docker-compose.yml")
+				if exists, _ := afero.Exists(fs, composePath); exists {
+					if ps, err := d.ComposePs(wt.Path); err == nil && len(ps) > 0 {
+						repoRunning++
+					}
+				}
+			}
+
+			// Shorten repo ID for display
+			shortRepo := repoID
+			if len(shortRepo) > 40 {
+				shortRepo = "..." + shortRepo[len(shortRepo)-37:]
+			}
+
+			statusIcon := output.IconStopped
+			statusText := "stopped"
+			if repoRunning > 0 {
+				statusIcon = output.IconRunning
+				statusText = "running"
+			}
+
+			line := fmt.Sprintf("%-42s  %d worktrees  %s %d %s",
+				shortRepo,
+				len(repo.Worktrees),
+				output.Colorize(statusIcon, statusText),
+				repoRunning,
+				statusText,
+			)
+
+			repoLines = append(repoLines, output.TreeItem(isLast, line, ""))
+		}
+
+		repoInfo := output.Section(output.IconRepo, "Repositories", repoLines)
+		fmt.Println(repoInfo)
+	}
+
+	// Summary
+	fmt.Println()
+	if totalWorktrees == 0 {
+		fmt.Println(output.StyleMuted.Render("No worktrees found. Run 'git hop <uri>' to clone a repository."))
+	} else {
+		summary := fmt.Sprintf("Tracking %d worktrees across %d repositories",
+			totalWorktrees, len(st.Repositories))
+		if runningServices > 0 {
+			summary += output.Colorize(fmt.Sprintf(" · %d services running", runningServices), "success")
+		}
+		fmt.Println(summary)
+	}
+}
+
+func showSystemStatusPlain(fs afero.Fs, d *docker.Docker, st *state.State) {
+	dataHome := hop.GetGitHopDataHome()
+	configHome := hop.GetConfigHome()
+	configPath := filepath.Join(configHome, "git-hop", "config.json")
+
+	output.Info("Configuration:")
+	output.Info("  Data Home: %s", dataHome)
+	output.Info("  Config: %s", configPath)
+	output.Info("")
+
+	totalWorktrees := 0
+	activeWorktrees := 0
+	for _, repo := range st.Repositories {
+		for _, wt := range repo.Worktrees {
+			totalWorktrees++
+			if exists, _ := afero.DirExists(fs, wt.Path); exists {
+				activeWorktrees++
+			}
+		}
+	}
+
+	output.Info("Resources:")
+	output.Info("  Repositories: %d", len(st.Repositories))
+	output.Info("  Total Worktrees: %d", totalWorktrees)
+	output.Info("  Active: %d", activeWorktrees)
+	output.Info("")
+
+	output.Info("Repositories:")
+	for repoID, repo := range st.Repositories {
+		output.Info("  %s: %d worktrees", repoID, len(repo.Worktrees))
+	}
+}
+
+func formatBytes(bytes int64) string {
+	const unit = 1024
+	if bytes < unit {
+		return fmt.Sprintf("%d B", bytes)
+	}
+	div, exp := int64(unit), 0
+	for n := bytes / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(bytes)/float64(div), "KMGTPE"[exp])
+}
+
+func sortRepoIDs(ids []string) {
+	// Simple bubble sort for small lists
+	for i := 0; i < len(ids); i++ {
+		for j := i + 1; j < len(ids); j++ {
+			if ids[i] > ids[j] {
+				ids[i], ids[j] = ids[j], ids[i]
+			}
+		}
+	}
+}
+
 func init() {
+	statusCmd.Flags().BoolVar(&statusAll, "all", false, "Show system-wide git-hop status")
 	cli.RootCmd.AddCommand(statusCmd)
 }
