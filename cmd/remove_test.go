@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -234,4 +235,73 @@ func TestRemoveCommand_UpdatesTimestamp(t *testing.T) {
 	reloadedHopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	require.NoError(t, err)
 	assert.NotContains(t, reloadedHopspace.Config.Branches, "feature")
+}
+
+// TestRemoveCommand_PathResolution verifies that relative worktree paths
+// are correctly resolved when using filepath.Abs vs config.ResolveWorktreePath
+func TestRemoveCommand_PathResolution(t *testing.T) {
+	// This test demonstrates the bug: when basePath is a relative path like "hops/main"
+	// and we use filepath.Abs() from a CWD that already contains "hops/main",
+	// we get path duplication like "/hub/hops/main/hops/main"
+
+	hubPath := "/test/hub"
+	relativePath := "hops/main"
+	expectedAbsPath := "/test/hub/hops/main"
+
+	// Simulate what happens with filepath.Abs when CWD is the worktree itself
+	// In the buggy code: filepath.Abs("hops/main") from CWD "/test/hub/hops/main"
+	// would produce "/test/hub/hops/main/hops/main"
+
+	// The correct way: use config.ResolveWorktreePath
+	correctPath := config.ResolveWorktreePath(relativePath, hubPath)
+	assert.Equal(t, expectedAbsPath, correctPath, "ResolveWorktreePath should produce correct absolute path")
+
+	// Bug scenario: if we were using filepath.Abs and CWD was hubPath + relativePath,
+	// it would incorrectly double the path
+	buggyPath := filepath.Join(hubPath, relativePath, relativePath)
+	assert.NotEqual(t, buggyPath, correctPath, "Should not produce duplicated path like /hub/hops/main/hops/main")
+	assert.NotContains(t, correctPath, "hops/main/hops", "Should not contain duplicated path segments")
+}
+
+// TestRemoveCommand_RelativePathBug reproduces the actual bug scenario
+// where basePath is relative and gets incorrectly resolved
+func TestRemoveCommand_RelativePathBug(t *testing.T) {
+	fs := afero.NewMemMapFs()
+
+	// Create hub structure
+	hubPath := "/test/hub"
+	hub, err := hop.CreateHub(fs, hubPath, "git@github.com:test/repo.git", "test", "repo", "main")
+	require.NoError(t, err)
+
+	// Add main branch with RELATIVE path (this is how it's stored in hub config)
+	mainRelativePath := "hops/main"
+	mainAbsolutePath := filepath.Join(hubPath, mainRelativePath)
+	require.NoError(t, fs.MkdirAll(mainAbsolutePath, 0755))
+	require.NoError(t, hub.AddBranch("main", "main", mainRelativePath))
+
+	// Add feature branch with RELATIVE path
+	featureRelativePath := "hops/feature"
+	featureAbsolutePath := filepath.Join(hubPath, featureRelativePath)
+	require.NoError(t, fs.MkdirAll(featureAbsolutePath, 0755))
+	require.NoError(t, hub.AddBranch("feature", "feature", featureRelativePath))
+
+	// Get the basePath and worktreePath as they would be in remove command
+	basePath := hub.Config.Branches["main"].Path          // "hops/main" (relative)
+	worktreePath := hub.Config.Branches["feature"].Path  // "hops/feature" (relative)
+
+	// THE BUG: using filepath.Abs on a relative path resolves from CWD
+	// If we just used filepath.Abs(basePath), it would resolve from current directory
+	// which could cause duplication. The fix is to use config.ResolveWorktreePath.
+
+	// Demonstrate the fix
+	correctBasePath := config.ResolveWorktreePath(basePath, hubPath)
+	correctWorktreePath := config.ResolveWorktreePath(worktreePath, hubPath)
+
+	// Verify correct paths
+	assert.Equal(t, mainAbsolutePath, correctBasePath)
+	assert.Equal(t, featureAbsolutePath, correctWorktreePath)
+
+	// Ensure no duplication
+	assert.NotContains(t, correctBasePath, "hops/main/hops")
+	assert.NotContains(t, correctWorktreePath, "hops/feature/hops")
 }

@@ -3,9 +3,9 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 
 	"github.com/jadb/git-hop/internal/cli"
+	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
@@ -54,7 +54,8 @@ var removeCmd = &cobra.Command{
 
 				// Get the worktree path from the hub config BEFORE removing from config
 				branchConfig := hub.Config.Branches[target]
-				worktreePath := branchConfig.Path
+				// Resolve the worktree path (may be relative like "hops/branch")
+				worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
 
 				// We need to remove the symlink and update config
 				if err := hub.RemoveBranch(target); err != nil {
@@ -80,12 +81,12 @@ var removeCmd = &cobra.Command{
 				}
 
 				if basePath != "" {
-					absBasePath, err := filepath.Abs(basePath)
-					if err == nil {
-						// Try git worktree remove
-						if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
-							output.Warn("Failed to remove worktree via git: %v", err)
-						}
+					// Resolve the base path relative to hub (may be relative path like "hops/main")
+					absBasePath := config.ResolveWorktreePath(basePath, hubPath)
+
+					// Try git worktree remove
+					if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
+						output.Warn("Failed to remove worktree via git: %v", err)
 					}
 				}
 
