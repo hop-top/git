@@ -128,19 +128,17 @@ Available on all commands:
 ### Hubs
 
 A **hub** is a directory that serves as your local working context. It contains:
-- Symlinks to all worktrees for a repository
-- A `hop.json` configuration file
+- A `hop.json` configuration file tracking all worktrees
 - A `.git` reference to the bare repository
+- Direct access to worktrees via paths stored in config
 
 ```
 my-repo/                    # Hub directory (local context)
   .git                      # Bare repository reference
-  hop.json                  # Hub configuration
-  feature-x -> (symlink)    # Points to actual worktree
-  feature-y -> (symlink)
+  hop.json                  # Hub configuration (tracks worktree paths)
 ```
 
-You can have multiple hubs for the same repository, each with different symlink layouts.
+The hub's `hop.json` maintains references to all worktrees with their full paths, allowing you to quickly switch between branches without manual path management.
 
 ### Hopspaces
 

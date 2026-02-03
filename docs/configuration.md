@@ -297,7 +297,7 @@ Example: `~/projects/myrepo/hop.json`
 | Field | Type | Description |
 |-------|------|-------------|
 | `branches` | object | Map of branch names to hub branch info |
-| `branches[].path` | string | Relative path from hub to worktree (or symlink target) |
+| `branches[].path` | string | Full path to the worktree directory |
 | `branches[].hopspaceBranch` | string | Corresponding branch name in hopspace |
 | `branches[].fork` | string | Fork URI if this is a fork branch |
 | `settings.compareBranch` | string | Default branch for comparisons |

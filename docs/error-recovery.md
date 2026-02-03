@@ -134,7 +134,7 @@ git hop doctor --fix
 This will automatically fix issues that can be safely resolved:
 - Remove orphaned directories (if they have no uncommitted changes)
 - Prune stale git worktree metadata
-- Clean up broken symlinks
+- Clean up broken dependency symlinks (e.g., node_modules, vendor)
 
 **Safety:** The doctor command will never remove directories with uncommitted changes. You'll need to manually resolve those cases.
 
