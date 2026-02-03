@@ -139,3 +139,85 @@ func TestPruneWorktrees_NoWorktrees(t *testing.T) {
 	err := cleanup.PruneWorktrees(hopspace)
 	assert.NoError(t, err)
 }
+
+// TestPruneWorktrees_NonExistentPaths tests that pruning with stale/non-existent
+// paths in the config doesn't cause errors (Bug 2 regression test)
+func TestPruneWorktrees_NonExistentPaths(t *testing.T) {
+	fs := afero.NewMemMapFs()
+
+	mockRunner := &MockCommandRunner{
+		RunInDirFunc: func(dir string, cmd string, args ...string) (string, error) {
+			// Should never be called since no valid paths exist
+			t.Error("git command was called with non-existent path")
+			return "", nil
+		},
+	}
+
+	g := &git.Git{Runner: mockRunner}
+	cleanup := NewCleanupManager(fs, g)
+
+	// Create a hopspace with paths that don't exist on filesystem
+	hopspace := &Hopspace{
+		Path: "/test/hopspace",
+		Config: &config.HopspaceConfig{
+			Branches: map[string]config.HopspaceBranch{
+				"main": {
+					Exists: true,
+					Path:   "/non/existent/path/main",
+				},
+				"feature": {
+					Exists: true,
+					Path:   "/another/invalid/path/feature",
+				},
+			},
+		},
+	}
+
+	// Should not error when all paths are invalid - should just skip pruning
+	err := cleanup.PruneWorktrees(hopspace)
+	assert.NoError(t, err)
+}
+
+// TestPruneWorktrees_MixedValidInvalidPaths tests that pruning selects
+// the first valid path when some paths are invalid
+func TestPruneWorktrees_MixedValidInvalidPaths(t *testing.T) {
+	fs := afero.NewMemMapFs()
+
+	var capturedDir string
+	mockRunner := &MockCommandRunner{
+		RunInDirFunc: func(dir string, cmd string, args ...string) (string, error) {
+			capturedDir = dir
+			return "", nil
+		},
+	}
+
+	g := &git.Git{Runner: mockRunner}
+	cleanup := NewCleanupManager(fs, g)
+
+	// Create one valid path and one invalid path
+	validPath := "/test/hopspace/hops/feature"
+	require.NoError(t, fs.MkdirAll(validPath, 0755))
+
+	hopspace := &Hopspace{
+		Path: "/test/hopspace",
+		Config: &config.HopspaceConfig{
+			Branches: map[string]config.HopspaceBranch{
+				"main": {
+					Exists: true,
+					Path:   "/non/existent/path/main", // Invalid
+				},
+				"feature": {
+					Exists: true,
+					Path:   validPath, // Valid
+				},
+			},
+		},
+	}
+
+	// Should successfully prune using the valid path
+	err := cleanup.PruneWorktrees(hopspace)
+	assert.NoError(t, err)
+
+	// Should have called git with the valid path (not the invalid one)
+	assert.Equal(t, validPath, capturedDir)
+}

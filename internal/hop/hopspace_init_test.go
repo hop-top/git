@@ -224,6 +224,49 @@ func TestHopspaceUnregisterBranch(t *testing.T) {
 	}
 }
 
+// TestHopspaceUnregisterBranch_NonExistent tests that unregistering
+// a non-existent branch doesn't return an error (Bug 1 regression test)
+func TestHopspaceUnregisterBranch_NonExistent(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	path := "/data/test-org/test-repo"
+	uri := "https://github.com/test-org/test-repo.git"
+	org := "test-org"
+	repo := "test-repo"
+	defaultBranch := "main"
+
+	// Initialize hopspace
+	hopspace, err := hop.InitHopspace(fs, path, uri, org, repo, defaultBranch)
+	if err != nil {
+		t.Fatalf("InitHopspace failed: %v", err)
+	}
+
+	// Register a branch so we have something to verify wasn't removed
+	testBranch := "test-branch"
+	err = hopspace.RegisterBranch(testBranch, "/hops/test-branch")
+	if err != nil {
+		t.Fatalf("RegisterBranch failed: %v", err)
+	}
+
+	// Try to unregister a branch that doesn't exist
+	err = hopspace.UnregisterBranch("non-existent-branch")
+
+	// Should NOT return an error - this is expected behavior
+	if err != nil {
+		t.Errorf("UnregisterBranch returned error for non-existent branch: %v", err)
+	}
+
+	// Config should remain valid and unchanged
+	hopspace2, err := hop.LoadHopspace(fs, path)
+	if err != nil {
+		t.Fatalf("LoadHopspace failed after unregistering non-existent branch: %v", err)
+	}
+
+	// Original branches should still be there
+	if _, ok := hopspace2.Config.Branches[testBranch]; !ok {
+		t.Error("Test branch was accidentally removed")
+	}
+}
+
 func TestHopspaceRegisterMultipleBranches(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	path := "/data/test-org/test-repo"
