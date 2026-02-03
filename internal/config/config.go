@@ -33,22 +33,30 @@ type HubSettings struct {
 
 // HopspaceConfig represents $GIT_HOP_DATA_HOME/<org>/<repo>/hop.json
 type HopspaceConfig struct {
-	Repo     RepoConfig                `json:"repo"`
-	Branches map[string]HopspaceBranch `json:"branches"`
-	Forks    map[string]HopspaceFork   `json:"forks"`
+	Repo            RepoConfig                       `json:"repo"`
+	Branches        map[string]HopspaceBranch        `json:"branches"`
+	Forks           map[string]HopspaceFork          `json:"forks"`
+	PackageManagers map[string]PackageManagerOverride `json:"packageManagers,omitempty"` // Repo-level PM overrides
 }
 
 type HopspaceBranch struct {
-	Exists   bool      `json:"exists"`
-	Path     string    `json:"path"`
-	LastSync time.Time `json:"lastSync"`
+	Exists          bool                              `json:"exists"`
+	Path            string                            `json:"path"`
+	LastSync        time.Time                         `json:"lastSync"`
+	PackageManagers map[string]PackageManagerOverride `json:"packageManagers,omitempty"` // Branch-level PM overrides
+}
+
+// PackageManagerOverride allows overriding install commands at repo or branch level
+type PackageManagerOverride struct {
+	InstallCmd []string `json:"installCmd,omitempty"` // Override install command
 }
 
 type HopspaceFork struct {
-	URI      string                    `json:"uri"`
-	Org      string                    `json:"org"`
-	Repo     string                    `json:"repo"`
-	Branches map[string]HopspaceBranch `json:"branches"`
+	URI             string                            `json:"uri"`
+	Org             string                            `json:"org"`
+	Repo            string                            `json:"repo"`
+	Branches        map[string]HopspaceBranch         `json:"branches"`
+	PackageManagers map[string]PackageManagerOverride `json:"packageManagers,omitempty"` // Fork-level PM overrides
 }
 
 // PortsConfig represents ports.json

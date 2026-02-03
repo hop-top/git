@@ -111,6 +111,182 @@ Save this to `$XDG_CONFIG_HOME/git-hop/global.json` (usually `~/.config/git-hop/
 
 Custom package managers with the same `name` as built-in ones will override the built-in configuration.
 
+## Install Command Overrides
+
+You can customize the install command for package managers at three levels: **global** (default), **repository** (all branches), or **branch** (specific worktree). The lockfile detection and hashing remain unchanged - only the install command is overridden.
+
+### Why Override Install Commands?
+
+Different projects or branches may need different installation flags:
+- Legacy projects requiring `--legacy-peer-deps`
+- Experimental branches testing new package manager behavior
+- Production builds using `--production` flag
+- Projects with peer dependency conflicts requiring `--force`
+
+### Resolution Hierarchy
+
+Git Hop resolves install commands in this order (highest priority first):
+
+1. **Branch-level** override in `hop.json`
+2. **Repository-level** override in `hop.json`
+3. **Global** package manager config (fallback)
+
+### Repository-Level Overrides
+
+Override install commands for **all branches** in a repository by editing the hopspace config at `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`:
+
+```json
+{
+  "repo": {
+    "uri": "github.com/myorg/myrepo",
+    "org": "myorg",
+    "repo": "myrepo",
+    "defaultBranch": "main"
+  },
+  "packageManagers": {
+    "npm": {
+      "installCmd": ["npm", "install", "--legacy-peer-deps"]
+    },
+    "pnpm": {
+      "installCmd": ["pnpm", "install", "--no-frozen-lockfile"]
+    }
+  },
+  "branches": {
+    "main": {
+      "exists": true,
+      "path": "/path/to/main"
+    }
+  }
+}
+```
+
+Now all branches in this repository will use `npm install --legacy-peer-deps` instead of the default `npm ci`.
+
+**Important**: The lockfile (`package-lock.json`) is still used for hashing and cache keys. Only the install command changes.
+
+### Branch-Level Overrides
+
+Override install commands for **specific branches/worktrees** in the same `hop.json`:
+
+```json
+{
+  "repo": {
+    "uri": "github.com/myorg/myrepo",
+    "org": "myorg",
+    "repo": "myrepo",
+    "defaultBranch": "main"
+  },
+  "packageManagers": {
+    "npm": {
+      "installCmd": ["npm", "install", "--legacy-peer-deps"]
+    }
+  },
+  "branches": {
+    "main": {
+      "exists": true,
+      "path": "/path/to/main"
+    },
+    "feature-experimental": {
+      "exists": true,
+      "path": "/path/to/feature-experimental",
+      "packageManagers": {
+        "npm": {
+          "installCmd": ["npm", "install", "--force"]
+        }
+      }
+    }
+  }
+}
+```
+
+In this example:
+- `main` uses: `npm install --legacy-peer-deps` (repo-level)
+- `feature-experimental` uses: `npm install --force` (branch-level)
+- Other branches use: `npm install --legacy-peer-deps` (repo-level)
+
+### Lockfile Hashing Stays the Same
+
+The lockfile is **always** used for dependency cache keys, regardless of install command overrides:
+
+```
+# Both use the same cached dependencies if package-lock.json is identical
+main:        npm install --legacy-peer-deps  → node_modules.abc123/
+feature-x:   npm install --force             → node_modules.abc123/  (same!)
+```
+
+The install command only affects **how** dependencies are installed when the cache key doesn't exist yet.
+
+### Common Override Patterns
+
+**Legacy peer dependencies** (entire repo):
+```json
+{
+  "packageManagers": {
+    "npm": {
+      "installCmd": ["npm", "install", "--legacy-peer-deps"]
+    }
+  }
+}
+```
+
+**Production builds** (specific branch):
+```json
+{
+  "branches": {
+    "production": {
+      "packageManagers": {
+        "npm": {
+          "installCmd": ["npm", "ci", "--production"]
+        }
+      }
+    }
+  }
+}
+```
+
+**Python with extra requirements** (specific branch):
+```json
+{
+  "branches": {
+    "ml-experiment": {
+      "packageManagers": {
+        "pip": {
+          "installCmd": ["sh", "-c", "pip install -r requirements.txt -r requirements-ml.txt"]
+        }
+      }
+    }
+  }
+}
+```
+
+**Complex shell commands** (using sh wrapper):
+```json
+{
+  "packageManagers": {
+    "npm": {
+      "installCmd": ["sh", "-c", "npm ci && npm run postinstall"]
+    }
+  }
+}
+```
+
+### Finding Your hop.json
+
+The hopspace configuration file is located at:
+```
+$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json
+```
+
+Default `$GIT_HOP_DATA_HOME` locations:
+- Linux: `~/.local/share/git-hop/`
+- macOS: `~/Library/Application Support/git-hop/`
+- Windows: `%LOCALAPPDATA%\git-hop\`
+
+Example:
+```
+~/.local/share/git-hop/facebook/react/hop.json
+```
+
 ## Garbage Collection
 
 Over time, you may accumulate dependencies that are no longer used by any branch.

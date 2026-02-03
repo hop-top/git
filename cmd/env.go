@@ -94,17 +94,27 @@ func runEnvCommand(action string) {
 			}
 		}
 
-		output.Info("Starting services...")
-		if err := d.ComposeUp(root, true); err != nil {
-			output.Fatal("Failed to start services: %v", err)
+		// Check if docker environment exists before trying to start services
+		if d.HasDockerEnv(root) {
+			output.Info("Starting services...")
+			if err := d.ComposeUp(root, true); err != nil {
+				output.Fatal("Failed to start services: %v", err)
+			}
+			output.Info("Services started.")
+		} else {
+			output.Info("No docker environment found. Dependencies are ready but no services to start.")
 		}
-		output.Info("Services started.")
 	case "stop":
-		output.Info("Stopping services...")
-		if err := d.ComposeStop(root); err != nil {
-			output.Fatal("Failed to stop services: %v", err)
+		// Check if docker environment exists before trying to stop services
+		if d.HasDockerEnv(root) {
+			output.Info("Stopping services...")
+			if err := d.ComposeStop(root); err != nil {
+				output.Fatal("Failed to stop services: %v", err)
+			}
+			output.Info("Services stopped.")
+		} else {
+			output.Info("No docker environment found. Nothing to stop.")
 		}
-		output.Info("Services stopped.")
 	}
 }
 

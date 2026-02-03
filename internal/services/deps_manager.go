@@ -15,6 +15,7 @@ type DepsManager struct {
 	Registry        *DepsRegistry
 	RepoPath        string
 	PackageManagers []PackageManager
+	HopspaceConfig  *config.HopspaceConfig // For resolving install command overrides
 	fs              afero.Fs
 	trash           *Trash
 }
@@ -56,10 +57,19 @@ func NewDepsManager(fs afero.Fs, repoPath string, globalConfig *config.GlobalCon
 		return nil, fmt.Errorf("failed to load registry: %w", err)
 	}
 
+	// Load hopspace config (for install command overrides)
+	loader := config.NewLoader(fs)
+	hopspaceConfig, err := loader.LoadHopspaceConfig(repoPath)
+	if err != nil {
+		// Hopspace config is optional, continue without it
+		hopspaceConfig = nil
+	}
+
 	return &DepsManager{
 		Registry:        registry,
 		RepoPath:        repoPath,
 		PackageManagers: pms,
+		HopspaceConfig:  hopspaceConfig,
 		fs:              fs,
 		trash:           NewTrash(fs),
 	}, nil
@@ -95,15 +105,18 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 		return nil
 	}
 
+	// Resolve install command with hierarchy (branch > repo > global)
+	resolvedPM := ResolveInstallCmd(pm, m.HopspaceConfig, branch)
+
 	// Compute hash
-	hash, err := pm.HashLockfile(lockfilePath)
+	hash, err := resolvedPM.HashLockfile(lockfilePath)
 	if err != nil {
 		return fmt.Errorf("failed to hash lockfile: %w", err)
 	}
 
-	depsKey := pm.GetDepsKey(hash)
+	depsKey := resolvedPM.GetDepsKey(hash)
 	depsPath := m.getDepsPath(depsKey)
-	symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
+	symlinkPath := filepath.Join(worktreePath, resolvedPM.DepsDir)
 
 	// Check if deps already installed
 	depsExists, err := afero.DirExists(m.fs, depsPath)
@@ -112,8 +125,8 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	}
 
 	if !depsExists {
-		// Install deps to shared storage
-		if err := m.installDeps(depsPath, worktreePath, pm, lockfilePath); err != nil {
+		// Install deps to shared storage using resolved PM
+		if err := m.installDeps(depsPath, worktreePath, *resolvedPM); err != nil {
 			return fmt.Errorf("failed to install deps: %w", err)
 		}
 
@@ -160,7 +173,7 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 }
 
 // installDeps installs dependencies to the target directory
-func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageManager, lockfilePath string) error {
+func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageManager) error {
 	// Create target directory
 	if err := m.fs.MkdirAll(targetDir, 0755); err != nil {
 		return fmt.Errorf("failed to create target directory: %w", err)
@@ -318,7 +331,9 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 			depsExists, _ := afero.DirExists(m.fs, depsPath)
 			if !depsExists {
 				lockfilePath, _ := issue.PM.FindLockfile(m.fs, issue.WorktreePath)
-				if err := m.installDeps(depsPath, issue.WorktreePath, issue.PM, lockfilePath); err != nil {
+				// Resolve install command for this branch
+				resolvedPM := ResolveInstallCmd(issue.PM, m.HopspaceConfig, issue.Branch)
+				if err := m.installDeps(depsPath, issue.WorktreePath, *resolvedPM); err != nil {
 					return fmt.Errorf("failed to install deps: %w", err)
 				}
 				m.Registry.UpdateEntryMetadata(issue.DepsKey, issue.ExpectedHash, filepath.Base(lockfilePath))
@@ -343,7 +358,9 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 			depsExists, _ := afero.DirExists(m.fs, depsPath)
 			if !depsExists {
 				lockfilePath, _ := issue.PM.FindLockfile(m.fs, issue.WorktreePath)
-				if err := m.installDeps(depsPath, issue.WorktreePath, issue.PM, lockfilePath); err != nil {
+				// Resolve install command for this branch
+				resolvedPM := ResolveInstallCmd(issue.PM, m.HopspaceConfig, issue.Branch)
+				if err := m.installDeps(depsPath, issue.WorktreePath, *resolvedPM); err != nil {
 					return fmt.Errorf("failed to install deps: %w", err)
 				}
 				m.Registry.UpdateEntryMetadata(issue.DepsKey, issue.ExpectedHash, filepath.Base(lockfilePath))
@@ -362,7 +379,9 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 			symlinkPath := filepath.Join(issue.WorktreePath, issue.PM.DepsDir)
 
 			lockfilePath, _ := issue.PM.FindLockfile(m.fs, issue.WorktreePath)
-			if err := m.installDeps(depsPath, issue.WorktreePath, issue.PM, lockfilePath); err != nil {
+			// Resolve install command for this branch
+			resolvedPM := ResolveInstallCmd(issue.PM, m.HopspaceConfig, issue.Branch)
+			if err := m.installDeps(depsPath, issue.WorktreePath, *resolvedPM); err != nil {
 				return fmt.Errorf("failed to install deps: %w", err)
 			}
 

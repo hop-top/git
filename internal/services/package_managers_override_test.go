@@ -426,3 +426,233 @@ func TestLoadPackageManagers_OverridePlusCustom(t *testing.T) {
 		t.Errorf("LoadPackageManagers() returned %d PMs, want 9", len(pms))
 	}
 }
+
+// Tests for hierarchical install command resolution
+
+func TestResolveInstallCmd_NoOverrides(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	hopspaceConfig := &config.HopspaceConfig{
+		Branches: make(map[string]config.HopspaceBranch),
+	}
+
+	resolved := services.ResolveInstallCmd(pm, hopspaceConfig, "main")
+
+	if len(resolved.InstallCmd) != 2 || resolved.InstallCmd[0] != "npm" || resolved.InstallCmd[1] != "ci" {
+		t.Errorf("ResolveInstallCmd() = %v, want [npm ci]", resolved.InstallCmd)
+	}
+}
+
+func TestResolveInstallCmd_RepoLevelOverride(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	hopspaceConfig := &config.HopspaceConfig{
+		PackageManagers: map[string]config.PackageManagerOverride{
+			"npm": {
+				InstallCmd: []string{"npm", "install", "--legacy-peer-deps"},
+			},
+		},
+		Branches: map[string]config.HopspaceBranch{
+			"main": {
+				Exists: true,
+				Path:   "/path/to/main",
+			},
+		},
+	}
+
+	resolved := services.ResolveInstallCmd(pm, hopspaceConfig, "main")
+
+	expected := []string{"npm", "install", "--legacy-peer-deps"}
+	if len(resolved.InstallCmd) != len(expected) {
+		t.Errorf("ResolveInstallCmd() length = %d, want %d", len(resolved.InstallCmd), len(expected))
+	}
+	for i, cmd := range expected {
+		if resolved.InstallCmd[i] != cmd {
+			t.Errorf("ResolveInstallCmd()[%d] = %v, want %v", i, resolved.InstallCmd[i], cmd)
+		}
+	}
+}
+
+func TestResolveInstallCmd_BranchLevelOverride(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	hopspaceConfig := &config.HopspaceConfig{
+		PackageManagers: map[string]config.PackageManagerOverride{
+			"npm": {
+				InstallCmd: []string{"npm", "install", "--legacy-peer-deps"},
+			},
+		},
+		Branches: map[string]config.HopspaceBranch{
+			"main": {
+				Exists: true,
+				Path:   "/path/to/main",
+			},
+			"feature-x": {
+				Exists: true,
+				Path:   "/path/to/feature-x",
+				PackageManagers: map[string]config.PackageManagerOverride{
+					"npm": {
+						InstallCmd: []string{"npm", "install", "--force"},
+					},
+				},
+			},
+		},
+	}
+
+	// main branch uses repo-level override
+	resolvedMain := services.ResolveInstallCmd(pm, hopspaceConfig, "main")
+	expectedMain := []string{"npm", "install", "--legacy-peer-deps"}
+	for i, cmd := range expectedMain {
+		if resolvedMain.InstallCmd[i] != cmd {
+			t.Errorf("main branch: InstallCmd[%d] = %v, want %v", i, resolvedMain.InstallCmd[i], cmd)
+		}
+	}
+
+	// feature-x branch uses branch-level override
+	resolvedFeature := services.ResolveInstallCmd(pm, hopspaceConfig, "feature-x")
+	expectedFeature := []string{"npm", "install", "--force"}
+	for i, cmd := range expectedFeature {
+		if resolvedFeature.InstallCmd[i] != cmd {
+			t.Errorf("feature-x branch: InstallCmd[%d] = %v, want %v", i, resolvedFeature.InstallCmd[i], cmd)
+		}
+	}
+}
+
+func TestResolveInstallCmd_NilConfig(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	resolved := services.ResolveInstallCmd(pm, nil, "main")
+
+	if len(resolved.InstallCmd) != 2 || resolved.InstallCmd[0] != "npm" || resolved.InstallCmd[1] != "ci" {
+		t.Errorf("ResolveInstallCmd() with nil config = %v, want [npm ci]", resolved.InstallCmd)
+	}
+}
+
+func TestResolveInstallCmd_EmptyOverride(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	hopspaceConfig := &config.HopspaceConfig{
+		PackageManagers: map[string]config.PackageManagerOverride{
+			"npm": {
+				InstallCmd: []string{}, // Empty override should be ignored
+			},
+		},
+		Branches: make(map[string]config.HopspaceBranch),
+	}
+
+	resolved := services.ResolveInstallCmd(pm, hopspaceConfig, "main")
+
+	if len(resolved.InstallCmd) != 2 || resolved.InstallCmd[0] != "npm" || resolved.InstallCmd[1] != "ci" {
+		t.Errorf("ResolveInstallCmd() with empty override = %v, want [npm ci]", resolved.InstallCmd)
+	}
+}
+
+func TestResolveInstallCmd_PreservesOtherFields(t *testing.T) {
+	pm := services.PackageManager{
+		Name:        "npm",
+		DetectFiles: []string{"package.json"},
+		LockFiles:   []string{"package-lock.json"},
+		DepsDir:     "node_modules",
+		InstallCmd:  []string{"npm", "ci"},
+	}
+
+	hopspaceConfig := &config.HopspaceConfig{
+		PackageManagers: map[string]config.PackageManagerOverride{
+			"npm": {
+				InstallCmd: []string{"npm", "install", "--legacy-peer-deps"},
+			},
+		},
+		Branches: make(map[string]config.HopspaceBranch),
+	}
+
+	resolved := services.ResolveInstallCmd(pm, hopspaceConfig, "main")
+
+	// Only InstallCmd should change
+	if resolved.Name != "npm" {
+		t.Errorf("Name = %v, want npm", resolved.Name)
+	}
+	if len(resolved.DetectFiles) != 1 || resolved.DetectFiles[0] != "package.json" {
+		t.Errorf("DetectFiles = %v, want [package.json]", resolved.DetectFiles)
+	}
+	if len(resolved.LockFiles) != 1 || resolved.LockFiles[0] != "package-lock.json" {
+		t.Errorf("LockFiles = %v, want [package-lock.json]", resolved.LockFiles)
+	}
+	if resolved.DepsDir != "node_modules" {
+		t.Errorf("DepsDir = %v, want node_modules", resolved.DepsDir)
+	}
+	if len(resolved.InstallCmd) != 3 || resolved.InstallCmd[0] != "npm" {
+		t.Errorf("InstallCmd = %v, want [npm install --legacy-peer-deps]", resolved.InstallCmd)
+	}
+}
+
+func TestApplyOverride_NilOverride(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	result := pm.ApplyOverride(nil)
+
+	// Should return same PM instance
+	if result != &pm {
+		t.Error("ApplyOverride(nil) should return same PM instance")
+	}
+}
+
+func TestApplyOverride_EmptyInstallCmd(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	override := &config.PackageManagerOverride{
+		InstallCmd: []string{},
+	}
+
+	result := pm.ApplyOverride(override)
+
+	// Should return same PM instance when override is empty
+	if result != &pm {
+		t.Error("ApplyOverride with empty InstallCmd should return same PM instance")
+	}
+}
+
+func TestApplyOverride_WithInstallCmd(t *testing.T) {
+	pm := services.PackageManager{
+		Name:       "npm",
+		InstallCmd: []string{"npm", "ci"},
+	}
+
+	override := &config.PackageManagerOverride{
+		InstallCmd: []string{"npm", "install", "--legacy-peer-deps"},
+	}
+
+	result := pm.ApplyOverride(override)
+
+	// Should return new PM with overridden command
+	if result == &pm {
+		t.Error("ApplyOverride with InstallCmd should return new PM instance")
+	}
+	if len(result.InstallCmd) != 3 || result.InstallCmd[0] != "npm" || result.InstallCmd[2] != "--legacy-peer-deps" {
+		t.Errorf("ApplyOverride InstallCmd = %v, want [npm install --legacy-peer-deps]", result.InstallCmd)
+	}
+	// Original should be unchanged
+	if len(pm.InstallCmd) != 2 || pm.InstallCmd[0] != "npm" || pm.InstallCmd[1] != "ci" {
+		t.Errorf("Original PM InstallCmd changed: %v, want [npm ci]", pm.InstallCmd)
+	}
+}

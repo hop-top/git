@@ -283,3 +283,40 @@ func (pm *PackageManager) GetDepsKey(hash string) string {
 	depsName := strings.ReplaceAll(pm.DepsDir, string(filepath.Separator), "_")
 	return fmt.Sprintf("%s.%s", depsName, hash)
 }
+
+// ApplyOverride creates a new PackageManager with overridden install command
+func (pm *PackageManager) ApplyOverride(override *config.PackageManagerOverride) *PackageManager {
+	if override == nil || len(override.InstallCmd) == 0 {
+		return pm
+	}
+
+	// Create a copy with overridden install command
+	overridden := *pm
+	overridden.InstallCmd = override.InstallCmd
+	return &overridden
+}
+
+// ResolveInstallCmd resolves the install command with hierarchy:
+// 1. Branch-level override (highest priority)
+// 2. Repo-level override
+// 3. Global package manager config (fallback)
+func ResolveInstallCmd(pm PackageManager, hopspaceConfig *config.HopspaceConfig, branch string) *PackageManager {
+	if hopspaceConfig == nil {
+		return &pm
+	}
+
+	// Check branch-level override first
+	if branchConfig, exists := hopspaceConfig.Branches[branch]; exists {
+		if override, hasOverride := branchConfig.PackageManagers[pm.Name]; hasOverride {
+			return pm.ApplyOverride(&override)
+		}
+	}
+
+	// Check repo-level override
+	if override, hasOverride := hopspaceConfig.PackageManagers[pm.Name]; hasOverride {
+		return pm.ApplyOverride(&override)
+	}
+
+	// Return original (uses global config)
+	return &pm
+}

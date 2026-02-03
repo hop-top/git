@@ -167,21 +167,13 @@ var addCmd = &cobra.Command{
 			}
 		}
 
-		// Check if docker-compose file exists before trying to generate environment
-		composeFiles := []string{"docker-compose.yaml", "docker-compose.yml", "compose.yaml", "compose.yml"}
-		hasDockerCompose := false
-		for _, composeFile := range composeFiles {
-			composePath := filepath.Join(worktreePath, composeFile)
-			if exists, _ := afero.Exists(fs, composePath); exists {
-				hasDockerCompose = true
-				break
-			}
-		}
+		// Check if docker environment exists before trying to generate environment
+		hasDockerEnv := d.HasDockerEnv(worktreePath)
 
 		var branchPorts *config.BranchPorts
 		var branchVols *config.BranchVolumes
 
-		if hasDockerCompose {
+		if hasDockerEnv {
 			envMgr := services.NewEnvManager(fs, portsCfg, volsCfg, d)
 			branchPorts, branchVols, err = envMgr.Generate(branch, worktreePath)
 			if err != nil {
@@ -198,6 +190,19 @@ var addCmd = &cobra.Command{
 				if err := writer.WriteVolumesConfig(hopspacePath, volsCfg); err != nil {
 					output.Error("Failed to save volumes config: %v", err)
 				}
+			}
+		}
+
+		// Setup dependencies
+		output.Info("Setting up dependencies...")
+		depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
+		if err != nil {
+			output.Warn("Failed to initialize dependency manager: %v", err)
+		} else {
+			if err := depsManager.EnsureDeps(worktreePath, branch); err != nil {
+				output.Warn("Failed to ensure dependencies: %v", err)
+			} else {
+				output.Info("Dependencies installed.")
 			}
 		}
 
