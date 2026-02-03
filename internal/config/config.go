@@ -26,9 +26,24 @@ type HubBranch struct {
 	Fork           *string `json:"fork,omitempty"`
 }
 
+// EnvHooks defines lifecycle hooks for an environment manager
+type EnvHooks struct {
+	PreStart  []string `json:"preStart,omitempty"`
+	PostStart []string `json:"postStart,omitempty"`
+	PreStop   []string `json:"preStop,omitempty"`
+	PostStop  []string `json:"postStop,omitempty"`
+}
+
+// EnvConfig represents per-repo environment configuration
+type EnvConfig struct {
+	Hooks EnvHooks `json:"hooks,omitempty"`
+}
+
 type HubSettings struct {
-	CompareBranch *string  `json:"compareBranch,omitempty"`
-	EnvPatterns   []string `json:"envPatterns"`
+	CompareBranch      *string    `json:"compareBranch,omitempty"`
+	EnvPatterns        []string   `json:"envPatterns"`
+	EnvironmentManager *string    `json:"environmentManager,omitempty"`
+	EnvironmentConfig  *EnvConfig `json:"environmentConfig,omitempty"`
 }
 
 // HopspaceConfig represents $GIT_HOP_DATA_HOME/<org>/<repo>/hop.json
@@ -112,11 +127,12 @@ type HopEntry struct {
 
 // GlobalConfig represents $XDG_CONFIG_HOME/git-hop/global.json
 type GlobalConfig struct {
-	Defaults         DefaultSettings          `json:"defaults"`
-	ShellIntegration ShellIntegrationSettings `json:"shellIntegration,omitempty"`
-	PackageManagers  []PackageManagerConfig   `json:"packageManagers,omitempty"`
-	Backup           BackupSettings           `json:"backup,omitempty"`
-	Conversion       ConversionSettings       `json:"conversion,omitempty"`
+	Defaults            DefaultSettings          `json:"defaults"`
+	ShellIntegration    ShellIntegrationSettings `json:"shellIntegration,omitempty"`
+	PackageManagers     []PackageManagerConfig   `json:"packageManagers,omitempty"`
+	EnvironmentManagers []EnvManagerConfig       `json:"environmentManagers,omitempty"`
+	Backup              BackupSettings           `json:"backup,omitempty"`
+	Conversion          ConversionSettings       `json:"conversion,omitempty"`
 }
 
 // PackageManagerConfig represents a custom package manager configuration
@@ -126,6 +142,23 @@ type PackageManagerConfig struct {
 	LockFiles   []string `json:"lockFiles"`
 	DepsDir     string   `json:"depsDir"`
 	InstallCmd  []string `json:"installCmd"`
+}
+
+// EnvManagerConfig represents an environment manager configuration
+type EnvManagerConfig struct {
+	Name        string     `json:"name"`
+	DetectFiles []string   `json:"detectFiles"`
+	Commands    EnvCommands `json:"commands"`
+	Hooks       EnvHooks    `json:"hooks,omitempty"`
+}
+
+// EnvCommands defines lifecycle commands for an environment manager
+type EnvCommands struct {
+	Start   []string `json:"start"`
+	Stop    []string `json:"stop"`
+	Health  []string `json:"health,omitempty"`
+	Restart []string `json:"restart,omitempty"`
+	Logs    []string `json:"logs,omitempty"`
 }
 
 // DefaultSettings represents global default settings

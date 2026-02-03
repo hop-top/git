@@ -6,7 +6,6 @@ import (
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/docker"
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
@@ -41,7 +40,6 @@ var envStopCmd = &cobra.Command{
 func runEnvCommand(action string) {
 	fs := afero.NewOsFs()
 	g := git.New()
-	d := docker.New()
 
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -57,63 +55,73 @@ func runEnvCommand(action string) {
 		output.Fatal("Failed to get git root: %v", err)
 	}
 
+	// Load global config
+	globalLoader := config.NewGlobalLoader()
+	globalConfig, err := globalLoader.Load()
+	if err != nil {
+		output.Warn("Failed to load global config, using defaults: %v", err)
+		globalConfig = globalLoader.GetDefaults()
+	}
+
+	// Load environment managers
+	managers, err := services.LoadEnvManagers(globalConfig)
+	if err != nil {
+		output.Fatal("Failed to load environment managers: %v", err)
+	}
+
+	// Try to find hub and get repo config
+	var hubConfig *config.HubConfig
+	var repoPath string
+	var branch string
+	hubPath, err := hop.FindHub(fs, cwd)
+	if err == nil {
+		hub, err := hop.LoadHub(fs, hubPath)
+		if err == nil {
+			hubConfig = hub.Config
+			// Get hopspace path
+			dataHome := hop.GetGitHopDataHome()
+			repoPath = hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+			// Get branch name from worktree path
+			branch = filepath.Base(root)
+		}
+	}
+
+	// Detect which environment manager to use
+	manager, err := services.DetectEnvManager(root, hubConfig, managers)
+	if err != nil {
+		output.Fatal("Failed to detect environment manager: %v", err)
+	}
+
+	if manager == nil {
+		output.Info("No environment manager detected, skipping")
+		return
+	}
+
+	output.Info("Environment Manager: %s", manager.Name)
+
 	switch action {
 	case "start":
-		// Load global config
-		globalLoader := config.NewGlobalLoader()
-		globalConfig, err := globalLoader.Load()
-		if err != nil {
-			output.Warn("Failed to load global config, using defaults: %v", err)
-			globalConfig = globalLoader.GetDefaults()
-		}
-
-		// Try to find hub and get repo path
-		hubPath, err := hop.FindHub(fs, cwd)
-		if err == nil {
-			hub, err := hop.LoadHub(fs, hubPath)
-			if err == nil {
-				// Get hopspace path
-				dataHome := hop.GetGitHopDataHome()
-				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-
-				// Get branch name from worktree path
-				branch := filepath.Base(root)
-
-				// Setup dependencies before starting services
-				output.Info("Ensuring dependencies...")
-				depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
-				if err != nil {
-					output.Warn("Failed to initialize dependency manager: %v", err)
+		// Setup dependencies before starting services
+		if repoPath != "" && branch != "" {
+			output.Info("Ensuring dependencies...")
+			depsManager, err := services.NewDepsManager(fs, repoPath, globalConfig)
+			if err != nil {
+				output.Warn("Failed to initialize dependency manager: %v", err)
+			} else {
+				if err := depsManager.EnsureDeps(root, branch); err != nil {
+					output.Warn("Failed to ensure dependencies: %v", err)
 				} else {
-					if err := depsManager.EnsureDeps(root, branch); err != nil {
-						output.Warn("Failed to ensure dependencies: %v", err)
-					} else {
-						output.Info("Dependencies ready.")
-					}
+					output.Info("Dependencies ready.")
 				}
 			}
 		}
 
-		// Check if docker environment exists before trying to start services
-		if d.HasDockerEnv(root) {
-			output.Info("Starting services...")
-			if err := d.ComposeUp(root, true); err != nil {
-				output.Fatal("Failed to start services: %v", err)
-			}
-			output.Info("Services started.")
-		} else {
-			output.Info("No docker environment found. Dependencies are ready but no services to start.")
+		if err := manager.Start(root, branch, repoPath, hubConfig); err != nil {
+			output.Fatal("Failed to start environment: %v", err)
 		}
 	case "stop":
-		// Check if docker environment exists before trying to stop services
-		if d.HasDockerEnv(root) {
-			output.Info("Stopping services...")
-			if err := d.ComposeStop(root); err != nil {
-				output.Fatal("Failed to stop services: %v", err)
-			}
-			output.Info("Services stopped.")
-		} else {
-			output.Info("No docker environment found. Nothing to stop.")
+		if err := manager.Stop(root, branch, repoPath, hubConfig); err != nil {
+			output.Fatal("Failed to stop environment: %v", err)
 		}
 	}
 }
