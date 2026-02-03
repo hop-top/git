@@ -116,6 +116,7 @@ type DefaultSettings struct {
 	BareRepo                  bool `json:"bareRepo"`
 	EnforceCleanForConversion bool `json:"enforceCleanForConversion"`
 	ConventionWarning         bool `json:"conventionWarning"`
+	GitDomain                 string `json:"gitDomain"`
 }
 
 // UserConfig represents global config.json (legacy)

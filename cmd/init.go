@@ -207,7 +207,8 @@ Or register current structure: git hop init --current`)
 	fmt.Printf("  %s/\n", repoPath)
 	fmt.Printf("    .git/              (bare repository)\n")
 	fmt.Printf("    hop.json\n")
-	fmt.Printf("    main/              (worktree for current branch)\n")
+	fmt.Printf("    worktrees/\n")
+	fmt.Printf("      main/            (worktree for current branch)\n")
 
 	if len(result.Warnings) > 0 {
 		fmt.Println("\nWarnings:")
@@ -223,10 +224,10 @@ Or register current structure: git hop init --current`)
 	}
 
 	output.Info("\nYou can now:")
-	fmt.Println("  cd main              # Work on current branch")
-	fmt.Println("  git hop add <branch>  # Add new branch")
-	fmt.Println("  git hop <branch>      # Jump to worktree")
-	fmt.Println("  git hop              # List all worktrees")
+	fmt.Println("  cd worktrees/main         # Work on current branch")
+	fmt.Println("  git hop add <branch>       # Add new branch")
+	fmt.Println("  git hop <branch>           # Jump to worktree")
+	fmt.Println("  git hop                    # List all worktrees")
 }
 
 func registerAsIs(fs afero.Fs, g *git.Git, repoPath string) {

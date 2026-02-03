@@ -1,12 +1,11 @@
 package e2e
 
 import (
-	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
-	"text/template"
 	"time"
 )
 
@@ -30,18 +29,19 @@ func TestCommands(t *testing.T) {
 		env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", branch)
 	}
 
-	// Initialize Hub manually (until `git hop clone` is implemented)
+	// Initialize Hub manually with worktrees/ structure
 	os.MkdirAll(env.HubPath, 0755)
-	mainWorktreePath := filepath.Join(env.DataHome, "local", "test-repo", "main")
-	os.MkdirAll(filepath.Dir(mainWorktreePath), 0755)
-	env.RunCommand(t, filepath.Dir(mainWorktreePath), "git", "clone", env.BareRepoPath, "main")
+	worktreesDir := filepath.Join(env.HubPath, "worktrees")
+	os.MkdirAll(worktreesDir, 0755)
+	mainWorktreePath := filepath.Join(worktreesDir, "main")
+	env.RunCommand(t, worktreesDir, "git", "clone", env.BareRepoPath, "main")
 
 	// Configs
 	createConfigs(t, env, mainWorktreePath)
 
-	// Verify main symlink exists initially
-	if _, err := os.Lstat(filepath.Join(env.HubPath, "main")); err != nil {
-		t.Fatalf("Main symlink missing after setup: %v", err)
+	// Verify main worktree exists initially
+	if _, err := os.Stat(filepath.Join(env.HubPath, "worktrees", "main")); err != nil {
+		t.Fatalf("Main worktree missing after setup: %v", err)
 	}
 
 	// --- Test: git hop add ---
@@ -52,14 +52,10 @@ func TestCommands(t *testing.T) {
 		if !strings.Contains(out, "Successfully added feature-1") {
 			t.Errorf("Expected success message, got: %s", out)
 		}
-		// Verify symlink
-		if _, err := os.Lstat(filepath.Join(env.HubPath, "feature-1")); err != nil {
-			t.Errorf("Symlink feature-1 not created")
-		}
-		// Verify worktree
-		wtPath := filepath.Join(env.DataHome, "local", "test-repo", "feature-1")
+		// Verify worktree directory exists under worktrees/
+		wtPath := filepath.Join(env.HubPath, "worktrees", "feature-1")
 		if _, err := os.Stat(wtPath); err != nil {
-			t.Errorf("Worktree feature-1 not created")
+			t.Errorf("Worktree feature-1 not created at worktrees/feature-1: %v", err)
 		}
 	})
 
@@ -85,7 +81,7 @@ func TestCommands(t *testing.T) {
 
 	// --- Test: git hop env ---
 	t.Run("Env", func(t *testing.T) {
-		branchPath := filepath.Join(env.HubPath, "feature-1")
+		branchPath := filepath.Join(env.HubPath, "worktrees", "feature-1")
 
 		// Generate (implicit in add, but test explicit)
 		env.RunGitHop(t, branchPath, "env", "generate")
@@ -120,14 +116,10 @@ func TestCommands(t *testing.T) {
 			t.Logf("Remove output: %s", out)
 		}
 
-		// Verify symlink gone
-		if _, err := os.Lstat(filepath.Join(env.HubPath, "feature-1")); err == nil {
-			t.Errorf("Symlink feature-1 should be gone")
-		}
 		// Verify worktree gone
-		wtPath := filepath.Join(env.DataHome, "local", "test-repo", "feature-1")
+		wtPath := filepath.Join(env.HubPath, "worktrees", "feature-1")
 		if _, err := os.Stat(wtPath); err == nil {
-			t.Errorf("Worktree feature-1 should be gone")
+			t.Errorf("Worktree feature-1 should be gone at worktrees/feature-1")
 		}
 	})
 
@@ -136,8 +128,8 @@ func TestCommands(t *testing.T) {
 		// Add feature-2 for this test
 		env.RunGitHop(t, env.HubPath, "add", "feature-2")
 
-		// Navigate to the worktree symlink and run commands from there
-		feature2Path := filepath.Join(env.HubPath, "feature-2")
+		// Navigate to the worktree directory and run commands from there
+		feature2Path := filepath.Join(env.HubPath, "worktrees", "feature-2")
 
 		// Test: git hop list from within worktree
 		out := env.RunGitHop(t, feature2Path, "list")
@@ -173,57 +165,62 @@ func TestCommands(t *testing.T) {
 			t.Errorf("ForkAttachMain output missing success message: %s", out)
 		}
 
-		// Verify symlink
-		// Name: main-fork-<org>
-		// Org is derived from URI.
-		// URI: .../fork.git -> org is parent dir name.
-		// Let's check for any symlink starting with "main-fork-"
-		files, _ := os.ReadDir(env.HubPath)
+		// Verify worktree directory
+		// Look for fork worktree starting with "main-fork-"
+		worktreesDir := filepath.Join(env.HubPath, "worktrees")
+		files, _ := os.ReadDir(worktreesDir)
 		found := false
-		var symlinkName string
+		var wtName string
 		for _, f := range files {
 			if strings.HasPrefix(f.Name(), "main-fork-") {
 				found = true
-				symlinkName = f.Name()
+				wtName = f.Name()
 				break
 			}
 		}
 		if !found {
-			t.Errorf("Fork symlink for main not found in hub")
+			t.Errorf("Fork worktree for main not found in worktrees/ directory")
 		} else {
-			// Verify it points to the right place
-			// Should point to .../fork/main
-			linkPath := filepath.Join(env.HubPath, symlinkName)
-			target, err := os.Readlink(linkPath)
-			if err != nil {
-				t.Errorf("Failed to read symlink: %v", err)
-			}
-			if !strings.HasSuffix(target, "/main") {
-				t.Errorf("Symlink target %s does not end in /main", target)
+			// Verify the worktree directory exists
+			wtPath := filepath.Join(worktreesDir, wtName)
+			if _, err := os.Stat(wtPath); err != nil {
+				t.Errorf("Fork worktree directory does not exist: %v", err)
 			}
 		}
 	})
 }
 
 func createConfigs(t *testing.T, env *TestEnv, mainWorktreePath string) {
-	// Create Hub Config
-	hubTmplContent, _ := os.ReadFile("fixtures/hub_config.json.tmpl")
-	hubTmpl, _ := template.New("hub.json").Parse(string(hubTmplContent))
-	var hubJsonBuf bytes.Buffer
-	hubTmpl.Execute(&hubJsonBuf, struct{ RepoURI string }{env.BareRepoPath})
-	WriteFile(t, filepath.Join(env.HubPath, "hop.json"), hubJsonBuf.String())
-
-	// Create Hopspace Config
-	hsTmplContent, _ := os.ReadFile("fixtures/hopspace_config.json.tmpl")
-	hsTmpl, _ := template.New("hopspace.json").Parse(string(hsTmplContent))
-	var hsJsonBuf bytes.Buffer
-	hsTmpl.Execute(&hsJsonBuf, struct {
-		RepoURI, WorktreePath, LastSync string
-	}{env.BareRepoPath, mainWorktreePath, time.Now().Format(time.RFC3339)})
-	WriteFile(t, filepath.Join(filepath.Dir(mainWorktreePath), "hop.json"), hsJsonBuf.String())
-
-	// Create symlink for main
-	if err := os.Symlink(mainWorktreePath, filepath.Join(env.HubPath, "main")); err != nil {
-		t.Fatalf("Failed to create main symlink: %v", err)
+	// Create merged local config (hub+hopspace in single hop.json)
+	// This simulates local mode (default, no --global flag)
+	mergedConfig := map[string]interface{}{
+		"repo": map[string]interface{}{
+			"uri":           env.BareRepoPath,
+			"org":           "local",
+			"repo":          "test-repo",
+			"defaultBranch": "main",
+			"structure":     "bare-worktree",
+			"isBare":        true,
+		},
+		"branches": map[string]interface{}{
+			"main": map[string]interface{}{
+				// Merged hub+hopspace fields
+				"path":           mainWorktreePath, // Absolute path for hopspace
+				"hopspaceBranch": "main",
+				"exists":         true,
+				"lastSync":       time.Now().Format(time.RFC3339),
+			},
+		},
+		"settings": map[string]interface{}{
+			"envPatterns": []string{"dev", "staging", "qa"},
+		},
+		"forks": map[string]interface{}{},
 	}
+
+	// Write merged config to hub directory
+	data, err := json.MarshalIndent(mergedConfig, "", "  ")
+	if err != nil {
+		t.Fatalf("Failed to marshal merged config: %v", err)
+	}
+	WriteFile(t, filepath.Join(env.HubPath, "hop.json"), string(data))
 }

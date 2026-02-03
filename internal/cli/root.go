@@ -17,13 +17,15 @@ import (
 
 var (
 	// Global flags
-	cfgFile   string
-	jsonOut   bool
-	porcelain bool
-	quiet     bool
-	verbose   bool
-	force     bool
-	dryRun    bool
+	cfgFile      string
+	jsonOut      bool
+	porcelain    bool
+	quiet        bool
+	verbose      bool
+	force        bool
+	dryRun       bool
+	gitDomain    string
+	globalConfig bool
 
 	// Build info
 	versionStr string
@@ -35,8 +37,45 @@ func SetVersionInfo(v, c, d string) {
 
 var RootCmd *cobra.Command
 
-func isURI(s string) bool {
+// IsURI checks if a string is a URI (git@, http://, https://, or ends with .git)
+func IsURI(s string) bool {
 	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@") || strings.HasSuffix(s, ".git")
+}
+
+// ExpandShorthand converts "org/repo" to a full git URI
+// Uses configured git domain (default: github.com)
+func ExpandShorthand(s string, gitDomain string) string {
+	// Already a full URI
+	if IsURI(s) {
+		return s
+	}
+
+	// Check if it looks like org/repo pattern
+	parts := strings.Split(s, "/")
+	if len(parts) == 2 && !strings.Contains(s, " ") {
+		// Heuristic: org/repo patterns typically have more chars before the slash
+		// Branch names like "feat/awesome" usually have 3-5 chars before slash
+		// Org names are typically longer or at least look like identifiers
+		// If the first part is very short (1-5 chars) and looks like a common
+		// branch prefix, treat it as a branch name
+		firstPart := parts[0]
+		commonBranchPrefixes := []string{"feat", "fix", "bug", "docs", "test", "chore", "refactor", "perf", "style", "build", "ci", "revert"}
+		for _, prefix := range commonBranchPrefixes {
+			if firstPart == prefix {
+				// This is likely a branch name, not org/repo
+				return s
+			}
+		}
+
+		// org/repo -> git@github.com:org/repo.git
+		if gitDomain == "" {
+			gitDomain = "github.com"
+		}
+		return fmt.Sprintf("git@%s:%s.git", gitDomain, s)
+	}
+
+	// Not a shorthand, return as-is (might be a branch name with more slashes)
+	return s
 }
 
 func Execute() error {
@@ -75,8 +114,24 @@ Worktree Mode:
 			fs := afero.NewOsFs()
 			g := git.New()
 
+			// Load global config for defaults
+			globalLoader := config.NewGlobalLoader()
+			globalCfg, err := globalLoader.Load()
+
+			// Get git domain from flag, config, or default
+			domain := gitDomain
+			if domain == "" && err == nil {
+				domain = globalCfg.Defaults.GitDomain
+			}
+			if domain == "" {
+				domain = "github.com"
+			}
+
+			// Expand shorthand notation (e.g., org/repo -> git@github.com:org/repo.git)
+			expandedArg := ExpandShorthand(arg, domain)
+
 			// Simple URI detection
-			if isURI(arg) {
+			if IsURI(expandedArg) {
 				// Check for --branch flag
 				branch, _ := cmd.Flags().GetString("branch")
 
@@ -85,7 +140,7 @@ Worktree Mode:
 					// Check if we are in a hub
 					hubPath, err := hop.FindHub(fs, cwd)
 					if err == nil {
-						if err := hop.ForkAttach(fs, g, arg, branch, hubPath); err != nil {
+						if err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath); err != nil {
 							output.Fatal("Fork-Attach failed: %v", err)
 						}
 						return
@@ -99,14 +154,12 @@ Worktree Mode:
 				}
 
 				// Use bare repo setting from global config (default: true)
-				globalLoader := config.NewGlobalLoader()
-				globalCfg, err := globalLoader.Load()
 				useBare := true // Core default
 				if err == nil {
 					useBare = globalCfg.Defaults.BareRepo
 				}
 
-				if err := hop.CloneWorktree(fs, g, arg, projectPath, useBare); err != nil {
+				if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig); err != nil {
 					output.Fatal("Clone failed: %v", err)
 				}
 				return
@@ -116,17 +169,27 @@ Worktree Mode:
 			// Check if we're in or under a hub
 			hubPath, err := hop.FindHub(fs, cwd)
 			if err == nil {
-				// Found a hub - delegate to Add command
-				addCmd, _, _ := cmd.Find([]string{"add"})
-				if addCmd != nil {
-					// Change to hub directory for add command
-					origDir := cwd
-					os.Chdir(hubPath)
-					defer os.Chdir(origDir)
-
-					addCmd.Run(addCmd, []string{arg})
-					return
+				// Found a hub - check if worktree exists
+				hub, loadErr := hop.LoadHub(fs, hubPath)
+				if loadErr != nil {
+					output.Fatal("Failed to load hub config: %v", loadErr)
 				}
+
+				// Check if this branch/worktree exists in the hub
+				branch, exists := hub.Config.Branches[arg]
+				if !exists {
+					output.Fatal("Worktree '%s' does not exist. Use 'git hop add %s' to create it.", arg, arg)
+				}
+
+				// Switch to the worktree directory
+				worktreePath := branch.Path
+				if err := os.Chdir(worktreePath); err != nil {
+					output.Fatal("Failed to change directory to worktree '%s': %v", worktreePath, err)
+				}
+
+				output.Success("Switched to worktree '%s'", arg)
+				output.Info("Path: %s", worktreePath)
+				return
 			}
 
 			output.Fatal("Unknown command or argument: %s", arg)
@@ -141,6 +204,8 @@ Worktree Mode:
 	RootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
 	RootCmd.PersistentFlags().BoolVar(&force, "force", false, "bypass safety checks")
 	RootCmd.PersistentFlags().BoolVar(&dryRun, "dry-run", false, "preview changes without applying")
+	RootCmd.PersistentFlags().BoolVarP(&globalConfig, "global", "g", false, "use global hopspace in $GIT_HOP_DATA_HOME (default: local)")
+	RootCmd.Flags().StringVar(&gitDomain, "git-domain", "", "Git domain for shorthand notation (e.g., github.com, gitlab.com)")
 	RootCmd.Flags().String("branch", "", "branch name for fork-attach mode")
 
 	// Bind Viper to flags (optional, but good for config/env overrides)

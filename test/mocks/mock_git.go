@@ -1,7 +1,10 @@
-package hop
+package mocks
 
 type MockGit struct {
-	Runner *MockCommandRunner
+	Runner                *MockCommandRunner
+	CreatedWorktrees      []string // Track created worktree paths
+	LastWorktreeBasePath  string   // Track the base path used for worktree commands
+	LastWorktreeBranch    string   // Track the branch name used
 }
 
 type MockCommandRunner struct {
@@ -51,10 +54,16 @@ func (m *MockGit) CloneBare(uri, path string) error {
 }
 
 func (m *MockGit) WorktreeAdd(hopspacePath, branch, path string) error {
+	m.CreatedWorktrees = append(m.CreatedWorktrees, path)
+	m.LastWorktreeBasePath = hopspacePath
+	m.LastWorktreeBranch = branch
 	return nil
 }
 
 func (m *MockGit) WorktreeAddCreate(hopspacePath, branch, path, base string) error {
+	m.CreatedWorktrees = append(m.CreatedWorktrees, path)
+	m.LastWorktreeBasePath = hopspacePath
+	m.LastWorktreeBranch = branch
 	return nil
 }
 
@@ -112,5 +121,6 @@ func NewMockGit() *MockGit {
 			Responses: make(map[string]string),
 			Errors:    make(map[string]error),
 		},
+		CreatedWorktrees: []string{},
 	}
 }

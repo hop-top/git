@@ -6,12 +6,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/spf13/afero"
 )
 
-func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare bool) error {
+func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare bool, globalConfig bool) error {
 	projectRoot := projectPath
 
 	if projectRoot == "" {
@@ -50,20 +51,35 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		}
 	}
 
-	if err := createProjectConfig(fs, g, projectRoot, uri, org, repo, defaultBranch, useBare); err != nil {
-		return err
+	// All worktrees are under worktrees/ subdirectory
+	mainWorktreePath := filepath.Join(projectRoot, "worktrees", defaultBranch)
+
+	// Ensure we use absolute path for hopspace registration
+	absMainWorktreePath, err := filepath.Abs(mainWorktreePath)
+	if err != nil {
+		return fmt.Errorf("failed to get absolute path: %v", err)
 	}
 
-	// Initialize hopspace in data directory
-	dataHome := GetGitHopDataHome()
-	hopspacePath := GetHopspacePath(dataHome, org, repo)
-	mainWorktreePath := filepath.Join(projectRoot, "main")
+	if globalConfig {
+		// Global mode: separate hub and hopspace configs
+		if err := createProjectConfig(fs, g, projectRoot, uri, org, repo, defaultBranch, useBare); err != nil {
+			return err
+		}
 
-	if err := initializeHopspace(fs, hopspacePath, uri, org, repo, defaultBranch, mainWorktreePath); err != nil {
-		return fmt.Errorf("failed to initialize hopspace: %v", err)
+		// Initialize hopspace in data directory
+		dataHome := GetGitHopDataHome()
+		hopspacePath := GetHopspacePath(dataHome, org, repo)
+		if err := initializeHopspace(fs, hopspacePath, uri, org, repo, defaultBranch, absMainWorktreePath, true); err != nil {
+			return fmt.Errorf("failed to initialize hopspace: %v", err)
+		}
+	} else {
+		// Local mode (default): merged hub+hopspace config in project root
+		if err := createMergedConfig(fs, projectRoot, uri, org, repo, defaultBranch, absMainWorktreePath, useBare); err != nil {
+			return err
+		}
 	}
 
-	if err := registerProject(fs, org, repo, defaultBranch, mainWorktreePath); err != nil {
+	if err := registerProject(fs, org, repo, defaultBranch, absMainWorktreePath); err != nil {
 		fmt.Printf("Warning: failed to register in global registry: %v\n", err)
 	}
 
@@ -74,10 +90,11 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		fmt.Printf("    .git/              (bare repository)\n")
 	}
 	fmt.Printf("    hop.json\n")
-	fmt.Printf("    main/              (worktree for current branch)\n")
+	fmt.Printf("    worktrees/\n")
+	fmt.Printf("      %s/           (worktree for current branch)\n", defaultBranch)
 
 	fmt.Printf("\nYou can now:\n")
-	fmt.Printf("  cd %s/main          # Work on current branch\n", projectRoot)
+	fmt.Printf("  cd %s/worktrees/%s    # Work on current branch\n", projectRoot, defaultBranch)
 	fmt.Printf("  git hop add <branch>  # Add new branch\n")
 	fmt.Printf("  git hop <branch>      # Jump to worktree\n")
 	fmt.Printf("  git hop              # List all worktrees\n")
@@ -92,7 +109,15 @@ func cloneBareRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch stri
 		return fmt.Errorf("failed to create bare repository: %w", err)
 	}
 
-	_, err := g.Runner.Run("git", "-C", projectRoot, "worktree", "add", "main", defaultBranch)
+	// Create worktrees directory
+	worktreesDir := filepath.Join(projectRoot, "worktrees")
+	if err := fs.MkdirAll(worktreesDir, 0755); err != nil {
+		return fmt.Errorf("failed to create worktrees directory: %w", err)
+	}
+
+	// Create main worktree under worktrees/
+	mainPath := filepath.Join(worktreesDir, defaultBranch)
+	_, err := g.Runner.Run("git", "-C", projectRoot, "worktree", "add", mainPath, defaultBranch)
 	if err != nil {
 		os.RemoveAll(projectRoot)
 		return fmt.Errorf("failed to create main worktree: %w", err)
@@ -108,12 +133,15 @@ func cloneRegularRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch s
 		return fmt.Errorf("failed to clone repository: %w", err)
 	}
 
-	mainPath := filepath.Join(projectRoot, "main")
-	if err := fs.MkdirAll(mainPath, 0755); err != nil {
-		return fmt.Errorf("failed to create main directory: %w", err)
+	// Create worktrees directory
+	worktreesDir := filepath.Join(projectRoot, "worktrees")
+	if err := fs.MkdirAll(worktreesDir, 0755); err != nil {
+		return fmt.Errorf("failed to create worktrees directory: %w", err)
 	}
 
-	if err := g.WorktreeAddCreate(projectRoot, "main", mainPath, defaultBranch); err != nil {
+	// Create main worktree under worktrees/
+	mainPath := filepath.Join(worktreesDir, defaultBranch)
+	if err := g.WorktreeAddCreate(projectRoot, defaultBranch, mainPath, defaultBranch); err != nil {
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 
@@ -123,8 +151,8 @@ func cloneRegularRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch s
 func createProjectConfig(fs afero.Fs, g *git.Git, projectRoot, uri, org, repo, defaultBranch string, useBare bool) error {
 	cfgPath := filepath.Join(projectRoot, "hop.json")
 
-	cfg := map[string]interface{}{
-		"repo": map[string]interface{}{
+	cfg := map[string]any{
+		"repo": map[string]any{
 			"uri":           uri,
 			"org":           org,
 			"repo":          repo,
@@ -132,14 +160,14 @@ func createProjectConfig(fs afero.Fs, g *git.Git, projectRoot, uri, org, repo, d
 			"structure":     "bare-worktree",
 			"isBare":        useBare,
 		},
-		"branches": map[string]interface{}{
-			defaultBranch: map[string]interface{}{
-				"path":   "main",
-				"exists": true,
+		"branches": map[string]any{
+			defaultBranch: map[string]any{
+				"path":           "main",
+				"hopspaceBranch": defaultBranch,
 			},
 		},
-		"settings": map[string]interface{}{
-			"autoEnvStart": true,
+		"settings": map[string]any{
+			"envPatterns": []string{"dev", "staging", "qa"},
 		},
 	}
 
@@ -152,6 +180,48 @@ func createProjectConfig(fs afero.Fs, g *git.Git, projectRoot, uri, org, repo, d
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
+	return nil
+}
+
+// createMergedConfig creates a single hop.json with both hub and hopspace fields (local mode)
+func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch, worktreePath string, useBare bool) error {
+	cfgPath := filepath.Join(projectRoot, "hop.json")
+
+	cfg := map[string]any{
+		"repo": map[string]any{
+			"uri":           uri,
+			"org":           org,
+			"repo":          repo,
+			"defaultBranch": defaultBranch,
+			"structure":     "bare-worktree",
+			"isBare":        useBare,
+		},
+		// Hub branches (points to worktree paths relative to hub)
+		"branches": map[string]any{
+			defaultBranch: map[string]any{
+				"path":           defaultBranch,
+				"hopspaceBranch": defaultBranch,
+				// Hopspace fields (merged into same branches map)
+				"exists":   true,
+				"lastSync": time.Now().Format(time.RFC3339),
+			},
+		},
+		"settings": map[string]any{
+			"envPatterns": []string{"dev", "staging", "qa"},
+		},
+		"forks": map[string]any{},
+	}
+
+	data, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	if err := afero.WriteFile(fs, cfgPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write config: %w", err)
+	}
+
+	fmt.Printf("Created local configuration (hub+hopspace) at %s\n", cfgPath)
 	return nil
 }
 
@@ -174,7 +244,7 @@ func registerProject(fs afero.Fs, org, repo, branch, worktreePath string) error 
 }
 
 // initializeHopspace creates the hopspace directory structure and config
-func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch, worktreePath string) error {
+func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch, worktreePath string, isGlobal bool) error {
 	// Use InitHopspace function which creates the directory and config
 	hopspace, err := InitHopspace(fs, hopspacePath, uri, org, repo, defaultBranch)
 	if err != nil {
@@ -186,6 +256,10 @@ func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch
 		return fmt.Errorf("failed to register default branch: %w", err)
 	}
 
-	fmt.Printf("Initialized hopspace at %s\n", hopspacePath)
+	location := "locally"
+	if isGlobal {
+		location = "globally"
+	}
+	fmt.Printf("Initialized hopspace %s at %s\n", location, hopspacePath)
 	return nil
 }

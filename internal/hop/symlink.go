@@ -3,6 +3,7 @@ package hop
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/afero"
 )
@@ -42,9 +43,25 @@ func createSymlink(fs afero.Fs, target, link string) error {
 	//
 	// Actually, `afero` has `SymlinkIfPossible` in the `OsFs` struct but not the interface.
 
+	// Create parent directories for the symlink if they don't exist
+	// This is needed when branch names contain slashes (e.g., feat/my-feature)
+	linkDir := filepath.Dir(link)
+	fmt.Printf("DEBUG: Creating parent directory: %s\n", linkDir)
+	if err := fs.MkdirAll(linkDir, 0755); err != nil {
+		return fmt.Errorf("failed to create parent directory for symlink: %w", err)
+	}
+
+	// Verify directory was created
+	if exists, _ := afero.DirExists(fs, linkDir); !exists {
+		return fmt.Errorf("parent directory was not created: %s", linkDir)
+	}
+	fmt.Printf("DEBUG: Parent directory confirmed: %s\n", linkDir)
+
 	// For now, let's just use os.Symlink.
+	fmt.Printf("DEBUG: Creating symlink: %s -> %s\n", link, target)
 	if err := os.Symlink(target, link); err != nil {
 		return fmt.Errorf("failed to create symlink: %w", err)
 	}
+	fmt.Printf("DEBUG: Symlink created successfully\n")
 	return nil
 }

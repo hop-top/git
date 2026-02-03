@@ -147,12 +147,19 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		currentBranch, _ := c.git.GetCurrentBranch(repoPath)
 		_ = currentBranch
 
-		_, err := c.git.Runner.Run("git", "-C", bareRepoPath, "worktree", "add", "main", "main")
+		// Create worktrees directory
+		worktreesDir := filepath.Join(bareRepoPath, "worktrees")
+		if err := c.fs.MkdirAll(worktreesDir, 0755); err != nil {
+			return fmt.Errorf("failed to create worktrees directory: %w", err)
+		}
+
+		mainPath := filepath.Join(worktreesDir, "main")
+		_, err := c.git.Runner.Run("git", "-C", bareRepoPath, "worktree", "add", mainPath, "main")
 		if err != nil {
 			return fmt.Errorf("failed to create main worktree: %w", err)
 		}
 
-		if err := c.moveFilesToWorktree(repoPath, filepath.Join(bareRepoPath, "main")); err != nil {
+		if err := c.moveFilesToWorktree(repoPath, mainPath); err != nil {
 			return fmt.Errorf("failed to move files to worktree: %w", err)
 		}
 
@@ -162,11 +169,13 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 	} else {
 		currentBranch, _ := c.git.GetCurrentBranch(repoPath)
 
-		mainPath := filepath.Join(repoPath, "main")
-		if err := c.fs.MkdirAll(mainPath, 0755); err != nil {
-			return fmt.Errorf("failed to create main directory: %w", err)
+		// Create worktrees directory
+		worktreesDir := filepath.Join(repoPath, "worktrees")
+		if err := c.fs.MkdirAll(worktreesDir, 0755); err != nil {
+			return fmt.Errorf("failed to create worktrees directory: %w", err)
 		}
 
+		mainPath := filepath.Join(worktreesDir, "main")
 		if err := c.git.WorktreeAddCreate(repoPath, "main", mainPath, currentBranch); err != nil {
 			return fmt.Errorf("failed to create main worktree: %w", err)
 		}
@@ -241,11 +250,8 @@ func (c *Converter) swapDirectories(parentDir, projectName, bareRepoPath string)
 }
 
 func (c *Converter) getWorktreePathForBranch(branch, repoPath string) string {
-	if strings.Contains(branch, "/") {
-		return filepath.Join(repoPath, branch)
-	}
-
-	return filepath.Join(repoPath, branch)
+	// All worktrees go under worktrees/ subdirectory
+	return filepath.Join(repoPath, "worktrees", branch)
 }
 
 func (c *Converter) createHopConfig(repoPath string, useBare bool, result *config.ConversionResult) error {
@@ -306,6 +312,7 @@ func (c *Converter) RestoreFromBackup(backupPath, targetPath string) error {
 func parseRepoFromURL(uri string) (org, repo string) {
 	trimmed := strings.TrimSuffix(uri, ".git")
 
+	// Handle file:// URIs
 	if strings.HasPrefix(trimmed, "file://") {
 		path := strings.TrimPrefix(trimmed, "file://")
 		parts := strings.Split(path, "/")
@@ -324,6 +331,25 @@ func parseRepoFromURL(uri string) (org, repo string) {
 		return "", ""
 	}
 
+	// Handle absolute file paths (e.g., /path/to/repo.git or /tmp/org/repo.git)
+	if strings.HasPrefix(trimmed, "/") {
+		parts := strings.Split(trimmed, "/")
+		var nonEmpty []string
+		for _, p := range parts {
+			if p != "" {
+				nonEmpty = append(nonEmpty, p)
+			}
+		}
+		if len(nonEmpty) >= 2 {
+			return nonEmpty[len(nonEmpty)-2], nonEmpty[len(nonEmpty)-1]
+		}
+		if len(nonEmpty) == 1 {
+			return nonEmpty[0], nonEmpty[0]
+		}
+		return "", ""
+	}
+
+	// Handle git@ SSH URIs
 	if strings.HasPrefix(trimmed, "git@") {
 		parts := strings.Split(trimmed, ":")
 		if len(parts) == 2 {
@@ -335,6 +361,7 @@ func parseRepoFromURL(uri string) (org, repo string) {
 		}
 	}
 
+	// Handle http:// and https:// URIs
 	if strings.Contains(trimmed, "://") {
 		parts := strings.Split(trimmed, "/")
 		if len(parts) >= 2 {

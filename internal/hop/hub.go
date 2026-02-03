@@ -2,7 +2,6 @@ package hop
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 
 	"github.com/jadb/git-hop/internal/config"
@@ -102,17 +101,11 @@ func CreateHub(fs afero.Fs, path string, repoURI, org, repo, defaultBranch strin
 	}, nil
 }
 
-// AddBranch adds a branch to the hub config and creates a symlink
+// AddBranch adds a branch to the hub config
 func (h *Hub) AddBranch(branchName, hopspaceBranch, worktreePath string) error {
-	// Create symlink
-	symlinkPath := filepath.Join(h.Path, branchName)
-	if err := createSymlink(h.fs, worktreePath, symlinkPath); err != nil {
-		return err
-	}
-
-	// Update config
+	// Update config - no symlinks needed, worktrees are accessed directly
 	h.Config.Branches[branchName] = config.HubBranch{
-		Path:           branchName, // Relative path (symlink name)
+		Path:           worktreePath, // Full path to worktree
 		HopspaceBranch: hopspaceBranch,
 	}
 
@@ -121,13 +114,7 @@ func (h *Hub) AddBranch(branchName, hopspaceBranch, worktreePath string) error {
 
 // RemoveBranch removes a branch from the hub
 func (h *Hub) RemoveBranch(branchName string) error {
-	// Remove symlink
-	symlinkPath := filepath.Join(h.Path, branchName)
-	if err := h.fs.Remove(symlinkPath); err != nil && !os.IsNotExist(err) {
-		return err
-	}
-
-	// Update config
+	// Update config - no symlinks to remove
 	delete(h.Config.Branches, branchName)
 
 	return h.Save()

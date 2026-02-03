@@ -43,25 +43,31 @@ var addCmd = &cobra.Command{
 			output.Fatal("Failed to load hub: %v", err)
 		}
 
-		// Load Hopspace
-		// We need to know where the hopspace is.
-		// The hub config should have the repo info to derive it, or we can look at an existing branch.
-		// But wait, the hub config has `Repo` info.
-		dataHome := hop.GetGitHopDataHome()
+		// Load Hopspace - try local first, then global
+		var hopspace *hop.Hopspace
+		var hopspacePath string
 
-		hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-		hopspace, err := hop.LoadHopspace(fs, hopspacePath)
+		// Try local hopspace first (in hub directory)
+		localHopspacePath := hubPath
+		hopspace, err = hop.LoadHopspace(fs, localHopspacePath)
 		if err != nil {
-			// If hopspace doesn't exist, we might need to init it?
-			// But if we are in a hub, the hopspace should exist.
-			output.Fatal("Failed to load hopspace at %s: %v", hopspacePath, err)
+			// Try global hopspace (in data directory)
+			dataHome := hop.GetGitHopDataHome()
+			globalHopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+			hopspace, err = hop.LoadHopspace(fs, globalHopspacePath)
+			if err != nil {
+				output.Fatal("Failed to load hopspace locally at %s or globally at %s", localHopspacePath, globalHopspacePath)
+			}
+			hopspacePath = globalHopspacePath
+		} else {
+			hopspacePath = localHopspacePath
 		}
 
 		output.Info("Adding branch %s (v2)...", branch)
 
-		// Create Worktree
+		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
-		worktreePath, err := wm.CreateWorktree(hopspace, branch)
+		worktreePath, err := wm.CreateWorktree(hopspace, hubPath, branch)
 		if err != nil {
 			output.Fatal("Failed to create worktree: %v", err)
 		}
