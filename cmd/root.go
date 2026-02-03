@@ -27,6 +27,11 @@ import (
 	"github.com/jadb/git-hop/internal/cli"
 )
 
+// SetVersion sets the version information for the CLI
+func SetVersion(version, commit, date string) {
+	cli.SetVersion(version, commit, date)
+}
+
 // Execute adds all child commands to the root command and sets flags appropriately.
 // This is called by main.main(). It only needs to happen once to the rootCmd.
 func Execute() {

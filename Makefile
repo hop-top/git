@@ -5,7 +5,10 @@ DATE := $(shell date -u +%Y-%m-%dT%H:%M:%SZ)
 
 LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DATE)
 
-.PHONY: all build clean test lint fmt
+# Platform-agnostic install path
+GOBIN ?= $(shell go env GOPATH)/bin
+
+.PHONY: all build clean test lint fmt install
 
 all: build
 
@@ -14,6 +17,10 @@ build:
 
 run: build
 	./$(BINARY_NAME)
+
+install: build
+	mkdir -p $(GOBIN)
+	cp $(BINARY_NAME) $(GOBIN)/
 
 clean:
 	go clean

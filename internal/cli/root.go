@@ -28,11 +28,18 @@ var (
 	globalConfig bool
 
 	// Build info
-	versionStr string
+	version string
+	commit  string
+	date    string
 )
 
-func SetVersionInfo(v, c, d string) {
-	versionStr = fmt.Sprintf("git-hop version %s (%s built %s)", v, c, d)
+func SetVersion(v, c, d string) {
+	version = v
+	commit = c
+	date = d
+	if RootCmd != nil {
+		RootCmd.Version = fmt.Sprintf("%s (commit: %s, built: %s)", v, c, d)
+	}
 }
 
 var RootCmd *cobra.Command
@@ -97,7 +104,8 @@ Clone Mode:
 Worktree Mode:
   git-hop <branch>
   Inside a project root: create/sync worktree for a branch`,
-		Args: cobra.ArbitraryArgs,
+		Version: "dev",
+		Args:    cobra.ArbitraryArgs,
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			initConfig()
 			setupOutputMode()
