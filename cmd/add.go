@@ -107,23 +107,37 @@ var addCmd = &cobra.Command{
 			}
 		}
 
-		envMgr := services.NewEnvManager(fs, portsCfg, volsCfg, d)
-		branchPorts, branchVols, err := envMgr.Generate(branch, worktreePath)
-		if err != nil {
-			output.Error("Failed to generate environment: %v", err)
-			// Don't fatal, just warn? Or fatal?
-			// Specs say "Implement service/env initialization triggers".
-		} else {
-			// Update configs
-			portsCfg.Branches[branch] = *branchPorts
-			volsCfg.Branches[branch] = *branchVols
-
-			writer := config.NewWriter(fs)
-			if err := writer.WritePortsConfig(hopspacePath, portsCfg); err != nil {
-				output.Error("Failed to save ports config: %v", err)
+		// Check if docker-compose file exists before trying to generate environment
+		composeFiles := []string{"docker-compose.yaml", "docker-compose.yml", "compose.yaml", "compose.yml"}
+		hasDockerCompose := false
+		for _, composeFile := range composeFiles {
+			composePath := filepath.Join(worktreePath, composeFile)
+			if exists, _ := afero.Exists(fs, composePath); exists {
+				hasDockerCompose = true
+				break
 			}
-			if err := writer.WriteVolumesConfig(hopspacePath, volsCfg); err != nil {
-				output.Error("Failed to save volumes config: %v", err)
+		}
+
+		var branchPorts *config.BranchPorts
+		var branchVols *config.BranchVolumes
+
+		if hasDockerCompose {
+			envMgr := services.NewEnvManager(fs, portsCfg, volsCfg, d)
+			branchPorts, branchVols, err = envMgr.Generate(branch, worktreePath)
+			if err != nil {
+				output.Error("Failed to generate environment: %v", err)
+			} else {
+				// Update configs
+				portsCfg.Branches[branch] = *branchPorts
+				volsCfg.Branches[branch] = *branchVols
+
+				writer := config.NewWriter(fs)
+				if err := writer.WritePortsConfig(hopspacePath, portsCfg); err != nil {
+					output.Error("Failed to save ports config: %v", err)
+				}
+				if err := writer.WriteVolumesConfig(hopspacePath, volsCfg); err != nil {
+					output.Error("Failed to save volumes config: %v", err)
+				}
 			}
 		}
 
