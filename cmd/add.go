@@ -18,9 +18,10 @@ import (
 )
 
 var addCmd = &cobra.Command{
-	Use:   "add [branch]",
-	Short: "Add a new worktree and environment",
-	Args:  cobra.ExactArgs(1),
+	Use:     "add [branch]",
+	Aliases: []string{"create", "new"},
+	Short:   "Add a new worktree and environment",
+	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		branch := args[0]
 		fs := afero.NewOsFs()

@@ -28,9 +28,10 @@ func init() {
 }
 
 var initCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize git-hop repository structure",
-	Long:  `Initialize git-hop repository structure with interactive setup for worktree conversion.`,
+	Use:     "init",
+	Aliases: []string{"setup", "install"},
+	Short:   "Initialize git-hop repository structure",
+	Long:    `Initialize git-hop repository structure with interactive setup for worktree conversion.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		g := git.New()

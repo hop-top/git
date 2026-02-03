@@ -12,8 +12,9 @@ import (
 )
 
 var pruneCmd = &cobra.Command{
-	Use:   "prune",
-	Short: "Remove orphaned data",
+	Use:     "prune",
+	Aliases: []string{"cleanup", "clean"},
+	Short:   "Remove orphaned data",
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		cwd, err := os.Getwd()

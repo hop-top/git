@@ -16,16 +16,18 @@ var envCmd = &cobra.Command{
 }
 
 var envStartCmd = &cobra.Command{
-	Use:   "start",
-	Short: "Start the environment services",
+	Use:     "start",
+	Aliases: []string{"up"},
+	Short:   "Start the environment services",
 	Run: func(cmd *cobra.Command, args []string) {
 		runEnvCommand("start")
 	},
 }
 
 var envStopCmd = &cobra.Command{
-	Use:   "stop",
-	Short: "Stop the environment services",
+	Use:     "stop",
+	Aliases: []string{"down"},
+	Short:   "Stop the environment services",
 	Run: func(cmd *cobra.Command, args []string) {
 		runEnvCommand("stop")
 	},

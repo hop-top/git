@@ -12,9 +12,10 @@ import (
 )
 
 var removeCmd = &cobra.Command{
-	Use:   "remove [target]",
-	Short: "Remove a hub, hopspace, or branch",
-	Args:  cobra.ExactArgs(1),
+	Use:     "remove [target]",
+	Aliases: []string{"rm", "delete", "del"},
+	Short:   "Remove a hub, hopspace, or branch",
+	Args:    cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		target := args[0]
 		noPrompt, _ := cmd.Flags().GetBool("no-prompt")

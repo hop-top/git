@@ -17,8 +17,9 @@ import (
 )
 
 var statusCmd = &cobra.Command{
-	Use:   "status",
-	Short: "Show the working tree status",
+	Use:     "status",
+	Aliases: []string{"st", "info"},
+	Short:   "Show the working tree status",
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		g := git.New()

@@ -17,8 +17,9 @@ import (
 )
 
 var listCmd = &cobra.Command{
-	Use:   "list",
-	Short: "List hubs, hopspaces, and branches",
+	Use:     "list",
+	Aliases: []string{"ls", "all"},
+	Short:   "List hubs, hopspaces, and branches",
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		cwd, err := os.Getwd()

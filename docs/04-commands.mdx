@@ -332,6 +332,50 @@ The `--fix` flag will:
 |------|-------------|
 | `--fix` | Automatically fix issues |
 
+## Command Aliases
+
+Many commands have shorter aliases for convenience:
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `list` | `ls`, `all` | List hubs, hopspaces, and branches |
+| `add` | `create`, `new` | Add a new worktree and environment |
+| `remove` | `rm`, `delete`, `del` | Remove a hub, hopspace, or branch |
+| `status` | `st`, `info` | Show the working tree status |
+| `prune` | `cleanup`, `clean` | Remove orphaned data |
+| `doctor` | `check`, `repair` | Check and repair the environment |
+| `init` | `setup`, `install` | Initialize git-hop repository structure |
+| `env start` | `env up` | Start environment services |
+| `env stop` | `env down` | Stop environment services |
+
+### Examples
+
+```bash
+# These are equivalent
+git hop list
+git hop ls
+git hop all
+
+# These are equivalent
+git hop add feature-1
+git hop create feature-1
+git hop new feature-1
+
+# These are equivalent
+git hop remove old-branch
+git hop rm old-branch
+git hop delete old-branch
+
+# These are equivalent
+git hop status
+git hop st
+git hop info
+
+# These are equivalent
+git hop env start
+git hop env up
+```
+
 ## Global Flags
 
 These flags work with all commands:
