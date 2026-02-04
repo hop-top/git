@@ -1,0 +1,60 @@
+version: '3.8'
+services:
+  app:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "${HOP_PORT_APP}:3000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/nextapp
+      - REDIS_URL=redis://cache:6379
+      - NODE_ENV=development
+    volumes:
+      - "${HOP_VOLUME_APP_CODE}:/app"
+    depends_on:
+      db:
+        condition: service_healthy
+      cache:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=nextapp
+      - POSTGRES_USER=postgres
+    ports:
+      - "${HOP_PORT_DB}:5432"
+    volumes:
+      - "${HOP_VOLUME_DB_DATA}:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+
+  cache:
+    image: redis:7-alpine
+    ports:
+      - "${HOP_PORT_CACHE}:6379"
+    volumes:
+      - "${HOP_VOLUME_CACHE_DATA}:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  app_code:
+  db_data:
+  cache_data:

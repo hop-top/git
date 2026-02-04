@@ -40,6 +40,9 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	}
 	if filepath.Base(projectRoot) == "e2e" {
 		projectRoot = filepath.Dir(filepath.Dir(projectRoot))
+	} else if filepath.Base(projectRoot) == "docker" {
+		// Handle test/e2e/docker subdirectory
+		projectRoot = filepath.Dir(filepath.Dir(filepath.Dir(projectRoot)))
 	}
 	RunCommand(t, projectRoot, "go", "build", "-o", binPath, "main.go")
 

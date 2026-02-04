@@ -1,0 +1,83 @@
+version: '3'
+services:
+  web:
+    image: python:3.12-slim
+    working_dir: /app
+    command: sh -c "pip install -q django psycopg2-binary celery redis && python manage.py runserver 0.0.0.0:8000"
+    ports:
+      - "${HOP_PORT_WEB}:8000"
+    volumes:
+      - "${HOP_VOLUME_APP_CODE}:/app"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/django
+      - CELERY_BROKER_URL=redis://broker:6379/0
+      - CELERY_RESULT_BACKEND=redis://broker:6379/1
+    depends_on:
+      - db
+      - broker
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 20s
+
+  worker:
+    image: python:3.12-slim
+    working_dir: /app
+    command: sh -c "pip install -q django psycopg2-binary celery redis && celery -A myproject worker -l info"
+    volumes:
+      - "${HOP_VOLUME_APP_CODE}:/app"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/django
+      - CELERY_BROKER_URL=redis://broker:6379/0
+      - CELERY_RESULT_BACKEND=redis://broker:6379/1
+    depends_on:
+      - db
+      - broker
+
+  beat:
+    image: python:3.12-slim
+    working_dir: /app
+    command: sh -c "pip install -q django psycopg2-binary celery redis && celery -A myproject beat -l info"
+    volumes:
+      - "${HOP_VOLUME_APP_CODE}:/app"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/django
+      - CELERY_BROKER_URL=redis://broker:6379/0
+      - CELERY_RESULT_BACKEND=redis://broker:6379/1
+    depends_on:
+      - db
+      - broker
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_PASSWORD=password
+      - POSTGRES_DB=django
+    ports:
+      - "${HOP_PORT_DB}:5432"
+    volumes:
+      - "${HOP_VOLUME_DB_DATA}:/var/lib/postgresql/data"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+  broker:
+    image: redis:7-alpine
+    ports:
+      - "${HOP_PORT_BROKER}:6379"
+    volumes:
+      - "${HOP_VOLUME_BROKER_DATA}:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 5
+
+volumes:
+  app_code:
+  db_data:
+  broker_data:

@@ -1,0 +1,31 @@
+version: '3.8'
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "${HOP_PORT_WEB}:80"
+    volumes:
+      - "${HOP_VOLUME_WEB_DATA}:/usr/share/nginx/html"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:80"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+  cache:
+    image: redis:alpine
+    ports:
+      - "${HOP_PORT_CACHE}:6379"
+    volumes:
+      - "${HOP_VOLUME_CACHE_DATA}:/data"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  web_data:
+  cache_data:
