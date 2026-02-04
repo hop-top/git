@@ -207,36 +207,42 @@ Or register current structure: git hop init --current`)
 	// Load hub config to get actual worktree path
 	hub, err := hop.LoadHub(fs, repoPath)
 	var mainWorktreePath string
-	var worktreeDir string
+	var currentBranchName string
+	var isRegularRepo bool
+
 	if err == nil {
-		// Find main branch worktree
+		// Find current branch worktree
 		for name, branch := range hub.Config.Branches {
-			if name == "main" || name == "master" {
-				// Resolve symlink to get actual path
-				linkPath := filepath.Join(repoPath, branch.Path)
-				target, err := os.Readlink(linkPath)
-				if err == nil {
-					mainWorktreePath = target
-					relPath, _ := filepath.Rel(repoPath, mainWorktreePath)
-					worktreeDir = filepath.Dir(relPath)
-				}
-				break
+			currentBranchName = name
+			if branch.Path == "." {
+				// Regular repo - current branch is in repo root
+				mainWorktreePath = repoPath
+				isRegularRepo = true
+			} else {
+				// Bare repo - path is full path to worktree
+				mainWorktreePath = filepath.Join(repoPath, branch.Path)
+				isRegularRepo = false
 			}
+			break
 		}
-	}
-	// Fallback if we couldn't determine the path
-	if worktreeDir == "" {
-		worktreeDir = "hops"
-		mainWorktreePath = filepath.Join(repoPath, worktreeDir, "main")
 	}
 
 	fmt.Println("\nConversion successful!")
-	fmt.Printf("Project structure:\n")
-	fmt.Printf("  %s/\n", repoPath)
-	fmt.Printf("    .git/              (bare repository)\n")
-	fmt.Printf("    hop.json\n")
-	fmt.Printf("    %s/\n", worktreeDir)
-	fmt.Printf("      main/            (worktree for current branch)\n")
+	if isRegularRepo {
+		fmt.Printf("Project structure:\n")
+		fmt.Printf("  %s/\n", repoPath)
+		fmt.Printf("    .git/              (repository)\n")
+		fmt.Printf("    hop.json\n")
+		fmt.Printf("    worktrees/         (future branch worktrees)\n")
+		fmt.Printf("    (repo root is %s branch working tree)\n", currentBranchName)
+	} else {
+		fmt.Printf("Project structure:\n")
+		fmt.Printf("  %s/\n", repoPath)
+		fmt.Printf("    .git/              (bare repository)\n")
+		fmt.Printf("    hop.json\n")
+		fmt.Printf("    hops/\n")
+		fmt.Printf("      %s/              (worktree for %s branch)\n", currentBranchName, currentBranchName)
+	}
 
 	if len(result.Warnings) > 0 {
 		fmt.Println("\nWarnings:")
@@ -252,7 +258,9 @@ Or register current structure: git hop init --current`)
 	}
 
 	output.Info("\nYou can now:")
-	fmt.Printf("  cd %s   # Work on current branch\n", mainWorktreePath)
+	if !isRegularRepo {
+		fmt.Printf("  cd %s   # Work on %s branch\n", mainWorktreePath, currentBranchName)
+	}
 	fmt.Println("  git hop add <branch>       # Add new branch")
 	fmt.Println("  git hop <branch>           # Jump to worktree")
 	fmt.Println("  git hop                    # List all worktrees")
@@ -262,21 +270,29 @@ func registerAsIs(fs afero.Fs, g *git.Git, repoPath string) {
 	output.Info("Registering repository as-is...")
 
 	remoteURL, err := g.GetRemoteURL(repoPath)
+	var org, repo string
+
 	if err != nil {
-		output.Error("No git remote 'origin' found")
-		output.Info("Cannot register repository without remote URL")
-		os.Exit(1)
+		// No remote configured - use local path
+		output.Info("No remote configured - using local path for registration")
+		absPath, err := filepath.Abs(repoPath)
+		if err != nil {
+			output.Error("Failed to get absolute path: %v", err)
+			os.Exit(1)
+		}
+		repo = filepath.Base(absPath)
+		org = filepath.Base(filepath.Dir(absPath))
+	} else {
+		org, repo = hop.ParseRepoFromURL(remoteURL)
+		if org == "" || repo == "" {
+			output.Error("Could not parse org/repo from URL")
+			os.Exit(1)
+		}
 	}
 
 	branch, err := g.GetCurrentBranch(repoPath)
 	if err != nil {
 		output.Error("Failed to get current branch: %v", err)
-		os.Exit(1)
-	}
-
-	org, repo := hop.ParseRepoFromURL(remoteURL)
-	if org == "" || repo == "" {
-		output.Error("Could not parse org/repo from URL")
 		os.Exit(1)
 	}
 
@@ -293,6 +309,9 @@ func registerAsIs(fs afero.Fs, g *git.Git, repoPath string) {
 	fmt.Printf("  Branch: %s\n", branch)
 	fmt.Printf("  Path: %s\n", repoPath)
 
+	if remoteURL == "" {
+		fmt.Println("\nNote: Repository has no remote configured.")
+	}
 	fmt.Println("\nNote: Some git-hop features are limited with this structure.")
 	fmt.Println("Consider converting to worktree structure for full functionality:")
 	fmt.Println("  git hop init --convert")

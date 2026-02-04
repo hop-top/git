@@ -51,8 +51,8 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 
 	remoteURL, err := c.git.GetRemoteURL(repoPath)
 	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("failed to get remote URL: %v", err))
-		return result, fmt.Errorf("failed to get remote URL: %w", err)
+		// No remote configured - use local path for org/repo
+		remoteURL = ""
 	}
 
 	if enforceClean && useBare {
@@ -63,10 +63,23 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		}
 	}
 
-	org, repo := parseRepoFromURL(remoteURL)
-	if org == "" || repo == "" {
-		result.Errors = append(result.Errors, "could not parse org/repo from remote URL")
-		return result, fmt.Errorf("invalid remote URL")
+	var org, repo string
+	if remoteURL != "" {
+		org, repo = parseRepoFromURL(remoteURL)
+		if org == "" || repo == "" {
+			result.Errors = append(result.Errors, "could not parse org/repo from remote URL")
+			return result, fmt.Errorf("invalid remote URL")
+		}
+	} else {
+		// Use repository path for org/repo when no remote
+		absPath, err := filepath.Abs(repoPath)
+		if err != nil {
+			result.Errors = append(result.Errors, fmt.Sprintf("failed to get absolute path: %v", err))
+			return result, fmt.Errorf("failed to get absolute path: %w", err)
+		}
+		repo = filepath.Base(absPath)
+		org = filepath.Base(filepath.Dir(absPath))
+		result.Warnings = append(result.Warnings, "No remote configured - using local path for backup organization")
 	}
 
 	c.backupMgr, err = NewBackupManager(c.fs, c.git, org, repo)
@@ -167,18 +180,14 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 			return fmt.Errorf("failed to swap directories: %w", err)
 		}
 	} else {
-		currentBranch, _ := c.git.GetCurrentBranch(repoPath)
-
-		// Create worktrees directory
+		// For regular repo conversion, the repo root remains as the working tree
+		// for the current branch. We don't create a worktree for it since it's
+		// already checked out. We just create the worktrees directory for future branches.
 		worktreesDir := filepath.Join(repoPath, "worktrees")
 		if err := c.fs.MkdirAll(worktreesDir, 0755); err != nil {
 			return fmt.Errorf("failed to create worktrees directory: %w", err)
 		}
-
-		mainPath := filepath.Join(worktreesDir, "main")
-		if err := c.git.CreateWorktree(repoPath, "main", mainPath, currentBranch, true); err != nil {
-			return fmt.Errorf("failed to create main worktree: %w", err)
-		}
+		// Note: No worktree created for current branch - repo root is its working tree
 	}
 
 	worktrees, err := ListWorktrees(c.git, repoPath)
@@ -257,11 +266,27 @@ func (c *Converter) getWorktreePathForBranch(branch, repoPath string) string {
 func (c *Converter) createHopConfig(repoPath string, useBare bool, result *config.ConversionResult) error {
 	remoteURL, err := c.git.GetRemoteURL(repoPath)
 	if err != nil {
-		return err
+		// No remote configured
+		remoteURL = ""
 	}
 
-	org, repo := parseRepoFromURL(remoteURL)
+	var org, repo string
+	if remoteURL != "" {
+		org, repo = parseRepoFromURL(remoteURL)
+	} else {
+		// Use repository path for org/repo when no remote
+		absPath, _ := filepath.Abs(repoPath)
+		repo = filepath.Base(absPath)
+		org = filepath.Base(filepath.Dir(absPath))
+	}
 	defaultBranch, _ := c.git.GetCurrentBranch(repoPath)
+
+	// For regular repos, the current branch's working tree is the repo root
+	// For bare repos, it's in the worktrees directory
+	branchPath := config.MakeWorktreePath(defaultBranch)
+	if !useBare {
+		branchPath = "."
+	}
 
 	hopConfig := map[string]interface{}{
 		"repo": map[string]interface{}{
@@ -274,7 +299,7 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 		},
 		"branches": map[string]interface{}{
 			defaultBranch: map[string]interface{}{
-				"path":   config.MakeWorktreePath(defaultBranch),
+				"path":   branchPath,
 				"exists": true,
 			},
 		},
