@@ -135,6 +135,11 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 		}
 	}
 
+	// Update current symlink to point to main worktree
+	if err := UpdateCurrentSymlink(fs, projectRoot, absMainWorktreePath); err != nil {
+		fmt.Printf("Warning: failed to create current symlink: %v\n", err)
+	}
+
 	// Get relative path from projectRoot to mainWorktreePath for display
 	relWorktreePath, err := filepath.Rel(projectRoot, mainWorktreePath)
 	if err != nil {

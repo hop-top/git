@@ -206,6 +206,12 @@ var addCmd = &cobra.Command{
 			}
 		}
 
+		// Update current symlink to point to new worktree
+		if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
+			// Don't fail on symlink error, just warn
+			output.Warn("Failed to update current symlink: %v", err)
+		}
+
 		output.Info("Created hopspace for '%s'", branch)
 
 		relPath, _ := filepath.Rel(cwd, worktreePath)

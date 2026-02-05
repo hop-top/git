@@ -227,6 +227,13 @@ Or register current structure: git hop init --current`)
 		}
 	}
 
+	// Update current symlink to point to the main worktree
+	if mainWorktreePath != "" && !isRegularRepo {
+		if err := hop.UpdateCurrentSymlink(fs, repoPath, mainWorktreePath); err != nil {
+			fmt.Printf("Warning: failed to create current symlink: %v\n", err)
+		}
+	}
+
 	fmt.Println("\nConversion successful!")
 	if isRegularRepo {
 		fmt.Printf("Project structure:\n")
@@ -242,6 +249,7 @@ Or register current structure: git hop init --current`)
 		fmt.Printf("    hop.json\n")
 		fmt.Printf("    hops/\n")
 		fmt.Printf("      %s/              (worktree for %s branch)\n", currentBranchName, currentBranchName)
+		fmt.Printf("    current -> hops/%s  (symlink)\n", currentBranchName)
 	}
 
 	if len(result.Warnings) > 0 {

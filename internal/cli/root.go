@@ -189,8 +189,14 @@ Worktree Mode:
 					output.Fatal("Worktree '%s' does not exist. Use 'git hop add %s' to create it.", arg, arg)
 				}
 
-				// Switch to the worktree directory
+				// Update current symlink to point to this worktree
 				worktreePath := branch.Path
+				if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
+					// Don't fail on symlink error, just warn
+					output.Warn("Failed to update current symlink: %v", err)
+				}
+
+				// Switch to the worktree directory
 				if err := os.Chdir(worktreePath); err != nil {
 					output.Fatal("Failed to change directory to worktree '%s': %v", worktreePath, err)
 				}
