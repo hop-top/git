@@ -18,6 +18,15 @@ git-hop eliminates the friction of managing multiple Git worktrees by automatica
 - Multi-tenant setups
 - Monorepo optimization (see Git's native monorepo support)
 
+## Features
+
+- 🚀 **Automatic Navigation** - Optional shell integration for seamless worktree switching
+- 🔗 **Smart Symlinks** - `current` symlink always points to your last worktree
+- 🐳 **Docker Integration** - Isolated environments with deterministic port allocation
+- 📦 **Dependency Management** - Automatic npm/yarn/pnpm installation per worktree
+- 🔄 **State Tracking** - Track all worktrees across your system
+- 🛠️ **Zero Config** - Sensible defaults, works out of the box
+
 ## Quick Start
 
 ### Install
@@ -64,11 +73,19 @@ git hop add feature-x
 cd feature-x
 ```
 
+**Optional:** Install shell integration for automatic directory switching:
+
+```bash
+git hop install-shell-integration
+# Now use: git-hop feature-x (automatically cd to worktree)
+```
+
 You now have:
 - A clean worktree for `feature-x`
 - Deterministic ports allocated (no conflicts)
 - Docker environment configured (if docker-compose.yml exists)
 - Full isolation from other branches
+- (Optional) Automatic navigation with `git-hop` command
 
 List all worktrees:
 
@@ -89,12 +106,25 @@ git hop env stop
 | Command | Description |
 |---------|-------------|
 | `git hop init` | Initialize git-hop in a repository (interactive setup) |
+| `git hop <branch>` | Navigate to an existing worktree (updates `current` symlink) |
 | `git hop add <branch>` | Create a new worktree and environment for a branch |
 | `git hop list` | List all managed worktrees and their status |
 | `git hop status` | Show status of current worktree or hub |
 | `git hop remove <target>` | Remove a worktree, hopspace, or hub |
 | `git hop prune` | Clean up orphaned worktrees and hubs |
 | `git hop doctor` | Check and repair environment issues |
+
+### Shell Integration (Optional)
+
+Enable automatic directory switching when hopping between worktrees:
+
+| Command | Description |
+|---------|-------------|
+| `git hop install-shell-integration` | Install shell wrapper for auto-cd (bash/zsh/fish) |
+| `git hop uninstall-shell-integration` | Remove shell wrapper function |
+| `git-hop <branch>` | Navigate and auto-cd (requires shell integration) |
+
+**[→ Shell Integration Guide](docs/shell-integration.md)**
 
 ### Environment Commands
 
