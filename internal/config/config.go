@@ -112,10 +112,11 @@ type HopEntry struct {
 
 // GlobalConfig represents $XDG_CONFIG_HOME/git-hop/global.json
 type GlobalConfig struct {
-	Defaults        DefaultSettings          `json:"defaults"`
-	PackageManagers []PackageManagerConfig   `json:"packageManagers,omitempty"`
-	Backup          BackupSettings           `json:"backup,omitempty"`
-	Conversion      ConversionSettings       `json:"conversion,omitempty"`
+	Defaults         DefaultSettings          `json:"defaults"`
+	ShellIntegration ShellIntegrationSettings `json:"shellIntegration,omitempty"`
+	PackageManagers  []PackageManagerConfig   `json:"packageManagers,omitempty"`
+	Backup           BackupSettings           `json:"backup,omitempty"`
+	Conversion       ConversionSettings       `json:"conversion,omitempty"`
 }
 
 // PackageManagerConfig represents a custom package manager configuration
@@ -137,6 +138,14 @@ type DefaultSettings struct {
 	ConventionWarning         bool `json:"conventionWarning"`
 	GitDomain                 string `json:"gitDomain"`
 	WorktreeLocation          string `json:"worktreeLocation,omitempty"`
+}
+
+// ShellIntegrationSettings tracks shell wrapper installation status
+type ShellIntegrationSettings struct {
+	Status         string    `json:"status"`         // unknown, approved, declined, disabled
+	InstalledShell string    `json:"installedShell,omitempty"` // bash, zsh, fish
+	InstalledPath  string    `json:"installedPath,omitempty"`  // path to rc file
+	InstalledAt    time.Time `json:"installedAt,omitempty"`
 }
 
 // UserConfig represents global config.json (legacy)

@@ -64,6 +64,9 @@ func (l *GlobalLoader) GetDefaults() *GlobalConfig {
 			ConventionWarning:         true,
 			WorktreeLocation:          "{hubPath}/hops/{branch}",
 		},
+		ShellIntegration: ShellIntegrationSettings{
+			Status: "unknown",
+		},
 		Backup: BackupSettings{
 			Enabled:         true,
 			KeepBackup:      false,
