@@ -95,7 +95,7 @@ func showHubStatus(fs afero.Fs, path string) {
 	t.Render()
 }
 
-func showWorktreeStatus(fs afero.Fs, g *git.Git, d *docker.Docker, path string) {
+func showWorktreeStatus(fs afero.Fs, g git.GitInterface, d *docker.Docker, path string) {
 	root, err := g.GetRoot(path)
 	if err != nil {
 		output.Fatal("Failed to get git root: %v", err)
@@ -125,13 +125,7 @@ func showWorktreeStatus(fs afero.Fs, g *git.Git, d *docker.Docker, path string) 
 		if err != nil {
 			output.Error("Failed to get service status: %v", err)
 		} else {
-			// Parse JSON output or just print?
-			// ComposePs returns JSON string.
-			// For now, let's just print it or parse it if we want a table.
-			// But `docker compose ps` output is complex.
-			// Let's just run `docker compose ps` directly for human output if not in porcelain mode?
-			// But we wrapped it to return string.
-			// Let's just print the raw output for now or improve wrapper to return struct.
+			// Print raw docker compose ps output
 			fmt.Println(ps)
 		}
 	}
@@ -272,8 +266,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 	runningServices := 0
 	activeVolumes := 0
 
-	// This is a simplified count - in production you'd query Docker
-	// For now, check if compose files exist and environments are tracked
+	// Count running services by checking docker-compose status
 	for _, repo := range st.Repositories {
 		for _, wt := range repo.Worktrees {
 			composePath := filepath.Join(wt.Path, "docker-compose.yml")

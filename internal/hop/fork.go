@@ -15,7 +15,7 @@ import (
 )
 
 // ForkAttach handles "Fork-Attach Mode" (git hop <uri> --branch <branch>)
-func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
+func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) error {
 	// 1. Validate Hub
 	if !IsHub(fs, hubPath) {
 		return fmt.Errorf("not in a git-hop hub")
@@ -41,10 +41,7 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 
 	// 3. Fork Detection / Validation
 	// We need to verify that the remote branch shares history with our local compare branch.
-	// First, we need a git context. We can use the Hub's main worktree (if it exists) or any existing worktree.
-	// Or we can use the fork hopspace if we initialize it.
-
-	// Let's initialize the fork hopspace first (empty dir)
+	// Initialize the fork hopspace directory
 	if err := os.MkdirAll(forkHopspacePath, 0755); err != nil {
 		return fmt.Errorf("failed to create fork hopspace: %v", err)
 	}
@@ -89,7 +86,7 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 	// Fetch
 	// We can use a temporary remote name or just fetch by URI
 	// git fetch <uri> <branch>
-	_, err = g.Runner.RunInDir(mainRepoPath, "git", "fetch", uri, branch)
+	_, err = g.RunInDir(mainRepoPath, "git", "fetch", uri, branch)
 	if err != nil {
 		return fmt.Errorf("failed to fetch fork branch: %v", err)
 	}
@@ -98,7 +95,7 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 	compareBranch := hub.Config.Settings.CompareBranch
 	if compareBranch == nil {
 		// Use current HEAD or default
-		// For now, use HEAD
+		// Default to comparing against HEAD
 		cb := "HEAD"
 		compareBranch = &cb
 	}
@@ -176,14 +173,12 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 	// 2. Fetch from the fork
 	// 3. Create a worktree tracking the fork branch
 
-	// For now, let's use a simpler approach: use the fork hopspace as source
-	// and create a worktree for the same branch
-	// The issue is that git won't let us checkout the same branch twice.
-	// Solution: Create a detached worktree from the commit
+	// Create a detached worktree from the fork branch commit
+	// (Git won't allow checking out the same branch twice)
 
 	// Get the commit hash from the fork branch
 	sourceWorktreePath := filepath.Join(forkHopspacePath, branch)
-	commitHash, err := g.Runner.RunInDir(sourceWorktreePath, "git", "rev-parse", "HEAD")
+	commitHash, err := g.RunInDir(sourceWorktreePath, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return fmt.Errorf("failed to get commit hash from fork: %v", err)
 	}
@@ -191,7 +186,7 @@ func ForkAttach(fs afero.Fs, g *git.Git, uri, branch, hubPath string) error {
 
 	// Create a detached worktree at that commit in the main repo
 	// We use the main repo worktree as the base
-	if _, err := g.Runner.RunInDir(mainRepoPath, "git", "worktree", "add", "--detach", forkWorktreePath, commitHash); err != nil {
+	if _, err := g.RunInDir(mainRepoPath, "git", "worktree", "add", "--detach", forkWorktreePath, commitHash); err != nil {
 		return fmt.Errorf("failed to add fork worktree: %v", err)
 	}
 

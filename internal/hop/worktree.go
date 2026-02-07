@@ -12,12 +12,12 @@ import (
 
 // WorktreeManager handles worktree operations
 type WorktreeManager struct {
-	git *git.Git
+	git git.GitInterface
 	fs  afero.Fs
 }
 
 // NewWorktreeManager creates a new manager
-func NewWorktreeManager(fs afero.Fs, g *git.Git) *WorktreeManager {
+func NewWorktreeManager(fs afero.Fs, g git.GitInterface) *WorktreeManager {
 	return &WorktreeManager{
 		git: g,
 		fs:  fs,
@@ -171,16 +171,7 @@ func (m *WorktreeManager) RemoveWorktree(hopspace *Hopspace, branch string) erro
 	}
 
 	if basePath == "" {
-		// If this is the last worktree, we might just be deleting the folder?
-		// But `git worktree remove` requires a git context.
-		// If it's the main worktree, we can't remove it with `worktree remove`.
-		// We have to just delete the dir?
-		//
-		// If it's the main repo (cloned one), we can't remove it via worktree remove.
-		//
-		// For now, let's try `git worktree remove`.
-		// If it fails because it's the main one, we might need to handle it differently.
-		// But typically we shouldn't remove the main one unless we are nuking the whole hopspace.
+		// Cannot remove the last worktree - git worktree remove requires a git context from another worktree
 		return fmt.Errorf("cannot remove the last/main worktree via this method")
 	}
 

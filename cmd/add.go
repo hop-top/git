@@ -148,9 +148,7 @@ var addCmd = &cobra.Command{
 		portsLoader := config.NewLoader(fs)
 		portsCfg, err := portsLoader.LoadPortsConfig(hopspacePath)
 		if err != nil {
-			// If missing, maybe init default?
-			// For now, assume it exists or we create empty.
-			// Let's create a default if missing.
+			// Create default configuration if missing
 			portsCfg = &config.PortsConfig{
 				AllocationMode: "incremental",
 				BaseRange:      config.PortRange{Start: 10000, End: 20000},

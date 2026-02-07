@@ -93,7 +93,7 @@ func TestDockerIntegration_BasicStartup(t *testing.T) {
 	webPort := GetPortFromEnv(t, string(envContent), "HOP_PORT_WEB")
 	webURL := "http://localhost:" + webPort
 	t.Logf("Testing HTTP endpoint: %s", webURL)
-	
+
 	// nginx returns 403 when accessing root without index.html (expected behavior)
 	CheckHTTPEndpoint(t, webURL, 403)
 
