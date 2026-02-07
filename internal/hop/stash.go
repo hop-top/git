@@ -17,11 +17,11 @@ type StashRef struct {
 }
 
 type StashManager struct {
-	git *git.Git
+	git git.GitInterface
 	fs  afero.Fs
 }
 
-func NewStashManager(g *git.Git, fs afero.Fs) *StashManager {
+func NewStashManager(g git.GitInterface, fs afero.Fs) *StashManager {
 	return &StashManager{
 		git: g,
 		fs:  fs,
@@ -29,7 +29,7 @@ func NewStashManager(g *git.Git, fs afero.Fs) *StashManager {
 }
 
 func (s *StashManager) ExportStashes(repoPath string) ([]StashRef, error) {
-	out, err := s.git.Runner.RunInDir(repoPath, "git", "stash", "list")
+	out, err := s.git.RunInDir(repoPath, "git", "stash", "list")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list stashes: %w", err)
 	}
@@ -52,12 +52,12 @@ func (s *StashManager) ExportStashes(repoPath string) ([]StashRef, error) {
 
 		message := strings.TrimSpace(parts[1])
 
-		sha, err := s.git.Runner.RunInDir(repoPath, "git", "rev-parse", fmt.Sprintf("stash@{%d}", index))
+		sha, err := s.git.RunInDir(repoPath, "git", "rev-parse", fmt.Sprintf("stash@{%d}", index))
 		if err != nil {
 			continue
 		}
 
-		timestampStr, err := s.git.Runner.RunInDir(repoPath, "git", "log", "-1", "--format=%ci", fmt.Sprintf("stash@{%d}", index))
+		timestampStr, err := s.git.RunInDir(repoPath, "git", "log", "-1", "--format=%ci", fmt.Sprintf("stash@{%d}", index))
 		if err != nil {
 			timestampStr = ""
 		}
@@ -77,7 +77,7 @@ func (s *StashManager) ExportStashes(repoPath string) ([]StashRef, error) {
 
 func (s *StashManager) ImportStashes(repoPath string, stashes []StashRef) error {
 	for _, stash := range stashes {
-		sha, err := s.git.Runner.RunInDir(repoPath, "git", "rev-parse", fmt.Sprintf("stash@{%d}", stash.Index))
+		sha, err := s.git.RunInDir(repoPath, "git", "rev-parse", fmt.Sprintf("stash@{%d}", stash.Index))
 		if err != nil {
 			continue
 		}

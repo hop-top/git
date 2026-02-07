@@ -70,7 +70,7 @@ var initCmd = &cobra.Command{
 	},
 }
 
-func showConversionMenu(fs afero.Fs, g *git.Git, repoPath string) {
+func showConversionMenu(fs afero.Fs, g git.GitInterface, repoPath string) {
 	fmt.Println(`
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   Git-Hop Repository Structure
@@ -128,14 +128,14 @@ Current repository: Standard git repository`)
 	}
 }
 
-func convertRepo(fs afero.Fs, g *git.Git, repoPath string, useBare, isRegular bool) {
+func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRegular bool) {
 	converter := hop.NewConverter(fs, g)
 	converter.DryRun = dryRunFlag
 	converter.Force = forceFlag
 	converter.KeepBackup = keepBackupFlag
 
 	if !dryRunFlag && !forceFlag {
-		status, _ := g.Runner.RunInDir(repoPath, "git", "status", "--porcelain")
+		status, _ := g.RunInDir(repoPath, "git", "status", "--porcelain")
 		if status != "" {
 			output.Error("Repository has uncommitted changes")
 			fmt.Println(`
@@ -167,7 +167,7 @@ Or register current structure: git hop init --current`)
 		branch, _ := g.GetCurrentBranch(repoPath)
 		fmt.Printf("Branch: %s\n", branch)
 
-		status, _ := g.Runner.RunInDir(repoPath, "git", "status", "--porcelain")
+		status, _ := g.RunInDir(repoPath, "git", "status", "--porcelain")
 		if status == "" {
 			fmt.Println("Status: clean")
 		} else {
@@ -266,7 +266,7 @@ Or register current structure: git hop init --current`)
 	fmt.Println("  git hop                    # List all worktrees")
 }
 
-func registerAsIs(fs afero.Fs, g *git.Git, repoPath string) {
+func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string) {
 	output.Info("Registering repository as-is...")
 
 	remoteURL, err := g.GetRemoteURL(repoPath)
@@ -317,7 +317,7 @@ func registerAsIs(fs afero.Fs, g *git.Git, repoPath string) {
 	fmt.Println("  git hop init --convert")
 }
 
-func handleRestore(fs afero.Fs, g *git.Git, backupPath string) {
+func handleRestore(fs afero.Fs, g git.GitInterface, backupPath string) {
 	cwd, err := os.Getwd()
 	if err != nil {
 		output.Error("Failed to get current directory: %v", err)

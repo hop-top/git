@@ -104,7 +104,7 @@ func FindProjectRoot(fs afero.Fs, path string) (string, error) {
 	return "", fmt.Errorf("project root not found")
 }
 
-func GetCurrentWorktreeBranch(g *git.Git, path string) (string, error) {
+func GetCurrentWorktreeBranch(g git.GitInterface, path string) (string, error) {
 	if !g.IsInsideWorkTree(path) {
 		return "", fmt.Errorf("not inside a git worktree")
 	}
@@ -117,7 +117,7 @@ func GetCurrentWorktreeBranch(g *git.Git, path string) (string, error) {
 	return branch, nil
 }
 
-func GetRepoRoot(g *git.Git, path string) (string, error) {
+func GetRepoRoot(g git.GitInterface, path string) (string, error) {
 	if !g.IsInsideWorkTree(path) {
 		return "", fmt.Errorf("not inside a git repository")
 	}
@@ -130,8 +130,8 @@ func GetRepoRoot(g *git.Git, path string) (string, error) {
 	return root, nil
 }
 
-func ListWorktrees(g *git.Git, repoRoot string) ([]string, error) {
-	out, err := g.Runner.RunInDir(repoRoot, "git", "worktree", "list", "--porcelain")
+func ListWorktrees(g git.GitInterface, repoRoot string) ([]string, error) {
+	out, err := g.RunInDir(repoRoot, "git", "worktree", "list", "--porcelain")
 	if err != nil {
 		return nil, fmt.Errorf("failed to list worktrees: %w", err)
 	}
@@ -155,8 +155,8 @@ func ListWorktrees(g *git.Git, repoRoot string) ([]string, error) {
 	return worktrees, nil
 }
 
-func GetWorktreePath(g *git.Git, repoRoot, branch string) (string, error) {
-	out, err := g.Runner.RunInDir(repoRoot, "git", "worktree", "list", "--porcelain")
+func GetWorktreePath(g git.GitInterface, repoRoot, branch string) (string, error) {
+	out, err := g.RunInDir(repoRoot, "git", "worktree", "list", "--porcelain")
 	if err != nil {
 		return "", fmt.Errorf("failed to list worktrees: %w", err)
 	}

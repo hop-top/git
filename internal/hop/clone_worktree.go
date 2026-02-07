@@ -14,7 +14,7 @@ import (
 	"github.com/spf13/afero"
 )
 
-func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare bool, globalConfig bool) error {
+func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, useBare bool, globalConfig bool) error {
 	projectRoot := projectPath
 
 	if projectRoot == "" {
@@ -161,7 +161,7 @@ func CloneWorktree(fs afero.Fs, g *git.Git, uri, projectPath string, useBare boo
 	return nil
 }
 
-func cloneBareRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch string) error {
+func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
 	fmt.Println("Creating bare repository...")
 
 	if err := g.CloneBare(uri, projectRoot); err != nil {
@@ -176,7 +176,7 @@ func cloneBareRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch stri
 
 	// Create main worktree under hops/
 	mainPath := filepath.Join(hopsDir, defaultBranch)
-	_, err := g.Runner.Run("git", "-C", projectRoot, "worktree", "add", mainPath, defaultBranch)
+	_, err := g.Run("git", "-C", projectRoot, "worktree", "add", mainPath, defaultBranch)
 	if err != nil {
 		os.RemoveAll(projectRoot)
 		return fmt.Errorf("failed to create main worktree: %w", err)
@@ -185,7 +185,7 @@ func cloneBareRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch stri
 	return nil
 }
 
-func cloneRegularRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch string) error {
+func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
 	fmt.Println("Creating regular repository with worktrees...")
 
 	if err := g.Clone(uri, projectRoot, defaultBranch); err != nil {
@@ -207,7 +207,7 @@ func cloneRegularRepo(fs afero.Fs, g *git.Git, uri, projectRoot, defaultBranch s
 	return nil
 }
 
-func createProjectConfig(fs afero.Fs, g *git.Git, projectRoot, uri, org, repo, defaultBranch string, useBare bool) error {
+func createProjectConfig(fs afero.Fs, g git.GitInterface, projectRoot, uri, org, repo, defaultBranch string, useBare bool) error {
 	cfgPath := filepath.Join(projectRoot, "hop.json")
 
 	cfg := map[string]any{

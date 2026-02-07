@@ -26,14 +26,14 @@ type BackupMetadata struct {
 
 type BackupManager struct {
 	fs        afero.Fs
-	git       *git.Git
+	git       git.GitInterface
 	backupDir string
 	metadata  *BackupMetadata
 	org       string
 	repo      string
 }
 
-func NewBackupManager(fs afero.Fs, g *git.Git, org, repo string) (*BackupManager, error) {
+func NewBackupManager(fs afero.Fs, g git.GitInterface, org, repo string) (*BackupManager, error) {
 	if org == "" || repo == "" {
 		return nil, fmt.Errorf("org and repo must be specified")
 	}
@@ -252,7 +252,7 @@ func (b *BackupManager) loadStashes() ([]StashRef, error) {
 }
 
 func (b *BackupManager) getGitStatus(path string) string {
-	status, err := b.git.Runner.RunInDir(path, "git", "status", "--porcelain")
+	status, err := b.git.RunInDir(path, "git", "status", "--porcelain")
 	if err != nil {
 		return "unknown"
 	}
@@ -313,7 +313,7 @@ func sanitizePath(path string) string {
 	return replacer.Replace(path)
 }
 
-func LoadBackupManager(fs afero.Fs, g *git.Git, backupPath string) (*BackupManager, error) {
+func LoadBackupManager(fs afero.Fs, g git.GitInterface, backupPath string) (*BackupManager, error) {
 	metadataPath := filepath.Join(backupPath, "backup-info.json")
 	data, err := afero.ReadFile(fs, metadataPath)
 	if err != nil {
