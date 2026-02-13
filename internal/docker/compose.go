@@ -10,8 +10,8 @@ import (
 
 // ServiceConfig represents a simplified view of docker-compose services
 type ServiceConfig struct {
-	Services map[string]interface{} `yaml:"services"`
-	Volumes  map[string]interface{} `yaml:"volumes"`
+	Services map[string]any `yaml:"services"`
+	Volumes  map[string]any `yaml:"volumes"`
 }
 
 // GetConfig returns the canonical docker compose config
@@ -30,7 +30,7 @@ func (d *Docker) GetConfig(dir string) (*ServiceConfig, error) {
 }
 
 func (d *Docker) getConfigRaw(dir string) (*ServiceConfig, error) {
-	candidates := []string{"docker-compose.yml", "docker-compose.yaml"}
+	candidates := []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"}
 	var content []byte
 	var err error
 
@@ -86,4 +86,18 @@ func (d *Docker) GetVolumeNames(dir string) ([]string, error) {
 func (d *Docker) HasDockerEnv(dir string) bool {
 	_, err := d.GetConfig(dir)
 	return err == nil
+}
+
+// ComposeFileCandidates lists all recognized compose file names in priority order
+var ComposeFileCandidates = []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"}
+
+// FindComposeFile returns the name of the first compose file found in dir, or empty string if none found
+func FindComposeFile(dir string) string {
+	for _, name := range ComposeFileCandidates {
+		p := filepath.Join(dir, name)
+		if _, err := os.Stat(p); err == nil {
+			return name
+		}
+	}
+	return ""
 }

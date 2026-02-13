@@ -59,9 +59,19 @@ func (d *Docker) IsAvailable() bool {
 	return err == nil
 }
 
-// ComposeUp starts services
-func (d *Docker) ComposeUp(dir string, detached bool) error {
+// ComposeUp starts services. If overridePath is non-empty, it is used as an
+// additional compose file via -f flags.
+func (d *Docker) ComposeUp(dir string, detached bool, overridePath ...string) error {
 	args := []string{"compose"}
+
+	// If override path provided, use explicit -f flags
+	if len(overridePath) > 0 && overridePath[0] != "" {
+		composeFile := FindComposeFile(dir)
+		if composeFile != "" {
+			args = append(args, "-f", composeFile)
+			args = append(args, "-f", overridePath[0])
+		}
+	}
 
 	// Explicitly load .env if it exists
 	envFile := filepath.Join(dir, ".env")

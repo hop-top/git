@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jadb/git-hop/internal/config"
+	"github.com/jadb/git-hop/internal/docker"
 )
 
 // EnvironmentManager represents an environment manager (docker-compose, podman, etc.)
@@ -112,8 +113,9 @@ func DetectEnvManager(worktreePath string, repoConfig *config.HubConfig, availab
 	return nil, nil
 }
 
-// Start starts the environment using this manager
-func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoConfig *config.HubConfig) error {
+// Start starts the environment using this manager.
+// If overridePath is non-empty, it is passed as an additional -f flag to docker compose.
+func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoConfig *config.HubConfig, overridePath string) error {
 	ctx := HookContext{
 		WorktreePath: worktreePath,
 		Branch:       branch,
@@ -140,7 +142,8 @@ func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoCo
 
 	// Execute start command
 	fmt.Printf("  → Starting services: %s\n", m.Name)
-	if err := m.executeCommand(m.Commands.Start, worktreePath); err != nil {
+	startCmd := m.buildCommandWithOverride(m.Commands.Start, worktreePath, overridePath)
+	if err := m.executeCommand(startCmd, worktreePath); err != nil {
 		return fmt.Errorf("start command failed: %w", err)
 	}
 
@@ -156,8 +159,9 @@ func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoCo
 	return nil
 }
 
-// Stop stops the environment using this manager
-func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoConfig *config.HubConfig) error {
+// Stop stops the environment using this manager.
+// If overridePath is non-empty, it is passed as an additional -f flag to docker compose.
+func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoConfig *config.HubConfig, overridePath string) error {
 	ctx := HookContext{
 		WorktreePath: worktreePath,
 		Branch:       branch,
@@ -184,7 +188,8 @@ func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoCon
 
 	// Execute stop command
 	fmt.Printf("  → Stopping services: %s\n", m.Name)
-	if err := m.executeCommand(m.Commands.Stop, worktreePath); err != nil {
+	stopCmd := m.buildCommandWithOverride(m.Commands.Stop, worktreePath, overridePath)
+	if err := m.executeCommand(stopCmd, worktreePath); err != nil {
 		return fmt.Errorf("stop command failed: %w", err)
 	}
 
@@ -231,6 +236,35 @@ func (m *EnvironmentManager) executeCommand(cmdParts []string, worktreePath stri
 	cmd.Stderr = os.Stderr
 
 	return cmd.Run()
+}
+
+// buildCommandWithOverride injects -f flags for compose override files into docker compose commands.
+// For non-docker-compose managers or when overridePath is empty, returns the original command unchanged.
+func (m *EnvironmentManager) buildCommandWithOverride(cmdParts []string, worktreePath, overridePath string) []string {
+	if overridePath == "" || m.Name != "docker-compose" {
+		return cmdParts
+	}
+
+	// Find the compose file in the worktree
+	composeFile := docker.FindComposeFile(worktreePath)
+	if composeFile == "" {
+		return cmdParts
+	}
+
+	// Build: docker compose -f <composeFile> -f <overridePath> --env-file .env <rest...>
+	// The original command is like: ["docker", "compose", "up", "-d"]
+	// We inject -f flags after "compose"
+	if len(cmdParts) < 2 {
+		return cmdParts
+	}
+
+	result := make([]string, 0, len(cmdParts)+6)
+	result = append(result, cmdParts[0], cmdParts[1]) // "docker", "compose"
+	result = append(result, "-f", composeFile)
+	result = append(result, "-f", overridePath)
+	result = append(result, "--env-file", ".env")
+	result = append(result, cmdParts[2:]...) // "up", "-d" or "stop" etc.
+	return result
 }
 
 // Validate checks that the manager configuration is valid

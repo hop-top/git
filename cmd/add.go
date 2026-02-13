@@ -173,7 +173,7 @@ var addCmd = &cobra.Command{
 
 		if hasDockerEnv {
 			envMgr := services.NewEnvManager(fs, portsCfg, volsCfg, d)
-			branchPorts, branchVols, err = envMgr.Generate(branch, worktreePath)
+			branchPorts, branchVols, _, err = envMgr.Generate(branch, worktreePath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 			if err != nil {
 				output.Error("Failed to generate environment: %v", err)
 			} else {

@@ -96,6 +96,21 @@ func GetBackupBasePath() string {
 	return filepath.Join(GetCacheHome(), "git-hop")
 }
 
+// GetGitHopCacheHome returns the git-hop cache directory
+func GetGitHopCacheHome() string {
+	return filepath.Join(GetCacheHome(), "git-hop")
+}
+
+// GetComposeOverrideCachePath returns the path to a cached docker-compose override file
+func GetComposeOverrideCachePath(org, repo, branch string) string {
+	return filepath.Join(GetGitHopCacheHome(), org, repo, branch, "docker-compose.override.yml")
+}
+
+// GetOverrideMetaCachePath returns the path to the override metadata file
+func GetOverrideMetaCachePath(org, repo, branch string) string {
+	return filepath.Join(GetGitHopCacheHome(), org, repo, branch, ".override-meta.json")
+}
+
 // GetGitHopDataHome returns the git-hop data directory
 // Checks GIT_HOP_DATA_HOME first, then falls back to OS-appropriate defaults
 func GetGitHopDataHome() string {
