@@ -109,7 +109,7 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	resolvedPM := ResolveInstallCmd(pm, m.HopspaceConfig, branch)
 
 	// Compute hash
-	hash, err := resolvedPM.HashLockfile(lockfilePath)
+	hash, err := resolvedPM.HashLockfile(m.fs, lockfilePath)
 	if err != nil {
 		return fmt.Errorf("failed to hash lockfile: %w", err)
 	}
@@ -141,20 +141,25 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	}
 
 	if symlinkExists {
-		// Check if it's pointing to the right place
+		isSymlink := false
 		if linker, ok := m.fs.(afero.Symlinker); ok {
 			target, err := linker.ReadlinkIfPossible(symlinkPath)
-			if err == nil && target == depsPath {
-				// Symlink is correct, just update usage
-				m.Registry.AddUsage(depsKey, branch)
-				return nil
+			if err == nil {
+				// It's a symlink
+				isSymlink = true
+				if target == depsPath {
+					// Symlink is correct, just update usage
+					m.Registry.AddUsage(depsKey, branch)
+					return nil
+				}
+				// Symlink points to wrong target, remove it
+				if err := m.fs.Remove(symlinkPath); err != nil {
+					return fmt.Errorf("failed to remove stale symlink: %w", err)
+				}
 			}
-			// Symlink is wrong, remove it
-			if err := m.fs.Remove(symlinkPath); err != nil {
-				return fmt.Errorf("failed to remove stale symlink: %w", err)
-			}
-		} else {
-			// Not a symlink, it's a real directory - move to trash
+		}
+		if !isSymlink {
+			// Real directory - move to trash
 			if _, err := m.trash.Move(symlinkPath); err != nil {
 				return fmt.Errorf("failed to trash local deps: %w", err)
 			}
@@ -200,18 +205,18 @@ func (m *DepsManager) createSymlink(target, linkPath string) error {
 	return fmt.Errorf("filesystem does not support symlinks")
 }
 
-// Audit scans all worktrees and identifies dependency issues
-func (m *DepsManager) Audit(worktrees []string) ([]Issue, error) {
+// Audit scans all worktrees and identifies dependency issues.
+// worktrees is a map of branchName → worktreePath.
+func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 	issues := []Issue{}
 
 	// Rebuild registry from worktrees first
-	if err := m.Registry.RebuildFromWorktrees(m.fs, worktrees, m.PackageManagers); err != nil {
+	if err := m.Registry.RebuildFromWorktrees(m.fs, worktrees, m.PackageManagers, m.RepoPath); err != nil {
 		return nil, fmt.Errorf("failed to rebuild registry: %w", err)
 	}
 
 	// Scan each worktree for issues
-	for _, worktreePath := range worktrees {
-		branch := filepath.Base(worktreePath)
+	for branch, worktreePath := range worktrees {
 
 		// Detect package managers
 		detectedPMs, err := DetectPackageManagers(m.fs, worktreePath, m.PackageManagers)
@@ -227,7 +232,7 @@ func (m *DepsManager) Audit(worktrees []string) ([]Issue, error) {
 			}
 
 			// Compute expected hash
-			expectedHash, err := pm.HashLockfile(lockfilePath)
+			expectedHash, err := pm.HashLockfile(m.fs, lockfilePath)
 			if err != nil {
 				continue
 			}
@@ -404,10 +409,11 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 	return nil
 }
 
-// GarbageCollect removes orphaned dependencies
-func (m *DepsManager) GarbageCollect(worktrees []string, dryRun bool) ([]string, int64, error) {
+// GarbageCollect removes orphaned dependencies.
+// worktrees is a map of branchName → worktreePath.
+func (m *DepsManager) GarbageCollect(worktrees map[string]string, dryRun bool) ([]string, int64, error) {
 	// Rebuild registry from worktrees
-	if err := m.Registry.RebuildFromWorktrees(m.fs, worktrees, m.PackageManagers); err != nil {
+	if err := m.Registry.RebuildFromWorktrees(m.fs, worktrees, m.PackageManagers, m.RepoPath); err != nil {
 		return nil, 0, fmt.Errorf("failed to rebuild registry: %w", err)
 	}
 

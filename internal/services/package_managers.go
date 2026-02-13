@@ -4,7 +4,6 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -23,8 +22,8 @@ type PackageManager struct {
 }
 
 // HashLockfile computes SHA256 hash of lockfile (first 6 chars)
-func (pm *PackageManager) HashLockfile(lockfilePath string) (string, error) {
-	file, err := os.Open(lockfilePath)
+func (pm *PackageManager) HashLockfile(fs afero.Fs, lockfilePath string) (string, error) {
+	file, err := fs.Open(lockfilePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open lockfile: %w", err)
 	}
@@ -40,8 +39,8 @@ func (pm *PackageManager) HashLockfile(lockfilePath string) (string, error) {
 }
 
 // HashLockfileLong computes SHA256 hash of lockfile (first 12 chars for collision handling)
-func (pm *PackageManager) HashLockfileLong(lockfilePath string) (string, error) {
-	file, err := os.Open(lockfilePath)
+func (pm *PackageManager) HashLockfileLong(fs afero.Fs, lockfilePath string) (string, error) {
+	file, err := fs.Open(lockfilePath)
 	if err != nil {
 		return "", fmt.Errorf("failed to open lockfile: %w", err)
 	}

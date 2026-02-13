@@ -125,8 +125,9 @@ func (r *DepsRegistry) RemoveUsage(depsKey, branch string) {
 	r.Entries[depsKey] = entry
 }
 
-// RebuildFromWorktrees rebuilds the registry from the current state of worktrees
-func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees []string, pms []PackageManager) error {
+// RebuildFromWorktrees rebuilds the registry from the current state of worktrees.
+// worktrees is a map of branchName → worktreePath.
+func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees map[string]string, pms []PackageManager, repoPath string) error {
 	// Clear all usedBy arrays
 	for key, entry := range r.Entries {
 		entry.UsedBy = []string{}
@@ -134,9 +135,7 @@ func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees []string, pms
 	}
 
 	// Scan each worktree
-	for _, worktreePath := range worktrees {
-		branch := filepath.Base(worktreePath)
-
+	for branch, worktreePath := range worktrees {
 		// Detect package managers in this worktree
 		detectedPMs, err := DetectPackageManagers(fs, worktreePath, pms)
 		if err != nil {
@@ -152,7 +151,7 @@ func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees []string, pms
 			}
 
 			// Compute hash
-			hash, err := pm.HashLockfile(lockfilePath)
+			hash, err := pm.HashLockfile(fs, lockfilePath)
 			if err != nil {
 				continue // Skip if can't hash
 			}
@@ -167,7 +166,7 @@ func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees []string, pms
 				target, err := linker.ReadlinkIfPossible(symlinkPath)
 				if err == nil && target != "" {
 					// Symlink exists - verify it points to the expected deps
-					expectedTarget := getDepsPath(getRepoPathFromWorktree(worktreePath), depsKey)
+					expectedTarget := getDepsPath(repoPath, depsKey)
 					if target == expectedTarget {
 						r.AddUsage(depsKey, branch)
 					}
@@ -239,9 +238,3 @@ func getDepsPath(repoPath, depsKey string) string {
 	return filepath.Join(getDepsBasePath(repoPath), depsKey)
 }
 
-// getRepoPathFromWorktree extracts the repo path from a worktree path
-// This is a helper that assumes worktrees are in {repoPath}/hops/{branch}
-func getRepoPathFromWorktree(worktreePath string) string {
-	// Go up two levels: hops/{branch} -> hops -> repo
-	return filepath.Dir(filepath.Dir(worktreePath))
-}

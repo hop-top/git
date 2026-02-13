@@ -10,7 +10,7 @@ func main() {
 	// Initialize output in human mode
 	output.SetupLogger(output.ModeHuman, false)
 
-	fmt.Println("=== Git-Hop Enhanced Output Demo ===\n")
+	fmt.Println("=== Git-Hop Enhanced Output Demo ===")
 
 	// 1. Success Card Demo
 	fmt.Println("1. Success Card:")

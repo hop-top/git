@@ -240,10 +240,9 @@ Use --fix to automatically repair issues.`,
 					issuesFound = true
 				} else {
 					// Collect all worktree paths
-					worktrees := make([]string, 0, len(hub.Config.Branches))
-					for _, branch := range hub.Config.Branches {
-						worktreePath := filepath.Join(hubPath, branch.Path)
-						worktrees = append(worktrees, worktreePath)
+					worktrees := make(map[string]string, len(hub.Config.Branches))
+					for branchName, branch := range hub.Config.Branches {
+						worktrees[branchName] = filepath.Join(hubPath, branch.Path)
 					}
 
 					// Run audit

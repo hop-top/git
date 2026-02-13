@@ -72,10 +72,9 @@ Use --force to skip the confirmation prompt.`,
 
 		// Collect all worktree paths
 		output.Info("Scanning worktrees...")
-		worktrees := make([]string, 0, len(hub.Config.Branches))
-		for _, branch := range hub.Config.Branches {
-			worktreePath := filepath.Join(hubPath, branch.Path)
-			worktrees = append(worktrees, worktreePath)
+		worktrees := make(map[string]string, len(hub.Config.Branches))
+		for branchName, branch := range hub.Config.Branches {
+			worktrees[branchName] = filepath.Join(hubPath, branch.Path)
 		}
 
 		output.Info("  ✓ Found %d worktree(s)", len(worktrees))

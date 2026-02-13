@@ -60,6 +60,8 @@ func TestDockerRealWorld_Laravel(t *testing.T) {
 	t.Log("Creating hotfix branch for critical bug fix...")
 	env.RunCommand(t, stagingPath, "git", "checkout", "-b", "hotfix/critical-bug")
 	env.RunCommand(t, stagingPath, "git", "push", "origin", "hotfix/critical-bug")
+	// Switch staging back so git allows the branch to be checked out in another worktree
+	env.RunCommand(t, stagingPath, "git", "checkout", "staging")
 
 	// Phase 7: Add hotfix branch to hub
 	// This creates a separate isolated environment for the hotfix
@@ -87,6 +89,10 @@ func TestDockerRealWorld_Laravel(t *testing.T) {
 	// Laravel needs certain files and configuration to work properly
 	setupLaravelEnvironment(t, env, stagingPath)
 	setupLaravelEnvironment(t, env, hotfixPath)
+
+	// Phase 10b: Generate environment files now that docker-compose.yml is in place
+	env.RunGitHop(t, stagingPath, "env", "generate")
+	env.RunGitHop(t, hotfixPath, "env", "generate")
 
 	// Phase 11: Start staging environment
 	// This is the long-running development environment

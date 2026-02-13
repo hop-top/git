@@ -31,12 +31,13 @@ func TestCreateWorktree_CreateNewBranch(t *testing.T) {
 	}
 	g := &Git{Runner: runner}
 
-	// First call fails (branch doesn't exist), second call creates it
+	// First call fails (branch doesn't exist), rev-parse confirms it doesn't exist, then create
 	runner.errors["/hub:git worktree add /path/to/worktree new-branch"] = fmt.Errorf("branch not found")
+	runner.errors["/hub:git rev-parse --verify refs/heads/new-branch"] = fmt.Errorf("not a valid ref")
 
 	err := g.CreateWorktree("/hub", "new-branch", "/path/to/worktree", "HEAD", false)
 	assert.NoError(t, err)
-	assert.Equal(t, 2, runner.callCount, "Should call git twice - link attempt then create")
+	assert.Equal(t, 3, runner.callCount, "Should call git three times - link attempt, rev-parse check, then create")
 	assert.Contains(t, runner.lastCommand, "worktree add -b new-branch /path/to/worktree HEAD")
 }
 
@@ -48,12 +49,13 @@ func TestCreateWorktree_CreateNewBranchFromBase(t *testing.T) {
 	}
 	g := &Git{Runner: runner}
 
-	// First call fails, second call creates with custom base
+	// First call fails, rev-parse confirms branch doesn't exist, then creates with custom base
 	runner.errors["/hub:git worktree add /path/to/worktree feature-branch"] = fmt.Errorf("branch not found")
+	runner.errors["/hub:git rev-parse --verify refs/heads/feature-branch"] = fmt.Errorf("not a valid ref")
 
 	err := g.CreateWorktree("/hub", "feature-branch", "/path/to/worktree", "develop", false)
 	assert.NoError(t, err)
-	assert.Equal(t, 2, runner.callCount)
+	assert.Equal(t, 3, runner.callCount)
 	assert.Contains(t, runner.lastCommand, "worktree add -b feature-branch /path/to/worktree develop")
 }
 
@@ -95,14 +97,34 @@ func TestCreateWorktree_BothCallsFail(t *testing.T) {
 	}
 	g := &Git{Runner: runner}
 
-	// Both calls fail
+	// All calls fail: link attempt, rev-parse shows branch doesn't exist, create also fails
 	runner.errors["/hub:git worktree add /path/to/worktree bad-branch"] = fmt.Errorf("branch not found")
+	runner.errors["/hub:git rev-parse --verify refs/heads/bad-branch"] = fmt.Errorf("not a valid ref")
 	runner.errors["/hub:git worktree add -b bad-branch /path/to/worktree HEAD"] = fmt.Errorf("permission denied")
 
 	err := g.CreateWorktree("/hub", "bad-branch", "/path/to/worktree", "HEAD", false)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "permission denied")
-	assert.Equal(t, 2, runner.callCount, "Should try both commands")
+	assert.Equal(t, 3, runner.callCount, "Should try link, rev-parse, then create")
+}
+
+// TestCreateWorktree_BranchExistsButCheckedOut tests when branch exists but is already checked out
+func TestCreateWorktree_BranchExistsButCheckedOut(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	// Link fails because branch is checked out in another worktree
+	runner.errors["/hub:git worktree add /path/to/worktree my-branch"] = fmt.Errorf("branch 'my-branch' is already checked out")
+	// rev-parse succeeds — branch exists, so we should NOT try -b
+	// (default mock returns no error)
+
+	err := g.CreateWorktree("/hub", "my-branch", "/path/to/worktree", "HEAD", false)
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "already checked out")
+	assert.Equal(t, 2, runner.callCount, "Should try link and rev-parse, but not -b since branch exists")
 }
 
 // TestCreateWorktree_ForceCreateFails tests when forced creation fails

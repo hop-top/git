@@ -113,11 +113,17 @@ func (g *Git) CreateWorktree(hopspacePath, branch, path, base string, forceCreat
 
 	// If linking failed because branch doesn't exist, try creating it
 	if err != nil && !forceCreate {
-		args = []string{"worktree", "add", "-b", branch, path}
-		if base != "" {
-			args = append(args, base)
+		// Check if the branch already exists before using -b
+		_, branchExists := g.Runner.RunInDir(hopspacePath, "git", "rev-parse", "--verify", "refs/heads/"+branch)
+		if branchExists != nil {
+			// Branch doesn't exist, create it with -b
+			args = []string{"worktree", "add", "-b", branch, path}
+			if base != "" {
+				args = append(args, base)
+			}
+			_, err = g.Runner.RunInDir(hopspacePath, "git", args...)
 		}
-		_, err = g.Runner.RunInDir(hopspacePath, "git", args...)
+		// If branch exists but worktree add failed, the original error stands
 	}
 
 	return err

@@ -85,8 +85,8 @@ func runEnvCommand(action string) {
 			// Get hopspace path
 			dataHome := hop.GetGitHopDataHome()
 			repoPath = hop.GetHopspacePath(dataHome, org, repo)
-			// Get branch name from worktree path
-			branch = filepath.Base(root)
+			// Get branch name from git
+			branch, _ = g.GetCurrentBranch(root)
 		}
 	}
 
@@ -172,7 +172,7 @@ var envGenerateCmd = &cobra.Command{
 			output.Fatal("Failed to load hub: %v", err)
 		}
 
-		branch := filepath.Base(root)
+		branch, _ := g.GetCurrentBranch(root)
 		org := hub.Config.Repo.Org
 		repo := hub.Config.Repo.Repo
 

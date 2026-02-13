@@ -20,10 +20,11 @@ func TestPackageManager_HashLockfile(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
 	// Hash the lockfile
-	hash1, err := pm.HashLockfile(lockfilePath)
+	hash1, err := pm.HashLockfile(fs, lockfilePath)
 	if err != nil {
 		t.Fatalf("HashLockfile() error = %v", err)
 	}
@@ -34,7 +35,7 @@ func TestPackageManager_HashLockfile(t *testing.T) {
 	}
 
 	// Verify hash is consistent
-	hash2, err := pm.HashLockfile(lockfilePath)
+	hash2, err := pm.HashLockfile(fs, lockfilePath)
 	if err != nil {
 		t.Fatalf("HashLockfile() second call error = %v", err)
 	}
@@ -49,7 +50,7 @@ func TestPackageManager_HashLockfile(t *testing.T) {
 		t.Fatalf("failed to update test file: %v", err)
 	}
 
-	hash3, err := pm.HashLockfile(lockfilePath)
+	hash3, err := pm.HashLockfile(fs, lockfilePath)
 	if err != nil {
 		t.Fatalf("HashLockfile() third call error = %v", err)
 	}
@@ -70,10 +71,11 @@ func TestPackageManager_HashLockfileLong(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
 	// Hash the lockfile with long hash
-	longHash1, err := pm.HashLockfileLong(lockfilePath)
+	longHash1, err := pm.HashLockfileLong(fs, lockfilePath)
 	if err != nil {
 		t.Fatalf("HashLockfileLong() error = %v", err)
 	}
@@ -84,7 +86,7 @@ func TestPackageManager_HashLockfileLong(t *testing.T) {
 	}
 
 	// Verify short hash is prefix of long hash
-	shortHash, err := pm.HashLockfile(lockfilePath)
+	shortHash, err := pm.HashLockfile(fs, lockfilePath)
 	if err != nil {
 		t.Fatalf("HashLockfile() error = %v", err)
 	}
@@ -94,7 +96,7 @@ func TestPackageManager_HashLockfileLong(t *testing.T) {
 	}
 
 	// Verify consistency
-	longHash2, err := pm.HashLockfileLong(lockfilePath)
+	longHash2, err := pm.HashLockfileLong(fs, lockfilePath)
 	if err != nil {
 		t.Fatalf("HashLockfileLong() second call error = %v", err)
 	}
@@ -122,15 +124,16 @@ func TestPackageManager_HashCollisionScenario(t *testing.T) {
 		t.Fatalf("failed to create lockfile2: %v", err)
 	}
 
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
 	// Get short hashes
-	hash1, err := pm.HashLockfile(lockfile1)
+	hash1, err := pm.HashLockfile(fs, lockfile1)
 	if err != nil {
 		t.Fatalf("HashLockfile(lockfile1) error = %v", err)
 	}
 
-	hash2, err := pm.HashLockfile(lockfile2)
+	hash2, err := pm.HashLockfile(fs, lockfile2)
 	if err != nil {
 		t.Fatalf("HashLockfile(lockfile2) error = %v", err)
 	}
@@ -139,12 +142,12 @@ func TestPackageManager_HashCollisionScenario(t *testing.T) {
 	// But if they were the same, long hashes should differ
 	if hash1 == hash2 {
 		// Collision detected in short hash - verify long hashes differ
-		longHash1, err := pm.HashLockfileLong(lockfile1)
+		longHash1, err := pm.HashLockfileLong(fs, lockfile1)
 		if err != nil {
 			t.Fatalf("HashLockfileLong(lockfile1) error = %v", err)
 		}
 
-		longHash2, err := pm.HashLockfileLong(lockfile2)
+		longHash2, err := pm.HashLockfileLong(fs, lockfile2)
 		if err != nil {
 			t.Fatalf("HashLockfileLong(lockfile2) error = %v", err)
 		}
@@ -156,15 +159,16 @@ func TestPackageManager_HashCollisionScenario(t *testing.T) {
 }
 
 func TestPackageManager_HashError_FileNotFound(t *testing.T) {
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
 	// Try to hash non-existent file
-	_, err := pm.HashLockfile("/nonexistent/path/to/lockfile.json")
+	_, err := pm.HashLockfile(fs, "/nonexistent/path/to/lockfile.json")
 	if err == nil {
 		t.Error("HashLockfile() should return error for non-existent file")
 	}
 
-	_, err = pm.HashLockfileLong("/nonexistent/path/to/lockfile.json")
+	_, err = pm.HashLockfileLong(fs, "/nonexistent/path/to/lockfile.json")
 	if err == nil {
 		t.Error("HashLockfileLong() should return error for non-existent file")
 	}
@@ -179,9 +183,10 @@ func TestPackageManager_HashEmptyFile(t *testing.T) {
 		t.Fatalf("failed to create empty file: %v", err)
 	}
 
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
-	hash, err := pm.HashLockfile(emptyFile)
+	hash, err := pm.HashLockfile(fs, emptyFile)
 	if err != nil {
 		t.Fatalf("HashLockfile() error = %v", err)
 	}
@@ -191,7 +196,7 @@ func TestPackageManager_HashEmptyFile(t *testing.T) {
 		t.Errorf("HashLockfile() on empty file hash length = %d, want 6", len(hash))
 	}
 
-	longHash, err := pm.HashLockfileLong(emptyFile)
+	longHash, err := pm.HashLockfileLong(fs, emptyFile)
 	if err != nil {
 		t.Fatalf("HashLockfileLong() error = %v", err)
 	}
@@ -216,9 +221,10 @@ func TestPackageManager_HashLargeFile(t *testing.T) {
 		t.Fatalf("failed to create large file: %v", err)
 	}
 
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
-	hash, err := pm.HashLockfile(largeFile)
+	hash, err := pm.HashLockfile(fs, largeFile)
 	if err != nil {
 		t.Fatalf("HashLockfile() error = %v", err)
 	}
@@ -227,7 +233,7 @@ func TestPackageManager_HashLargeFile(t *testing.T) {
 		t.Errorf("HashLockfile() hash length = %d, want 6", len(hash))
 	}
 
-	longHash, err := pm.HashLockfileLong(largeFile)
+	longHash, err := pm.HashLockfileLong(fs, largeFile)
 	if err != nil {
 		t.Fatalf("HashLockfileLong() error = %v", err)
 	}
@@ -240,6 +246,7 @@ func TestPackageManager_HashLargeFile(t *testing.T) {
 func TestPackageManager_HashDifferentFormats(t *testing.T) {
 	// Test hashing different lockfile formats
 	tmpDir := t.TempDir()
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
 	tests := []struct {
@@ -273,7 +280,7 @@ func TestPackageManager_HashDifferentFormats(t *testing.T) {
 				t.Fatalf("failed to create test file: %v", err)
 			}
 
-			hash, err := pm.HashLockfile(lockfile)
+			hash, err := pm.HashLockfile(fs, lockfile)
 			if err != nil {
 				t.Fatalf("HashLockfile() error = %v", err)
 			}
@@ -307,6 +314,7 @@ func TestPackageManager_HashStability(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
+	fs := afero.NewOsFs()
 	pm := services.PackageManager{Name: "test"}
 
 	// Hash multiple times
@@ -314,13 +322,13 @@ func TestPackageManager_HashStability(t *testing.T) {
 	var longHashes []string
 
 	for i := 0; i < 10; i++ {
-		hash, err := pm.HashLockfile(lockfile)
+		hash, err := pm.HashLockfile(fs, lockfile)
 		if err != nil {
 			t.Fatalf("HashLockfile() iteration %d error = %v", i, err)
 		}
 		hashes = append(hashes, hash)
 
-		longHash, err := pm.HashLockfileLong(lockfile)
+		longHash, err := pm.HashLockfileLong(fs, lockfile)
 		if err != nil {
 			t.Fatalf("HashLockfileLong() iteration %d error = %v", i, err)
 		}
@@ -352,6 +360,8 @@ func TestPackageManager_GetDepsKey_WithHashes(t *testing.T) {
 		t.Fatalf("failed to create test file: %v", err)
 	}
 
+	fs := afero.NewOsFs()
+
 	tests := []struct {
 		name           string
 		pm             services.PackageManager
@@ -377,7 +387,7 @@ func TestPackageManager_GetDepsKey_WithHashes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			hash, err := tt.pm.HashLockfile(lockfile)
+			hash, err := tt.pm.HashLockfile(fs, lockfile)
 			if err != nil {
 				t.Fatalf("HashLockfile() error = %v", err)
 			}
@@ -404,8 +414,7 @@ func TestPackageManager_GetDepsKey_WithHashes(t *testing.T) {
 }
 
 func TestPackageManager_HashWithAferoFs(t *testing.T) {
-	// Note: HashLockfile uses os.Open, not afero.Fs
-	// This test documents that limitation
+	// HashLockfile now accepts afero.Fs, so it works with in-memory FS
 	fs := afero.NewMemMapFs()
 	worktreePath := "/test/worktree"
 
@@ -421,12 +430,22 @@ func TestPackageManager_HashWithAferoFs(t *testing.T) {
 
 	pm := services.PackageManager{Name: "test"}
 
-	// HashLockfile uses os.Open, so this will fail
-	_, err := pm.HashLockfile(lockfilePath)
-	if err == nil {
-		t.Error("HashLockfile() should fail with in-memory FS path (uses os.Open, not afero)")
+	// HashLockfile now uses afero.Fs, so this should succeed
+	hash, err := pm.HashLockfile(fs, lockfilePath)
+	if err != nil {
+		t.Fatalf("HashLockfile() should succeed with in-memory FS: %v", err)
 	}
 
-	// This is expected behavior - hash functions use real filesystem
-	// because they need to work with actual lockfiles during operations
+	if len(hash) != 6 {
+		t.Errorf("HashLockfile() hash length = %d, want 6", len(hash))
+	}
+
+	longHash, err := pm.HashLockfileLong(fs, lockfilePath)
+	if err != nil {
+		t.Fatalf("HashLockfileLong() should succeed with in-memory FS: %v", err)
+	}
+
+	if len(longHash) != 12 {
+		t.Errorf("HashLockfileLong() hash length = %d, want 12", len(longHash))
+	}
 }
