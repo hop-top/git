@@ -132,9 +132,7 @@ func TestCommands(t *testing.T) {
 	// --- Test: git hop remove ---
 	t.Run("Remove", func(t *testing.T) {
 		// Remove feature-1
-		// Note: remove is interactive by default. We need --no-prompt or input.
-		// Assuming --no-prompt is implemented or we can pipe "y".
-		// Let's try with --no-prompt if spec says so. Spec says: `git hop remove <target> [--no-prompt]`
+		// Remove is interactive by default, use --no-prompt to avoid confirmation
 
 		out := env.RunGitHop(t, env.HubPath, "remove", "feature-1", "--no-prompt")
 		if !strings.Contains(out, "Removed") && !strings.Contains(out, "Successfully") {

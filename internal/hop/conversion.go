@@ -13,14 +13,14 @@ import (
 
 type Converter struct {
 	fs         afero.Fs
-	git        *git.Git
+	git        git.GitInterface
 	backupMgr  *BackupManager
 	DryRun     bool
 	Force      bool
 	KeepBackup bool
 }
 
-func NewConverter(fs afero.Fs, g *git.Git) *Converter {
+func NewConverter(fs afero.Fs, g git.GitInterface) *Converter {
 	return &Converter{
 		fs:  fs,
 		git: g,
@@ -56,7 +56,7 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 	}
 
 	if enforceClean && useBare {
-		status, err := c.git.Runner.RunInDir(repoPath, "git", "status", "--porcelain")
+		status, err := c.git.RunInDir(repoPath, "git", "status", "--porcelain")
 		if err == nil && status != "" {
 			result.Errors = append(result.Errors, "repository has uncommitted changes (commit or stash before conversion)")
 			return result, fmt.Errorf("repository is not clean")
@@ -167,7 +167,7 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		}
 
 		mainPath := filepath.Join(worktreesDir, "main")
-		_, err := c.git.Runner.Run("git", "-C", bareRepoPath, "worktree", "add", mainPath, "main")
+		_, err := c.git.Run("git", "-C", bareRepoPath, "worktree", "add", mainPath, "main")
 		if err != nil {
 			return fmt.Errorf("failed to create main worktree: %w", err)
 		}
@@ -284,8 +284,10 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 	// For regular repos, the current branch's working tree is the repo root
 	// For bare repos, it's in the worktrees directory
 	branchPath := config.MakeWorktreePath(defaultBranch)
+	structure := "bare-worktree"
 	if !useBare {
 		branchPath = "."
+		structure = "regular-worktree"
 	}
 
 	hopConfig := map[string]interface{}{
@@ -294,7 +296,7 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 			"org":           org,
 			"repo":          repo,
 			"defaultBranch": defaultBranch,
-			"structure":     "bare-worktree",
+			"structure":     structure,
 			"isBare":        useBare,
 		},
 		"branches": map[string]interface{}{

@@ -8,6 +8,27 @@ import (
 	"strings"
 )
 
+// GitInterface defines the interface for git operations
+type GitInterface interface {
+	Clone(uri, path, branch string) error
+	CloneBare(uri, path string) error
+	CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool) error
+	WorktreeRemove(hopspacePath, path string, force bool) error
+	WorktreePrune(hopspacePath string) error
+	RevParse(dir string, args ...string) (string, error)
+	IsInsideWorkTree(dir string) bool
+	GetRoot(dir string) (string, error)
+	MergeBase(dir, commit1, commit2 string) (string, error)
+	GetDefaultBranch(uri string) (string, error)
+	GetCurrentRepo() (string, error)
+	GetRepoInfo() (uri, org, repo, branch string, err error)
+	GetRemoteURL(dir string) (string, error)
+	GetCurrentBranch(dir string) (string, error)
+	GetStatus(dir string) (*Status, error)
+	RunInDir(dir string, cmd string, args ...string) (string, error)
+	Run(cmd string, args ...string) (string, error)
+}
+
 // Git wraps git command execution
 type Git struct {
 	Runner CommandRunner
@@ -220,6 +241,16 @@ func (g *Git) GetCurrentBranch(dir string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// RunInDir executes a command in the specified directory
+func (g *Git) RunInDir(dir string, cmd string, args ...string) (string, error) {
+	return g.Runner.RunInDir(dir, cmd, args...)
+}
+
+// Run executes a command in the current directory
+func (g *Git) Run(cmd string, args ...string) (string, error) {
+	return g.Runner.Run(cmd, args...)
 }
 
 // parseRepoFromURL parses org and repo name from various git URL formats.

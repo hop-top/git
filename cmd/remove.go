@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/config"
@@ -42,12 +43,20 @@ var removeCmd = &cobra.Command{
 			// Check if target is a branch in the hub
 			if _, ok := hub.Config.Branches[target]; ok {
 				if !noPrompt {
-					// TODO: Implement interactive prompt
-					// For now, just proceed as if confirmed or fail if strict?
-					// The spec says interactive by default.
-					// Since we don't have a prompter yet, let's just log a warning or assume yes for alpha?
-					// Better: if no-prompt is false, we should prompt.
-					// But for this fix, we just want to support the flag so the test passes.
+					// Prompt for confirmation before removing the worktree
+					branchConfig := hub.Config.Branches[target]
+					worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
+
+					confirmed := output.ConfirmDeletion(target, []output.CardField{
+						{Key: "Type", Value: "Branch worktree"},
+						{Key: "Path", Value: worktreePath},
+						{Key: "Hub", Value: hubPath},
+					})
+
+					if !confirmed {
+						output.Info("Cancelled.")
+						return
+					}
 				}
 
 				output.Info("Removing branch %s from hub...", target)
@@ -131,7 +140,96 @@ var removeCmd = &cobra.Command{
 			}
 		}
 
-		// TODO: Handle removing hubs or hopspaces by path/URI
+		// Check if target is a path to a hub directory
+		targetPath := target
+		if !filepath.IsAbs(target) {
+			targetPath = filepath.Join(cwd, target)
+		}
+
+		// Check if target is a hub
+		if hop.IsHub(fs, targetPath) {
+			if !noPrompt {
+				// Load hub to get branch count
+				hub, err := hop.LoadHub(fs, targetPath)
+				if err == nil {
+					branchCount := len(hub.Config.Branches)
+
+					confirmed := output.ConfirmDeletion(targetPath, []output.CardField{
+						{Key: "Type", Value: "Hub"},
+						{Key: "Branches", Value: fmt.Sprintf("%d", branchCount)},
+						{Key: "Repository", Value: fmt.Sprintf("%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)},
+					})
+
+					if !confirmed {
+						output.Info("Cancelled.")
+						return
+					}
+				} else {
+					// Fallback if we can't load hub config
+					confirmed := output.ConfirmDeletion(targetPath, []output.CardField{
+						{Key: "Type", Value: "Hub"},
+					})
+
+					if !confirmed {
+						output.Info("Cancelled.")
+						return
+					}
+				}
+			}
+
+			output.Info("Removing hub at %s...", targetPath)
+
+			// Load hub to get repo info
+			hub, err := hop.LoadHub(fs, targetPath)
+			if err != nil {
+				output.Fatal("Failed to load hub: %v", err)
+			}
+
+			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+			// Remove all worktrees
+			for branchName, branchConfig := range hub.Config.Branches {
+				worktreePath := config.ResolveWorktreePath(branchConfig.Path, targetPath)
+				output.Info("Removing worktree for branch %s...", branchName)
+
+				if err := fs.RemoveAll(worktreePath); err != nil {
+					output.Warn("Failed to remove worktree %s: %v", branchName, err)
+				}
+			}
+
+			// Remove hub directory
+			output.Info("Removing hub directory...")
+			if err := fs.RemoveAll(targetPath); err != nil {
+				output.Fatal("Failed to remove hub directory: %v", err)
+			}
+
+			// Remove from global state
+			st, err := state.LoadState(fs)
+			if err == nil {
+				if err := st.RemoveRepository(repoID); err != nil {
+					output.Warn("Failed to update state: %v", err)
+				} else {
+					if err := state.SaveState(fs, st); err != nil {
+						output.Warn("Failed to save state: %v", err)
+					}
+				}
+			}
+
+			// Clean up hopspace data
+			dataHome := hop.GetGitHopDataHome()
+			hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+			if exists, _ := afero.DirExists(fs, hopspacePath); exists {
+				output.Info("Cleaning up hopspace data...")
+				if err := fs.RemoveAll(hopspacePath); err != nil {
+					output.Warn("Failed to remove hopspace data: %v", err)
+				}
+			}
+
+			output.Success("Successfully removed hub: %s", targetPath)
+			return
+		}
+
+		// Target not found
 		output.Fatal("Target %s not found or not supported yet", target)
 	},
 }

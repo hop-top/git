@@ -120,3 +120,42 @@ func TestDoctorCommand_NoOrphanedDirectories(t *testing.T) {
 	// Should find no orphaned directories
 	assert.Empty(t, orphaned)
 }
+
+func TestDoctorCommand_DetectsBrokenWorktrees(t *testing.T) {
+	fs := afero.NewMemMapFs()
+
+	// Setup hub with a broken worktree reference
+	hubPath := "/tmp/test-hub"
+	hopspacePath := "/tmp/test-hopspace"
+	uri := "git@github.com:test/repo.git"
+	org := "test"
+	repo := "repo"
+	defaultBranch := "main"
+
+	// Create hub
+	hub, err := hop.CreateHub(fs, hubPath, uri, org, repo, defaultBranch)
+	require.NoError(t, err)
+
+	// Create hopspace
+	hopspace, err := hop.InitHopspace(fs, hopspacePath, uri, org, repo, defaultBranch)
+	require.NoError(t, err)
+
+	// Add a branch to hub that references a non-existent worktree
+	branchPath := "hops/feature"
+	worktreePath := filepath.Join(hubPath, branchPath)
+	require.NoError(t, hub.AddBranch("feature", "feature", branchPath))
+	require.NoError(t, hopspace.RegisterBranch("feature", worktreePath))
+
+	// Verify the worktree path doesn't exist (broken)
+	exists, err := afero.Exists(fs, worktreePath)
+	require.NoError(t, err)
+	assert.False(t, exists, "Worktree should not exist initially")
+
+	// Check that hub config references the broken path
+	assert.Contains(t, hub.Config.Branches, "feature")
+	assert.Equal(t, branchPath, hub.Config.Branches["feature"].Path)
+
+	// Verify stat fails for broken worktree
+	_, err = fs.Stat(worktreePath)
+	assert.Error(t, err, "Stat should fail for non-existent worktree")
+}

@@ -26,11 +26,11 @@ type StateValidation struct {
 // StateValidator validates the consistency of hopspace state
 type StateValidator struct {
 	fs  afero.Fs
-	git *git.Git
+	git git.GitInterface
 }
 
 // NewStateValidator creates a new state validator
-func NewStateValidator(fs afero.Fs, g *git.Git) *StateValidator {
+func NewStateValidator(fs afero.Fs, g git.GitInterface) *StateValidator {
 	return &StateValidator{
 		fs:  fs,
 		git: g,

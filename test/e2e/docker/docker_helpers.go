@@ -57,7 +57,7 @@ func WaitForServiceHealthy(t *testing.T, dir, service string, timeout time.Durat
 	cmd := exec.Command("docker", "compose", "logs", service)
 	cmd.Dir = dir
 	logs, _ := cmd.Output()
-	
+
 	t.Fatalf("Service %s did not become healthy within %v\nLogs:\n%s", service, timeout, string(logs))
 }
 
@@ -87,7 +87,7 @@ func CleanupContainers(t *testing.T, dir string) {
 	t.Helper()
 
 	d := docker.New()
-	
+
 	// Try to stop containers
 	if err := d.ComposeStop(dir); err != nil {
 		t.Logf("Warning: Failed to stop containers: %v", err)
@@ -141,7 +141,7 @@ func WaitForContainerReady(t *testing.T, dir string, timeout time.Duration) {
 		cmd := exec.Command("docker", "compose", "ps", "--format", "json")
 		cmd.Dir = dir
 		output, err := cmd.Output()
-		
+
 		if err == nil {
 			outputStr := string(output)
 			// Check if we have at least one container running

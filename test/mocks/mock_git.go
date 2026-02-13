@@ -1,5 +1,9 @@
 package mocks
 
+import (
+	"github.com/jadb/git-hop/internal/git"
+)
+
 // MockGit is a mock implementation of the Git interface for testing
 type MockGit struct {
 	Runner               *MockCommandRunner
@@ -123,9 +127,25 @@ func (m *MockGit) GetCurrentBranch(dir string) (string, error) {
 	return "main", nil
 }
 
-// GetBranches mocks getting repository branches
-func (m *MockGit) GetBranches(dir string) ([]string, error) {
-	return []string{"main", "develop"}, nil
+// GetStatus mocks getting repository status
+func (m *MockGit) GetStatus(dir string) (*git.Status, error) {
+	return &git.Status{
+		Branch: "main",
+		Clean:  true,
+		Files:  []string{},
+		Ahead:  0,
+		Behind: 0,
+	}, nil
+}
+
+// RunInDir executes a mocked command in a specific directory
+func (m *MockGit) RunInDir(dir string, cmd string, args ...string) (string, error) {
+	return m.Runner.RunInDir(dir, cmd, args...)
+}
+
+// Run executes a mocked command
+func (m *MockGit) Run(cmd string, args ...string) (string, error) {
+	return m.Runner.Run(cmd, args...)
 }
 
 // NewMockGit creates a new MockGit instance for testing

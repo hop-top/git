@@ -154,13 +154,63 @@ Use --fix to automatically repair issues.`,
 					}
 				}
 
-				// Check symlinks
+				// Check branch paths (worktrees)
 				for name, b := range hub.Config.Branches {
 					linkPath := filepath.Join(hub.Path, b.Path)
 					if _, err := fs.Stat(linkPath); err != nil {
 						output.Error("Broken link for branch %s: %s", name, linkPath)
 						issuesFound = true
-						// TODO: Add fix logic for broken symlinks
+
+						if doctorFix {
+							// Attempt to recreate the worktree
+							output.Info("Attempting to fix broken worktree for branch %s...", name)
+
+							// Get hopspace path for git worktree commands
+							dataHome := hop.GetGitHopDataHome()
+							hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+							// Load hopspace to verify it exists
+							hopspace, err := hop.LoadHopspace(fs, hopspacePath)
+							if err != nil {
+								output.Error("Cannot fix: failed to load hopspace: %v", err)
+								continue
+							}
+
+							// Check if branch is registered in hopspace
+							_, existsInHopspace := hopspace.Config.Branches[b.HopspaceBranch]
+							if !existsInHopspace {
+								output.Error("Cannot fix: branch %s not found in hopspace", b.HopspaceBranch)
+								continue
+							}
+
+							// Create parent directories if needed
+							linkDir := filepath.Dir(linkPath)
+							if err := fs.MkdirAll(linkDir, 0755); err != nil {
+								output.Error("Failed to create parent directory: %v", err)
+								continue
+							}
+
+							// Recreate the worktree using git
+							g := git.New()
+							if err := g.CreateWorktree(hopspacePath, b.HopspaceBranch, linkPath, "", false); err != nil {
+								output.Error("Failed to recreate worktree: %v", err)
+								continue
+							}
+
+							// Update hopspace to reflect the restored worktree
+							if err := hopspace.RegisterBranch(b.HopspaceBranch, linkPath); err != nil {
+								output.Error("Failed to update hopspace: %v", err)
+								// Continue anyway as the worktree was created
+							}
+
+							// Verify the worktree was created successfully
+							if _, err := fs.Stat(linkPath); err == nil {
+								output.Info("✓ Fixed worktree for branch %s", name)
+								fixedIssues++
+							} else {
+								output.Error("Worktree creation appeared to succeed but path still not accessible")
+							}
+						}
 					}
 				}
 			}

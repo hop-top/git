@@ -8,11 +8,11 @@ import (
 // CleanupManager handles cleanup operations for orphaned artifacts
 type CleanupManager struct {
 	fs  afero.Fs
-	git *git.Git
+	git git.GitInterface
 }
 
 // NewCleanupManager creates a new CleanupManager
-func NewCleanupManager(fs afero.Fs, g *git.Git) *CleanupManager {
+func NewCleanupManager(fs afero.Fs, g git.GitInterface) *CleanupManager {
 	return &CleanupManager{
 		fs:  fs,
 		git: g,

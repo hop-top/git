@@ -229,6 +229,18 @@ func (s *State) AddHub(repoID string, hub *HubState) error {
 	return nil
 }
 
+// RemoveRepository removes a repository and all its worktrees from the state
+func (s *State) RemoveRepository(repoID string) error {
+	if _, exists := s.Repositories[repoID]; !exists {
+		return fmt.Errorf("repository not found: %s", repoID)
+	}
+
+	delete(s.Repositories, repoID)
+	s.LastUpdated = time.Now()
+
+	return nil
+}
+
 // AddOrphanedEntry adds an orphaned entry to the state
 func (s *State) AddOrphanedEntry(entry *OrphanedEntry) {
 	if s.Orphaned == nil {
