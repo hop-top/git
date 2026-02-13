@@ -8,7 +8,7 @@ LDFLAGS := -X main.version=$(VERSION) -X main.commit=$(COMMIT) -X main.date=$(DA
 # Platform-agnostic install path
 GOBIN ?= $(shell go env GOPATH)/bin
 
-.PHONY: all build clean test lint fmt install
+.PHONY: all build clean test lint fmt install lint-links
 
 all: build
 
@@ -36,3 +36,7 @@ lint:
 
 fmt:
 	go fmt ./...
+
+# Requires lychee installed: brew install lychee (or cargo install lychee)
+lint-links:
+	lychee --offline --no-progress --exclude-path vendor 'docs/**/*.md' 'internal/**/*.md' '*.md'
