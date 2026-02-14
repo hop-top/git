@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/config"
@@ -42,6 +43,19 @@ var removeCmd = &cobra.Command{
 
 			// Check if target is a branch in the hub
 			if _, ok := hub.Config.Branches[target]; ok {
+				// Guard: cannot remove the default branch
+				if target == hub.Config.Repo.DefaultBranch {
+					output.Fatal("Cannot remove the default branch '%s'.", target)
+				}
+
+				// Guard: cannot remove worktree while inside it
+				guardBranchCfg := hub.Config.Branches[target]
+				absWorktree, _ := filepath.Abs(config.ResolveWorktreePath(guardBranchCfg.Path, hubPath))
+				absCwd, _ := filepath.Abs(cwd)
+				if absCwd == absWorktree || strings.HasPrefix(absCwd, absWorktree+string(filepath.Separator)) {
+					output.Fatal("Cannot remove branch '%s': you are currently inside its worktree. Change to a different worktree first.", target)
+				}
+
 				if !noPrompt {
 					// Prompt for confirmation before removing the worktree
 					branchConfig := hub.Config.Branches[target]
@@ -105,6 +119,21 @@ var removeCmd = &cobra.Command{
 					output.Error("Failed to remove worktree directory: %v", err)
 				} else {
 					output.Info("Successfully removed worktree directory")
+				}
+
+				// Delete local and remote branches
+				if basePath != "" {
+					absBasePath := config.ResolveWorktreePath(basePath, hubPath)
+
+					if err := g.DeleteLocalBranch(absBasePath, target); err != nil {
+						output.Warn("Failed to delete local branch: %v", err)
+					}
+
+					if g.HasRemoteBranch(absBasePath, target) {
+						if err := g.DeleteRemoteBranch(absBasePath, target); err != nil {
+							output.Warn("Failed to delete remote branch: %v", err)
+						}
+					}
 				}
 
 				// Load Hopspace to unregister

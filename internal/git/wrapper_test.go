@@ -157,6 +157,82 @@ func TestCreateWorktree_EmptyParameters(t *testing.T) {
 	assert.NoError(t, err) // Mock doesn't validate parameters
 }
 
+// TestDeleteLocalBranch tests force-deleting a local branch
+func TestDeleteLocalBranch(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	err := g.DeleteLocalBranch("/repo", "feature")
+	assert.NoError(t, err)
+	assert.Contains(t, runner.lastCommand, "branch -D feature")
+}
+
+// TestDeleteLocalBranch_Error tests failure when branch doesn't exist
+func TestDeleteLocalBranch_Error(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	runner.errors["/repo:git branch -D gone"] = fmt.Errorf("branch 'gone' not found")
+	err := g.DeleteLocalBranch("/repo", "gone")
+	assert.Error(t, err)
+}
+
+// TestHasRemoteBranch_Exists tests detecting an existing remote branch
+func TestHasRemoteBranch_Exists(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	runner.responses["/repo:git ls-remote --heads origin feature"] = "abc123\trefs/heads/feature"
+	assert.True(t, g.HasRemoteBranch("/repo", "feature"))
+}
+
+// TestHasRemoteBranch_NotExists tests detecting a missing remote branch
+func TestHasRemoteBranch_NotExists(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	// Default empty response means branch doesn't exist
+	assert.False(t, g.HasRemoteBranch("/repo", "nope"))
+}
+
+// TestDeleteRemoteBranch tests deleting a remote branch
+func TestDeleteRemoteBranch(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	err := g.DeleteRemoteBranch("/repo", "feature")
+	assert.NoError(t, err)
+	assert.Contains(t, runner.lastCommand, "push origin --delete feature")
+}
+
+// TestDeleteRemoteBranch_Error tests failure when remote delete fails
+func TestDeleteRemoteBranch_Error(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	runner.errors["/repo:git push origin --delete feature"] = fmt.Errorf("remote rejected")
+	err := g.DeleteRemoteBranch("/repo", "feature")
+	assert.Error(t, err)
+}
+
 // MockRunner is a test helper for mocking git commands
 type MockRunner struct {
 	responses   map[string]string

@@ -48,11 +48,11 @@ func TestRemovePathResolution(t *testing.T) {
 		t.Fatalf("Feature worktree not found: %v", err)
 	}
 
-	// KEY TEST: Run remove from WITHIN a worktree directory
-	// This is where the bug manifests - if filepath.Abs() is used on the relative path
-	// "hops/main", it will resolve from CWD which is already "hops/feature",
-	// potentially creating paths like "/hub/hops/feature/hops/main"
-	out := env.RunGitHop(t, featureWorktreePath, "remove", "feature", "--no-prompt")
+	// Run remove from a DIFFERENT worktree (the main one)
+	// Previously this test ran from within the target worktree, but the CWD guard
+	// now correctly prevents that. The path resolution bug is still exercised
+	// because basePath is resolved relative to hubPath regardless of CWD.
+	out := env.RunGitHop(t, mainWorktreePath, "remove", "feature", "--no-prompt")
 	t.Logf("Remove command output:\n%s", out)
 
 	// THE BUG: Check for warning about failed git worktree remove with duplicated path

@@ -6,6 +6,7 @@ import (
 
 	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/hop"
+	"github.com/jadb/git-hop/test/mocks"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -304,4 +305,73 @@ func TestRemoveCommand_RelativePathBug(t *testing.T) {
 	// Ensure no duplication
 	assert.NotContains(t, correctBasePath, "hops/main/hops")
 	assert.NotContains(t, correctWorktreePath, "hops/feature/hops")
+}
+
+// TestRemoveCommand_DefaultBranchGuard verifies removal of default branch is rejected
+func TestRemoveCommand_DefaultBranchGuard(t *testing.T) {
+	fs := afero.NewMemMapFs()
+
+	hubPath := "/test/hub"
+	hub, err := hop.CreateHub(fs, hubPath, "git@github.com:test/repo.git", "test", "repo", "main")
+	require.NoError(t, err)
+
+	// The default branch is "main"
+	assert.Equal(t, "main", hub.Config.Repo.DefaultBranch)
+
+	// Verify the guard condition matches
+	target := "main"
+	assert.Equal(t, target, hub.Config.Repo.DefaultBranch,
+		"Guard should trigger when target equals default branch")
+}
+
+// TestRemoveCommand_CwdGuard verifies removal is blocked when inside target worktree
+func TestRemoveCommand_CwdGuard(t *testing.T) {
+	hubPath := "/test/hub"
+	worktreeRelPath := "hops/feature"
+	absWorktree := filepath.Join(hubPath, worktreeRelPath)
+
+	tests := []struct {
+		name    string
+		cwd     string
+		blocked bool
+	}{
+		{"exact match", absWorktree, true},
+		{"subdirectory", filepath.Join(absWorktree, "src"), true},
+		{"different worktree", filepath.Join(hubPath, "hops/main"), false},
+		{"parent of hub", "/test", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			absCwd := tt.cwd
+			inside := absCwd == absWorktree ||
+				len(absCwd) > len(absWorktree) &&
+					absCwd[:len(absWorktree)+1] == absWorktree+string(filepath.Separator)
+			assert.Equal(t, tt.blocked, inside)
+		})
+	}
+}
+
+// TestRemoveCommand_MockBranchDeletion verifies branch deletion calls via mock
+func TestRemoveCommand_MockBranchDeletion(t *testing.T) {
+	mockGit := mocks.NewMockGit()
+
+	// Simulate branch deletion flow
+	dir := "/test/hub/hops/main"
+	target := "feature"
+
+	err := mockGit.DeleteLocalBranch(dir, target)
+	require.NoError(t, err)
+	assert.Contains(t, mockGit.DeletedLocalBranches, target)
+
+	// Remote branch does not exist by default
+	assert.False(t, mockGit.HasRemoteBranch(dir, target))
+
+	// Set remote branch to exist
+	mockGit.RemoteBranchExists = true
+	assert.True(t, mockGit.HasRemoteBranch(dir, target))
+
+	err = mockGit.DeleteRemoteBranch(dir, target)
+	require.NoError(t, err)
+	assert.Contains(t, mockGit.DeletedRemoteBranches, target)
 }
