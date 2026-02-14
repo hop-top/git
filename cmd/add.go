@@ -242,4 +242,5 @@ var addCmd = &cobra.Command{
 
 func init() {
 	cli.RootCmd.AddCommand(addCmd)
+	addCmd.ValidArgsFunction = completeRemoteBranchNames
 }

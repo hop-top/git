@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -25,6 +26,10 @@ type GitInterface interface {
 	GetRemoteURL(dir string) (string, error)
 	GetCurrentBranch(dir string) (string, error)
 	GetStatus(dir string) (*Status, error)
+	DeleteLocalBranch(dir, branch string) error
+	HasRemoteBranch(dir, branch string) bool
+	DeleteRemoteBranch(dir, branch string) error
+	ListRemoteBranches(dir string) ([]string, error)
 	RunInDir(dir string, cmd string, args ...string) (string, error)
 	Run(cmd string, args ...string) (string, error)
 }
@@ -247,6 +252,44 @@ func (g *Git) GetCurrentBranch(dir string) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(out), nil
+}
+
+// DeleteLocalBranch force-deletes a local branch
+func (g *Git) DeleteLocalBranch(dir, branch string) error {
+	_, err := g.Runner.RunInDir(dir, "git", "branch", "-D", branch)
+	return err
+}
+
+// HasRemoteBranch checks whether a branch exists on the remote
+func (g *Git) HasRemoteBranch(dir, branch string) bool {
+	out, err := g.Runner.RunInDir(dir, "git", "ls-remote", "--heads", "origin", branch)
+	return err == nil && out != ""
+}
+
+// DeleteRemoteBranch deletes a branch from the remote
+func (g *Git) DeleteRemoteBranch(dir, branch string) error {
+	_, err := g.Runner.RunInDir(dir, "git", "push", "origin", "--delete", branch)
+	return err
+}
+
+// ListRemoteBranches returns remote branch names with the origin/ prefix stripped.
+// Filters out HEAD pointer lines.
+func (g *Git) ListRemoteBranches(dir string) ([]string, error) {
+	out, err := g.Runner.RunInDir(dir, "git", "branch", "-r")
+	if err != nil {
+		return nil, err
+	}
+	var branches []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.Contains(line, "->") {
+			continue
+		}
+		branch := strings.TrimPrefix(line, "origin/")
+		branches = append(branches, branch)
+	}
+	sort.Strings(branches)
+	return branches, nil
 }
 
 // RunInDir executes a command in the specified directory

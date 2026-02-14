@@ -237,4 +237,5 @@ var removeCmd = &cobra.Command{
 func init() {
 	cli.RootCmd.AddCommand(removeCmd)
 	removeCmd.Flags().Bool("no-prompt", false, "Do not prompt for confirmation")
+	removeCmd.ValidArgsFunction = completeBranchNames
 }

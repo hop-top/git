@@ -6,10 +6,14 @@ import (
 
 // MockGit is a mock implementation of the Git interface for testing
 type MockGit struct {
-	Runner               *MockCommandRunner
-	CreatedWorktrees     []string
-	LastWorktreeBasePath string
-	LastWorktreeBranch   string
+	Runner                *MockCommandRunner
+	CreatedWorktrees      []string
+	LastWorktreeBasePath  string
+	LastWorktreeBranch    string
+	DeletedLocalBranches  []string
+	DeletedRemoteBranches []string
+	RemoteBranchExists    bool
+	RemoteBranches        []string
 }
 
 // MockCommandRunner is a mock implementation of CommandRunner for testing
@@ -136,6 +140,28 @@ func (m *MockGit) GetStatus(dir string) (*git.Status, error) {
 		Ahead:  0,
 		Behind: 0,
 	}, nil
+}
+
+// DeleteLocalBranch mocks deleting a local branch
+func (m *MockGit) DeleteLocalBranch(dir, branch string) error {
+	m.DeletedLocalBranches = append(m.DeletedLocalBranches, branch)
+	return nil
+}
+
+// HasRemoteBranch mocks checking for a remote branch
+func (m *MockGit) HasRemoteBranch(dir, branch string) bool {
+	return m.RemoteBranchExists
+}
+
+// ListRemoteBranches mocks listing remote branches
+func (m *MockGit) ListRemoteBranches(dir string) ([]string, error) {
+	return m.RemoteBranches, nil
+}
+
+// DeleteRemoteBranch mocks deleting a remote branch
+func (m *MockGit) DeleteRemoteBranch(dir, branch string) error {
+	m.DeletedRemoteBranches = append(m.DeletedRemoteBranches, branch)
+	return nil
 }
 
 // RunInDir executes a mocked command in a specific directory

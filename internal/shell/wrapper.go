@@ -56,6 +56,20 @@ git-hop() {
 
     return $exit_code
 }
+
+# git-hop tab completion
+_git_hop() {
+    local cur prev words cword
+    _init_completion -n : || return
+
+    local completions
+    completions=$(command git-hop __complete "${words[@]:1}" 2>/dev/null)
+    if [[ $? -eq 0 ]]; then
+        COMPREPLY=($(compgen -W "$completions" -- "$cur"))
+        __ltrim_colon_completions "$cur"
+    fi
+}
+complete -o default -F _git_hop git-hop
 `
 }
 
@@ -96,5 +110,8 @@ function git-hop
 
     return $exit_code
 end
+
+# git-hop tab completion
+complete -c git-hop -f -a '(command git-hop __complete (commandline -cop) 2>/dev/null)'
 `
 }
