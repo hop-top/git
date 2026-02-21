@@ -10,6 +10,8 @@ git-hop includes a flexible hooks system that allows you to run custom scripts a
 |-----------|-------------|
 | `pre-worktree-add` | Before creating a new worktree |
 | `post-worktree-add` | After successfully creating a worktree |
+| `pre-worktree-remove` | Before removing a worktree |
+| `post-worktree-remove` | After successfully removing a worktree |
 | `pre-env-start` | Before starting Docker/environment services |
 | `post-env-start` | After successfully starting services |
 | `pre-env-stop` | Before stopping environment services |
@@ -113,6 +115,19 @@ All hooks receive these environment variables:
 | `GIT_HOP_REPO_ID` | Repository identifier | `github.com/org/repo` |
 | `GIT_HOP_BRANCH` | Branch name | `feature-x` |
 
+### Branch Type Detection Variables
+
+When a branch type is detected (via git-flow-next or custom prefixes), these additional variables are available:
+
+| Variable | Description | Example |
+|----------|-------------|---------|
+| `GIT_HOP_BRANCH_TYPE` | Detected branch type | `feature` |
+| `GIT_HOP_BRANCH_NAME` | Branch name without prefix | `my-feature` |
+| `GIT_HOP_BRANCH_PREFIX` | Matched prefix | `feature/` |
+| `GIT_HOP_BRANCH_PARENT` | Parent branch for this type | `develop` |
+| `GIT_HOP_BRANCH_START_POINT` | Branch to start from | `develop` |
+| `GIT_HOP_DETECTOR_SOURCE` | Which detector matched | `gitflow-next` |
+
 Example hook using these variables:
 
 ```bash
@@ -122,12 +137,22 @@ echo "Repo: $GIT_HOP_REPO_ID"
 echo "Branch: $GIT_HOP_BRANCH"
 echo "Path: $GIT_HOP_WORKTREE_PATH"
 
+# Branch type detection (if available)
+if [ -n "$GIT_HOP_BRANCH_TYPE" ]; then
+    echo "Branch Type: $GIT_HOP_BRANCH_TYPE"
+    echo "Branch Name: $GIT_HOP_BRANCH_NAME"
+    echo "Parent Branch: $GIT_HOP_BRANCH_PARENT"
+    echo "Detected by: $GIT_HOP_DETECTOR_SOURCE"
+fi
+
 # Change to worktree directory
 cd "$GIT_HOP_WORKTREE_PATH"
 
 # Branch-specific logic
 if [ "$GIT_HOP_BRANCH" = "main" ]; then
     echo "Running production setup..."
+elif [ "$GIT_HOP_BRANCH_TYPE" = "feature" ]; then
+    echo "Running feature setup..."
 else
     echo "Running development setup..."
 fi
@@ -281,6 +306,108 @@ fi
 
 echo "✓ Branch name is valid"
 exit 0
+```
+
+### 7. Git-Flow Integration
+
+git-hop has **built-in integration** with [git-flow-next](https://github.com/gittower/git-flow-next) that automatically detects branch types and runs appropriate git-flow commands.
+
+#### Built-in Detection
+
+When you run `git hop add feature/my-feature`, git-hop:
+
+1. **Detects the branch type** by reading your git-flow configuration
+2. **Runs `git flow feature start my-feature`** automatically
+3. **Creates the worktree**
+4. **Sets environment variables** for hooks to use
+
+Similarly, `git hop remove feature/my-feature` will run `git flow feature finish my-feature` before removing the worktree.
+
+This works with **any branch types configured in git-flow-next**, including custom types:
+
+```bash
+# Configure a custom branch type in git-flow
+git config gitflow.branch.bugfix.type topic
+git config gitflow.branch.bugfix.parent develop
+git config gitflow.branch.bugfix.prefix bugfix/
+
+# git-hop automatically detects it
+git hop add bugfix/fix-login  # Runs: git flow bugfix start fix-login
+```
+
+#### Environment Variables
+
+When a branch type is detected, hooks receive these additional variables:
+
+| Variable | Description |
+|----------|-------------|
+| `GIT_HOP_BRANCH_TYPE` | The detected branch type (feature, release, etc.) |
+| `GIT_HOP_BRANCH_NAME` | Branch name without prefix |
+| `GIT_HOP_BRANCH_PARENT` | Parent branch from git-flow config |
+| `GIT_HOP_DETECTOR_SOURCE` | Which detector matched (`gitflow-next` or `generic`) |
+
+#### Example: Extend Git-Flow Behavior
+
+Hooks can extend the built-in git-flow integration:
+
+```bash
+#!/bin/bash
+# post-worktree-add - Run tests after feature branch starts
+
+# Only for feature branches
+if [ "$GIT_HOP_BRANCH_TYPE" = "feature" ]; then
+    cd "$GIT_HOP_WORKTREE_PATH"
+    
+    echo "Running initial tests for $GIT_HOP_BRANCH_NAME..."
+    npm test
+fi
+```
+
+#### Example: Custom Validation
+
+```bash
+#!/bin/bash
+# pre-worktree-add - Validate branch names
+
+# Use detected branch type info
+if [ -n "$GIT_HOP_BRANCH_TYPE" ]; then
+    echo "Detected $GIT_HOP_BRANCH_TYPE branch: $GIT_HOP_BRANCH_NAME"
+    
+    # Ensure release branches follow semver
+    if [ "$GIT_HOP_BRANCH_TYPE" = "release" ]; then
+        if [[ ! "$GIT_HOP_BRANCH_NAME" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Error: Release must use semver (e.g., v1.2.3)"
+            exit 1
+        fi
+    fi
+fi
+
+exit 0
+```
+
+#### Workflow
+
+| Command | Built-in Action | Git-Hop Action |
+|---------|-----------------|----------------|
+| `git hop add feature/my-feature` | `git flow feature start my-feature` | Creates worktree |
+| `git hop remove feature/my-feature` | `git flow feature finish my-feature` | Removes worktree |
+| `git hop add release/v1.0.0` | `git flow release start v1.0.0` | Creates worktree |
+| `git hop remove release/v1.0.0` | `git flow release finish v1.0.0` | Removes worktree |
+
+#### Manual Hook Integration (Optional)
+
+If you need custom git-flow behavior not handled by the built-in detector, you can still use hooks:
+
+```bash
+#!/bin/bash
+# pre-worktree-add - Custom git-flow logic
+
+# Skip if git-flow-next already handled it
+if [ "$GIT_HOP_DETECTOR_SOURCE" = "gitflow-next" ]; then
+    exit 0  # Already handled by built-in detector
+fi
+
+# Your custom logic here
 ```
 
 ## Installing Hook Directories
