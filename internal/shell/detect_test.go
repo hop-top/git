@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/jadb/git-hop/internal/shell"
+	"hop.top/git/internal/shell"
 )
 
 func TestDetectShell(t *testing.T) {

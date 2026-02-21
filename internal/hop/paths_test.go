@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/jadb/git-hop/internal/hop"
+	"hop.top/git/internal/hop"
 )
 
 func TestGetDataHome(t *testing.T) {

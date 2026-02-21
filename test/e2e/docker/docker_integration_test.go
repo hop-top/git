@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	e2e "github.com/jadb/git-hop/test/e2e"
+	e2e "hop.top/git/test/e2e"
 )
 
 // TestDockerIntegration_BasicStartup tests basic Docker container startup and health verification.

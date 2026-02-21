@@ -3,10 +3,10 @@ package cmd
 import (
 	"os"
 
-	"github.com/jadb/git-hop/internal/cli"
-	"github.com/jadb/git-hop/internal/git"
-	"github.com/jadb/git-hop/internal/hooks"
-	"github.com/jadb/git-hop/internal/output"
+	"hop.top/git/internal/cli"
+	"hop.top/git/internal/git"
+	"hop.top/git/internal/hooks"
+	"hop.top/git/internal/output"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )

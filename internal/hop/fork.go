@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/git"
-	"github.com/jadb/git-hop/internal/output"
-	"github.com/jadb/git-hop/internal/state"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
+	"hop.top/git/internal/output"
+	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 )
 

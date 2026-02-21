@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/docker"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/docker"
 )
 
 // EnvironmentManager represents an environment manager (docker-compose, podman, etc.)

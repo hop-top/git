@@ -3,7 +3,7 @@ package services_test
 import (
 	"testing"
 
-	"github.com/jadb/git-hop/internal/services"
+	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
 )
 

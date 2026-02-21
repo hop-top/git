@@ -1,9 +1,9 @@
 package cmd
 
 import (
-	"github.com/jadb/git-hop/internal/cli"
-	"github.com/jadb/git-hop/internal/output"
-	"github.com/jadb/git-hop/internal/state"
+	"hop.top/git/internal/cli"
+	"hop.top/git/internal/output"
+	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )

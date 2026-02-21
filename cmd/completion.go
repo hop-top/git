@@ -3,7 +3,7 @@ package cmd
 import (
 	"os"
 
-	"github.com/jadb/git-hop/internal/cli"
+	"hop.top/git/internal/cli"
 	"github.com/spf13/cobra"
 )
 

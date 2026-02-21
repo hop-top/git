@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jadb/git-hop/internal/git"
+	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
 )
 

@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/state"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

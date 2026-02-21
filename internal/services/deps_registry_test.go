@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jadb/git-hop/internal/services"
+	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
 )
 

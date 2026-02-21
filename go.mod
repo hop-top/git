@@ -1,4 +1,4 @@
-module github.com/jadb/git-hop
+module hop.top/git
 
 go 1.25.3
 

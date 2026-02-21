@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jadb/git-hop/internal/config"
+	"hop.top/git/internal/config"
 )
 
 func TestShellIntegrationStatus(t *testing.T) {

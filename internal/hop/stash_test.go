@@ -3,8 +3,8 @@ package hop_test
 import (
 	"testing"
 
-	"github.com/jadb/git-hop/internal/git"
-	"github.com/jadb/git-hop/internal/hop"
+	"hop.top/git/internal/git"
+	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
 )
 

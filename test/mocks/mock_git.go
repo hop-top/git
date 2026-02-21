@@ -1,7 +1,7 @@
 package mocks
 
 import (
-	"github.com/jadb/git-hop/internal/git"
+	"hop.top/git/internal/git"
 )
 
 // MockGit is a mock implementation of the Git interface for testing

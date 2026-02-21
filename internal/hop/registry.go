@@ -8,7 +8,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/jadb/git-hop/internal/config"
+	"hop.top/git/internal/config"
 	"github.com/spf13/afero"
 )
 

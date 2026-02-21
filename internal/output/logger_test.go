@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jadb/git-hop/internal/output"
+	"hop.top/git/internal/output"
 )
 
 func TestSetupLogger(t *testing.T) {

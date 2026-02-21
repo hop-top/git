@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 
-	"github.com/jadb/git-hop/internal/config"
+	"hop.top/git/internal/config"
 )
 
 // PortAllocator handles port allocation

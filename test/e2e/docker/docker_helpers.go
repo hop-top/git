@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jadb/git-hop/internal/docker"
+	"hop.top/git/internal/docker"
 )
 
 // SkipIfDockerNotAvailable checks if Docker is available and skips the test if not

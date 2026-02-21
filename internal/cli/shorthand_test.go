@@ -3,7 +3,7 @@ package cli_test
 import (
 	"testing"
 
-	"github.com/jadb/git-hop/internal/cli"
+	"hop.top/git/internal/cli"
 )
 
 func TestExpandShorthand(t *testing.T) {

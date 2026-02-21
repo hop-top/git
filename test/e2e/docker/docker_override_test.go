@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	e2e "github.com/jadb/git-hop/test/e2e"
+	e2e "hop.top/git/test/e2e"
 )
 
 // TestDockerOverride_HardcodedPortIsolation verifies that git-hop automatically generates

@@ -21,7 +21,7 @@ THE SOFTWARE.
 */
 package main
 
-import "github.com/jadb/git-hop/cmd"
+import "hop.top/git/cmd"
 
 var (
 	version = "dev"

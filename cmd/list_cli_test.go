@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jadb/git-hop/cmd"
-	"github.com/jadb/git-hop/internal/cli"
+	"hop.top/git/cmd"
+	"hop.top/git/internal/cli"
 )
 
 func TestListCommand_Help(t *testing.T) {

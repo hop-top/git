@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/jadb/git-hop/internal/hop"
+	"hop.top/git/internal/hop"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

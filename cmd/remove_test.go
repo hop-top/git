@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/hop"
-	"github.com/jadb/git-hop/test/mocks"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/hop"
+	"hop.top/git/test/mocks"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

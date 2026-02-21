@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	e2e "github.com/jadb/git-hop/test/e2e"
+	e2e "hop.top/git/test/e2e"
 )
 
 // TestDockerRealWorld_NextJS tests git-hop with a real Next.js application from the official Next.js repository.

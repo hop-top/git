@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/jadb/git-hop/internal/output"
+	"hop.top/git/internal/output"
 )
 
 func main() {

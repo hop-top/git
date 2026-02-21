@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/shell"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/shell"
 	"github.com/spf13/afero"
 )
 

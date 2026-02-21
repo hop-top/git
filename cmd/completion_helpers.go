@@ -4,9 +4,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/git"
-	"github.com/jadb/git-hop/internal/hop"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
+	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )

@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jadb/git-hop/test/e2e"
+	"hop.top/git/test/e2e"
 )
 
 // TestDockerIsolation_PortIsolation verifies that different branches get different ports

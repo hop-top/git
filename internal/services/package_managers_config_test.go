@@ -3,8 +3,8 @@ package services_test
 import (
 	"testing"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/services"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/services"
 )
 
 func TestLoadPackageManagers_CustomConfig(t *testing.T) {

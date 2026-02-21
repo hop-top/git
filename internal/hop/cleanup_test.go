@@ -3,8 +3,8 @@ package hop
 import (
 	"testing"
 
-	"github.com/jadb/git-hop/internal/config"
-	"github.com/jadb/git-hop/internal/git"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
