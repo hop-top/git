@@ -12,6 +12,7 @@ import (
 	"github.com/jadb/git-hop/internal/config"
 	"github.com/jadb/git-hop/internal/docker"
 	"github.com/jadb/git-hop/internal/git"
+	"github.com/jadb/git-hop/internal/hooks"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
 	"github.com/jadb/git-hop/internal/services"
@@ -76,9 +77,29 @@ var addCmd = &cobra.Command{
 			globalConfig = globalLoader.GetDefaults()
 		}
 
+		// Calculate worktree path (needed for pre-worktree-add hook)
+		dataHome := hop.GetGitHopDataHome()
+		ctx := hop.WorktreeLocationContext{
+			HubPath:  hubPath,
+			Branch:   branch,
+			Org:      hub.Config.Repo.Org,
+			Repo:     hub.Config.Repo.Repo,
+			DataHome: dataHome,
+		}
+		worktreePath := hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx)
+		worktreePath = filepath.Clean(worktreePath)
+
+		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+		// Execute pre-worktree-add hook
+		hookRunner := hooks.NewRunner(fs)
+		if err := hookRunner.ExecuteHook("pre-worktree-add", worktreePath, repoID, branch); err != nil {
+			output.Fatal("Hook pre-worktree-add failed: %v", err)
+		}
+
 		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
-		worktreePath, err := wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 		if err != nil {
 			// Check if it's a state error
 			if stateErr, ok := err.(*hop.StateError); ok {
@@ -88,6 +109,11 @@ var addCmd = &cobra.Command{
 				os.Exit(1)
 			}
 			output.Fatal("Failed to create worktree: %v", err)
+		}
+
+		// Execute post-worktree-add hook
+		if err := hookRunner.ExecuteHook("post-worktree-add", worktreePath, repoID, branch); err != nil {
+			output.Warn("Hook post-worktree-add failed: %v", err)
 		}
 
 		// Register in Hopspace
@@ -105,8 +131,6 @@ var addCmd = &cobra.Command{
 		if err != nil {
 			st = state.NewState()
 		}
-
-		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 		// Ensure repository exists in state
 		if st.Repositories[repoID] == nil {
@@ -218,6 +242,11 @@ var addCmd = &cobra.Command{
 		}
 		output.Info("Worktree: %s", relPath)
 
+		// If running inside an AI coding agent, hint how to add the worktree directory
+		if hint := agentDirHint(worktreePath); hint != "" {
+			output.Info("Run: %s", hint)
+		}
+
 		if branchPorts != nil && len(branchPorts.Ports) > 0 {
 			var minPort, maxPort int
 			var servicesList []string
@@ -238,6 +267,19 @@ var addCmd = &cobra.Command{
 			output.Info("Services: %s", strings.Join(servicesList, ", "))
 		}
 	},
+}
+
+// agentDirHint returns a slash command hint for adding the worktree directory
+// to the current session when running inside a supported AI coding agent.
+func agentDirHint(path string) string {
+	switch {
+	case os.Getenv("CLAUDE_CODE") == "1":
+		return fmt.Sprintf("/add-dir %s", path)
+	case os.Getenv("GEMINI_CLI") == "1":
+		return fmt.Sprintf("/directory add %s", path)
+	default:
+		return ""
+	}
 }
 
 func init() {
