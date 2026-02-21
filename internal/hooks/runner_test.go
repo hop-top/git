@@ -167,6 +167,8 @@ func TestValidateHookName(t *testing.T) {
 	}{
 		{"valid pre-worktree-add", "pre-worktree-add", true},
 		{"valid post-worktree-add", "post-worktree-add", true},
+		{"valid pre-worktree-remove", "pre-worktree-remove", true},
+		{"valid post-worktree-remove", "post-worktree-remove", true},
 		{"valid pre-env-start", "pre-env-start", true},
 		{"valid post-env-start", "post-env-start", true},
 		{"valid pre-env-stop", "pre-env-stop", true},

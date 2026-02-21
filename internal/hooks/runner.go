@@ -25,6 +25,8 @@ func NewRunner(fs afero.Fs) *Runner {
 var ValidHookNames = []string{
 	"pre-worktree-add",
 	"post-worktree-add",
+	"pre-worktree-remove",
+	"post-worktree-remove",
 	"pre-env-start",
 	"post-env-start",
 	"pre-env-stop",
@@ -50,11 +52,19 @@ func ValidateHookName(hookName string) error {
 // 1. Repo override (.git-hop/hooks/<hook-name>)
 // 2. Hopspace hook ($XDG_DATA_HOME/git-hop/<org>/<repo>/hooks/<hook-name>)
 // 3. Global hook ($XDG_CONFIG_HOME/git-hop/hooks/<hook-name>)
+//
+// For repo-level hooks, we also search parent directories to find hooks
+// at the hub level (useful for sharing hooks across worktrees)
 func (r *Runner) FindHookFile(hookName string, worktreePath string, repoID string) string {
-	// Priority 1: Repo-level override
+	// Priority 1: Repo-level override (also check parent dirs for hub-level hooks)
 	repoHook := filepath.Join(worktreePath, ".git-hop", "hooks", hookName)
 	if exists, _ := afero.Exists(r.fs, repoHook); exists {
 		return repoHook
+	}
+
+	// Also check parent directories for repo-level hooks at hub level
+	if hook := r.findHookInParentDirs(hookName, worktreePath); hook != "" {
+		return hook
 	}
 
 	dataHome := getDataHome()
@@ -74,6 +84,25 @@ func (r *Runner) FindHookFile(hookName string, worktreePath string, repoID strin
 	}
 
 	// No hook found
+	return ""
+}
+
+// findHookInParentDirs searches for a hook in parent directories
+// This is used for pre-worktree-add since the worktree doesn't exist yet
+func (r *Runner) findHookInParentDirs(hookName string, startPath string) string {
+	dir := startPath
+	for {
+		hookPath := filepath.Join(dir, ".git-hop", "hooks", hookName)
+		if exists, _ := afero.Exists(r.fs, hookPath); exists {
+			return hookPath
+		}
+
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break
+		}
+		dir = parent
+	}
 	return ""
 }
 
@@ -105,6 +134,46 @@ func (r *Runner) ExecuteHook(hookName string, worktreePath string, repoID string
 	}
 
 	env := r.GetHookEnv(hookName, worktreePath, repoID, branch)
+
+	cmd := exec.Command(hookFile, args...)
+	cmd.Env = append(os.Environ(), env...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("hook %s failed: %w", hookName, err)
+	}
+
+	return nil
+}
+
+// ExecuteHookWithDetector executes a hook with additional detector environment variables
+func (r *Runner) ExecuteHookWithDetector(hookName string, worktreePath string, repoID string, branch string, detectorEnv map[string]string, args ...string) error {
+	if err := ValidateHookName(hookName); err != nil {
+		return err
+	}
+
+	hookFile := r.FindHookFile(hookName, worktreePath, repoID)
+	if hookFile == "" {
+		return nil
+	}
+
+	info, err := r.fs.Stat(hookFile)
+	if err != nil {
+		return fmt.Errorf("failed to stat hook file: %w", err)
+	}
+
+	if runtime.GOOS != "windows" {
+		if info.Mode()&0111 == 0 {
+			return fmt.Errorf("hook file is not executable: %s", hookFile)
+		}
+	}
+
+	env := r.GetHookEnv(hookName, worktreePath, repoID, branch)
+
+	for k, v := range detectorEnv {
+		env = append(env, fmt.Sprintf("%s=%s", k, v))
+	}
 
 	cmd := exec.Command(hookFile, args...)
 	cmd.Env = append(os.Environ(), env...)
