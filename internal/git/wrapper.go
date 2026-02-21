@@ -32,6 +32,10 @@ type GitInterface interface {
 	ListRemoteBranches(dir string) ([]string, error)
 	RunInDir(dir string, cmd string, args ...string) (string, error)
 	Run(cmd string, args ...string) (string, error)
+	GetConfig(dir, key string) (string, error)
+	GetConfigRegex(dir, pattern string) (map[string]string, error)
+	RunGitFlowStart(dir, branchType, name string) error
+	RunGitFlowFinish(dir, branchType, name string) error
 }
 
 // Git wraps git command execution
@@ -345,4 +349,44 @@ func parseRepoFromURL(uri string) (org, repo string) {
 	}
 
 	return "", ""
+}
+
+// GetConfig retrieves a git config value
+func (g *Git) GetConfig(dir, key string) (string, error) {
+	return g.Runner.RunInDir(dir, "git", "config", "--get", key)
+}
+
+// GetConfigRegex retrieves all git config values matching a regex pattern
+func (g *Git) GetConfigRegex(dir, pattern string) (map[string]string, error) {
+	out, err := g.Runner.RunInDir(dir, "git", "config", "--get-regexp", pattern)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make(map[string]string)
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) == 2 {
+			result[parts[0]] = parts[1]
+		} else if len(parts) == 1 {
+			result[parts[0]] = ""
+		}
+	}
+	return result, nil
+}
+
+// RunGitFlowStart executes git flow <type> start <name>
+func (g *Git) RunGitFlowStart(dir, branchType, name string) error {
+	_, err := g.Runner.RunInDir(dir, "git", "flow", branchType, "start", name)
+	return err
+}
+
+// RunGitFlowFinish executes git flow <type> finish <name>
+func (g *Git) RunGitFlowFinish(dir, branchType, name string) error {
+	_, err := g.Runner.RunInDir(dir, "git", "flow", branchType, "finish", name)
+	return err
 }

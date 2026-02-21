@@ -174,6 +174,36 @@ func (m *MockGit) Run(cmd string, args ...string) (string, error) {
 	return m.Runner.Run(cmd, args...)
 }
 
+// GetConfig mocks getting a git config value
+func (m *MockGit) GetConfig(dir, key string) (string, error) {
+	return m.Runner.RunInDir(dir, "git", "config", "--get", key)
+}
+
+// GetConfigRegex mocks getting git config values matching a regex
+func (m *MockGit) GetConfigRegex(dir, pattern string) (map[string]string, error) {
+	out, err := m.Runner.RunInDir(dir, "git", "config", "--get-regexp", pattern)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]string)
+	if out == "" {
+		return result, nil
+	}
+	return result, nil
+}
+
+// RunGitFlowStart mocks running git flow start
+func (m *MockGit) RunGitFlowStart(dir, branchType, name string) error {
+	_, err := m.Runner.RunInDir(dir, "git", "flow", branchType, "start", name)
+	return err
+}
+
+// RunGitFlowFinish mocks running git flow finish
+func (m *MockGit) RunGitFlowFinish(dir, branchType, name string) error {
+	_, err := m.Runner.RunInDir(dir, "git", "flow", branchType, "finish", name)
+	return err
+}
+
 // NewMockGit creates a new MockGit instance for testing
 func NewMockGit() *MockGit {
 	return &MockGit{
