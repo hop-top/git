@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,7 +9,9 @@ import (
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/config"
+	"github.com/jadb/git-hop/internal/detector"
 	"github.com/jadb/git-hop/internal/git"
+	"github.com/jadb/git-hop/internal/hooks"
 	"github.com/jadb/git-hop/internal/hop"
 	"github.com/jadb/git-hop/internal/output"
 	"github.com/jadb/git-hop/internal/state"
@@ -79,6 +82,27 @@ var removeCmd = &cobra.Command{
 				branchConfig := hub.Config.Branches[target]
 				// Resolve the worktree path (may be relative like "hops/branch")
 				worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
+
+				repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+				// Create detector manager and register detectors
+				detectorMgr := detector.NewManager(fs, g)
+				detectorMgr.Register(detector.NewGitFlowNextDetector(g))
+				detectorMgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
+
+				// Execute pre-remove (detector OnRemove)
+				detectorCtx := context.Background()
+				branchInfo, err := detectorMgr.ExecutePreRemove(detectorCtx, target, hubPath, worktreePath)
+				if err != nil {
+					output.Fatal("Branch type detector failed: %v", err)
+				}
+
+				// Execute pre-worktree-remove hook with detector env vars
+				hookRunner := hooks.NewRunner(fs)
+				detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
+				if err := hookRunner.ExecuteHookWithDetector("pre-worktree-remove", worktreePath, repoID, target, detectorEnv); err != nil {
+					output.Fatal("Hook pre-worktree-remove failed: %v", err)
+				}
 
 				// We need to remove the symlink and update config
 				if err := hub.RemoveBranch(target); err != nil {
@@ -154,7 +178,6 @@ var removeCmd = &cobra.Command{
 				// Update global state
 				st, err := state.LoadState(fs)
 				if err == nil {
-					repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 					if err := st.RemoveWorktree(repoID, target); err != nil {
 						output.Warn("Failed to update state: %v", err)
 					} else {
@@ -162,6 +185,11 @@ var removeCmd = &cobra.Command{
 							output.Warn("Failed to save state: %v", err)
 						}
 					}
+				}
+
+				// Execute post-worktree-remove hook
+				if err := hookRunner.ExecuteHookWithDetector("post-worktree-remove", worktreePath, repoID, target, detectorEnv); err != nil {
+					output.Warn("Hook post-worktree-remove failed: %v", err)
 				}
 
 				output.Info("Successfully removed %s", target)

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/jadb/git-hop/internal/cli"
 	"github.com/jadb/git-hop/internal/config"
+	"github.com/jadb/git-hop/internal/detector"
 	"github.com/jadb/git-hop/internal/docker"
 	"github.com/jadb/git-hop/internal/git"
 	"github.com/jadb/git-hop/internal/hooks"
@@ -91,9 +93,22 @@ var addCmd = &cobra.Command{
 
 		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
-		// Execute pre-worktree-add hook
+		// Create detector manager and register detectors
+		detectorMgr := detector.NewManager(fs, g)
+		detectorMgr.Register(detector.NewGitFlowNextDetector(g))
+		detectorMgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
+
+		// Execute pre-add (detector OnAdd)
+		detectorCtx := context.Background()
+		branchInfo, err := detectorMgr.ExecutePreAdd(detectorCtx, branch, hubPath, worktreePath)
+		if err != nil {
+			output.Fatal("Branch type detector failed: %v", err)
+		}
+
+		// Execute pre-worktree-add hook with detector env vars
 		hookRunner := hooks.NewRunner(fs)
-		if err := hookRunner.ExecuteHook("pre-worktree-add", worktreePath, repoID, branch); err != nil {
+		detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
+		if err := hookRunner.ExecuteHookWithDetector("pre-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
 			output.Fatal("Hook pre-worktree-add failed: %v", err)
 		}
 
@@ -112,7 +127,7 @@ var addCmd = &cobra.Command{
 		}
 
 		// Execute post-worktree-add hook
-		if err := hookRunner.ExecuteHook("post-worktree-add", worktreePath, repoID, branch); err != nil {
+		if err := hookRunner.ExecuteHookWithDetector("post-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
 			output.Warn("Hook post-worktree-add failed: %v", err)
 		}
 
