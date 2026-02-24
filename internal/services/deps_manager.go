@@ -75,6 +75,19 @@ func NewDepsManager(fs afero.Fs, repoPath string, globalConfig *config.GlobalCon
 	}, nil
 }
 
+// NewDepsManagerFromParts creates a DepsManager from pre-built components.
+// This is primarily useful in tests where commands are not available on PATH.
+func NewDepsManagerFromParts(fs afero.Fs, repoPath string, registry *DepsRegistry, pms []PackageManager, hopspaceConfig *config.HopspaceConfig) *DepsManager {
+	return &DepsManager{
+		Registry:        registry,
+		RepoPath:        repoPath,
+		PackageManagers: pms,
+		HopspaceConfig:  hopspaceConfig,
+		fs:              fs,
+		trash:           NewTrash(fs),
+	}
+}
+
 // EnsureDeps ensures dependencies are set up for a worktree
 func (m *DepsManager) EnsureDeps(worktreePath, branch string) error {
 	// Detect package managers in this worktree
@@ -134,31 +147,37 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 		m.Registry.UpdateEntryMetadata(depsKey, hash, filepath.Base(lockfilePath))
 	}
 
-	// Check if symlink exists and is correct
-	symlinkExists, err := afero.Exists(m.fs, symlinkPath)
-	if err != nil {
-		return fmt.Errorf("failed to check symlink existence: %w", err)
+	// Check if something exists at the symlink path.
+	// ReadlinkIfPossible is checked first because afero.Exists follows symlinks
+	// and returns false for dangling symlinks, causing createSymlink to fail
+	// with "file exists" when the dangling symlink is still on disk.
+	isSymlink := false
+	var currentTarget string
+	if linker, ok := m.fs.(afero.Symlinker); ok {
+		target, err := linker.ReadlinkIfPossible(symlinkPath)
+		if err == nil {
+			isSymlink = true
+			currentTarget = target
+		}
 	}
 
-	if symlinkExists {
-		isSymlink := false
-		if linker, ok := m.fs.(afero.Symlinker); ok {
-			target, err := linker.ReadlinkIfPossible(symlinkPath)
-			if err == nil {
-				// It's a symlink
-				isSymlink = true
-				if target == depsPath {
-					// Symlink is correct, just update usage
-					m.Registry.AddUsage(depsKey, branch)
-					return nil
-				}
-				// Symlink points to wrong target, remove it
-				if err := m.fs.Remove(symlinkPath); err != nil {
-					return fmt.Errorf("failed to remove stale symlink: %w", err)
-				}
-			}
+	if isSymlink {
+		if currentTarget == depsPath {
+			// Symlink is correct, just update usage
+			m.Registry.AddUsage(depsKey, branch)
+			return nil
 		}
-		if !isSymlink {
+		// Symlink points to wrong or dangling target, remove it
+		if err := m.fs.Remove(symlinkPath); err != nil {
+			return fmt.Errorf("failed to remove stale symlink: %w", err)
+		}
+	} else {
+		// Check if a real directory exists at the path
+		symlinkExists, err := afero.Exists(m.fs, symlinkPath)
+		if err != nil {
+			return fmt.Errorf("failed to check symlink existence: %w", err)
+		}
+		if symlinkExists {
 			// Real directory - move to trash
 			if _, err := m.trash.Move(symlinkPath); err != nil {
 				return fmt.Errorf("failed to trash local deps: %w", err)
@@ -241,26 +260,10 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 			expectedDepsPath := m.getDepsPath(expectedDepsKey)
 			symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
 
-			// Check what's at the symlink path
-			symlinkExists, err := afero.Exists(m.fs, symlinkPath)
-			if err != nil {
-				continue
-			}
-
-			if !symlinkExists {
-				// Missing deps
-				issues = append(issues, Issue{
-					Type:         IssueMissingDeps,
-					WorktreePath: worktreePath,
-					Branch:       branch,
-					PM:           pm,
-					ExpectedHash: expectedHash,
-					DepsKey:      expectedDepsKey,
-				})
-				continue
-			}
-
-			// Check if it's a symlink
+			// Check what's at the symlink path.
+			// ReadlinkIfPossible is checked first because afero.Exists follows
+			// symlinks and returns false for dangling symlinks, which would
+			// incorrectly classify them as IssueMissingDeps.
 			isSymlink := false
 			var currentTarget string
 			if linker, ok := m.fs.(afero.Symlinker); ok {
@@ -272,6 +275,25 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 			}
 
 			if !isSymlink {
+				// Not a symlink - check if a real path exists
+				symlinkExists, err := afero.Exists(m.fs, symlinkPath)
+				if err != nil {
+					continue
+				}
+
+				if !symlinkExists {
+					// Missing deps
+					issues = append(issues, Issue{
+						Type:         IssueMissingDeps,
+						WorktreePath: worktreePath,
+						Branch:       branch,
+						PM:           pm,
+						ExpectedHash: expectedHash,
+						DepsKey:      expectedDepsKey,
+					})
+					continue
+				}
+
 				// Local folder instead of symlink
 				size := m.getDirSize(symlinkPath)
 				issues = append(issues, Issue{
@@ -286,12 +308,15 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 				continue
 			}
 
-			// It's a symlink - check if it points to the right place
+			// It's a symlink - check if it points to the right place.
+			// Errors from Exists are intentionally ignored here: a failure to stat
+			// the target (e.g., permission denied) is treated the same as missing,
+			// which is conservative — we'd rather report a broken symlink than
+			// silently skip a genuinely inaccessible target.
+			targetExists, _ := afero.Exists(m.fs, currentTarget)
 			if currentTarget != expectedDepsPath {
-				// Check if target exists
-				targetExists, _ := afero.Exists(m.fs, currentTarget)
 				if !targetExists {
-					// Broken symlink
+					// Broken symlink (points to non-existent target)
 					issues = append(issues, Issue{
 						Type:          IssueBrokenSymlink,
 						WorktreePath:  worktreePath,
@@ -313,6 +338,18 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 						SymlinkTarget: currentTarget,
 					})
 				}
+			} else if !targetExists {
+				// Symlink points to the correct key but the target directory is missing
+				// (e.g., it was garbage-collected while the symlink still referenced it)
+				issues = append(issues, Issue{
+					Type:          IssueBrokenSymlink,
+					WorktreePath:  worktreePath,
+					Branch:        branch,
+					PM:            pm,
+					ExpectedHash:  expectedHash,
+					DepsKey:       expectedDepsKey,
+					SymlinkTarget: currentTarget,
+				})
 			}
 		}
 	}

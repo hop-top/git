@@ -142,34 +142,26 @@ func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees map[string]st
 			return fmt.Errorf("failed to detect package managers in %s: %w", worktreePath, err)
 		}
 
-		// For each detected PM, check what deps it's using
+		// For each detected PM, record usage based on what the symlink actually points to.
+		// This is intentionally independent of the current lockfile hash: if a lockfile
+		// changes between GC runs, the old shared deps directory must not be removed while
+		// a live symlink still references it.
 		for _, pm := range detectedPMs {
-			// Find lockfile
-			lockfilePath, err := pm.FindLockfile(fs, worktreePath)
-			if err != nil {
-				continue // Skip if no lockfile
-			}
-
-			// Compute hash
-			hash, err := pm.HashLockfile(fs, lockfilePath)
-			if err != nil {
-				continue // Skip if can't hash
-			}
-
-			depsKey := pm.GetDepsKey(hash)
-
-			// Check if symlink points to this deps
 			symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
 
-			// Check if it's a symlink (using underlying OS filesystem)
 			if linker, ok := fs.(afero.Symlinker); ok {
 				target, err := linker.ReadlinkIfPossible(symlinkPath)
-				if err == nil && target != "" {
-					// Symlink exists - verify it points to the expected deps
-					expectedTarget := getDepsPath(repoPath, depsKey)
-					if target == expectedTarget {
-						r.AddUsage(depsKey, branch)
-					}
+				if err != nil || target == "" {
+					continue
+				}
+				// Verify the symlink target actually lives inside our managed deps
+				// directory by round-tripping: compute the canonical path for a key
+				// derived from the target and check that it matches the target itself.
+				// This uses the same path logic as symlink creation so it remains
+				// correct even for non-standard repoPath values.
+				actualDepsKey := filepath.Base(target)
+				if getDepsPath(repoPath, actualDepsKey) == target {
+					r.AddUsage(actualDepsKey, branch)
 				}
 			}
 		}
