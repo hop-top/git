@@ -222,6 +222,15 @@ func TestInstallHooks_NotGitRepo(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a git repository")
 }
 
+func TestValidateHookName_Move(t *testing.T) {
+	if err := ValidateHookName("pre-worktree-move"); err != nil {
+		t.Errorf("expected pre-worktree-move to be valid, got: %v", err)
+	}
+	if err := ValidateHookName("post-worktree-move"); err != nil {
+		t.Errorf("expected post-worktree-move to be valid, got: %v", err)
+	}
+}
+
 // Helper functions for tests
 func getTestDataHome() string {
 	return "/tmp/test-data-home"

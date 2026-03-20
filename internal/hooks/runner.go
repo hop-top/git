@@ -27,6 +27,8 @@ var ValidHookNames = []string{
 	"post-worktree-add",
 	"pre-worktree-remove",
 	"post-worktree-remove",
+	"pre-worktree-move",
+	"post-worktree-move",
 	"pre-env-start",
 	"post-env-start",
 	"pre-env-stop",
