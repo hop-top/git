@@ -89,6 +89,22 @@ func (h *Hopspace) UnregisterBranch(branch string) error {
 	return h.Save()
 }
 
+// RenameBranch updates the hopspace config to reflect a branch rename.
+func (h *Hopspace) RenameBranch(oldBranch, newBranch, newPath string) error {
+	old, exists := h.Config.Branches[oldBranch]
+	if !exists {
+		// Not in hopspace — silently skip (same pattern as UnregisterBranch)
+		return nil
+	}
+	delete(h.Config.Branches, oldBranch)
+	h.Config.Branches[newBranch] = config.HopspaceBranch{
+		Exists:   old.Exists,
+		Path:     newPath,
+		LastSync: old.LastSync,
+	}
+	return h.Save()
+}
+
 // Save persists the hopspace config
 func (h *Hopspace) Save() error {
 	writer := config.NewWriter(h.fs)
