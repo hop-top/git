@@ -292,6 +292,8 @@ func agentDirHint(path string) string {
 		return fmt.Sprintf("/add-dir %s", path)
 	case os.Getenv("GEMINI_CLI") == "1":
 		return fmt.Sprintf("/directory add %s", path)
+	case os.Getenv("COPILOT_GH") == "true":
+		return fmt.Sprintf("/add-dir %s", path)
 	default:
 		return ""
 	}
