@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
@@ -260,6 +261,8 @@ var addCmd = &cobra.Command{
 		// If running inside an AI coding agent, hint how to add the worktree directory
 		if hint := agentDirHint(worktreePath); hint != "" {
 			output.Info("Run: %s", hint)
+		} else if os.Getenv("OPENCODE") == "1" {
+			opencodeAgentHint(worktreePath, os.Stdin)
 		}
 
 		if branchPorts != nil && len(branchPorts.Ports) > 0 {
@@ -297,6 +300,34 @@ func agentDirHint(path string) string {
 	default:
 		return ""
 	}
+}
+
+// opencodeAgentHint prompts the user to choose local or global OpenCode config,
+// then prints the external_directories snippet to add the worktree path.
+func opencodeAgentHint(path string, in *os.File) {
+	xdgConfig := os.Getenv("XDG_CONFIG_HOME")
+	if xdgConfig == "" {
+		home, _ := os.UserHomeDir()
+		xdgConfig = filepath.Join(home, ".config")
+	}
+	localCfg := ".opencode/opencode.jsonc"
+	globalCfg := filepath.Join(xdgConfig, "opencode", "opencode.jsonc")
+
+	fmt.Fprintf(os.Stderr, "Add %s to OpenCode config. Which?\n  1) local  (%s)\n  2) global (%s)\nChoice [1/2]: ", path, localCfg, globalCfg)
+
+	reader := bufio.NewReader(in)
+	choice, _ := reader.ReadString('\n')
+	choice = strings.TrimSpace(choice)
+
+	var cfgPath string
+	switch choice {
+	case "2":
+		cfgPath = globalCfg
+	default:
+		cfgPath = localCfg
+	}
+
+	fmt.Fprintf(os.Stderr, "\nAdd to %s:\n\n  \"external_directories\": [\"%s\"]\n\n", cfgPath, path)
 }
 
 func init() {
