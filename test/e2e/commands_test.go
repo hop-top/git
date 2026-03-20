@@ -99,9 +99,45 @@ func TestCommands(t *testing.T) {
 
 	// --- Test: git hop status ---
 	t.Run("Status", func(t *testing.T) {
+		// Hub view: branch table shows Linked for existing worktree
 		out := env.RunGitHop(t, env.HubPath, "status")
 		if !strings.Contains(out, "feature-1") {
 			t.Errorf("Status output missing feature-1: %s", out)
+		}
+		if !strings.Contains(out, "Linked") {
+			t.Errorf("Status hub view should show 'Linked' for existing worktree: %s", out)
+		}
+
+		// Target arg: status of a specific branch from hub
+		out = env.RunGitHop(t, env.HubPath, "status", "feature-1")
+		if !strings.Contains(out, "feature-1") {
+			t.Errorf("Status target output missing branch name: %s", out)
+		}
+		if !strings.Contains(out, "Worktree") {
+			t.Errorf("Status target output should show worktree path: %s", out)
+		}
+	})
+
+	// --- Test: git hop status --all ---
+	t.Run("StatusAll", func(t *testing.T) {
+		out := env.RunGitHop(t, env.HubPath, "status", "--all")
+		if !strings.Contains(out, "Repositories") {
+			t.Errorf("Status --all output missing Repositories section: %s", out)
+		}
+		if !strings.Contains(out, env.DataHome) {
+			t.Errorf("Status --all output missing data home path: %s", out)
+		}
+		if !strings.Contains(out, "Active") {
+			t.Errorf("Status --all output missing Active count: %s", out)
+		}
+	})
+
+	// --- Test: git hop status outside hub/worktree ---
+	t.Run("StatusOutsideHub", func(t *testing.T) {
+		// RootDir is not a hub or worktree — plain directory
+		out := runCommandExpectError(t, env, env.RootDir, env.BinPath, "status")
+		if !strings.Contains(out, "Not in") {
+			t.Errorf("Status outside hub should say 'Not in ...', got: %s", out)
 		}
 	})
 
@@ -122,12 +158,20 @@ func TestCommands(t *testing.T) {
 		// Start
 		env.RunGitHop(t, branchPath, "env", "start")
 
-		// Verify running (mocked via docker wrapper, but we check output)
-		// In real e2e with docker, we could check `docker ps`.
-		// Here we rely on the command succeeding.
+		// status --all should show running services after env start
+		allOut := env.RunGitHop(t, env.HubPath, "status", "--all")
+		if !strings.Contains(allOut, "running") {
+			t.Errorf("Status --all should show 'running' after env start: %s", allOut)
+		}
 
 		// Stop
 		env.RunGitHop(t, branchPath, "env", "stop")
+
+		// status --all should show stopped after env stop
+		allOut = env.RunGitHop(t, env.HubPath, "status", "--all")
+		if !strings.Contains(allOut, "stopped") {
+			t.Errorf("Status --all should show 'stopped' after env stop: %s", allOut)
+		}
 	})
 
 	// --- Test: git hop remove ---
@@ -145,6 +189,18 @@ func TestCommands(t *testing.T) {
 		wtPath := filepath.Join(env.HubPath, "hops", "feature-1")
 		if _, err := os.Stat(wtPath); err == nil {
 			t.Errorf("Worktree feature-1 should be gone at hops/feature-1")
+		}
+
+		// Hub status should now show Missing for the removed worktree
+		out = env.RunGitHop(t, env.HubPath, "status")
+		if !strings.Contains(out, "Missing") {
+			t.Errorf("Status hub view should show 'Missing' for removed worktree: %s", out)
+		}
+
+		// status --all should reflect updated Active/Missing counts
+		allOut := env.RunGitHop(t, env.HubPath, "status", "--all")
+		if !strings.Contains(allOut, "Missing") {
+			t.Errorf("Status --all should show Missing count after removal: %s", allOut)
 		}
 	})
 
