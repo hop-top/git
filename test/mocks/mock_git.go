@@ -14,6 +14,8 @@ type MockGit struct {
 	DeletedRemoteBranches []string
 	RemoteBranchExists    bool
 	RemoteBranches        []string
+	MovedWorktrees        []string // tracks [oldPath, newPath] pairs flattened
+	RenamedBranches       []string // tracks [oldBranch, newBranch] pairs flattened
 }
 
 // MockCommandRunner is a mock implementation of CommandRunner for testing
@@ -190,6 +192,18 @@ func (m *MockGit) GetConfigRegex(dir, pattern string) (map[string]string, error)
 		return result, nil
 	}
 	return result, nil
+}
+
+// WorktreeMove mocks moving a worktree
+func (m *MockGit) WorktreeMove(basePath, oldPath, newPath string) error {
+	m.MovedWorktrees = append(m.MovedWorktrees, oldPath, newPath)
+	return nil
+}
+
+// RenameBranch mocks renaming a local branch
+func (m *MockGit) RenameBranch(dir, oldBranch, newBranch string) error {
+	m.RenamedBranches = append(m.RenamedBranches, oldBranch, newBranch)
+	return nil
 }
 
 // RunGitFlowStart mocks running git flow start

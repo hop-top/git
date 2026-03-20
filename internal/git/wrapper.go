@@ -36,6 +36,8 @@ type GitInterface interface {
 	GetConfigRegex(dir, pattern string) (map[string]string, error)
 	RunGitFlowStart(dir, branchType, name string) error
 	RunGitFlowFinish(dir, branchType, name string) error
+	WorktreeMove(basePath, oldPath, newPath string) error
+	RenameBranch(dir, oldBranch, newBranch string) error
 }
 
 // Git wraps git command execution
@@ -377,6 +379,18 @@ func (g *Git) GetConfigRegex(dir, pattern string) (map[string]string, error) {
 		}
 	}
 	return result, nil
+}
+
+// WorktreeMove moves a worktree to a new path
+func (g *Git) WorktreeMove(basePath, oldPath, newPath string) error {
+	_, err := g.Runner.RunInDir(basePath, "git", "worktree", "move", oldPath, newPath)
+	return err
+}
+
+// RenameBranch renames a local branch
+func (g *Git) RenameBranch(dir, oldBranch, newBranch string) error {
+	_, err := g.Runner.RunInDir(dir, "git", "branch", "-m", oldBranch, newBranch)
+	return err
 }
 
 // RunGitFlowStart executes git flow <type> start <name>
