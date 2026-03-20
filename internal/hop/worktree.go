@@ -151,6 +151,77 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	return worktreePath, nil
 }
 
+// MoveWorktree renames a worktree: renames the git branch, moves the directory,
+// and updates hub and hopspace configs.
+// Returns (oldPath, newPath, error).
+func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, newBranch string, locationPattern, org, repo string) (string, string, error) {
+	if oldBranch == "" || newBranch == "" {
+		return "", "", fmt.Errorf("branch names cannot be empty")
+	}
+
+	// Guard: cannot move the default branch
+	if oldBranch == hub.Config.Repo.DefaultBranch {
+		return "", "", fmt.Errorf("cannot move the default branch '%s'", oldBranch)
+	}
+
+	// Resolve old path from hub config
+	branchCfg, exists := hub.Config.Branches[oldBranch]
+	if !exists {
+		return "", "", fmt.Errorf("branch '%s' not found in hub", oldBranch)
+	}
+	oldPath := config.ResolveWorktreePath(branchCfg.Path, hub.Path)
+
+	// Guard: new branch must not already exist
+	if _, exists := hub.Config.Branches[newBranch]; exists {
+		return oldPath, "", fmt.Errorf("branch '%s' already exists", newBranch)
+	}
+
+	// Compute new path from location pattern
+	dataHome := GetGitHopDataHome()
+	ctx := WorktreeLocationContext{
+		HubPath:  hub.Path,
+		Branch:   newBranch,
+		Org:      org,
+		Repo:     repo,
+		DataHome: dataHome,
+	}
+	newPath := filepath.Clean(ExpandWorktreeLocation(locationPattern, ctx))
+
+	// Find a base path for git commands (any other worktree)
+	var basePath string
+	for bn, bc := range hub.Config.Branches {
+		if bn != oldBranch && bc.Path != "" {
+			basePath = config.ResolveWorktreePath(bc.Path, hub.Path)
+			break
+		}
+	}
+	if basePath == "" {
+		basePath = hub.Path
+	}
+
+	// 1. Rename git branch
+	if err := m.git.RenameBranch(basePath, oldBranch, newBranch); err != nil {
+		return oldPath, newPath, fmt.Errorf("failed to rename branch: %w", err)
+	}
+
+	// 2. Move worktree directory
+	if err := m.git.WorktreeMove(basePath, oldPath, newPath); err != nil {
+		return oldPath, newPath, fmt.Errorf("failed to move worktree: %w", err)
+	}
+
+	// 3. Update hub config
+	if err := hub.RenameBranch(oldBranch, newBranch, newPath); err != nil {
+		return oldPath, newPath, fmt.Errorf("failed to update hub config: %w", err)
+	}
+
+	// 4. Update hopspace config
+	if err := hopspace.RenameBranch(oldBranch, newBranch, newPath); err != nil {
+		return oldPath, newPath, fmt.Errorf("failed to update hopspace config: %w", err)
+	}
+
+	return oldPath, newPath, nil
+}
+
 // RemoveWorktree removes a worktree
 func (m *WorktreeManager) RemoveWorktree(hopspace *Hopspace, branch string) error {
 	// Find the worktree to remove
