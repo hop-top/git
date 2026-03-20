@@ -107,6 +107,7 @@ func TestCommands(t *testing.T) {
 
 	// --- Test: git hop env ---
 	t.Run("Env", func(t *testing.T) {
+		SkipIfDockerNotAvailable(t)
 		branchPath := filepath.Join(env.HubPath, "hops", "feature-1")
 
 		// Generate (implicit in add, but test explicit)

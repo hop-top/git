@@ -148,6 +148,21 @@ func CreateTempDir(t *testing.T) string {
 	return dir
 }
 
+// SkipIfDockerNotAvailable skips the test if Docker daemon is not running.
+// Use this at the top of any test that requires a live Docker daemon.
+func SkipIfDockerNotAvailable(t *testing.T) {
+	t.Helper()
+	// docker info fails when daemon is not running (unlike docker version which just checks the CLI)
+	cmd := exec.Command("docker", "info")
+	if err := cmd.Run(); err != nil {
+		t.Skip("Docker daemon is not running - skipping test")
+	}
+	cmd = exec.Command("docker", "compose", "version")
+	if err := cmd.Run(); err != nil {
+		t.Skip("Docker Compose is not available - skipping test")
+	}
+}
+
 // WriteFile writes content to a file
 func WriteFile(t *testing.T, path, content string) {
 	t.Helper()

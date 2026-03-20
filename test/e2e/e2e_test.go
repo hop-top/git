@@ -8,6 +8,8 @@ import (
 )
 
 func TestE2E_PortAndVolumeIsolation(t *testing.T) {
+	SkipIfDockerNotAvailable(t)
+
 	// Setup
 	env := SetupTestEnv(t)
 
