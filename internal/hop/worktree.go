@@ -199,9 +199,11 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 		basePath = hub.Path
 	}
 
-	// 1. Rename git branch
-	if err := m.git.RenameBranch(basePath, oldBranch, newBranch); err != nil {
-		return oldPath, newPath, fmt.Errorf("failed to rename branch: %w", err)
+	// 1. Rename git branch (skip if already renamed — e.g. git hop add used newBranch directly)
+	if !m.git.LocalBranchExists(basePath, newBranch) {
+		if err := m.git.RenameBranch(basePath, oldBranch, newBranch); err != nil {
+			return oldPath, newPath, fmt.Errorf("failed to rename branch: %w", err)
+		}
 	}
 
 	// 2. Move worktree directory

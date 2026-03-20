@@ -16,6 +16,7 @@ type MockGit struct {
 	RemoteBranches        []string
 	MovedWorktrees        []string // tracks [oldPath, newPath] pairs flattened
 	RenamedBranches       []string // tracks [oldBranch, newBranch] pairs flattened
+	LocalBranches         []string // tracks local branches for LocalBranchExists
 }
 
 // MockCommandRunner is a mock implementation of CommandRunner for testing
@@ -204,6 +205,16 @@ func (m *MockGit) WorktreeMove(basePath, oldPath, newPath string) error {
 func (m *MockGit) RenameBranch(dir, oldBranch, newBranch string) error {
 	m.RenamedBranches = append(m.RenamedBranches, oldBranch, newBranch)
 	return nil
+}
+
+// LocalBranchExists mocks checking if a local branch exists
+func (m *MockGit) LocalBranchExists(dir, branch string) bool {
+	for _, b := range m.LocalBranches {
+		if b == branch {
+			return true
+		}
+	}
+	return false
 }
 
 // RunGitFlowStart mocks running git flow start

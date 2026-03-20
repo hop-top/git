@@ -78,6 +78,43 @@ func TestMoveWorktree_RenamesAll(t *testing.T) {
 	}
 }
 
+// TestMoveWorktree_BranchAlreadyRenamed verifies that MoveWorktree succeeds when git hop add
+// already created the branch under newBranch (e.g. "feat/foo") but the worktree path still
+// uses oldBranch (e.g. "track/foo"). In that case LocalBranchExists(newBranch)=true so
+// RenameBranch must be skipped — otherwise git branch -m fails with "no branch named <old>".
+func TestMoveWorktree_BranchAlreadyRenamed(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hub"
+	oldBranch := "track/foo"
+	newBranch := "feat/foo"
+	oldPath := "/hub/hops/track/foo"
+	fs.MkdirAll(oldPath, 0755)
+	fs.MkdirAll(hubPath+"/hops/main", 0755)
+
+	hopspace := setupMoveTestHopspace(fs, hubPath, oldBranch, oldPath)
+	hub := setupMoveTestHub(fs, hubPath, "main", oldBranch, oldPath)
+
+	mockGit := mocks.NewMockGit()
+	// Simulate: git already has newBranch (old was renamed externally by git hop add)
+	mockGit.LocalBranches = []string{newBranch}
+
+	wm := hop.NewWorktreeManager(fs, mockGit)
+	_, _, err := wm.MoveWorktree(hopspace, hub, oldBranch, newBranch, "{hubPath}/hops/{branch}", "org", "repo")
+	if err != nil {
+		t.Fatalf("MoveWorktree should succeed when branch was already renamed: %v", err)
+	}
+
+	// RenameBranch must NOT have been called
+	if len(mockGit.RenamedBranches) > 0 {
+		t.Errorf("expected RenameBranch to be skipped, but it was called with %v", mockGit.RenamedBranches)
+	}
+
+	// WorktreeMove must still have been called
+	if len(mockGit.MovedWorktrees) < 2 || mockGit.MovedWorktrees[0] != oldPath {
+		t.Errorf("expected WorktreeMove(%s, ...) to be called", oldPath)
+	}
+}
+
 func TestMoveWorktree_DefaultBranchBlocked(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	hubPath := "/hub"

@@ -38,6 +38,7 @@ type GitInterface interface {
 	RunGitFlowFinish(dir, branchType, name string) error
 	WorktreeMove(basePath, oldPath, newPath string) error
 	RenameBranch(dir, oldBranch, newBranch string) error
+	LocalBranchExists(dir, branch string) bool
 }
 
 // Git wraps git command execution
@@ -391,6 +392,12 @@ func (g *Git) WorktreeMove(basePath, oldPath, newPath string) error {
 func (g *Git) RenameBranch(dir, oldBranch, newBranch string) error {
 	_, err := g.Runner.RunInDir(dir, "git", "branch", "-m", oldBranch, newBranch)
 	return err
+}
+
+// LocalBranchExists reports whether a local branch exists
+func (g *Git) LocalBranchExists(dir, branch string) bool {
+	out, err := g.Runner.RunInDir(dir, "git", "branch", "--list", branch)
+	return err == nil && strings.TrimSpace(out) != ""
 }
 
 // RunGitFlowStart executes git flow <type> start <name>
