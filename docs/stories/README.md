@@ -12,6 +12,8 @@ Branch Type Detection System implementation stories.
 | [004](004-detector-env-vars.md) | Detector Environment Variables for Hooks | Completed | Medium |
 | [005](005-worktree-remove-hooks.md) | Pre/Post Worktree-Remove Hooks | Completed | High |
 | [006](006-e2e-testing.md) | E2E Git-Flow Integration Testing | Completed | High |
+| [007](007-worktree-move.md) | Worktree Move / Rename | Completed | High |
+| [008](008-move-e2e-testing.md) | E2E Move Command Testing | Completed | High |
 
 ## Summary
 
