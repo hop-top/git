@@ -87,10 +87,11 @@ func showHubStatus(fs afero.Fs, path string) {
 	for name, b := range hub.Config.Branches {
 		// Check if path exists
 		state := "Missing"
-		if _, err := fs.Stat(filepath.Join(hub.Path, b.Path)); err == nil {
+		resolvedPath := config.ResolveWorktreePath(b.Path, hub.Path)
+		if _, err := fs.Stat(resolvedPath); err == nil {
 			state = "Linked"
 		}
-		t.AddRow(name, state, b.Path)
+		t.AddRow(name, state, resolvedPath)
 	}
 	t.Render()
 }
