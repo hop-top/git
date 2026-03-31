@@ -29,6 +29,9 @@ type composeService struct {
 
 var varPattern = regexp.MustCompile(`^\$\{.+\}$`)
 
+// varDefaultPattern matches ${VAR:-default} style compose default-value syntax.
+var varDefaultPattern = regexp.MustCompile(`^\$\{[^}]+:-[^}]*\}$`)
+
 // ParsePortMappings parses all services' port mappings from compose YAML content.
 // Handles short syntax ("8000:8000", "127.0.0.1:8000:8000", "8000:8000/tcp")
 // and long syntax ({target: 8000, published: 8000}).
@@ -78,6 +81,31 @@ func parseShortSyntax(s string) (PortMapping, error) {
 	if idx := strings.LastIndex(s, "/"); idx != -1 {
 		pm.Protocol = s[idx+1:]
 		s = s[:idx]
+	}
+
+	// If string starts with "${", find the closing "}" to capture the entire
+	// variable token — including default-value syntax like ${VAR:-default}.
+	// Splitting naively on ":" would break ${VAR:-default}:containerport.
+	if strings.HasPrefix(s, "${") {
+		closeIdx := strings.Index(s, "}")
+		if closeIdx == -1 {
+			return pm, fmt.Errorf("invalid port mapping (unclosed variable): %s", s)
+		}
+		varToken := s[:closeIdx+1]
+		rest := s[closeIdx+1:]
+		if rest == "" {
+			// Container-only port expressed as a variable (unusual but valid)
+			pm.ContainerPort = varToken
+		} else if strings.HasPrefix(rest, ":") {
+			pm.HostPort = varToken
+			pm.ContainerPort = rest[1:]
+		} else {
+			return pm, fmt.Errorf("invalid port mapping: %s", s)
+		}
+		if varPattern.MatchString(pm.HostPort) {
+			pm.IsVariable = true
+		}
+		return pm, nil
 	}
 
 	parts := strings.Split(s, ":")

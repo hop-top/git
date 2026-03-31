@@ -12,6 +12,10 @@ import (
 	"github.com/spf13/afero"
 )
 
+// ErrBinaryNotFound is returned by Install when the package manager binary is not found in PATH.
+// Callers may choose to skip installation rather than treat this as a hard error.
+var ErrBinaryNotFound = fmt.Errorf("package manager binary not found in PATH")
+
 // PackageManager represents a package manager configuration
 type PackageManager struct {
 	Name        string
@@ -55,10 +59,19 @@ func (pm *PackageManager) HashLockfileLong(fs afero.Fs, lockfilePath string) (st
 	return fullHash[:12], nil
 }
 
-// Install runs the install command in the target directory
+// Install runs the install command in the target directory.
+// Returns ErrBinaryNotFound if the package manager binary is not in PATH.
 func (pm *PackageManager) Install(targetDir string, worktreePath string) error {
 	if len(pm.InstallCmd) == 0 {
 		return fmt.Errorf("no install command defined for %s", pm.Name)
+	}
+
+	// Check binary availability before attempting to run; avoids confusing
+	// "exec: not found" errors and lets callers skip gracefully.
+	if pm.Name != "pip" {
+		if _, err := exec.LookPath(pm.InstallCmd[0]); err != nil {
+			return fmt.Errorf("%w: %s", ErrBinaryNotFound, pm.InstallCmd[0])
+		}
 	}
 
 	// Special handling for pip - needs venv creation
