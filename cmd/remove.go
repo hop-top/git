@@ -143,6 +143,12 @@ var removeCmd = &cobra.Command{
 					output.Error("Failed to remove worktree directory: %v", err)
 				} else {
 					output.Info("Successfully removed worktree directory")
+
+					// Remove parent dir (e.g. feat/, fix/) if now empty.
+					cleanupMgr := hop.NewCleanupManager(fs, g)
+					if err := cleanupMgr.RemoveEmptyParent(worktreePath, hubPath); err != nil {
+						output.Warn("Failed to remove empty parent directory: %v", err)
+					}
 				}
 
 				// Delete local and remote branches

@@ -178,6 +178,84 @@ func TestPruneWorktrees_NonExistentPaths(t *testing.T) {
 	assert.NoError(t, err)
 }
 
+// TestRemoveEmptyParent tests that the parent directory is removed when empty.
+func TestRemoveEmptyParent(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := git.New()
+	cleanup := NewCleanupManager(fs, g)
+
+	hubPath := "/hub"
+	worktreePath := "/hub/fix/my-branch"
+	parentDir := "/hub/fix"
+
+	// Create hub dir and parent dir (worktree already removed, parent is now empty).
+	require.NoError(t, fs.MkdirAll(hubPath, 0755))
+	require.NoError(t, fs.MkdirAll(parentDir, 0755))
+
+	err := cleanup.RemoveEmptyParent(worktreePath, hubPath)
+	assert.NoError(t, err)
+
+	exists, _ := afero.DirExists(fs, parentDir)
+	assert.False(t, exists, "empty parent dir should be removed")
+}
+
+// TestRemoveEmptyParent_Siblings tests that the parent is kept when siblings exist.
+func TestRemoveEmptyParent_Siblings(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := git.New()
+	cleanup := NewCleanupManager(fs, g)
+
+	hubPath := "/hub"
+	worktreePath := "/hub/fix/my-branch"
+	parentDir := "/hub/fix"
+	siblingDir := "/hub/fix/other-branch"
+
+	require.NoError(t, fs.MkdirAll(hubPath, 0755))
+	require.NoError(t, fs.MkdirAll(parentDir, 0755))
+	require.NoError(t, fs.MkdirAll(siblingDir, 0755))
+
+	err := cleanup.RemoveEmptyParent(worktreePath, hubPath)
+	assert.NoError(t, err)
+
+	exists, _ := afero.DirExists(fs, parentDir)
+	assert.True(t, exists, "parent with siblings should not be removed")
+}
+
+// TestRemoveEmptyParent_HubRoot tests that the hub root is never removed.
+func TestRemoveEmptyParent_HubRoot(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := git.New()
+	cleanup := NewCleanupManager(fs, g)
+
+	hubPath := "/hub"
+	// worktree is a direct child of hub (no prefix subdir)
+	worktreePath := "/hub/main"
+
+	require.NoError(t, fs.MkdirAll(hubPath, 0755))
+
+	err := cleanup.RemoveEmptyParent(worktreePath, hubPath)
+	assert.NoError(t, err)
+
+	exists, _ := afero.DirExists(fs, hubPath)
+	assert.True(t, exists, "hub root must not be removed")
+}
+
+// TestRemoveEmptyParent_NonExistentParent treats missing parent as no-op.
+func TestRemoveEmptyParent_NonExistentParent(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := git.New()
+	cleanup := NewCleanupManager(fs, g)
+
+	hubPath := "/hub"
+	worktreePath := "/hub/feat/gone-branch"
+
+	require.NoError(t, fs.MkdirAll(hubPath, 0755))
+	// parent /hub/feat does NOT exist
+
+	err := cleanup.RemoveEmptyParent(worktreePath, hubPath)
+	assert.NoError(t, err)
+}
+
 // TestPruneWorktrees_MixedValidInvalidPaths tests that pruning selects
 // the first valid path when some paths are invalid
 func TestPruneWorktrees_MixedValidInvalidPaths(t *testing.T) {
