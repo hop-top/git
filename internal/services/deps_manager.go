@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -140,6 +141,10 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	if !depsExists {
 		// Install deps to shared storage using resolved PM
 		if err := m.installDeps(depsPath, worktreePath, *resolvedPM); err != nil {
+			if errors.Is(err, ErrBinaryNotFound) {
+				// Binary not available in this environment; skip silently.
+				return nil
+			}
 			return fmt.Errorf("failed to install deps: %w", err)
 		}
 

@@ -363,6 +363,46 @@ func TestComputePortVarNames_Basic(t *testing.T) {
 	}
 }
 
+func TestParsePortMappings_DefaultValueSyntax(t *testing.T) {
+	// ${VAR:-default}:container must be parsed without creating nested interpolation
+	compose := []byte(`
+services:
+  db:
+    image: postgres:14
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+`)
+
+	result, err := ParsePortMappings(compose)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	dbPorts := result["db"]
+	if len(dbPorts) != 1 {
+		t.Fatalf("expected 1 db port, got %d", len(dbPorts))
+	}
+	if dbPorts[0].HostPort != "${POSTGRES_PORT:-5432}" {
+		t.Errorf("host port: got %q, want ${POSTGRES_PORT:-5432}", dbPorts[0].HostPort)
+	}
+	if dbPorts[0].ContainerPort != "5432" {
+		t.Errorf("container port: got %q, want 5432", dbPorts[0].ContainerPort)
+	}
+	// Port with default value is already a variable — no override needed
+	if !dbPorts[0].IsVariable {
+		t.Error("${POSTGRES_PORT:-5432} should be detected as variable (IsVariable=true)")
+	}
+}
+
+func TestNeedsOverride_DefaultValueVariable(t *testing.T) {
+	ports := map[string][]PortMapping{
+		"db": {{HostPort: "${POSTGRES_PORT:-5432}", ContainerPort: "5432", IsVariable: true}},
+	}
+	if NeedsOverride(ports) {
+		t.Error("should not need override for ${VAR:-default} style variable")
+	}
+}
+
 func TestComputePortVarNames_MultiPort(t *testing.T) {
 	ports := map[string][]PortMapping{
 		"app": {
