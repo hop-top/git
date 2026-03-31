@@ -6,13 +6,14 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
+	"hop.top/upgrade"
 )
 
 var (
@@ -109,6 +110,9 @@ Worktree Mode:
 		PersistentPreRun: func(cmd *cobra.Command, args []string) {
 			initConfig()
 			setupOutputMode()
+			if cmd.Name() != "upgrade" {
+				upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
+			}
 		},
 		// If no subcommand, we fall through (core dispatch logic comes later)
 		Run: func(cmd *cobra.Command, args []string) {
