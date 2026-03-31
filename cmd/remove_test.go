@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -374,4 +375,48 @@ func TestRemoveCommand_MockBranchDeletion(t *testing.T) {
 	err = mockGit.DeleteRemoteBranch(dir, target)
 	require.NoError(t, err)
 	assert.Contains(t, mockGit.DeletedRemoteBranches, target)
+}
+
+// TestUpdateCurrentToDefault verifies symlink points to defaultBranch worktree after remove.
+func TestUpdateCurrentToDefault(t *testing.T) {
+	fs := afero.NewOsFs()
+	hubPath := t.TempDir()
+
+	// Create hub with main + feature branches
+	hub, err := hop.CreateHub(fs, hubPath, "git@github.com:test/repo.git", "test", "repo", "main")
+	require.NoError(t, err)
+
+	mainPath := filepath.Join(hubPath, "hops", "main")
+	featurePath := filepath.Join(hubPath, "hops", "feature")
+	require.NoError(t, os.MkdirAll(mainPath, 0755))
+	require.NoError(t, os.MkdirAll(featurePath, 0755))
+
+	require.NoError(t, hub.AddBranch("main", "main", mainPath))
+	require.NoError(t, hub.AddBranch("feature", "feature", featurePath))
+
+	// Simulate: current symlink points to feature (set during `git hop add feature`)
+	require.NoError(t, hop.UpdateCurrentSymlink(fs, hubPath, featurePath))
+
+	// Simulate remove: call updateCurrentToDefault after removing feature
+	require.NoError(t, hub.RemoveBranch("feature"))
+	err = updateCurrentToDefault(fs, hub, hubPath)
+	require.NoError(t, err)
+
+	// current symlink must now point to main (relative path)
+	target, err := os.Readlink(filepath.Join(hubPath, "current"))
+	require.NoError(t, err)
+	assert.Equal(t, "hops/main", target)
+}
+
+// TestUpdateCurrentToDefault_MissingDefault returns error when defaultBranch absent.
+func TestUpdateCurrentToDefault_MissingDefault(t *testing.T) {
+	fs := afero.NewOsFs()
+	hubPath := t.TempDir()
+
+	hub, err := hop.CreateHub(fs, hubPath, "git@github.com:test/repo.git", "test", "repo", "main")
+	require.NoError(t, err)
+
+	// Don't add the default branch to the hub — simulate corrupt/empty state
+	err = updateCurrentToDefault(fs, hub, hubPath)
+	assert.ErrorContains(t, err, "main")
 }
