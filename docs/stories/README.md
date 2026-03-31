@@ -14,6 +14,8 @@ Branch Type Detection System implementation stories.
 | [006](006-e2e-testing.md) | E2E Git-Flow Integration Testing | Completed | High |
 | [007](007-worktree-move.md) | Worktree Move / Rename | Completed | High |
 | [008](008-move-e2e-testing.md) | E2E Move Command Testing | Completed | High |
+| [009](009-worktree-merge.md) | Worktree Merge | Completed | High |
+| [010](010-doctor-missing-worktrees.md) | Doctor --fix for Missing Worktrees | Completed | High |
 
 ## Summary
 
