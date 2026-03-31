@@ -13,7 +13,7 @@ GOBIN ?= $(shell go env GOPATH)/bin
 all: build
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) .
+	go build -buildvcs=false -ldflags "$(LDFLAGS)" -o $(BINARY_NAME) .
 
 run: build
 	./$(BINARY_NAME)
@@ -27,7 +27,7 @@ clean:
 	rm -f $(BINARY_NAME)
 
 test:
-	go test -v ./internal/...
+	go test -buildvcs=false -v ./internal/...
 
 # Requires staticcheck installed: go install honnef.co/go/tools/cmd/staticcheck@latest
 lint:
