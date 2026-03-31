@@ -170,3 +170,22 @@ func WriteFile(t *testing.T, path, content string) {
 		t.Fatalf("Failed to write file %s: %v", path, err)
 	}
 }
+
+// StopDockerEnv stops and removes Docker containers in dir.
+// Safe to call even if containers are not running; errors are logged, not fatal.
+func StopDockerEnv(t *testing.T, dir string) {
+	t.Helper()
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return
+	}
+	for _, args := range [][]string{
+		{"compose", "stop"},
+		{"compose", "down", "--volumes", "--remove-orphans"},
+	} {
+		cmd := exec.Command("docker", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Logf("docker %v in %s: %v\n%s", args, dir, err, out)
+		}
+	}
+}
