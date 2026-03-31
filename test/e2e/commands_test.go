@@ -146,6 +146,11 @@ func TestCommands(t *testing.T) {
 		SkipIfDockerNotAvailable(t)
 		branchPath := filepath.Join(env.HubPath, "hops", "feature-1")
 
+		// Ensure containers are cleaned up even if test fails mid-way
+		t.Cleanup(func() {
+			StopDockerEnv(t, branchPath)
+		})
+
 		// Generate (implicit in add, but test explicit)
 		env.RunGitHop(t, branchPath, "env", "generate")
 

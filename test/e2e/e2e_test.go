@@ -48,6 +48,12 @@ func TestE2E_PortAndVolumeIsolation(t *testing.T) {
 	branchAPath := filepath.Join(env.HubPath, "hops", "branch-a")
 	branchBPath := filepath.Join(env.HubPath, "hops", "branch-b")
 
+	// Register cleanup early so containers are stopped even on test failure
+	t.Cleanup(func() {
+		StopDockerEnv(t, branchAPath)
+		StopDockerEnv(t, branchBPath)
+	})
+
 	checkEnv := func(path string) {
 		content, err := os.ReadFile(filepath.Join(path, ".env"))
 		if err != nil {
@@ -89,7 +95,4 @@ func TestE2E_PortAndVolumeIsolation(t *testing.T) {
 		t.Errorf("Ports should be different: %s vs %s", portA, portB)
 	}
 
-	// Cleanup
-	env.RunGitHop(t, filepath.Join(env.HubPath, "hops", "branch-a"), "env", "stop")
-	env.RunGitHop(t, filepath.Join(env.HubPath, "hops", "branch-b"), "env", "stop")
 }
