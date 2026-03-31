@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"hop.top/git/internal/config"
@@ -14,6 +15,26 @@ import (
 	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
 )
+
+// hopVolumeRefRe matches ${HOP_VOLUME_NAME} references in compose files.
+var hopVolumeRefRe = regexp.MustCompile(`\$\{(HOP_VOLUME_[A-Z0-9_]+)\}`)
+
+// extractHopVolumeKeys returns the HOP_VOLUME_* variable names referenced in content.
+// E.g. "${HOP_VOLUME_WEB_DATA}" → "WEB_DATA".
+func extractHopVolumeKeys(content []byte) []string {
+	matches := hopVolumeRefRe.FindAllSubmatch(content, -1)
+	seen := make(map[string]bool)
+	var keys []string
+	for _, m := range matches {
+		varName := string(m[1]) // e.g. "HOP_VOLUME_WEB_DATA"
+		suffix := strings.TrimPrefix(varName, "HOP_VOLUME_")
+		if !seen[suffix] {
+			seen[suffix] = true
+			keys = append(keys, suffix)
+		}
+	}
+	return keys
+}
 
 // EnvManager manages the environment
 type EnvManager struct {
@@ -131,6 +152,20 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 	vols, err := m.Volumes.CreateVolumes(branch, volNames)
 	if err != nil {
 		return nil, nil, "", err
+	}
+
+	// Ensure every HOP_VOLUME_* reference in the compose file has a value.
+	// If docker volume discovery missed any bind-mount vars, add XDG defaults.
+	if len(composeContent) > 0 {
+		for _, key := range extractHopVolumeKeys(composeContent) {
+			lower := strings.ToLower(key)
+			if _, exists := vols[lower]; !exists {
+				volDir := filepath.Join(hop.GetGitHopDataHome(), "volumes", branch, lower)
+				if err := m.fs.MkdirAll(volDir, 0755); err == nil {
+					vols[lower] = volDir
+				}
+			}
+		}
 	}
 
 	envPath := filepath.Join(worktreePath, ".env")
