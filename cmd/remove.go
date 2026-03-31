@@ -104,14 +104,9 @@ var removeCmd = &cobra.Command{
 					output.Fatal("Hook pre-worktree-remove failed: %v", err)
 				}
 
-				// We need to remove the symlink and update config
-				if err := hub.RemoveBranch(target); err != nil {
-					output.Fatal("Failed to remove branch from hub: %v", err)
-				}
-
-				// We also need to remove the worktree from the hopspace?
-				// The specs say: "Remove the symlink from the Hub. Remove the Worktree from the Hopspace."
-				// So yes.
+				// Keep branch entry in hub config so status shows it as Missing.
+				// The directory will be removed below; showHubStatus checks path
+				// existence and displays Missing when the directory is gone.
 
 				// Use main worktree as base for git worktree remove command
 				var basePath string
