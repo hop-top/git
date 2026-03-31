@@ -93,8 +93,12 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 			existingSvcs[s] = true
 		}
 		for _, name := range portVarNames {
-			if !existingSvcs[name] {
-				m.Ports.Config.Services = append(m.Ports.Config.Services, name)
+			// portVarNames are full env var names like "HOP_PORT_WEB".
+			// Config.Services holds the suffix only (e.g. "WEB") so that
+			// writeEnvFile can apply the HOP_PORT_ prefix without doubling it.
+			svcKey := strings.TrimPrefix(name, "HOP_PORT_")
+			if !existingSvcs[svcKey] {
+				m.Ports.Config.Services = append(m.Ports.Config.Services, svcKey)
 			}
 		}
 	} else {
