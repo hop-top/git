@@ -192,6 +192,11 @@ var removeCmd = &cobra.Command{
 					output.Warn("Hook post-worktree-remove failed: %v", err)
 				}
 
+				// Update current symlink to point back to defaultBranch worktree
+				if err := updateCurrentToDefault(fs, hub, hubPath); err != nil {
+					output.Warn("Failed to update current symlink: %v", err)
+				}
+
 				output.Info("Successfully removed %s", target)
 				return
 			}
@@ -289,6 +294,18 @@ var removeCmd = &cobra.Command{
 		// Target not found
 		output.Fatal("Target %s not found or not supported yet", target)
 	},
+}
+
+// updateCurrentToDefault updates the "current" symlink to point to the defaultBranch worktree.
+// Called after removing a branch so the symlink stays valid.
+func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string) error {
+	defaultBranch := hub.Config.Repo.DefaultBranch
+	branchCfg, ok := hub.Config.Branches[defaultBranch]
+	if !ok {
+		return fmt.Errorf("default branch %q not found in hub", defaultBranch)
+	}
+	defaultPath := config.ResolveWorktreePath(branchCfg.Path, hubPath)
+	return hop.UpdateCurrentSymlink(fs, hubPath, defaultPath)
 }
 
 func init() {
