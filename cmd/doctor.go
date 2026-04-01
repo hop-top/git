@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
@@ -392,12 +394,16 @@ Use --fix to automatically repair issues.`,
 				}
 
 				if doctorFix {
-					output.Info("\nPruning orphaned entries from state...")
-					// Use the prune functions
+					output.Info("\nFixing missing worktrees...")
+					g := git.New()
+					missingFixed := fixMissingWorktrees(fs, g, st)
+					fixedIssues += missingFixed
+
+					output.Info("\nPruning remaining orphaned entries from state...")
 					worktreesPruned := pruneOrphanedWorktrees(fs, st)
 					hubsPruned := pruneOrphanedHubs(fs, st)
 
-					if worktreesPruned > 0 || hubsPruned > 0 {
+					if missingFixed > 0 || worktreesPruned > 0 || hubsPruned > 0 {
 						if err := state.SaveState(fs, st); err != nil {
 							output.Error("Failed to save state: %v", err)
 						} else {
@@ -468,4 +474,122 @@ func checkStateConsistency(fs afero.Fs, st *state.State) []string {
 	}
 
 	return issues
+}
+
+// fixMissingWorktrees handles worktrees whose paths no longer exist on disk.
+// For each missing worktree it checks whether the branch was merged; if so it
+// removes the state entry automatically. Otherwise it asks the user to either
+// provide a new location, delete the entry, or keep it as-is.
+// Returns the number of entries resolved (relocated or deleted).
+func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State) int {
+	resolved := 0
+
+	for repoID, repo := range st.Repositories {
+		for branch, wt := range repo.Worktrees {
+			if exists, _ := afero.DirExists(fs, wt.Path); exists {
+				continue
+			}
+
+			output.Info("\nMissing worktree: %s:%s (was at %s)", repoID, branch, wt.Path)
+
+			// Try to determine a git dir to run branch-merged check.
+			// Prefer the hub path recorded in state; fall back to hopspace.
+			gitDir := findGitDirForRepo(fs, repoID, wt.HubPath)
+
+			if gitDir != "" && isBranchMerged(g, gitDir, branch, repo.DefaultBranch) {
+				output.Info("  Branch '%s' is merged into '%s' — auto-removing entry.", branch, repo.DefaultBranch)
+				delete(repo.Worktrees, branch)
+				resolved++
+				continue
+			}
+
+			// Not merged (or unable to check): ask user.
+			idx, _ := output.Select(
+				fmt.Sprintf("Worktree for '%s' is missing. What would you like to do?", branch),
+				[]string{
+					"Provide new location",
+					"Delete the entry",
+					"Keep as-is (skip)",
+				},
+			)
+
+			switch idx {
+			case 0: // new location
+				newPath := output.Input("Enter new path for worktree")
+				newPath = strings.TrimSpace(newPath)
+				if newPath == "" {
+					output.Warn("  No path entered — skipping.")
+					continue
+				}
+				if exists, _ := afero.DirExists(fs, newPath); !exists {
+					output.Error("  Path does not exist: %s — skipping.", newPath)
+					continue
+				}
+				wt.Path = newPath
+				repo.Worktrees[branch] = wt
+				output.Info("  ✓ Updated path to %s", newPath)
+				resolved++
+
+			case 1: // delete
+				delete(repo.Worktrees, branch)
+				output.Info("  ✓ Deleted entry for '%s'", branch)
+				resolved++
+
+			default: // skip / invalid
+				output.Info("  Kept as-is.")
+			}
+		}
+	}
+
+	return resolved
+}
+
+// findGitDirForRepo returns a usable git directory for running git commands
+// against the given repository. It tries the hub path first, then falls back
+// to the hopspace derived from the repoID.
+func findGitDirForRepo(fs afero.Fs, repoID, hubPath string) string {
+	if hubPath != "" {
+		if exists, _ := afero.DirExists(fs, hubPath); exists {
+			return hubPath
+		}
+	}
+
+	// repoID is typically "github.com/org/repo" — extract org/repo suffix.
+	parts := strings.SplitN(repoID, "/", 3)
+	if len(parts) == 3 {
+		dataHome := hop.GetGitHopDataHome()
+		hopspacePath := hop.GetHopspacePath(dataHome, parts[1], parts[2])
+		if exists, _ := afero.DirExists(fs, hopspacePath); exists {
+			return hopspacePath
+		}
+	}
+
+	return ""
+}
+
+// isBranchMerged reports whether branch has been merged into defaultBranch
+// (or into HEAD when defaultBranch is empty). It uses `git branch --merged`.
+func isBranchMerged(g git.GitInterface, dir, branch, defaultBranch string) bool {
+	base := defaultBranch
+	if base == "" {
+		base = "HEAD"
+	}
+
+	out, err := g.RunInDir(dir, "git", "branch", "--merged", base)
+	if err != nil {
+		return false
+	}
+
+	for _, line := range strings.Split(out, "\n") {
+		// Strip leading markers: "* " (current branch), "+ " (worktree), "  " (others)
+		trimmed := strings.TrimSpace(line)
+		trimmed = strings.TrimPrefix(trimmed, "* ")
+		trimmed = strings.TrimPrefix(trimmed, "+ ")
+		name := strings.TrimSpace(trimmed)
+		if name == branch {
+			return true
+		}
+	}
+
+	return false
 }
