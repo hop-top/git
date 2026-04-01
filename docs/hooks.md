@@ -412,13 +412,16 @@ fi
 
 ## Installing Hook Directories
 
-To set up the `.git-hop/hooks` directory in a worktree:
+The `.git-hop/hooks` directory is created automatically by `git hop init`.
+To skip this, use `--no-hooks`:
 
 ```bash
-git hop install-hooks
+git hop init           # creates .git-hop/hooks/ automatically
+git hop init --no-hooks  # skip hook directory creation
 ```
 
-This creates the necessary directory structure for repo-level hook overrides.
+Re-running `git hop init` on an already-initialized repo also ensures the
+hooks directory exists (unless `--no-hooks` is passed).
 
 ## Debugging Hooks
 

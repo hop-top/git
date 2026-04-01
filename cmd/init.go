@@ -10,8 +10,10 @@ import (
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/shell"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 )
@@ -22,6 +24,8 @@ var (
 	keepBackupFlag bool
 	regularFlag    bool
 	restorePath    string
+	noHooksFlag    bool
+	enableChdirFlag bool
 )
 
 func init() {
@@ -54,11 +58,9 @@ var initCmd = &cobra.Command{
 			os.Exit(1)
 		}
 
-		if structure == config.BareWorktreeRoot || structure == config.WorktreeRoot {
-			output.Error("Repository already uses worktree structure")
-			output.Info("Current structure: %s", structure)
-			output.Info("Project root: %s", cwd)
-			os.Exit(1)
+		if structure == config.BareWorktreeRoot || structure == config.WorktreeRoot || structure == config.WorktreeChild {
+			handleAlreadyInitializedWithFlags(afero.NewOsFs(), g, cwd, structure, noHooksFlag, enableChdirFlag)
+			return
 		}
 
 		if structure != config.StandardRepo {
@@ -117,18 +119,18 @@ Current repository: Standard git repository`)
 
 	switch choice {
 	case "1":
-		convertRepo(fs, g, repoPath, true, false)
+		convertRepo(fs, g, repoPath, true, false, noHooksFlag, enableChdirFlag)
 	case "2":
-		convertRepo(fs, g, repoPath, false, false)
+		convertRepo(fs, g, repoPath, false, false, noHooksFlag, enableChdirFlag)
 	case "3":
-		registerAsIs(fs, g, repoPath)
+		registerAsIs(fs, g, repoPath, noHooksFlag, enableChdirFlag)
 	case "q":
 		fmt.Println("Cancelled")
 		os.Exit(0)
 	}
 }
 
-func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRegular bool) {
+func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRegular, noHooks, enableChdir bool) {
 	converter := hop.NewConverter(fs, g)
 	converter.DryRun = dryRunFlag
 	converter.Force = forceFlag
@@ -265,6 +267,27 @@ Or register current structure: git hop init --current`)
 		fmt.Printf("  rm -rf %s\n", result.BackupPath)
 	}
 
+	if !noHooks {
+		if err := installInitHooks(fs, repoPath, mainWorktreePath, isRegularRepo); err != nil {
+			fmt.Printf("Warning: failed to install hooks directory: %v\n", err)
+		} else {
+			hookInstallPath := repoPath
+			if mainWorktreePath != "" && !isRegularRepo {
+				hookInstallPath = mainWorktreePath
+			}
+			fmt.Printf("\nHooks directory created: %s/.git-hop/hooks/\n", hookInstallPath)
+			fmt.Println("Place executable scripts there to hook into git-hop operations:")
+			fmt.Println("  pre/post-worktree-add, pre/post-worktree-remove, pre/post-worktree-move")
+			fmt.Println("  pre/post-env-start, pre/post-env-stop")
+		}
+	}
+
+	if enableChdir {
+		if err := maybeInstallShellIntegration(fs, true); err != nil {
+			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
+		}
+	}
+
 	output.Info("\nYou can now:")
 	if !isRegularRepo {
 		fmt.Printf("  cd %s   # Work on %s branch\n", mainWorktreePath, currentBranchName)
@@ -274,7 +297,7 @@ Or register current structure: git hop init --current`)
 	fmt.Println("  git hop                    # List all worktrees")
 }
 
-func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string) {
+func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, enableChdir bool) {
 	output.Info("Registering repository as-is...")
 
 	remoteURL, err := g.GetRemoteURL(repoPath)
@@ -323,6 +346,88 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string) {
 	fmt.Println("\nNote: Some git-hop features are limited with this structure.")
 	fmt.Println("Consider converting to worktree structure for full functionality:")
 	fmt.Println("  git hop init --convert")
+
+	if !noHooks {
+		if err := installInitHooks(fs, repoPath, "", false); err != nil {
+			fmt.Printf("Warning: failed to install hooks directory: %v\n", err)
+		} else {
+			fmt.Printf("\nHooks directory created: %s/.git-hop/hooks/\n", repoPath)
+			fmt.Println("Place executable scripts there to hook into git-hop operations:")
+			fmt.Println("  pre/post-worktree-add, pre/post-worktree-remove, pre/post-worktree-move")
+			fmt.Println("  pre/post-env-start, pre/post-env-stop")
+		}
+	}
+
+	if enableChdir {
+		if err := maybeInstallShellIntegration(fs, true); err != nil {
+			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
+		}
+	}
+}
+
+// handleAlreadyInitialized wraps handleAlreadyInitializedWithFlags using global flag values.
+func handleAlreadyInitialized(fs afero.Fs, g git.GitInterface, path string, structure config.StructureType) {
+	handleAlreadyInitializedWithFlags(fs, g, path, structure, noHooksFlag, enableChdirFlag)
+}
+
+// handleAlreadyInitializedWithFlags is called when git hop init is run in a repo that is
+// already using the worktree structure. It ensures hooks are installed (unless --no-hooks)
+// and prints a summary so the command is idempotent.
+func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path string, structure config.StructureType, noHooks, enableChdir bool) {
+	fmt.Println("Repository already initialized with git-hop worktree structure.")
+	fmt.Printf("Structure: %s\n", structure)
+	fmt.Printf("Path:      %s\n", path)
+
+	if !noHooks {
+		if err := installInitHooks(fs, path, "", true); err != nil {
+			fmt.Printf("Warning: failed to ensure hooks directory: %v\n", err)
+		} else {
+			fmt.Printf("\nHooks directory: %s/.git-hop/hooks/\n", path)
+		}
+	}
+
+	if enableChdir {
+		if err := maybeInstallShellIntegration(fs, true); err != nil {
+			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
+		}
+	}
+
+	fmt.Println("\nYou can use git-hop normally:")
+	fmt.Println("  git hop add <branch>   # Add new branch")
+	fmt.Println("  git hop <branch>       # Jump to worktree")
+	fmt.Println("  git hop               # List all worktrees")
+}
+
+// installInitHooks installs the .git-hop/hooks directory after init.
+// For bare repos it installs in the main worktree; otherwise in the repo root.
+func installInitHooks(fs afero.Fs, repoPath, mainWorktreePath string, isRegularRepo bool) error {
+	installPath := repoPath
+	if mainWorktreePath != "" && !isRegularRepo {
+		installPath = mainWorktreePath
+	}
+	return hooks.NewRunner(fs).InstallHooks(installPath)
+}
+
+// installInitHooksConditional installs hooks unless noHooks is true.
+func installInitHooksConditional(fs afero.Fs, repoPath, mainWorktreePath string, isRegularRepo, noHooks bool) {
+	if noHooks {
+		return
+	}
+	installInitHooks(fs, repoPath, mainWorktreePath, isRegularRepo) //nolint:errcheck
+}
+
+// maybeInstallShellIntegration installs shell integration when enabled is true.
+func maybeInstallShellIntegration(fs afero.Fs, enabled bool) error {
+	if !enabled {
+		return nil
+	}
+	result, err := shell.InstallIntegration(fs)
+	if err != nil {
+		return err
+	}
+	output.Success("Shell integration installed to: %s", result.RcPath)
+	output.Info("Restart your shell or run: source %s", result.RcPath)
+	return nil
 }
 
 func handleRestore(fs afero.Fs, g git.GitInterface, backupPath string) {
@@ -372,6 +477,8 @@ func init() {
 	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion")
 	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Use regular repo instead of bare")
 	initCmd.Flags().StringVar(&restorePath, "restore", "", "Restore repository from backup (manual rollback)")
+	initCmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "Skip automatic installation of .git-hop/hooks/ directory")
+	initCmd.Flags().BoolVar(&enableChdirFlag, "enable-chdir", false, "Install shell integration for automatic directory switching after hop commands")
 }
 
 func parseRepoFromURL(uri string) (org, repo string) {

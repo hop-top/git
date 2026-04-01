@@ -8,8 +8,8 @@ Quick reference for daily worktree + env workflows. Scannable in 30 seconds.
 
 ```bash
 git hop init                          # convert existing repo → bare+worktree structure
-git hop install-shell-integration     # enable auto-cd after add/remove/merge
-git hop install-hooks                 # create .git-hop/hooks/ in current worktree
+git hop init --enable-chdir           # also install shell wrapper for auto-cd
+git hop init --no-hooks               # skip creating .git-hop/hooks/ directory
 ```
 
 Config: `$XDG_CONFIG_HOME/git-hop/config.json`
@@ -94,12 +94,11 @@ git hop upgrade --auto                # non-interactive upgrade
 
 ## Shell Integration (auto-cd)
 
-After `install-shell-integration`, `git hop add`/`remove`/`merge` auto-`cd`
-to the resulting worktree. Re-run install if shell config was reset.
+Pass `--enable-chdir` to `git hop init` to install the shell wrapper. `git hop add`/`remove`/`merge` then auto-`cd` to the resulting worktree.
 
 ```bash
-git hop install-shell-integration     # bash / zsh / fish
-git hop uninstall-shell-integration   # remove wrapper
+git hop init --enable-chdir           # bash / zsh / fish — install on first run
+git hop init                          # re-run on existing repo: installs wrapper if --enable-chdir
 ```
 
 ---
@@ -109,7 +108,7 @@ git hop uninstall-shell-integration   # remove wrapper
 Priority: repo override → hopspace hook → global hook.
 
 ```
-.git-hop/hooks/         (repo-level, after install-hooks)
+.git-hop/hooks/         (repo-level, created by git hop init)
 $XDG_DATA_HOME/git-hop/<org>/<repo>/hooks/
 $XDG_CONFIG_HOME/git-hop/hooks/
 ```
@@ -125,7 +124,7 @@ Available hooks:
 
 | Symptom | Fix |
 |---------|-----|
-| `cd` not happening after add/merge | Run `git hop install-shell-integration` |
+| `cd` not happening after add/merge | Run `git hop init --enable-chdir` |
 | Wrong config loaded | `--config <path>` or set `XDG_CONFIG_HOME` |
 | Orphaned worktrees in state | `git hop prune` |
 | Stale state after manual branch delete | `git hop doctor --fix` |

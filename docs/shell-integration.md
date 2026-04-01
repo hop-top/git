@@ -19,10 +19,10 @@ git-hop feature-branch    # Automatically cd to worktree
 
 ### Installation
 
-Install the shell wrapper function:
+Enable the shell wrapper during init (or re-init):
 
 ```bash
-git hop install-shell-integration
+git hop init --enable-chdir
 ```
 
 This adds a shell function to your RC file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`).
@@ -89,12 +89,12 @@ git-hop feature-branch
 
 ## Commands
 
-### install-shell-integration
+### `git hop init --enable-chdir`
 
 Installs the shell wrapper function to your RC file.
 
 ```bash
-git hop install-shell-integration
+git hop init --enable-chdir
 ```
 
 **What it does:**
@@ -102,37 +102,19 @@ git hop install-shell-integration
 - Appends the wrapper function to your RC file
 - Updates global config to track installation status
 - Preserves existing RC file content
-
-**Options:**
-None. The command is fully automatic and idempotent (safe to run multiple times).
+- Safe to re-run on already-initialized repos
 
 **Output:**
 ```
-✓ Shell integration installed!
-
-Installed to: /home/user/.bashrc
-Shell: bash
-
+Shell integration installed to: /home/user/.bashrc
 Restart your shell or run: source /home/user/.bashrc
-
-You can now use: git-hop <branch>
-And it will automatically cd to the worktree.
 ```
 
-### uninstall-shell-integration
+### Removing shell integration
 
-Removes the shell wrapper function from your RC file.
+To remove the wrapper, delete the `git-hop shell integration` block from your RC file (`~/.bashrc`, `~/.zshrc`, or `~/.config/fish/config.fish`) manually.
 
-```bash
-git hop uninstall-shell-integration
-```
-
-**What it does:**
-- Removes the wrapper function from your RC file
-- Updates global config status to "declined"
-- Preserves other content in your RC file
-
-**After uninstalling:**
+**After removing:**
 You'll need to manually navigate to worktrees:
 ```bash
 git hop feature-branch
@@ -184,7 +166,7 @@ cd ../current        # Goes to feature-b, not feature-a
 **Problem:** Running `git-hop` says "command not found"
 
 **Solution:**
-1. Verify installation: `git hop install-shell-integration`
+1. Verify installation: `git hop init --enable-chdir`
 2. Restart your shell: `exec $SHELL`
 3. Check your RC file has the wrapper:
    ```bash
@@ -221,8 +203,8 @@ cd ../current        # Goes to feature-b, not feature-a
 1. Manually remove duplicate entries from RC file
 2. Or uninstall and reinstall:
    ```bash
-   git hop uninstall-shell-integration
-   git hop install-shell-integration
+   # Remove the git-hop shell integration block from your RC file manually, then:
+   git hop init --enable-chdir
    ```
 
 ### CI/Scripts
