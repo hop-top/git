@@ -244,33 +244,12 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 	fmt.Println(legend)
 }
 
-// loadStateOrLegacy loads state.json, or falls back to legacy registry
+// loadStateOrLegacy loads state.json, returning an empty state if not found.
 func loadStateOrLegacy(fs afero.Fs) (*state.State, error) {
-	// Try to load new state first
 	st, err := state.LoadState(fs)
 	if err == nil && len(st.Repositories) > 0 {
 		return st, nil
 	}
-
-	// Fall back to legacy registry and auto-migrate
-	registry := hop.LoadRegistry(fs)
-	if registry.Config != nil && len(registry.Config.Hops) > 0 {
-		output.Warn("Found legacy data. Auto-migrating...")
-		newState := state.NewState()
-		if err := hop.MigrateRegistry(fs, registry, newState); err != nil {
-			return nil, fmt.Errorf("auto-migration failed: %w", err)
-		}
-
-		// Save migrated state
-		if err := state.SaveState(fs, newState); err != nil {
-			return nil, fmt.Errorf("failed to save migrated state: %w", err)
-		}
-
-		output.Success("Auto-migration complete.")
-		return newState, nil
-	}
-
-	// Return empty state if nothing found
 	return state.NewState(), nil
 }
 
