@@ -89,6 +89,21 @@ func (e *TestEnv) RunGitHop(t *testing.T, dir string, args ...string) string {
 	return e.RunCommand(t, dir, e.BinPath, args...)
 }
 
+// RunGitHopCombined runs the git-hop binary and returns combined stdout+stderr.
+// Does not fatal on non-zero exit; use when testing warning/error output.
+func (e *TestEnv) RunGitHopCombined(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command(e.BinPath, args...)
+	cmd.Dir = dir
+	cmd.Env = e.EnvVars
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	cmd.Stderr = &buf
+	t.Logf("Running: %s %v in %s", e.BinPath, args, dir)
+	_ = cmd.Run()
+	return buf.String()
+}
+
 // RunCommand runs a command in the given directory with the test environment
 func (e *TestEnv) RunCommand(t *testing.T, dir, name string, args ...string) string {
 	t.Helper()

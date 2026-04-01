@@ -108,28 +108,32 @@ var removeCmd = &cobra.Command{
 				// The directory will be removed below; showHubStatus checks path
 				// existence and displays Missing when the directory is gone.
 
-				// Use main worktree as base for git worktree remove command
-				var basePath string
-				if mainBranch, exists := hub.Config.Branches[hub.Config.Repo.DefaultBranch]; exists {
-					basePath = mainBranch.Path
-				} else {
-					// Fallback: use any other worktree
+				// Resolve a live base path for git commands (worktree remove, branch -D).
+				// Prefer the default branch worktree; fall back to any other live worktree;
+				// finally use hubPath itself (bare repo) so git commands always have a
+				// valid working directory even when all tracked worktrees are missing.
+				resolveBasePath := func() string {
+					candidates := []string{}
+					if mainBranch, exists := hub.Config.Branches[hub.Config.Repo.DefaultBranch]; exists {
+						candidates = append(candidates, config.ResolveWorktreePath(mainBranch.Path, hubPath))
+					}
 					for bn, bc := range hub.Config.Branches {
 						if bn != target && bc.Path != "" {
-							basePath = bc.Path
-							break
+							candidates = append(candidates, config.ResolveWorktreePath(bc.Path, hubPath))
 						}
 					}
-				}
-
-				if basePath != "" {
-					// Resolve the base path relative to hub (may be relative path like "hops/main")
-					absBasePath := config.ResolveWorktreePath(basePath, hubPath)
-
-					// Try git worktree remove
-					if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
-						output.Warn("Failed to remove worktree via git: %v", err)
+					for _, p := range candidates {
+						if info, err := os.Stat(p); err == nil && info.IsDir() {
+							return p
+						}
 					}
+					return hubPath
+				}
+				absBasePath := resolveBasePath()
+
+				// Try git worktree remove
+				if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
+					output.Warn("Failed to remove worktree via git: %v", err)
 				}
 
 				// Always try to remove the directory physically as well
@@ -147,18 +151,21 @@ var removeCmd = &cobra.Command{
 				}
 
 				// Delete local and remote branches
-				if basePath != "" {
-					absBasePath := config.ResolveWorktreePath(basePath, hubPath)
+				if err := g.DeleteLocalBranch(absBasePath, target); err != nil {
+					output.Warn("Failed to delete local branch: %v", err)
+				}
 
-					if err := g.DeleteLocalBranch(absBasePath, target); err != nil {
-						output.Warn("Failed to delete local branch: %v", err)
+				if g.HasRemoteBranch(absBasePath, target) {
+					if err := g.DeleteRemoteBranch(absBasePath, target); err != nil {
+						output.Warn("Failed to delete remote branch: %v", err)
 					}
+				}
 
-					if g.HasRemoteBranch(absBasePath, target) {
-						if err := g.DeleteRemoteBranch(absBasePath, target); err != nil {
-							output.Warn("Failed to delete remote branch: %v", err)
-						}
-					}
+				// Remove branch from hub config so it no longer appears in status
+				delete(hub.Config.Branches, target)
+				writer := config.NewWriter(fs)
+				if err := writer.WriteHubConfig(hubPath, hub.Config); err != nil {
+					output.Warn("Failed to update hub config: %v", err)
 				}
 
 				// Load Hopspace to unregister
