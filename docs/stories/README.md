@@ -16,6 +16,10 @@ Branch Type Detection System implementation stories.
 | [008](008-move-e2e-testing.md) | E2E Move Command Testing | Completed | High |
 | [009](009-worktree-merge.md) | Worktree Merge | Completed | High |
 | [010](010-doctor-missing-worktrees.md) | Doctor --fix for Missing Worktrees | Completed | High |
+| [011](011-remove-missing-worktrees.md) | Remove Branch When All Worktrees Missing | Completed | High |
+| [012](012-init-auto-hooks-idempotent.md) | Init Auto-Installs Hooks and Is Idempotent | Completed | High |
+| [013](013-init-flags-no-hooks-enable-chdir.md) | Init --no-hooks and --enable-chdir Flags | Completed | High |
+| [014](014-admin-flag-hidden-commands.md) | Hidden Admin Commands via --admin Flag | Completed | Medium |
 
 ## Summary
 
