@@ -27,6 +27,7 @@ var (
 	dryRun       bool
 	gitDomain    string
 	globalConfig bool
+	adminMode    bool
 
 	// Build info
 	version string
@@ -117,6 +118,10 @@ Worktree Mode:
 		// If no subcommand, we fall through (core dispatch logic comes later)
 		Run: func(cmd *cobra.Command, args []string) {
 			if len(args) == 0 {
+				if adminMode {
+					printAdminHelp(cmd)
+					os.Exit(0)
+				}
 				cmd.Help()
 				os.Exit(0)
 			}
@@ -226,9 +231,27 @@ Worktree Mode:
 	RootCmd.Flags().StringVar(&gitDomain, "git-domain", "", "Git domain for shorthand notation (e.g., github.com, gitlab.com)")
 	RootCmd.Flags().String("branch", "", "branch name for fork-attach mode")
 
+	// --admin: hidden flag, only active when no subcommand is given
+	RootCmd.Flags().BoolVar(&adminMode, "admin", false, "")
+	RootCmd.Flags().MarkHidden("admin")
+
+	// Hide cobra's built-in help command
+	RootCmd.SetHelpCommand(&cobra.Command{Hidden: true})
+
 	// Bind Viper to flags (optional, but good for config/env overrides)
 	viper.BindPFlag("json", RootCmd.PersistentFlags().Lookup("json"))
 	viper.BindPFlag("verbose", RootCmd.PersistentFlags().Lookup("verbose"))
+}
+
+// printAdminHelp prints only the hidden admin commands (completion, upgrade).
+func printAdminHelp(cmd *cobra.Command) {
+	fmt.Println("Admin commands:")
+	fmt.Println()
+	for _, sub := range cmd.Commands() {
+		if sub.Hidden && sub.Name() != "" {
+			fmt.Printf("  %-20s %s\n", sub.Name(), sub.Short)
+		}
+	}
 }
 
 func initConfig() {

@@ -87,5 +87,6 @@ func init() {
 	upgradeCmd.Flags().Bool("auto", false, "Install without prompting")
 	upgradeCmd.Flags().BoolP("quiet", "q", false, "Suppress output when already up to date")
 	upgradeCmd.AddCommand(upgradePreambleCmd)
+	upgradeCmd.Hidden = true
 	RootCmd.AddCommand(upgradeCmd)
 }

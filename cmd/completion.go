@@ -50,5 +50,6 @@ Fish:
 }
 
 func init() {
+	completionCmd.Hidden = true
 	cli.RootCmd.AddCommand(completionCmd)
 }
