@@ -481,26 +481,3 @@ func init() {
 	initCmd.Flags().BoolVar(&enableChdirFlag, "enable-chdir", false, "Install shell integration for automatic directory switching after hop commands")
 }
 
-func parseRepoFromURL(uri string) (org, repo string) {
-	trimmed := strings.TrimSuffix(uri, ".git")
-
-	if strings.Contains(trimmed, "://") {
-		parts := strings.Split(trimmed, "/")
-		if len(parts) >= 2 {
-			return parts[len(parts)-2], parts[len(parts)-1]
-		}
-	}
-
-	if strings.HasPrefix(trimmed, "git@") {
-		parts := strings.Split(trimmed, ":")
-		if len(parts) == 2 {
-			path := parts[1]
-			pathParts := strings.Split(path, "/")
-			if len(pathParts) >= 2 {
-				return pathParts[len(pathParts)-2], pathParts[len(pathParts)-1]
-			}
-		}
-	}
-
-	return "", ""
-}

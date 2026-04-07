@@ -17,9 +17,7 @@ func NewTable(headers []interface{}) *Table {
 	t.SetOutputMirror(os.Stdout)
 
 	row := make(table.Row, len(headers))
-	for i, h := range headers {
-		row[i] = h
-	}
+	copy(row, headers)
 	t.AppendHeader(row)
 
 	t.SetStyle(table.StyleRounded)
@@ -29,9 +27,7 @@ func NewTable(headers []interface{}) *Table {
 // AddRow adds a row
 func (t *Table) AddRow(row ...interface{}) {
 	r := make(table.Row, len(row))
-	for i, v := range row {
-		r[i] = v
-	}
+	copy(r, row)
 	t.t.AppendRow(r)
 }
 

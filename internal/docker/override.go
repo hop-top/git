@@ -29,9 +29,6 @@ type composeService struct {
 
 var varPattern = regexp.MustCompile(`^\$\{.+\}$`)
 
-// varDefaultPattern matches ${VAR:-default} style compose default-value syntax.
-var varDefaultPattern = regexp.MustCompile(`^\$\{[^}]+:-[^}]*\}$`)
-
 // ParsePortMappings parses all services' port mappings from compose YAML content.
 // Handles short syntax ("8000:8000", "127.0.0.1:8000:8000", "8000:8000/tcp")
 // and long syntax ({target: 8000, published: 8000}).
