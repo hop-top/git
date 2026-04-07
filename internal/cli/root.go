@@ -31,14 +31,10 @@ var (
 
 	// Build info
 	version string
-	commit  string
-	date    string
 )
 
 func SetVersion(v, c, d string) {
 	version = v
-	commit = c
-	date = d
 	if RootCmd != nil {
 		RootCmd.Version = fmt.Sprintf("%s (commit: %s, built: %s)", v, c, d)
 	}
