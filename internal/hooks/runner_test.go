@@ -222,6 +222,50 @@ func TestInstallHooks_NotGitRepo(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a git repository")
 }
 
+// TestInstallHooks_WorktreeChild covers the .git-as-file shape: a git
+// worktree's .git is a regular file containing "gitdir: <hub>/worktrees/X".
+// Before the LooksLikeGitCheckout refactor, the old DirExists check
+// rejected this shape and InstallHooks errored out — so hooks could
+// never be installed inside any branch worktree.
+func TestInstallHooks_WorktreeChild(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	runner := NewRunner(fs)
+
+	worktreePath := "/path/to/worktree"
+	require.NoError(t, fs.MkdirAll(worktreePath, 0755))
+	require.NoError(t, afero.WriteFile(fs, filepath.Join(worktreePath, ".git"),
+		[]byte("gitdir: /hub/worktrees/feature\n"), 0644))
+
+	err := runner.InstallHooks(worktreePath)
+	require.NoError(t, err)
+
+	exists, err := afero.DirExists(fs, filepath.Join(worktreePath, ".git-hop", "hooks"))
+	require.NoError(t, err)
+	assert.True(t, exists)
+}
+
+// TestInstallHooks_BareRepoAtPath covers the bare-at-root shape: a hop
+// hub where HEAD/objects/refs sit directly under the path with no .git
+// subdir. Before the fix, InstallHooks rejected hubs because its old
+// check looked for .git as a directory.
+func TestInstallHooks_BareRepoAtPath(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	runner := NewRunner(fs)
+
+	hubPath := "/path/to/hub"
+	require.NoError(t, fs.MkdirAll(filepath.Join(hubPath, "objects"), 0755))
+	require.NoError(t, fs.MkdirAll(filepath.Join(hubPath, "refs"), 0755))
+	require.NoError(t, afero.WriteFile(fs, filepath.Join(hubPath, "HEAD"),
+		[]byte("ref: refs/heads/main\n"), 0644))
+
+	err := runner.InstallHooks(hubPath)
+	require.NoError(t, err)
+
+	exists, err := afero.DirExists(fs, filepath.Join(hubPath, ".git-hop", "hooks"))
+	require.NoError(t, err)
+	assert.True(t, exists)
+}
+
 func TestValidateHookName_Move(t *testing.T) {
 	if err := ValidateHookName("pre-worktree-move"); err != nil {
 		t.Errorf("expected pre-worktree-move to be valid, got: %v", err)

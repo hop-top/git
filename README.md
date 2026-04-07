@@ -496,6 +496,19 @@ go test ./cmd -v      # Test specific package
 go test -run TestName  # Run specific test
 ```
 
+The default `go test ./...` covers tier-1 (unit) and tier-2 (local-git
+e2e) tests. Tier-3 docker e2e tests are gated behind the `dockere2e`
+build tag and run nightly via `.github/workflows/dockere2e.yml`. To run
+them locally:
+
+```bash
+go test -tags dockere2e ./test/e2e/docker/...
+```
+
+See [docs/testing.md](docs/testing.md) for the full testing
+architecture, CI workflow split, the xrr-aware binary contract, and
+common gotchas.
+
 ## Documentation
 
 For detailed information, see:
@@ -505,6 +518,7 @@ For detailed information, see:
 - **[Hooks System](docs/hooks.md)** - Lifecycle hooks for customizing worktree and environment behavior
 - **[Error Recovery](docs/error-recovery.md)** - Understanding and fixing state issues with the doctor command
 - **[Package Manager Overrides](docs/package-manager-overrides.md)** - Custom dependency installation per branch
+- **[Testing](docs/testing.md)** - Test tiers, CI workflow split, dockere2e gate, xrr-aware test runtime
 
 ## FAQ
 

@@ -1,3 +1,5 @@
+//go:build dockere2e
+
 package docker_test
 
 import (

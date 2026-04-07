@@ -14,6 +14,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	gopkg.in/yaml.v3 v3.0.1
 	hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7
+	hop.top/xrr v0.1.0-alpha.3
 )
 
 require (

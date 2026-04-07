@@ -180,32 +180,38 @@ func TestCommands(t *testing.T) {
 	})
 
 	// --- Test: git hop remove ---
+	//
+	// Spec (per docs/stories/011-remove-missing-worktrees.md and commit
+	// c5e3770 "fix(remove): resolve chdir error and ghost entry"): a
+	// successful `git hop remove` deletes the branch from hub config so
+	// it no longer appears in `git hop status`. The "Missing" state is
+	// reserved for worktrees whose directory was externally deleted
+	// (user `rm -rf`) while the hub config entry still exists — see
+	// remove_missing_test.go for that path.
 	t.Run("Remove", func(t *testing.T) {
-		// Remove feature-1
-		// Remove is interactive by default, use --no-prompt to avoid confirmation
-
 		out := env.RunGitHop(t, env.HubPath, "remove", "feature-1", "--no-prompt")
 		if !strings.Contains(out, "Removed") && !strings.Contains(out, "Successfully") {
-			// Adjust expectation based on actual output
 			t.Logf("Remove output: %s", out)
 		}
 
-		// Verify worktree gone
+		// Worktree directory should be physically gone.
 		wtPath := filepath.Join(env.HubPath, "hops", "feature-1")
 		if _, err := os.Stat(wtPath); err == nil {
 			t.Errorf("Worktree feature-1 should be gone at hops/feature-1")
 		}
 
-		// Hub status should now show Missing for the removed worktree
+		// `git hop status` should no longer list feature-1 at all.
 		out = env.RunGitHop(t, env.HubPath, "status")
-		if !strings.Contains(out, "Missing") {
-			t.Errorf("Status hub view should show 'Missing' for removed worktree: %s", out)
+		if strings.Contains(out, "feature-1") {
+			t.Errorf("Status should NOT list removed worktree feature-1: %s", out)
 		}
 
-		// status --all should reflect updated Active/Missing counts
+		// `git hop status --all` likewise: no feature-1 row, and the
+		// Missing count should NOT increase (removal is not the same
+		// as a missing-worktree state).
 		allOut := env.RunGitHop(t, env.HubPath, "status", "--all")
-		if !strings.Contains(allOut, "Missing") {
-			t.Errorf("Status --all should show Missing count after removal: %s", allOut)
+		if strings.Contains(allOut, "feature-1") {
+			t.Errorf("Status --all should NOT list removed worktree feature-1: %s", allOut)
 		}
 	})
 
