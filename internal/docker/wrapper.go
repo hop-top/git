@@ -48,9 +48,25 @@ func (r *RealRunner) RunInDir(dir string, cmd string, args ...string) (string, e
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// New creates a new Docker wrapper
-func New() *Docker {
-	return &Docker{Runner: &RealRunner{}}
+// Option configures a Docker wrapper. Used by New for opt-in
+// customization (e.g. tests injecting an xrr-backed CommandRunner).
+type Option func(*Docker)
+
+// WithRunner overrides the default RealRunner. Tests pass an
+// xrr-backed runner to record/replay docker invocations
+// deterministically — no real docker daemon needed in CI.
+func WithRunner(r CommandRunner) Option {
+	return func(d *Docker) { d.Runner = r }
+}
+
+// New creates a new Docker wrapper. Without options it uses RealRunner —
+// production behavior is unchanged.
+func New(opts ...Option) *Docker {
+	d := &Docker{Runner: &RealRunner{}}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
 }
 
 // IsAvailable checks if docker is available
