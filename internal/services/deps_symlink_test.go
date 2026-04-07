@@ -211,6 +211,143 @@ func TestEnsureDeps_PopulatesSharedCache(t *testing.T) {
 	assert.Equal(t, "populated\n", string(contents))
 }
 
+// TestEnsureDeps_StaleSymlinkClearedBeforeInstall verifies that when the
+// lockfile hash changes (so the worktree's existing symlink points to an OLD
+// cache dir), EnsureDeps clears the stale symlink BEFORE running the install
+// command. Otherwise the install writes through the symlink into the old
+// cache — corrupting shared state used by other branches — and the
+// post-install relocation would then move the symlink (not a real dir) into
+// the new cache path, producing a symlink-to-symlink pointing nowhere useful.
+// See https://github.com/hop-top/git/pull/13 review (ordering bug).
+func TestEnsureDeps_StaleSymlinkClearedBeforeInstall(t *testing.T) {
+	tmpDir := setupDepsTestDir(t)
+	osFs := afero.NewOsFs()
+
+	// Pre-populate an OLD cache dir and a symlink pointing at it.
+	oldDepsKey := "node_modules.oldhsh"
+	oldDepsPath := filepath.Join(tmpDir, "deps", oldDepsKey)
+	require.NoError(t, os.MkdirAll(oldDepsPath, 0755))
+	oldMarker := filepath.Join(oldDepsPath, "old-marker")
+	require.NoError(t, os.WriteFile(oldMarker, []byte("old"), 0644))
+
+	worktreeDir := filepath.Join(tmpDir, "worktrees", "feature")
+	require.NoError(t, os.MkdirAll(worktreeDir, 0755))
+	// New lockfile content → new hash → new cache key.
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "pnpm-lock.yaml"), []byte("lockfileVersion: 6\nnew: true\n"), 0644))
+
+	// Stale symlink from a prior EnsureDeps with the old lockfile.
+	symlinkPath := filepath.Join(worktreeDir, "node_modules")
+	require.NoError(t, os.Symlink(oldDepsPath, symlinkPath))
+
+	pm := services.PackageManager{
+		Name:        "pnpm",
+		DetectFiles: []string{"pnpm-lock.yaml"},
+		LockFiles:   []string{"pnpm-lock.yaml"},
+		DepsDir:     "node_modules",
+		// Install command that would corrupt the old cache if the stale
+		// symlink survived into it: writes a "new-marker" via the worktree
+		// dep dir path.
+		InstallCmd: []string{"sh", "-c", "mkdir -p node_modules && echo new > node_modules/new-marker"},
+	}
+
+	registry := &services.DepsRegistry{Entries: make(map[string]services.DepsEntry)}
+	dm := services.NewDepsManagerFromParts(osFs, tmpDir, registry, []services.PackageManager{pm}, nil)
+
+	require.NoError(t, dm.EnsureDeps(worktreeDir, "feature"))
+
+	// The old cache must NOT have been mutated by the install command.
+	// If the stale symlink survived into install, new-marker would have
+	// ended up inside oldDepsPath.
+	_, err := os.Stat(filepath.Join(oldDepsPath, "new-marker"))
+	assert.True(t, os.IsNotExist(err), "old shared cache must not be corrupted by install writing through a stale symlink")
+	// The original old-marker should still be there.
+	contents, err := os.ReadFile(oldMarker)
+	require.NoError(t, err, "old cache contents must be preserved")
+	assert.Equal(t, "old", string(contents))
+
+	// The new symlink target must be a real dir containing new-marker.
+	target, err := os.Readlink(symlinkPath)
+	require.NoError(t, err)
+	info, err := os.Lstat(target)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir() && info.Mode()&os.ModeSymlink == 0, "new cache target must be a real directory, not a symlink")
+	newContents, err := os.ReadFile(filepath.Join(target, "new-marker"))
+	require.NoError(t, err)
+	assert.Equal(t, "new\n", string(newContents))
+}
+
+// TestEnsureDeps_InstallProducedNothingErrors verifies that when an install
+// command succeeds but neither populates targetDir (pip-style) nor creates
+// worktreePath/<DepsDir> (cwd-relative style), EnsureDeps reports an error
+// rather than silently leaving an empty shared cache entry behind. The
+// previous implementation treated "no worktree deps dir" as the pip path and
+// returned nil regardless of PM, which hid install bugs.
+func TestEnsureDeps_InstallProducedNothingErrors(t *testing.T) {
+	tmpDir := setupDepsTestDir(t)
+	osFs := afero.NewOsFs()
+
+	worktreeDir := filepath.Join(tmpDir, "worktrees", "feature")
+	require.NoError(t, os.MkdirAll(worktreeDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "pnpm-lock.yaml"), []byte("lockfileVersion: 6\n"), 0644))
+
+	// Install command that succeeds but produces nothing anywhere.
+	pm := services.PackageManager{
+		Name:        "pnpm",
+		DetectFiles: []string{"pnpm-lock.yaml"},
+		LockFiles:   []string{"pnpm-lock.yaml"},
+		DepsDir:     "node_modules",
+		InstallCmd:  []string{"true"},
+	}
+
+	registry := &services.DepsRegistry{Entries: make(map[string]services.DepsEntry)}
+	dm := services.NewDepsManagerFromParts(osFs, tmpDir, registry, []services.PackageManager{pm}, nil)
+
+	err := dm.EnsureDeps(worktreeDir, "feature")
+	require.Error(t, err, "install command producing no output must be an error, not silent success")
+	assert.Contains(t, err.Error(), "produced", "error should explain the install produced no deps")
+}
+
+// TestRelocateDir_FallsBackToCopy verifies that the move-with-fallback
+// helper used by installDeps falls back to a recursive copy when os.Rename
+// cannot move src onto dst. os.Rename fails with EXDEV across filesystems
+// (worktree and data home on different volumes); we can't easily produce
+// EXDEV in a unit test, but we can produce an equivalent failure by making
+// dst a file (so Rename's "cannot replace file with directory" path
+// triggers), then verifying the fallback recreates the tree at dst.
+func TestRelocateDir_FallsBackToCopy(t *testing.T) {
+	tmpDir := t.TempDir()
+
+	src := filepath.Join(tmpDir, "src")
+	require.NoError(t, os.MkdirAll(filepath.Join(src, "nested"), 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0644))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "nested", "b.txt"), []byte("b"), 0644))
+
+	// Create dst as a file so a direct Rename(src→dst) fails: on most
+	// platforms renaming a directory onto a regular file errors out
+	// (ENOTDIR / file exists). The helper must remove dst and try copy.
+	dst := filepath.Join(tmpDir, "dst")
+	require.NoError(t, os.WriteFile(dst, []byte("stub"), 0644))
+
+	err := services.RelocateDir(src, dst)
+	require.NoError(t, err)
+
+	// src must be gone.
+	_, err = os.Stat(src)
+	assert.True(t, os.IsNotExist(err), "src must be removed after relocation")
+
+	// dst must now be a directory with the full tree.
+	info, err := os.Lstat(dst)
+	require.NoError(t, err)
+	assert.True(t, info.IsDir(), "dst must be a directory after fallback copy")
+
+	a, err := os.ReadFile(filepath.Join(dst, "a.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "a", string(a))
+	b, err := os.ReadFile(filepath.Join(dst, "nested", "b.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "b", string(b))
+}
+
 // TestAudit_DetectsBrokenSymlinkWhenTargetDeleted verifies that Audit reports
 // IssueBrokenSymlink when the symlink points to the expected (correct-hash)
 // path but the target directory has been deleted. Before the fix, Audit only
