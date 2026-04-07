@@ -60,8 +60,18 @@ func (r *Runner) Run(cmd string, args ...string) (string, error) {
 // non-zero process exit (*os/exec.ExitError) is absorbed into the
 // recorded Response so replay can re-emit the same exit shape; non-exit
 // errors (binary missing, ctx cancel) propagate as-is.
+//
+// dir is recorded into the request fingerprint via xexec.Request.Cwd
+// (xrr v0.1.0-alpha.3+) so the same command run from different
+// worktrees produces distinct cassette keys. Without this, multi-cwd
+// recordings — which are the norm for git-hop tests — would all
+// collide on the same fingerprint and overwrite each other on record /
+// reuse the wrong recording on replay.
 func (r *Runner) RunInDir(dir, cmd string, args ...string) (string, error) {
-	req := &xexec.Request{Argv: append([]string{cmd}, args...)}
+	req := &xexec.Request{
+		Argv: append([]string{cmd}, args...),
+		Cwd:  dir,
+	}
 	resp, err := r.sess.Record(context.Background(), r.adapter, req,
 		func() (xrr.Response, error) {
 			out, runErr := r.real.RunInDir(dir, cmd, args...)

@@ -142,3 +142,95 @@ func (o *osExecReal) RunInDir(dir, cmd string, args ...string) (string, error) {
 	out, err := c.Output()
 	return string(out), err
 }
+
+// dirAwareReal is a Real runner that returns per-directory responses,
+// used by TestRunner_CwdInFingerprint to verify the same command run in
+// different cwds yields distinct cassettes.
+type dirAwareReal struct {
+	calls    int
+	perDir   map[string]string
+	fallback string
+}
+
+func (d *dirAwareReal) Run(cmd string, args ...string) (string, error) {
+	return d.RunInDir("", cmd, args...)
+}
+
+func (d *dirAwareReal) RunInDir(dir, cmd string, args ...string) (string, error) {
+	d.calls++
+	if v, ok := d.perDir[dir]; ok {
+		return v, nil
+	}
+	return d.fallback, nil
+}
+
+// TestRunner_CwdInFingerprint exercises xrr v0.1.0-alpha.3's Cwd field:
+// the same command run in two different directories must produce two
+// distinct cassettes during record, and replay must return the right
+// one for each directory. Before alpha.3, both calls collided on the
+// same fingerprint and the second record overwrote the first.
+func TestRunner_CwdInFingerprint(t *testing.T) {
+	cassDir := t.TempDir()
+
+	const (
+		dirA = "/tmp/worktree-a"
+		dirB = "/tmp/worktree-b"
+	)
+	real := &dirAwareReal{
+		perDir: map[string]string{
+			dirA: "sha-from-a\n",
+			dirB: "sha-from-b\n",
+		},
+	}
+
+	// --- record: same argv in two different cwds. Cassettes must NOT
+	// collide; both invocations must be persisted.
+	recSess := xrr.NewSession(xrr.ModeRecord, xrr.NewFileCassette(cassDir))
+	rec := xrrx.NewRunner(real, recSess)
+
+	outA, err := rec.RunInDir(dirA, "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("record dirA: %v", err)
+	}
+	if outA != "sha-from-a\n" {
+		t.Fatalf("record dirA stdout = %q, want %q", outA, "sha-from-a\n")
+	}
+
+	outB, err := rec.RunInDir(dirB, "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("record dirB: %v", err)
+	}
+	if outB != "sha-from-b\n" {
+		t.Fatalf("record dirB stdout = %q, want %q", outB, "sha-from-b\n")
+	}
+
+	if real.calls != 2 {
+		t.Fatalf("real runner called %d times, want 2", real.calls)
+	}
+
+	// --- replay: a fresh fakeReal that MUST NOT be invoked. Both cwds
+	// should resolve to their distinct recorded responses.
+	notCalled := &dirAwareReal{fallback: "must not be observed"}
+	replSess := xrr.NewSession(xrr.ModeReplay, xrr.NewFileCassette(cassDir))
+	repl := xrrx.NewRunner(notCalled, replSess)
+
+	replA, err := repl.RunInDir(dirA, "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("replay dirA: %v", err)
+	}
+	if replA != "sha-from-a\n" {
+		t.Fatalf("replay dirA stdout = %q, want %q (collision: cwd not in fingerprint?)", replA, "sha-from-a\n")
+	}
+
+	replB, err := repl.RunInDir(dirB, "git", "rev-parse", "HEAD")
+	if err != nil {
+		t.Fatalf("replay dirB: %v", err)
+	}
+	if replB != "sha-from-b\n" {
+		t.Fatalf("replay dirB stdout = %q, want %q (collision: cwd not in fingerprint?)", replB, "sha-from-b\n")
+	}
+
+	if notCalled.calls != 0 {
+		t.Fatalf("real runner called %d times during replay, want 0", notCalled.calls)
+	}
+}
