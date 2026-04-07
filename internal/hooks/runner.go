@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+
+	"hop.top/git/internal/hop"
 )
 
 // Runner handles hook execution following the priority system
@@ -199,16 +201,18 @@ func (r *Runner) GetHookEnv(hookName string, worktreePath string, repoID string,
 	}
 }
 
-// InstallHooks installs git-hop hooks in a worktree
-// Creates .git-hop/hooks directory for repo-level hook overrides
+// InstallHooks installs git-hop hooks in a worktree, hub, or worktree
+// child. Creates .git-hop/hooks directory for repo-level hook overrides.
+//
+// The git-repo presence check accepts three shapes via
+// hop.LooksLikeGitCheckout: standard repos (.git dir), worktree children
+// (.git file with gitdir: pointer), and bare repos at root
+// (HEAD/objects/refs directly under path, e.g. hop hubs).
 func (r *Runner) InstallHooks(worktreePath string) error {
-	// Verify this is a git repository
-	gitDir := filepath.Join(worktreePath, ".git")
-	if exists, _ := afero.DirExists(r.fs, gitDir); !exists {
+	if !hop.LooksLikeGitCheckout(r.fs, worktreePath) {
 		return fmt.Errorf("not a git repository: %s", worktreePath)
 	}
 
-	// Create .git-hop/hooks directory
 	hooksDir := filepath.Join(worktreePath, ".git-hop", "hooks")
 	if err := r.fs.MkdirAll(hooksDir, 0755); err != nil {
 		return fmt.Errorf("failed to create hooks directory: %w", err)

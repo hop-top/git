@@ -11,6 +11,37 @@ import (
 	"github.com/spf13/afero"
 )
 
+// LooksLikeGitCheckout reports whether path is any flavor of git checkout
+// — a standard repo (.git directory), a worktree child (.git file with
+// gitdir: pointer), or a bare repo at root (HEAD/objects/refs directly
+// under path, the shape cloneBareRepo produces for hop hubs).
+//
+// Use this when you need a permissive "is this a place where it's safe
+// to install hop metadata" check, rather than a structural classifier.
+// DetectRepoStructure is the structural classifier and returns more
+// specific information when callers care about WHICH flavor.
+func LooksLikeGitCheckout(fs afero.Fs, path string) bool {
+	if isBareRepoAtPath(fs, path) {
+		return true
+	}
+	gitPath := filepath.Join(path, ".git")
+	info, err := fs.Stat(gitPath)
+	if err != nil {
+		return false
+	}
+	if info.IsDir() {
+		return true
+	}
+	// .git is a file — worktree child shape ("gitdir: ..." pointer).
+	if info.Mode().IsRegular() {
+		content, err := afero.ReadFile(fs, gitPath)
+		if err == nil && strings.Contains(string(content), "gitdir:") {
+			return true
+		}
+	}
+	return false
+}
+
 // isBareRepoAtPath reports whether path is itself a bare git repository
 // (no .git subdir; HEAD/objects/refs sit directly under path). This is
 // the shape produced by cloneBareRepo for hop hubs.
