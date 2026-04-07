@@ -11,7 +11,35 @@ import (
 	"github.com/spf13/afero"
 )
 
+// isBareRepoAtPath reports whether path is itself a bare git repository
+// (no .git subdir; HEAD/objects/refs sit directly under path). This is
+// the shape produced by cloneBareRepo for hop hubs.
+func isBareRepoAtPath(fs afero.Fs, path string) bool {
+	headInfo, err := fs.Stat(filepath.Join(path, "HEAD"))
+	if err != nil || !headInfo.Mode().IsRegular() {
+		return false
+	}
+	objInfo, err := fs.Stat(filepath.Join(path, "objects"))
+	if err != nil || !objInfo.IsDir() {
+		return false
+	}
+	refsInfo, err := fs.Stat(filepath.Join(path, "refs"))
+	if err != nil || !refsInfo.IsDir() {
+		return false
+	}
+	return true
+}
+
 func DetectRepoStructure(fs afero.Fs, path string) config.StructureType {
+	// Hub directories created by cloneBareRepo are bare git repos with
+	// metadata living directly under <path>/ (no .git subdir). Detect
+	// that shape first: HEAD as a regular file plus objects/ and refs/
+	// as directories. Without this branch, the .git-subdir check below
+	// would mis-classify hubs as NotGit.
+	if isBareRepoAtPath(fs, path) {
+		return config.BareWorktreeRoot
+	}
+
 	gitDir := filepath.Join(path, ".git")
 	gitInfo, err := fs.Stat(gitDir)
 	if err != nil {
