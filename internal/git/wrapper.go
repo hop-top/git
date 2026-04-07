@@ -81,9 +81,24 @@ func (r *RealRunner) RunInDir(dir string, cmd string, args ...string) (string, e
 	return strings.TrimSpace(stdout.String()), nil
 }
 
-// New creates a new Git wrapper
-func New() *Git {
-	return &Git{Runner: &RealRunner{}}
+// Option configures a Git wrapper. Used by New for opt-in customization
+// (e.g. tests injecting an xrr-backed CommandRunner).
+type Option func(*Git)
+
+// WithRunner overrides the default RealRunner. Tests pass an
+// xrr-backed runner to record/replay git invocations deterministically.
+func WithRunner(r CommandRunner) Option {
+	return func(g *Git) { g.Runner = r }
+}
+
+// New creates a new Git wrapper. Without options it uses RealRunner —
+// production behavior is unchanged.
+func New(opts ...Option) *Git {
+	g := &Git{Runner: &RealRunner{}}
+	for _, opt := range opts {
+		opt(g)
+	}
+	return g
 }
 
 // Clone clones a repository
