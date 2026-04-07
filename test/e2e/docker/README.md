@@ -2,6 +2,27 @@
 
 Comprehensive integration tests for git-hop's Docker environment management and multi-service isolation.
 
+## Running
+
+These tests are gated behind the `dockere2e` build tag and require a real
+local Docker daemon. They are **excluded from default `go test ./...`** and
+from PR CI runs.
+
+```sh
+# Run all docker e2e tests (requires docker + docker compose locally)
+go test -tags dockere2e ./test/e2e/docker/...
+
+# Run a single test
+go test -tags dockere2e -run TestDockerIsolation_PortIsolation ./test/e2e/docker/...
+```
+
+Default `go test ./...` skips this directory entirely — it does not even
+compile the files. The build-tag gate is the right approach here because
+the tests assert on real OS-allocated state (port numbers, container IDs,
+volume directory contents, real HTTP responses) which cannot be
+deterministically replayed via xrr cassettes. See
+`hop-top/git` track `git-test-determinism` T-0015 for the analysis.
+
 ## Overview
 
 These tests verify actual Docker container behavior, not just file generation. They ensure:
