@@ -187,6 +187,10 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 
+	if err := ensureWorktreeHooksDir(fs, mainPath); err != nil {
+		return fmt.Errorf("failed to seed hooks directory: %w", err)
+	}
+
 	return nil
 }
 
@@ -209,7 +213,22 @@ func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, default
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 
+	if err := ensureWorktreeHooksDir(fs, mainPath); err != nil {
+		return fmt.Errorf("failed to seed hooks directory: %w", err)
+	}
+
 	return nil
+}
+
+// ensureWorktreeHooksDir creates the .git-hop/hooks directory inside a
+// freshly-created worktree so user-supplied hooks can be dropped in
+// without an extra `git hop init` step. Inlined here (rather than going
+// through internal/hooks.Runner.InstallHooks) to avoid an import cycle:
+// internal/hooks already imports internal/hop for LooksLikeGitCheckout.
+// We just created the worktree, so the existence check is unnecessary.
+func ensureWorktreeHooksDir(fs afero.Fs, worktreePath string) error {
+	hooksDir := filepath.Join(worktreePath, ".git-hop", "hooks")
+	return fs.MkdirAll(hooksDir, 0755)
 }
 
 func createProjectConfig(fs afero.Fs, g git.GitInterface, projectRoot, uri, org, repo, defaultBranch string, useBare bool) error {
