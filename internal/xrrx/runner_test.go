@@ -2,6 +2,7 @@ package xrrx_test
 
 import (
 	"errors"
+	"os/exec"
 	"testing"
 
 	"hop.top/git/internal/xrrx"
@@ -89,4 +90,55 @@ func TestRunner_ReplayMissReturnsCassetteMiss(t *testing.T) {
 	if !errors.Is(err, xrr.ErrCassetteMiss) {
 		t.Fatalf("expected ErrCassetteMiss, got %v", err)
 	}
+}
+
+// TestRunner_NonZeroExitRecordedAndReplayed exercises xrr v0.1.0-alpha.2's
+// new behavior: a clean process exit with non-zero code is persisted into
+// the cassette envelope so replay can re-emit the same error. We use a
+// real `false` subprocess via os/exec to produce a genuine
+// *os/exec.ExitError; an errors.New stand-in would still record but the
+// real-binary path is the integration we care about.
+//
+// xrrx.Runner returns (string, error) — on a non-zero exit, both record
+// and replay must surface a non-nil error so callers (git.CommandRunner,
+// docker.CommandRunner) see the same shape they would in production.
+func TestRunner_NonZeroExitRecordedAndReplayed(t *testing.T) {
+	if _, err := exec.LookPath("false"); err != nil {
+		t.Skip("`false` binary unavailable on this platform")
+	}
+
+	dir := t.TempDir()
+
+	// --- record: real `false` returns exit 1; runner surfaces the error.
+	recSess := xrr.NewSession(xrr.ModeRecord, xrr.NewFileCassette(dir))
+	rec := xrrx.NewRunner(&osExecReal{}, recSess)
+	_, recErr := rec.Run("false")
+	if recErr == nil {
+		t.Fatal("record: expected non-nil error from `false`, got nil")
+	}
+
+	// --- replay: must re-emit a non-nil error matching the recorded exit.
+	replSess := xrr.NewSession(xrr.ModeReplay, xrr.NewFileCassette(dir))
+	repl := xrrx.NewRunner(&fakeReal{err: errors.New("must not be called")}, replSess)
+	_, replErr := repl.Run("false")
+	if replErr == nil {
+		t.Fatal("replay: expected non-nil error for recorded non-zero exit, got nil")
+	}
+}
+
+// osExecReal is a Real runner backed by real os/exec, used only by the
+// non-zero-exit test where we need a genuine *exec.ExitError.
+type osExecReal struct{}
+
+func (o *osExecReal) Run(cmd string, args ...string) (string, error) {
+	return o.RunInDir("", cmd, args...)
+}
+
+func (o *osExecReal) RunInDir(dir, cmd string, args ...string) (string, error) {
+	c := exec.Command(cmd, args...)
+	if dir != "" {
+		c.Dir = dir
+	}
+	out, err := c.Output()
+	return string(out), err
 }

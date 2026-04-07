@@ -56,26 +56,46 @@ func (r *Runner) Run(cmd string, args ...string) (string, error) {
 }
 
 // RunInDir executes cmd in dir. The interaction is mediated by the
-// xrr session: it may be recorded, replayed, or passed through.
+// xrr session: it may be recorded, replayed, or passed through. A
+// non-zero process exit (*os/exec.ExitError) is absorbed into the
+// recorded Response so replay can re-emit the same exit shape; non-exit
+// errors (binary missing, ctx cancel) propagate as-is.
 func (r *Runner) RunInDir(dir, cmd string, args ...string) (string, error) {
 	req := &xexec.Request{Argv: append([]string{cmd}, args...)}
 	resp, err := r.sess.Record(context.Background(), r.adapter, req,
 		func() (xrr.Response, error) {
 			out, runErr := r.real.RunInDir(dir, cmd, args...)
-			return &xexec.Response{
-				Stdout:   out,
-				ExitCode: exitCodeFromErr(runErr),
-			}, runErr
+			return wrapExecResult(out, runErr)
 		})
-	if err != nil {
-		return "", err
+	return stdoutOf(resp), err
+}
+
+// wrapExecResult populates the Response with the exit code (via
+// xexec.ExitCodeFromError) and, critically, returns runErr verbatim so
+// xrr v0.1.0-alpha.2's session.record can persist it into the cassette
+// envelope. On replay, session.replay re-emits the recorded error,
+// preserving the (string, error) contract that git.CommandRunner and
+// docker.CommandRunner expose to callers.
+//
+// This differs from xrr's examples/wrap_command_runner which absorbs
+// ExitError into the Response and returns nil — that pattern fits
+// callers that read resp.ExitCode directly. We project to (string,
+// error) and need the error round-tripped so non-zero exits remain
+// observable.
+func wrapExecResult(out string, runErr error) (xrr.Response, error) {
+	resp := &xexec.Response{
+		Stdout:   out,
+		ExitCode: xexec.ExitCodeFromError(runErr),
 	}
-	return stdoutOf(resp), nil
+	return resp, runErr
 }
 
 // stdoutOf extracts stdout from either a typed exec response (record /
 // passthrough) or a RawResponse map (replay).
 func stdoutOf(resp xrr.Response) string {
+	if resp == nil {
+		return ""
+	}
 	switch v := resp.(type) {
 	case *xexec.Response:
 		return v.Stdout
@@ -85,14 +105,4 @@ func stdoutOf(resp xrr.Response) string {
 		}
 	}
 	return ""
-}
-
-// exitCodeFromErr returns 0 on nil, 1 otherwise. The exec adapter does
-// not currently expose process exit codes from os/exec wrappers, so this
-// is best-effort. See xrr feedback: exec adapter exit-code propagation.
-func exitCodeFromErr(err error) int {
-	if err == nil {
-		return 0
-	}
-	return 1
 }

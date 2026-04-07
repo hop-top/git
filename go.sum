@@ -110,3 +110,5 @@ hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7 h1:LGxrmqG9V+uMY30PUzYZvulJ1C
 hop.top/upgrade v0.0.0-20260323164843-b8379a5355f7/go.mod h1:/J7R294USZQXbsEGVEUkLnGvVcamC6gh9Lt27YCEtCU=
 hop.top/xrr v0.1.0-alpha.1 h1:ecNzmRlSms5pc+wwbOou1OmqaHN/X9DbsIqGb2wO+Io=
 hop.top/xrr v0.1.0-alpha.1/go.mod h1:OtQoLVAyLV7M6SHeYdfQ/ypIB4KYVZF/Z9KL/SW7wxQ=
+hop.top/xrr v0.1.0-alpha.2 h1:hBr0ssGRKwMyYOf6FKxakmiFa9V1MCT4eW7qBnjEz2c=
+hop.top/xrr v0.1.0-alpha.2/go.mod h1:OtQoLVAyLV7M6SHeYdfQ/ypIB4KYVZF/Z9KL/SW7wxQ=
