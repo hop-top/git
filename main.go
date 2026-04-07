@@ -21,7 +21,13 @@ THE SOFTWARE.
 */
 package main
 
-import "hop.top/git/cmd"
+import (
+	"fmt"
+	"os"
+
+	"hop.top/git/cmd"
+	"hop.top/git/internal/xrrx"
+)
 
 var (
 	version = "dev"
@@ -30,6 +36,10 @@ var (
 )
 
 func main() {
+	if err := xrrx.InstallFromEnv(); err != nil {
+		fmt.Fprintln(os.Stderr, "git-hop: xrr install failed:", err)
+		os.Exit(2)
+	}
 	cmd.SetVersion(version, commit, date)
 	cmd.Execute()
 }

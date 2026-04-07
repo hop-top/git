@@ -91,10 +91,30 @@ func WithRunner(r CommandRunner) Option {
 	return func(g *Git) { g.Runner = r }
 }
 
+// defaultOptions are applied by every New() call before any explicit
+// options. Production leaves this empty; the binary's startup wires it
+// from XRR_MODE/XRR_CASSETTE_DIR via SetDefaultOptions so every git.New()
+// call site gets an xrr-backed runner without threading Options through
+// the codebase.
+var defaultOptions []Option
+
+// SetDefaultOptions installs Options that every subsequent New() call
+// applies before any explicit options. Intended for one-shot startup
+// wiring (xrr session injection) — not for concurrent reconfiguration.
+// Tests that need an isolated default can call SetDefaultOptions(nil)
+// in t.Cleanup.
+func SetDefaultOptions(opts ...Option) {
+	defaultOptions = opts
+}
+
 // New creates a new Git wrapper. Without options it uses RealRunner —
-// production behavior is unchanged.
+// production behavior is unchanged. defaultOptions (set by
+// SetDefaultOptions at startup) are applied first, then explicit opts.
 func New(opts ...Option) *Git {
 	g := &Git{Runner: &RealRunner{}}
+	for _, opt := range defaultOptions {
+		opt(g)
+	}
 	for _, opt := range opts {
 		opt(g)
 	}
