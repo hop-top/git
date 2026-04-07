@@ -62,15 +62,36 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 		}
 	}
 
+	xdgConfigHome := filepath.Join(rootDir, ".config")
+	xdgDataHome := filepath.Join(rootDir, ".local", "share")
+	xdgStateHome := filepath.Join(rootDir, ".local", "state")
+
 	envVars := []string{
 		"GIT_HOP_DATA_HOME=" + dataHome,
 		"PATH=" + os.Getenv("PATH"),
 		"DOCKER_CONFIG=" + dockerConfigDir,
 		"GIT_CONFIG_GLOBAL=" + gitConfigPath,
 		"HOME=" + rootDir,
-		"XDG_CONFIG_HOME=" + filepath.Join(rootDir, ".config"),
-		"XDG_DATA_HOME=" + filepath.Join(rootDir, ".local", "share"),
+		"XDG_CONFIG_HOME=" + xdgConfigHome,
+		"XDG_DATA_HOME=" + xdgDataHome,
+		"XDG_STATE_HOME=" + xdgStateHome,
 	}
+
+	// Mirror the same overrides into the PARENT test process. The child
+	// git-hop binary picks them up via cmd.Env above, but the test
+	// process itself also calls helpers like state.LoadState(afero.OsFs)
+	// which read os.Getenv directly. Without these, the parent reads
+	// the developer's REAL ~/.config, ~/.local/share, and macOS
+	// fallback state path — leaking pre-existing entries into the test
+	// and producing flaky pass/fail based on host state.
+	//
+	// t.Setenv auto-restores on test completion. None of the e2e tests
+	// use t.Parallel() (as of 2026-04-07), so it's safe here.
+	t.Setenv("GIT_HOP_DATA_HOME", dataHome)
+	t.Setenv("HOME", rootDir)
+	t.Setenv("XDG_CONFIG_HOME", xdgConfigHome)
+	t.Setenv("XDG_DATA_HOME", xdgDataHome)
+	t.Setenv("XDG_STATE_HOME", xdgStateHome)
 
 	return &TestEnv{
 		RootDir:      rootDir,
