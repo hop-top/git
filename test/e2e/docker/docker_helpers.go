@@ -7,8 +7,40 @@ import (
 	"testing"
 	"time"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/docker"
+	"hop.top/git/internal/hop"
+	"hop.top/git/internal/services"
 )
+
+// hopComposeProject derives the docker compose project name hop uses for a
+// given worktree + branch. Returns "" if the enclosing hub config can't be
+// loaded, which falls back to compose's default (cwd basename). Callers
+// thread this into -p flags so test helpers target the same containers
+// hop started.
+func hopComposeProject(dir, branch string) string {
+	fs := afero.NewOsFs()
+	hubPath, err := hop.FindHub(fs, dir)
+	if err != nil {
+		return ""
+	}
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil {
+		return ""
+	}
+	return services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, branch)
+}
+
+// composeArgs returns the leading `compose -p <project>` args for a docker
+// exec.Command invocation; when project is empty, falls back to a bare
+// `compose` (default project = cwd basename).
+func composeArgs(project string, rest ...string) []string {
+	args := []string{"compose"}
+	if project != "" {
+		args = append(args, "-p", project)
+	}
+	return append(args, rest...)
+}
 
 // SkipIfDockerNotAvailable checks if Docker is available and skips the test if not
 func SkipIfDockerNotAvailable(t *testing.T) {
@@ -26,15 +58,18 @@ func SkipIfDockerNotAvailable(t *testing.T) {
 	}
 }
 
-// WaitForServiceHealthy waits for a service to become healthy
-func WaitForServiceHealthy(t *testing.T, dir, service string, timeout time.Duration) {
+// WaitForServiceHealthy waits for a service to become healthy. branch is the
+// hop branch used to derive the compose project name so this targets the
+// containers hop started (which now run under `docker compose -p <project>`).
+func WaitForServiceHealthy(t *testing.T, dir, branch, service string, timeout time.Duration) {
 	t.Helper()
 
+	project := hopComposeProject(dir, branch)
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
 		// Check container status
-		cmd := exec.Command("docker", "compose", "ps", "--format", "json", service)
+		cmd := exec.Command("docker", composeArgs(project, "ps", "--format", "json", service)...)
 		cmd.Dir = dir
 		output, err := cmd.Output()
 		if err == nil && strings.Contains(string(output), "\"Health\":\"healthy\"") {
@@ -54,7 +89,7 @@ func WaitForServiceHealthy(t *testing.T, dir, service string, timeout time.Durat
 	}
 
 	// Get logs for debugging
-	cmd := exec.Command("docker", "compose", "logs", service)
+	cmd := exec.Command("docker", composeArgs(project, "logs", service)...)
 	cmd.Dir = dir
 	logs, _ := cmd.Output()
 
@@ -82,13 +117,18 @@ func CheckHTTPEndpoint(t *testing.T, url string, expectedStatus int) {
 	t.Logf("HTTP endpoint %s is accessible (status: %d)", url, resp.StatusCode)
 }
 
-// CleanupContainers stops and removes all containers in the given directory.
-// Pass an empty project to fall back to compose's default (cwd basename),
-// matching pre-isolation behavior; tests that exercise project isolation
-// should pass the matching project name.
-func CleanupContainers(t *testing.T, dir, project string) {
+// CleanupContainers stops and removes containers started by `git hop env
+// start` for the given worktree + branch. The branch is used to derive the
+// same compose project name hop injects via -p, so this helper targets the
+// correct project even when multiple hops share branch names across hubs.
+//
+// If the enclosing hub can't be loaded, the project name falls back to
+// empty (compose's default, basename of dir) — same behavior as before the
+// project-isolation change.
+func CleanupContainers(t *testing.T, dir, branch string) {
 	t.Helper()
 
+	project := hopComposeProject(dir, branch)
 	d := docker.New()
 
 	// Try to stop containers
@@ -96,12 +136,15 @@ func CleanupContainers(t *testing.T, dir, project string) {
 		t.Logf("Warning: Failed to stop containers: %v", err)
 	}
 
-	// Try to remove containers and volumes
+	// Try to remove containers and associated compose resources. Note:
+	// this does not pass --volumes, so named volumes survive cleanup; tests
+	// that need volume teardown must use docker compose down --volumes
+	// directly.
 	if err := d.ComposeDown(dir, project); err != nil {
 		t.Logf("Warning: Failed to cleanup containers: %v", err)
 	}
 
-	t.Logf("Cleaned up Docker containers in %s", dir)
+	t.Logf("Cleaned up Docker containers in %s (project=%q)", dir, project)
 }
 
 // GetPortFromEnv reads a port value from the .env file
@@ -134,14 +177,17 @@ func VerifyPortIsolation(t *testing.T, port1, port2, label1, label2 string) {
 	}
 }
 
-// WaitForContainerReady waits for container to be in running state
-func WaitForContainerReady(t *testing.T, dir string, timeout time.Duration) {
+// WaitForContainerReady waits for container to be in running state.
+// branch is the hop branch used to derive the compose project name so this
+// targets the containers hop started.
+func WaitForContainerReady(t *testing.T, dir, branch string, timeout time.Duration) {
 	t.Helper()
 
+	project := hopComposeProject(dir, branch)
 	deadline := time.Now().Add(timeout)
 
 	for time.Now().Before(deadline) {
-		cmd := exec.Command("docker", "compose", "ps", "--format", "json")
+		cmd := exec.Command("docker", composeArgs(project, "ps", "--format", "json")...)
 		cmd.Dir = dir
 		output, err := cmd.Output()
 

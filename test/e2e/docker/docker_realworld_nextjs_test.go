@@ -115,9 +115,9 @@ func TestDockerRealWorld_NextJS(t *testing.T) {
 	// Phase 12: Register cleanup for both branches
 	t.Cleanup(func() {
 		t.Log("Cleaning up main branch containers...")
-		CleanupContainers(t, mainPath, "")
+		CleanupContainers(t, mainPath, "main")
 		t.Log("Cleaning up feature branch containers...")
-		CleanupContainers(t, featurePath, "")
+		CleanupContainers(t, featurePath, "feature/new-page")
 	})
 
 	// Phase 13: Verify docker-compose.yml exists in both worktrees
@@ -146,10 +146,10 @@ func TestDockerRealWorld_NextJS(t *testing.T) {
 	// Phase 17: Wait for services to be ready (Next.js takes time to build and start)
 	// Next.js services typically expose port 3000, mapped to HOP_PORT_NEXT
 	t.Log("Waiting for main branch services to be ready...")
-	WaitForContainerReady(t, mainPath, 180*time.Second)
+	WaitForContainerReady(t, mainPath, "main", 180*time.Second)
 
 	t.Log("Waiting for feature branch services to be ready...")
-	WaitForContainerReady(t, featurePath, 180*time.Second)
+	WaitForContainerReady(t, featurePath, "feature/new-page", 180*time.Second)
 
 	// Give Next.js additional time to complete initial build
 	t.Log("Waiting for Next.js build to complete...")
@@ -201,7 +201,7 @@ func TestDockerRealWorld_NextJS(t *testing.T) {
 
 	// Wait for services to restart
 	t.Log("Waiting for feature branch to restart...")
-	WaitForContainerReady(t, featurePath, 180*time.Second)
+	WaitForContainerReady(t, featurePath, "feature/new-page", 180*time.Second)
 	time.Sleep(30 * time.Second) // Wait for Next.js rebuild
 
 	// Phase 24: Verify feature branch is still accessible after restart

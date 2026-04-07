@@ -66,7 +66,7 @@ func TestDockerIntegration_BasicStartup(t *testing.T) {
 	// Phase 8: Register cleanup to ensure containers are stopped even if test fails
 	// This is critical to prevent orphaned containers
 	t.Cleanup(func() {
-		CleanupContainers(t, branchPath, "")
+		CleanupContainers(t, branchPath, "test-branch")
 	})
 
 	// Phase 9: Verify .env file was generated with required variables
@@ -85,8 +85,8 @@ func TestDockerIntegration_BasicStartup(t *testing.T) {
 	// Phase 11: Wait for services to become healthy
 	// Services need time to start and pass their health checks
 	t.Log("Waiting for services to become healthy...")
-	WaitForServiceHealthy(t, branchPath, "web", 60*time.Second)
-	WaitForServiceHealthy(t, branchPath, "cache", 60*time.Second)
+	WaitForServiceHealthy(t, branchPath, "test-branch", "web", 60*time.Second)
+	WaitForServiceHealthy(t, branchPath, "test-branch", "cache", 60*time.Second)
 
 	// Phase 12: Verify HTTP endpoint accessibility
 	// Extract the allocated port from .env and test the nginx service

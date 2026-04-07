@@ -36,8 +36,8 @@ func TestDockerOverride_HardcodedPortIsolation(t *testing.T) {
 
 	// Register cleanup
 	t.Cleanup(func() {
-		CleanupContainers(t, branchAPath, "")
-		CleanupContainers(t, branchBPath, "")
+		CleanupContainers(t, branchAPath, "branch-a")
+		CleanupContainers(t, branchBPath, "branch-b")
 	})
 
 	// Verify override files were generated in cache
@@ -90,12 +90,12 @@ func TestDockerOverride_HardcodedPortIsolation(t *testing.T) {
 	env.RunGitHop(t, branchBPath, "env", "start")
 
 	// Wait for services to be healthy
-	WaitForServiceHealthy(t, branchAPath, "web", 60*time.Second)
-	WaitForServiceHealthy(t, branchBPath, "web", 60*time.Second)
+	WaitForServiceHealthy(t, branchAPath, "branch-a", "web", 60*time.Second)
+	WaitForServiceHealthy(t, branchBPath, "branch-b", "web", 60*time.Second)
 	t.Log("Both web services are healthy")
 
-	WaitForServiceHealthy(t, branchAPath, "cache", 30*time.Second)
-	WaitForServiceHealthy(t, branchBPath, "cache", 30*time.Second)
+	WaitForServiceHealthy(t, branchAPath, "branch-a", "cache", 30*time.Second)
+	WaitForServiceHealthy(t, branchBPath, "branch-b", "cache", 30*time.Second)
 	t.Log("Both cache services are healthy")
 
 	// Verify both HTTP endpoints are accessible on their allocated ports

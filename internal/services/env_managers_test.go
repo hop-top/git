@@ -310,6 +310,12 @@ func TestComposeProjectName(t *testing.T) {
 		{"unsafe chars stripped", "ac me", "re@po", "feat#1", "ac-me-re-po-feat-1"},
 		{"missing org falls back to repo", "", "tlc", "main", "tlc-main"},
 		{"missing repo falls back to branch", "", "", "main", "main"},
+		// Compose requires project names to start with [a-z0-9]. Inputs
+		// that would slugify to a leading "_" or "-" must be trimmed.
+		{"leading underscore org", "_acme", "svc", "main", "acme-svc-main"},
+		{"leading hyphen branch", "acme", "svc", "-main", "acme-svc-main"},
+		{"all-underscore segment stripped", "___", "svc", "main", "svc-main"},
+		{"all-unsafe input yields empty", "___", "___", "___", ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

@@ -1,9 +1,11 @@
 package cmd
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
@@ -287,7 +289,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 			if exists, _ := afero.Exists(fs, composePath); exists {
 				// Check if services are running
 				project := services.ComposeProjectName(repo.Org, repo.Repo, branch)
-				if ps, err := d.ComposePs(wt.Path, project); err == nil && len(ps) > 0 {
+				if ps, err := d.ComposePs(wt.Path, project); err == nil && composePsHasRunning(ps) {
 					runningServices++
 				}
 			}
@@ -324,7 +326,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 				composePath := filepath.Join(wt.Path, "docker-compose.yml")
 				if exists, _ := afero.Exists(fs, composePath); exists {
 					project := services.ComposeProjectName(repo.Org, repo.Repo, branch)
-					if ps, err := d.ComposePs(wt.Path, project); err == nil && len(ps) > 0 {
+					if ps, err := d.ComposePs(wt.Path, project); err == nil && composePsHasRunning(ps) {
 						repoRunning++
 					}
 				}
@@ -427,6 +429,38 @@ func sortRepoIDs(ids []string) {
 			}
 		}
 	}
+}
+
+// composePsHasRunning reports whether the output of
+// `docker compose ps --format json` represents at least one container.
+// Compose emits either a JSON array (older releases) or JSON Lines (one
+// object per line, newer releases). The empty cases we must reject are:
+//   - the empty string / whitespace
+//   - a literal "[]" (empty array, which is 2 characters and would otherwise
+//     trip a naive len(ps) > 0 check)
+//   - JSON Lines output with no non-empty lines
+func composePsHasRunning(ps string) bool {
+	trimmed := strings.TrimSpace(ps)
+	if trimmed == "" || trimmed == "[]" {
+		return false
+	}
+	// JSON array form: "[ {...}, {...} ]"
+	if strings.HasPrefix(trimmed, "[") {
+		var arr []any
+		if err := json.Unmarshal([]byte(trimmed), &arr); err == nil {
+			return len(arr) > 0
+		}
+		// Malformed JSON array — fall through and treat the non-empty,
+		// non-"[]" string as running to avoid false negatives.
+		return true
+	}
+	// JSON Lines form: one object per line.
+	for _, line := range strings.Split(trimmed, "\n") {
+		if strings.TrimSpace(line) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func init() {
