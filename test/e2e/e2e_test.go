@@ -1,3 +1,5 @@
+//go:build dockere2e
+
 package e2e
 
 import (
