@@ -201,7 +201,19 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	return nil
 }
 
-// installDeps installs dependencies to the target directory
+// installDeps installs dependencies to the target directory.
+//
+// Most package manager install commands (npm ci, pnpm install, go mod vendor,
+// composer install, bundle install) write to a fixed path relative to their
+// cwd — they don't accept an arbitrary output directory. So we run the
+// install with cwd=worktreePath, then relocate the resulting <DepsDir> into
+// targetDir. pip is the exception: it writes a venv directly into targetDir
+// via `python -m venv <targetDir>`, so its <DepsDir> never appears in the
+// worktree and the relocation step is a no-op.
+//
+// Without this relocation, the cache stays empty and ensurePMDeps ends up
+// symlinking every worktree to a 0-byte directory. See
+// https://github.com/hop-top/git/issues/11.
 func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageManager) error {
 	// Create target directory
 	if err := m.fs.MkdirAll(targetDir, 0755); err != nil {
@@ -213,6 +225,28 @@ func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageMana
 		// Clean up on failure
 		m.fs.RemoveAll(targetDir)
 		return fmt.Errorf("failed to run install: %w", err)
+	}
+
+	// Relocate worktree-local install output into the shared cache.
+	worktreeDeps := filepath.Join(worktreePath, pm.DepsDir)
+	exists, err := afero.DirExists(m.fs, worktreeDeps)
+	if err != nil {
+		return fmt.Errorf("failed to check worktree deps dir: %w", err)
+	}
+	if !exists {
+		// pip path: install wrote directly to targetDir; nothing to relocate.
+		return nil
+	}
+
+	// targetDir was created empty by MkdirAll above. os.Rename refuses to
+	// overwrite an existing directory, so remove it first. We use os.Rename
+	// (not afero) because trash.go already relies on it and the relocation
+	// must be atomic across the same filesystem.
+	if err := m.fs.RemoveAll(targetDir); err != nil {
+		return fmt.Errorf("failed to clear target directory: %w", err)
+	}
+	if err := os.Rename(worktreeDeps, targetDir); err != nil {
+		return fmt.Errorf("failed to relocate %s into shared cache: %w", pm.DepsDir, err)
 	}
 
 	return nil

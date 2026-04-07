@@ -165,6 +165,52 @@ func TestRebuildFromWorktrees_UnmanagedSymlinkIgnored(t *testing.T) {
 	assert.Empty(t, registry.Entries, "unmanaged symlink target must not create a registry entry")
 }
 
+// TestEnsureDeps_PopulatesSharedCache verifies that after EnsureDeps runs,
+// the shared cache directory (the symlink target) actually contains the
+// installed dependencies. Before the fix, the install command was always run
+// in the worktree (writing to worktree/<DepsDir>), and ensurePMDeps then
+// trashed that real directory and replaced it with a symlink to an empty
+// cache dir. Result: every cache entry was 0 bytes and the dependency-sharing
+// feature provided no benefit. See https://github.com/hop-top/git/issues/11.
+func TestEnsureDeps_PopulatesSharedCache(t *testing.T) {
+	tmpDir := setupDepsTestDir(t)
+	osFs := afero.NewOsFs()
+
+	worktreeDir := filepath.Join(tmpDir, "worktrees", "feature")
+	require.NoError(t, os.MkdirAll(worktreeDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDir, "pnpm-lock.yaml"), []byte("lockfileVersion: 6\n"), 0644))
+
+	// Use a fake "vendoring" install command that mimics how `go mod vendor`,
+	// `npm ci`, `pnpm install`, etc. behave: it writes into ./<DepsDir>
+	// relative to the cwd (which the runner sets to worktreePath). The cache
+	// argument is invisible to the install command.
+	pm := services.PackageManager{
+		Name:        "pnpm",
+		DetectFiles: []string{"pnpm-lock.yaml"},
+		LockFiles:   []string{"pnpm-lock.yaml"},
+		DepsDir:     "node_modules",
+		InstallCmd:  []string{"sh", "-c", "mkdir -p node_modules && echo populated > node_modules/marker"},
+	}
+
+	registry := &services.DepsRegistry{Entries: make(map[string]services.DepsEntry)}
+	dm := services.NewDepsManagerFromParts(osFs, tmpDir, registry, []services.PackageManager{pm}, nil)
+
+	require.NoError(t, dm.EnsureDeps(worktreeDir, "feature"))
+
+	// The worktree path must be a symlink (the sharing contract).
+	symlinkPath := filepath.Join(worktreeDir, "node_modules")
+	target, err := os.Readlink(symlinkPath)
+	require.NoError(t, err, "worktree/node_modules should be a symlink after EnsureDeps")
+
+	// The cache target must be populated with the install command's output.
+	// This is the regression: the marker file lives in the worktree dir the
+	// install command wrote to, NOT in the cache target the symlink points to.
+	markerInCache := filepath.Join(target, "marker")
+	contents, err := os.ReadFile(markerInCache)
+	require.NoError(t, err, "shared cache at %s must contain the install output (currently empty due to bug)", target)
+	assert.Equal(t, "populated\n", string(contents))
+}
+
 // TestAudit_DetectsBrokenSymlinkWhenTargetDeleted verifies that Audit reports
 // IssueBrokenSymlink when the symlink points to the expected (correct-hash)
 // path but the target directory has been deleted. Before the fix, Audit only
