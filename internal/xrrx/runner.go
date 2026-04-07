@@ -56,10 +56,15 @@ func (r *Runner) Run(cmd string, args ...string) (string, error) {
 }
 
 // RunInDir executes cmd in dir. The interaction is mediated by the
-// xrr session: it may be recorded, replayed, or passed through. A
-// non-zero process exit (*os/exec.ExitError) is absorbed into the
-// recorded Response so replay can re-emit the same exit shape; non-exit
-// errors (binary missing, ctx cancel) propagate as-is.
+// xrr session: it may be recorded, replayed, or passed through.
+//
+// On a non-zero process exit (*os/exec.ExitError), the exit code is
+// captured in the recorded Response so replay sees the same code, AND
+// the original error is returned to the caller (and recorded by xrr's
+// alpha.2 error-persistence path so replay can re-emit it). Callers
+// MUST treat a non-nil error as failure even though the Response is
+// also populated. Non-exit errors (binary missing, ctx cancel)
+// propagate as-is and are not recordable.
 //
 // dir is recorded into the request fingerprint via xexec.Request.Cwd
 // (xrr v0.1.0-alpha.3+) so the same command run from different
