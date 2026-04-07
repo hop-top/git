@@ -115,9 +115,9 @@ func TestDockerRealWorld_NextJS(t *testing.T) {
 	// Phase 12: Register cleanup for both branches
 	t.Cleanup(func() {
 		t.Log("Cleaning up main branch containers...")
-		CleanupContainers(t, mainPath)
+		CleanupContainers(t, mainPath, "")
 		t.Log("Cleaning up feature branch containers...")
-		CleanupContainers(t, featurePath)
+		CleanupContainers(t, featurePath, "")
 	})
 
 	// Phase 13: Verify docker-compose.yml exists in both worktrees

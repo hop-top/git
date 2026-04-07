@@ -36,8 +36,8 @@ func TestDockerOverride_HardcodedPortIsolation(t *testing.T) {
 
 	// Register cleanup
 	t.Cleanup(func() {
-		CleanupContainers(t, branchAPath)
-		CleanupContainers(t, branchBPath)
+		CleanupContainers(t, branchAPath, "")
+		CleanupContainers(t, branchBPath, "")
 	})
 
 	// Verify override files were generated in cache

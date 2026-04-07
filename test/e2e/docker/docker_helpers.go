@@ -82,19 +82,22 @@ func CheckHTTPEndpoint(t *testing.T, url string, expectedStatus int) {
 	t.Logf("HTTP endpoint %s is accessible (status: %d)", url, resp.StatusCode)
 }
 
-// CleanupContainers stops and removes all containers in the given directory
-func CleanupContainers(t *testing.T, dir string) {
+// CleanupContainers stops and removes all containers in the given directory.
+// Pass an empty project to fall back to compose's default (cwd basename),
+// matching pre-isolation behavior; tests that exercise project isolation
+// should pass the matching project name.
+func CleanupContainers(t *testing.T, dir, project string) {
 	t.Helper()
 
 	d := docker.New()
 
 	// Try to stop containers
-	if err := d.ComposeStop(dir); err != nil {
+	if err := d.ComposeStop(dir, project); err != nil {
 		t.Logf("Warning: Failed to stop containers: %v", err)
 	}
 
 	// Try to remove containers and volumes
-	if err := d.ComposeDown(dir); err != nil {
+	if err := d.ComposeDown(dir, project); err != nil {
 		t.Logf("Warning: Failed to cleanup containers: %v", err)
 	}
 

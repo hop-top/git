@@ -291,3 +291,90 @@ func TestEnvironmentManagerValidate(t *testing.T) {
 		assert.NoError(t, err)
 	})
 }
+
+// TestComposeProjectName verifies that ComposeProjectName produces a stable,
+// hop-scoped, compose-safe slug from (org, repo, branch). Compose requires
+// project names to start with alphanumeric and contain only [a-z0-9_-].
+func TestComposeProjectName(t *testing.T) {
+	cases := []struct {
+		name   string
+		org    string
+		repo   string
+		branch string
+		want   string
+	}{
+		{"simple", "hop-top", "git", "main", "hop-top-git-main"},
+		{"slash branch", "ideacrafterslabs", "tlc", "feat/foo", "ideacrafterslabs-tlc-feat-foo"},
+		{"deep branch", "acme", "svc", "fix/T-0001/sub", "acme-svc-fix-t-0001-sub"},
+		{"uppercase normalized", "Acme", "Repo", "Feature/Bar", "acme-repo-feature-bar"},
+		{"unsafe chars stripped", "ac me", "re@po", "feat#1", "ac-me-re-po-feat-1"},
+		{"missing org falls back to repo", "", "tlc", "main", "tlc-main"},
+		{"missing repo falls back to branch", "", "", "main", "main"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := ComposeProjectName(tc.org, tc.repo, tc.branch)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestBuildComposeCommand_InjectsProjectName verifies that the docker compose
+// command always carries `-p <project>` so containers, networks, and volumes
+// are namespaced per hop. Without this, two hops with the same branch name
+// (or stale containers from a prior crashed run) collide on container names
+// like `staging-redis-1`. See https://github.com/hop-top/git/issues/12.
+func TestBuildComposeCommand_InjectsProjectName(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a compose file so docker.FindComposeFile returns non-empty.
+	require.NoError(t, os.WriteFile(filepath.Join(tmpDir, "docker-compose.yml"), []byte("services: {}\n"), 0644))
+
+	m := &EnvironmentManager{
+		Name: "docker-compose",
+		Commands: EnvCommands{
+			Start: []string{"docker", "compose", "up", "-d"},
+			Stop:  []string{"docker", "compose", "stop"},
+		},
+	}
+
+	t.Run("no override file", func(t *testing.T) {
+		got := m.buildComposeCommand(m.Commands.Start, tmpDir, "", "hop-top", "git", "main")
+		// Must contain -p hop-top-git-main right after `compose`.
+		assert.Equal(t, []string{"docker", "compose", "-p", "hop-top-git-main", "up", "-d"}, got)
+	})
+
+	t.Run("with override file", func(t *testing.T) {
+		override := filepath.Join(tmpDir, "override.yml")
+		require.NoError(t, os.WriteFile(override, []byte("services: {}\n"), 0644))
+
+		got := m.buildComposeCommand(m.Commands.Start, tmpDir, override, "hop-top", "git", "feat/foo")
+		// Project name appears, override -f flags appear, original args are preserved.
+		assert.Contains(t, got, "-p")
+		idx := indexOf(got, "-p")
+		require.GreaterOrEqual(t, idx, 0)
+		assert.Equal(t, "hop-top-git-feat-foo", got[idx+1])
+		assert.Contains(t, got, "-f")
+		assert.Contains(t, got, override)
+		// up -d still at the end.
+		assert.Equal(t, []string{"up", "-d"}, got[len(got)-2:])
+	})
+
+	t.Run("non-docker-compose manager untouched", func(t *testing.T) {
+		other := &EnvironmentManager{
+			Name:     "podman-compose",
+			Commands: EnvCommands{Start: []string{"podman-compose", "up", "-d"}},
+		}
+		got := other.buildComposeCommand(other.Commands.Start, tmpDir, "", "hop-top", "git", "main")
+		// Untouched: no project-name injection for non-docker managers.
+		assert.Equal(t, []string{"podman-compose", "up", "-d"}, got)
+	})
+}
+
+func indexOf(s []string, target string) int {
+	for i, v := range s {
+		if v == target {
+			return i
+		}
+	}
+	return -1
+}

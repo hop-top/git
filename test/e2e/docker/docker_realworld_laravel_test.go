@@ -72,9 +72,9 @@ func TestDockerRealWorld_Laravel(t *testing.T) {
 	// Phase 8: Register cleanup to stop containers even if test fails
 	t.Cleanup(func() {
 		t.Log("Cleaning up staging environment...")
-		CleanupContainers(t, stagingPath)
+		CleanupContainers(t, stagingPath, "")
 		t.Log("Cleaning up hotfix environment...")
-		CleanupContainers(t, hotfixPath)
+		CleanupContainers(t, hotfixPath, "")
 	})
 
 	// Phase 9: Verify docker-compose.yml exists in the repository

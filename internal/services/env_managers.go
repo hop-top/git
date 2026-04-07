@@ -5,11 +5,64 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
 )
+
+// ComposeProjectName builds a stable, hop-scoped, compose-safe project name
+// from the hub identity and branch. Compose project names must start with an
+// alphanumeric character and contain only [a-z0-9_-]. Without a stable
+// project name, container/network/volume identifiers fall back to
+// filepath.Base(worktreePath), which collides across hubs that share branch
+// names and across stale runs of the same hop. See
+// https://github.com/hop-top/git/issues/12.
+func ComposeProjectName(org, repo, branch string) string {
+	parts := []string{}
+	if s := composeSlugify(org); s != "" {
+		parts = append(parts, s)
+	}
+	if s := composeSlugify(repo); s != "" {
+		parts = append(parts, s)
+	}
+	if s := composeSlugify(branch); s != "" {
+		parts = append(parts, s)
+	}
+	return strings.Join(parts, "-")
+}
+
+// repoIdentity extracts (org, repo) from a HubConfig safely. Returns empty
+// strings when the config is nil so callers can fall through to a
+// branch-only project name in tests and edge cases.
+func repoIdentity(repoConfig *config.HubConfig) (string, string) {
+	if repoConfig == nil {
+		return "", ""
+	}
+	return repoConfig.Repo.Org, repoConfig.Repo.Repo
+}
+
+// composeSlugify lowercases the input and replaces every run of characters
+// outside [a-z0-9_] with a single hyphen, then trims leading/trailing
+// hyphens. Empty input → empty output.
+func composeSlugify(s string) string {
+	s = strings.ToLower(s)
+	var b strings.Builder
+	prevHyphen := false
+	for _, r := range s {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' {
+			b.WriteRune(r)
+			prevHyphen = false
+			continue
+		}
+		if !prevHyphen {
+			b.WriteByte('-')
+			prevHyphen = true
+		}
+	}
+	return strings.Trim(b.String(), "-")
+}
 
 // EnvironmentManager represents an environment manager (docker-compose, podman, etc.)
 type EnvironmentManager struct {
@@ -142,7 +195,8 @@ func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoCo
 
 	// Execute start command
 	fmt.Printf("  → Starting services: %s\n", m.Name)
-	startCmd := m.buildCommandWithOverride(m.Commands.Start, worktreePath, overridePath)
+	org, repo := repoIdentity(repoConfig)
+	startCmd := m.buildComposeCommand(m.Commands.Start, worktreePath, overridePath, org, repo, branch)
 	if err := m.executeCommand(startCmd, worktreePath); err != nil {
 		return fmt.Errorf("start command failed: %w", err)
 	}
@@ -188,7 +242,8 @@ func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoCon
 
 	// Execute stop command
 	fmt.Printf("  → Stopping services: %s\n", m.Name)
-	stopCmd := m.buildCommandWithOverride(m.Commands.Stop, worktreePath, overridePath)
+	org, repo := repoIdentity(repoConfig)
+	stopCmd := m.buildComposeCommand(m.Commands.Stop, worktreePath, overridePath, org, repo, branch)
 	if err := m.executeCommand(stopCmd, worktreePath); err != nil {
 		return fmt.Errorf("stop command failed: %w", err)
 	}
@@ -238,31 +293,44 @@ func (m *EnvironmentManager) executeCommand(cmdParts []string, worktreePath stri
 	return cmd.Run()
 }
 
-// buildCommandWithOverride injects -f flags for compose override files into docker compose commands.
-// For non-docker-compose managers or when overridePath is empty, returns the original command unchanged.
-func (m *EnvironmentManager) buildCommandWithOverride(cmdParts []string, worktreePath, overridePath string) []string {
-	if overridePath == "" || m.Name != "docker-compose" {
+// buildComposeCommand assembles the docker compose invocation, injecting:
+//   - -p <project>  always (so containers/networks/volumes are hop-scoped)
+//   - -f <composeFile> -f <overridePath> --env-file .env  when an override
+//     is provided
+//
+// For non-docker-compose managers, the command is returned unchanged.
+//
+// The project-name injection is what makes hops isolated at the
+// container/network/volume identifier layer. Without it, two hops with the
+// same branch name collide on container names like `staging-redis-1`, and a
+// crashed prior run leaves orphaned containers that block restart. See
+// https://github.com/hop-top/git/issues/12.
+func (m *EnvironmentManager) buildComposeCommand(cmdParts []string, worktreePath, overridePath, org, repo, branch string) []string {
+	if m.Name != "docker-compose" {
 		return cmdParts
 	}
-
-	// Find the compose file in the worktree
-	composeFile := docker.FindComposeFile(worktreePath)
-	if composeFile == "" {
-		return cmdParts
-	}
-
-	// Build: docker compose -f <composeFile> -f <overridePath> --env-file .env <rest...>
-	// The original command is like: ["docker", "compose", "up", "-d"]
-	// We inject -f flags after "compose"
 	if len(cmdParts) < 2 {
 		return cmdParts
 	}
 
-	result := make([]string, 0, len(cmdParts)+6)
+	projectName := ComposeProjectName(org, repo, branch)
+
+	result := make([]string, 0, len(cmdParts)+8)
 	result = append(result, cmdParts[0], cmdParts[1]) // "docker", "compose"
-	result = append(result, "-f", composeFile)
-	result = append(result, "-f", overridePath)
-	result = append(result, "--env-file", ".env")
+	if projectName != "" {
+		result = append(result, "-p", projectName)
+	}
+
+	if overridePath != "" {
+		// Find the compose file in the worktree
+		composeFile := docker.FindComposeFile(worktreePath)
+		if composeFile != "" {
+			result = append(result, "-f", composeFile)
+			result = append(result, "-f", overridePath)
+			result = append(result, "--env-file", ".env")
+		}
+	}
+
 	result = append(result, cmdParts[2:]...) // "up", "-d" or "stop" etc.
 	return result
 }

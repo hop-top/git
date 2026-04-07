@@ -66,7 +66,7 @@ func TestDockerIntegration_BasicStartup(t *testing.T) {
 	// Phase 8: Register cleanup to ensure containers are stopped even if test fails
 	// This is critical to prevent orphaned containers
 	t.Cleanup(func() {
-		CleanupContainers(t, branchPath)
+		CleanupContainers(t, branchPath, "")
 	})
 
 	// Phase 9: Verify .env file was generated with required variables

@@ -99,8 +99,8 @@ func TestDockerRealWorld_Django(t *testing.T) {
 	// Phase 9: Register cleanup to ensure containers are stopped
 	t.Cleanup(func() {
 		t.Log("Cleaning up Docker containers...")
-		CleanupContainers(t, prodPath)
-		CleanupContainers(t, devPath)
+		CleanupContainers(t, prodPath, "")
+		CleanupContainers(t, devPath, "")
 	})
 
 	// Phase 10: Read and analyze docker-compose.yml to identify services

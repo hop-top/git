@@ -36,8 +36,8 @@ func TestDockerIsolation_PortIsolation(t *testing.T) {
 
 	// Register cleanup for both environments
 	t.Cleanup(func() {
-		CleanupContainers(t, branchAPath)
-		CleanupContainers(t, branchBPath)
+		CleanupContainers(t, branchAPath, "")
+		CleanupContainers(t, branchBPath, "")
 	})
 
 	// Start both environments concurrently
@@ -96,8 +96,8 @@ func TestDockerIsolation_VolumeDataIsolation(t *testing.T) {
 
 	// Register cleanup for both environments
 	t.Cleanup(func() {
-		CleanupContainers(t, branchXPath)
-		CleanupContainers(t, branchYPath)
+		CleanupContainers(t, branchXPath, "")
+		CleanupContainers(t, branchYPath, "")
 	})
 
 	// Get volume paths from .env files

@@ -11,6 +11,7 @@ import (
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 	"hop.top/git/internal/tui"
 	"github.com/spf13/afero"
@@ -122,7 +123,18 @@ func showWorktreeStatus(fs afero.Fs, g git.GitInterface, d *docker.Docker, path 
 	// Check if docker-compose.yml exists
 	if _, err := fs.Stat(filepath.Join(root, "docker-compose.yml")); err == nil {
 		output.Info("\nServices:")
-		ps, err := d.ComposePs(root)
+		// Resolve hop-scoped compose project name from the enclosing hub.
+		// Falls back to the empty project (compose default) if the worktree
+		// isn't inside a known hub, which preserves prior behavior.
+		var project string
+		if status != nil {
+			if hubPath, err := hop.FindHub(fs, root); err == nil {
+				if hub, err := hop.LoadHub(fs, hubPath); err == nil {
+					project = services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, status.Branch)
+				}
+			}
+		}
+		ps, err := d.ComposePs(root, project)
 		if err != nil {
 			output.Error("Failed to get service status: %v", err)
 		} else {
@@ -173,7 +185,8 @@ func showTargetStatus(fs afero.Fs, d *docker.Docker, hubPath, target string) {
 	output.Info("\nServices:")
 	fullPath := filepath.Join(hubPath, branch.Path)
 	if _, err := fs.Stat(filepath.Join(fullPath, "docker-compose.yml")); err == nil {
-		ps, err := d.ComposePs(fullPath)
+		project := services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, branch.HopspaceBranch)
+		ps, err := d.ComposePs(fullPath, project)
 		if err == nil {
 			fmt.Println(ps)
 		}
@@ -269,11 +282,12 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 
 	// Count running services by checking docker-compose status
 	for _, repo := range st.Repositories {
-		for _, wt := range repo.Worktrees {
+		for branch, wt := range repo.Worktrees {
 			composePath := filepath.Join(wt.Path, "docker-compose.yml")
 			if exists, _ := afero.Exists(fs, composePath); exists {
 				// Check if services are running
-				if ps, err := d.ComposePs(wt.Path); err == nil && len(ps) > 0 {
+				project := services.ComposeProjectName(repo.Org, repo.Repo, branch)
+				if ps, err := d.ComposePs(wt.Path, project); err == nil && len(ps) > 0 {
 					runningServices++
 				}
 			}
@@ -306,10 +320,11 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 
 			// Count running services for this repo
 			repoRunning := 0
-			for _, wt := range repo.Worktrees {
+			for branch, wt := range repo.Worktrees {
 				composePath := filepath.Join(wt.Path, "docker-compose.yml")
 				if exists, _ := afero.Exists(fs, composePath); exists {
-					if ps, err := d.ComposePs(wt.Path); err == nil && len(ps) > 0 {
+					project := services.ComposeProjectName(repo.Org, repo.Repo, branch)
+					if ps, err := d.ComposePs(wt.Path, project); err == nil && len(ps) > 0 {
 						repoRunning++
 					}
 				}
