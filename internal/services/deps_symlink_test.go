@@ -1,6 +1,7 @@
 package services_test
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -309,29 +310,35 @@ func TestEnsureDeps_InstallProducedNothingErrors(t *testing.T) {
 
 // TestRelocateDir_FallsBackToCopy verifies that the move-with-fallback
 // helper used by installDeps falls back to a recursive copy when os.Rename
-// cannot move src onto dst. os.Rename fails with EXDEV across filesystems
+// cannot move src to dst. os.Rename fails with EXDEV across filesystems
 // (worktree and data home on different volumes); we can't easily produce
-// EXDEV in a unit test, but we can produce an equivalent failure by making
-// dst a file (so Rename's "cannot replace file with directory" path
-// triggers), then verifying the fallback recreates the tree at dst.
+// EXDEV in a unit test, so we inject a failing rename function via
+// services.SetRelocateRenameForTest and verify the copy path runs and
+// produces the expected tree.
 func TestRelocateDir_FallsBackToCopy(t *testing.T) {
 	tmpDir := t.TempDir()
+	osFs := afero.NewOsFs()
 
 	src := filepath.Join(tmpDir, "src")
 	require.NoError(t, os.MkdirAll(filepath.Join(src, "nested"), 0755))
 	require.NoError(t, os.WriteFile(filepath.Join(src, "a.txt"), []byte("a"), 0644))
 	require.NoError(t, os.WriteFile(filepath.Join(src, "nested", "b.txt"), []byte("b"), 0644))
 
-	// Create dst as a file so a direct Rename(src→dst) fails: on most
-	// platforms renaming a directory onto a regular file errors out
-	// (ENOTDIR / file exists). The helper must remove dst and try copy.
 	dst := filepath.Join(tmpDir, "dst")
-	require.NoError(t, os.WriteFile(dst, []byte("stub"), 0644))
 
-	err := services.RelocateDir(src, dst)
+	// Inject a rename that always fails to force the fallback branch.
+	calls := 0
+	restore := services.SetRelocateRenameForTest(func(string, string) error {
+		calls++
+		return fmt.Errorf("injected EXDEV")
+	})
+	defer restore()
+
+	err := services.RelocateDir(osFs, src, dst)
 	require.NoError(t, err)
+	assert.GreaterOrEqual(t, calls, 1, "the injected rename must have been called (else the test didn't exercise the fallback path)")
 
-	// src must be gone.
+	// src must be gone after the fallback copy+remove.
 	_, err = os.Stat(src)
 	assert.True(t, os.IsNotExist(err), "src must be removed after relocation")
 
@@ -346,6 +353,26 @@ func TestRelocateDir_FallsBackToCopy(t *testing.T) {
 	b, err := os.ReadFile(filepath.Join(dst, "nested", "b.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "b", string(b))
+}
+
+// TestRelocateDir_HappyPathRename verifies the non-fallback path: with no
+// injection, a same-filesystem rename succeeds and the copy branch is not
+// exercised. This complements the fallback test above to ensure both
+// branches are covered.
+func TestRelocateDir_HappyPathRename(t *testing.T) {
+	tmpDir := t.TempDir()
+	osFs := afero.NewOsFs()
+
+	src := filepath.Join(tmpDir, "src")
+	require.NoError(t, os.MkdirAll(src, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(src, "f.txt"), []byte("x"), 0644))
+
+	dst := filepath.Join(tmpDir, "dst")
+	require.NoError(t, services.RelocateDir(osFs, src, dst))
+
+	content, err := os.ReadFile(filepath.Join(dst, "f.txt"))
+	require.NoError(t, err)
+	assert.Equal(t, "x", string(content))
 }
 
 // TestAudit_DetectsBrokenSymlinkWhenTargetDeleted verifies that Audit reports

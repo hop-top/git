@@ -144,9 +144,11 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 
 	// Fast path: existing correct symlink to a populated cache → nothing to
 	// do. This short-circuits before touching the worktree or running the
-	// install command.
+	// install command. "Populated" means the cache directory has at least
+	// one entry; a 0-byte cache (legacy or crashed-mid-install) is treated
+	// as missing so the install re-runs and fills it.
 	if existing, ok := readSymlink(m.fs, symlinkPath); ok && existing == depsPath {
-		if exists, _ := afero.DirExists(m.fs, depsPath); exists {
+		if populated, _ := dirHasEntries(m.fs, depsPath); populated {
 			m.Registry.AddUsage(depsKey, branch)
 			return nil
 		}
@@ -161,14 +163,17 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 		return err
 	}
 
-	// Check if the target cache already exists (populated by a sibling
-	// branch with the same lockfile hash). If not, install.
-	depsExists, err := afero.DirExists(m.fs, depsPath)
+	// Check if the target cache already exists and is populated (e.g. by a
+	// sibling branch with the same lockfile hash). An empty directory is
+	// treated as missing so we re-install into it rather than symlink to
+	// emptiness — this also cleans up legacy 0-byte cache entries left by
+	// the pre-#11 bug.
+	depsPopulated, err := dirHasEntries(m.fs, depsPath)
 	if err != nil {
 		return fmt.Errorf("failed to check deps existence: %w", err)
 	}
 
-	if !depsExists {
+	if !depsPopulated {
 		if err := m.installDeps(depsPath, worktreePath, *resolvedPM); err != nil {
 			if errors.Is(err, ErrBinaryNotFound) {
 				// Binary not available in this environment; skip silently.
@@ -191,14 +196,16 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 }
 
 // readSymlink returns the target of a symlink at path, or ("", false) if
-// path is not a symlink or cannot be read.
+// path is not a symlink or cannot be read. An empty target is treated as
+// "not a symlink" to stay consistent with Audit's symlink detection, which
+// rejects empty targets to avoid ambiguous classification.
 func readSymlink(fs afero.Fs, path string) (string, bool) {
 	linker, ok := fs.(afero.Symlinker)
 	if !ok {
 		return "", false
 	}
 	target, err := linker.ReadlinkIfPossible(path)
-	if err != nil {
+	if err != nil || target == "" {
 		return "", false
 	}
 	return target, true
@@ -227,34 +234,55 @@ func (m *DepsManager) cleanWorktreeDepsPath(symlinkPath string) error {
 	return nil
 }
 
-// RelocateDir moves src to dst. It first tries an atomic os.Rename. If
-// that fails for any reason (cross-filesystem EXDEV, dst exists as the
-// wrong type, etc.), it falls back to a recursive copy + RemoveAll of src.
-// The fallback mirrors the pattern trash.go uses for the same class of
-// failure. dst is removed before the rename/copy so both paths start from a
-// clean slate.
-func RelocateDir(src, dst string) error {
-	if err := os.RemoveAll(dst); err != nil {
+// relocateRename is the rename function used by RelocateDir. It is a
+// package-level var so tests can inject a failing rename to force the
+// copy-fallback path without needing a real cross-filesystem setup.
+// Production code never reassigns it; only SetRelocateRenameForTest does.
+var relocateRename = os.Rename
+
+// SetRelocateRenameForTest replaces the rename function used by
+// RelocateDir for the duration of a test. It returns a restore function
+// that must be called (typically via defer) to reset the default. Not for
+// production use.
+func SetRelocateRenameForTest(fn func(string, string) error) func() {
+	prev := relocateRename
+	relocateRename = fn
+	return func() { relocateRename = prev }
+}
+
+// RelocateDir moves src to dst. When fs is *afero.OsFs it first tries an
+// atomic os.Rename; if that fails for any reason (cross-filesystem EXDEV,
+// dst exists as the wrong type, etc.) it falls back to a recursive copy
+// plus RemoveAll of src. For any other afero backend it always uses the
+// afero-based copy path. dst is removed before the rename/copy so both
+// paths start from a clean slate. Mirrors the pattern in trash.go.
+func RelocateDir(fs afero.Fs, src, dst string) error {
+	if err := fs.RemoveAll(dst); err != nil {
 		return fmt.Errorf("failed to clear destination %s: %w", dst, err)
 	}
-	if err := os.Rename(src, dst); err == nil {
-		return nil
+	if _, ok := fs.(*afero.OsFs); ok {
+		if err := relocateRename(src, dst); err == nil {
+			return nil
+		}
+		// Rename failed (EXDEV, ENOTDIR, injected test error, etc.).
+		// Fall through to copy + remove.
 	}
-	// Rename failed (EXDEV, ENOTDIR, etc.). Fall back to copy + remove.
-	if err := copyTree(src, dst); err != nil {
+	if err := copyTree(fs, src, dst); err != nil {
 		return fmt.Errorf("failed to copy %s to %s: %w", src, dst, err)
 	}
-	if err := os.RemoveAll(src); err != nil {
+	if err := fs.RemoveAll(src); err != nil {
 		return fmt.Errorf("failed to remove source %s after copy: %w", src, err)
 	}
 	return nil
 }
 
-// copyTree recursively copies a directory tree from src to dst. It preserves
-// file modes but not ownership or extended attributes (sufficient for
-// package-manager output which is regenerable from lockfiles anyway).
-func copyTree(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
+// copyTree recursively copies a directory tree from src to dst via the
+// given afero filesystem. It preserves file modes but not ownership or
+// extended attributes (sufficient for package-manager output which is
+// regenerable from lockfiles anyway). Symlinks are preserved when the
+// filesystem supports afero.Symlinker.
+func copyTree(fs afero.Fs, src, dst string) error {
+	return afero.Walk(fs, src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -265,33 +293,43 @@ func copyTree(src, dst string) error {
 		target := filepath.Join(dst, rel)
 
 		if info.Mode()&os.ModeSymlink != 0 {
-			link, err := os.Readlink(path)
+			linker, ok := fs.(afero.Symlinker)
+			if !ok {
+				// Filesystem can't read/write symlinks; skip silently so
+				// tree walks on non-symlink backends still succeed.
+				return nil
+			}
+			link, err := linker.ReadlinkIfPossible(path)
 			if err != nil {
 				return err
 			}
-			return os.Symlink(link, target)
+			return linker.SymlinkIfPossible(link, target)
 		}
 		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
+			return fs.MkdirAll(target, info.Mode())
 		}
-		return copyFile(path, target, info.Mode())
+		return copyFile(fs, path, target, info.Mode())
 	})
 }
 
-// copyFile copies a single regular file preserving mode.
-func copyFile(src, dst string, mode os.FileMode) error {
-	in, err := os.Open(src)
+// copyFile copies a single regular file preserving mode. It returns any
+// error from Close so callers see write failures that only surface when
+// buffered writes are flushed (e.g. on some network filesystems).
+func copyFile(fs afero.Fs, src, dst string, mode os.FileMode) error {
+	in, err := fs.Open(src)
 	if err != nil {
 		return err
 	}
 	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
+	out, err := fs.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, mode)
 	if err != nil {
 		return err
 	}
-	defer out.Close()
-	_, err = io.Copy(out, in)
-	return err
+	if _, err := io.Copy(out, in); err != nil {
+		out.Close()
+		return err
+	}
+	return out.Close()
 }
 
 // installDeps installs dependencies to the shared cache at targetDir.
@@ -333,7 +371,7 @@ func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageMana
 	if exists, err := afero.DirExists(m.fs, worktreeDeps); err != nil {
 		return fmt.Errorf("failed to check worktree deps dir: %w", err)
 	} else if exists {
-		if err := RelocateDir(worktreeDeps, targetDir); err != nil {
+		if err := RelocateDir(m.fs, worktreeDeps, targetDir); err != nil {
 			m.fs.RemoveAll(targetDir)
 			return fmt.Errorf("failed to relocate %s into shared cache: %w", pm.DepsDir, err)
 		}
@@ -344,7 +382,7 @@ func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageMana
 	// something into targetDir. An empty targetDir after install means the
 	// command silently produced nothing — surface the bug instead of
 	// caching the emptiness.
-	populated, err := dirHasEntries(targetDir)
+	populated, err := dirHasEntries(m.fs, targetDir)
 	if err != nil {
 		return fmt.Errorf("failed to inspect target directory: %w", err)
 	}
@@ -357,8 +395,8 @@ func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageMana
 
 // dirHasEntries reports whether path is a directory containing at least
 // one entry. Returns false if path does not exist.
-func dirHasEntries(path string) (bool, error) {
-	entries, err := os.ReadDir(path)
+func dirHasEntries(fs afero.Fs, path string) (bool, error) {
+	entries, err := afero.ReadDir(fs, path)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return false, nil
