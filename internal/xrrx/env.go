@@ -3,6 +3,7 @@ package xrrx
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 
 	xrr "hop.top/xrr"
 )
@@ -27,10 +28,17 @@ const (
 // EnvCassetteDir environment variables. Returns (nil, nil) when
 // EnvMode is unset or "off" — the production default.
 //
-// Returns a non-nil error only when EnvMode is set to something
-// invalid, or when EnvMode is set but EnvCassetteDir is missing. The
-// caller is expected to fail loudly on this error: a misconfigured
-// test harness should not silently fall back to live calls.
+// Returns a non-nil error when EnvMode is set to something invalid,
+// when EnvMode is set but EnvCassetteDir is missing, or when
+// EnvCassetteDir is not an absolute path. The absolute-path
+// requirement guards the cross-process use case (parent test sets
+// the env var, child binary builds the session): a relative path
+// would resolve against the child's cwd, which is rarely what the
+// parent intended and produces silently mis-located cassettes.
+//
+// The caller is expected to fail loudly on any error: a misconfigured
+// test harness should not silently fall back to live calls or write
+// cassettes to the wrong place.
 func SessionFromEnv() (*xrr.FileSession, error) {
 	mode := os.Getenv(EnvMode)
 	if mode == "" || mode == "off" {
@@ -40,6 +48,9 @@ func SessionFromEnv() (*xrr.FileSession, error) {
 	dir := os.Getenv(EnvCassetteDir)
 	if dir == "" {
 		return nil, fmt.Errorf("xrrx: %s=%q but %s is unset", EnvMode, mode, EnvCassetteDir)
+	}
+	if !filepath.IsAbs(dir) {
+		return nil, fmt.Errorf("xrrx: %s=%q must be an absolute path", EnvCassetteDir, dir)
 	}
 
 	var xrrMode xrr.Mode

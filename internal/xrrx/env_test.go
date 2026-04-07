@@ -97,3 +97,21 @@ func TestSessionFromEnv_InvalidMode_ReturnsError(t *testing.T) {
 		t.Fatalf("error %q should echo invalid value", err)
 	}
 }
+
+// TestSessionFromEnv_RelativeDir_ReturnsError guards the cross-process
+// use case: a parent test sets XRR_CASSETTE_DIR before exec'ing the
+// binary, but the child's cwd may not match the parent's. A relative
+// path would silently resolve against the wrong root and produce
+// mis-located cassettes. SessionFromEnv must reject it loudly.
+func TestSessionFromEnv_RelativeDir_ReturnsError(t *testing.T) {
+	t.Setenv(xrrx.EnvMode, "record")
+	t.Setenv(xrrx.EnvCassetteDir, "relative/path")
+
+	_, err := xrrx.SessionFromEnv()
+	if err == nil {
+		t.Fatal("expected error for relative XRR_CASSETTE_DIR")
+	}
+	if !strings.Contains(err.Error(), "absolute") {
+		t.Fatalf("error %q should mention 'absolute'", err)
+	}
+}
