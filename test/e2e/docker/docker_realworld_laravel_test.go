@@ -72,9 +72,9 @@ func TestDockerRealWorld_Laravel(t *testing.T) {
 	// Phase 8: Register cleanup to stop containers even if test fails
 	t.Cleanup(func() {
 		t.Log("Cleaning up staging environment...")
-		CleanupContainers(t, stagingPath)
+		CleanupContainers(t, stagingPath, "staging")
 		t.Log("Cleaning up hotfix environment...")
-		CleanupContainers(t, hotfixPath)
+		CleanupContainers(t, hotfixPath, "hotfix/critical-bug")
 	})
 
 	// Phase 9: Verify docker-compose.yml exists in the repository
@@ -107,10 +107,10 @@ func TestDockerRealWorld_Laravel(t *testing.T) {
 	// Phase 13: Wait for Laravel services to become healthy
 	// Laravel stack takes longer due to composer install and database migrations
 	t.Log("Waiting for staging services to become healthy (may take up to 3 minutes)...")
-	waitForLaravelServices(t, stagingPath, 180*time.Second)
+	waitForLaravelServices(t, stagingPath, "staging", 180*time.Second)
 
 	t.Log("Waiting for hotfix services to become healthy (may take up to 3 minutes)...")
-	waitForLaravelServices(t, hotfixPath, 180*time.Second)
+	waitForLaravelServices(t, hotfixPath, "hotfix/critical-bug", 180*time.Second)
 
 	// Phase 14: Verify port isolation
 	// Each branch must have different ports to run concurrently
@@ -176,7 +176,7 @@ func TestDockerRealWorld_Laravel(t *testing.T) {
 	time.Sleep(3 * time.Second) // Allow containers to fully stop
 
 	env.RunGitHop(t, hotfixPath, "env", "start")
-	waitForLaravelServices(t, hotfixPath, 180*time.Second)
+	waitForLaravelServices(t, hotfixPath, "hotfix/critical-bug", 180*time.Second)
 	t.Log("✓ Hotfix environment restarted successfully")
 
 	// Phase 20: Verify staging environment is unaffected
@@ -316,27 +316,28 @@ echo json_encode(['status' => 'ok', 'service' => 'laravel', 'timestamp' => time(
 
 // waitForLaravelServices waits for all Laravel services to become healthy.
 // Laravel stack includes: web (nginx), app (php-fpm), db (mysql), cache (redis).
-func waitForLaravelServices(t *testing.T, dir string, timeout time.Duration) {
+// branch identifies the hop the services belong to for compose project scoping.
+func waitForLaravelServices(t *testing.T, dir, branch string, timeout time.Duration) {
 	t.Helper()
 
 	// Wait for database first (other services depend on it)
 	if hasService(t, dir, "db") {
-		WaitForServiceHealthy(t, dir, "db", timeout)
+		WaitForServiceHealthy(t, dir, branch, "db", timeout)
 	}
 
 	// Wait for cache
 	if hasService(t, dir, "cache") {
-		WaitForServiceHealthy(t, dir, "cache", timeout)
+		WaitForServiceHealthy(t, dir, branch, "cache", timeout)
 	}
 
 	// Wait for PHP application
 	if hasService(t, dir, "app") {
-		WaitForServiceHealthy(t, dir, "app", timeout)
+		WaitForServiceHealthy(t, dir, branch, "app", timeout)
 	}
 
 	// Finally wait for web server
 	if hasService(t, dir, "web") {
-		WaitForServiceHealthy(t, dir, "web", timeout)
+		WaitForServiceHealthy(t, dir, branch, "web", timeout)
 	}
 
 	t.Logf("All Laravel services healthy in %s", filepath.Base(dir))

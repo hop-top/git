@@ -36,8 +36,8 @@ func TestDockerIsolation_PortIsolation(t *testing.T) {
 
 	// Register cleanup for both environments
 	t.Cleanup(func() {
-		CleanupContainers(t, branchAPath)
-		CleanupContainers(t, branchBPath)
+		CleanupContainers(t, branchAPath, "branch-a")
+		CleanupContainers(t, branchBPath, "branch-b")
 	})
 
 	// Start both environments concurrently
@@ -55,8 +55,8 @@ func TestDockerIsolation_PortIsolation(t *testing.T) {
 	t.Logf("Branch A port: %s, Branch B port: %s", portA, portB)
 
 	// Verify both services are healthy
-	WaitForServiceHealthy(t, branchAPath, "web", 30*time.Second)
-	WaitForServiceHealthy(t, branchBPath, "web", 30*time.Second)
+	WaitForServiceHealthy(t, branchAPath, "branch-a", "web", 30*time.Second)
+	WaitForServiceHealthy(t, branchBPath, "branch-b", "web", 30*time.Second)
 	t.Log("Both services are healthy")
 
 	// Verify both HTTP endpoints are accessible
@@ -96,8 +96,8 @@ func TestDockerIsolation_VolumeDataIsolation(t *testing.T) {
 
 	// Register cleanup for both environments
 	t.Cleanup(func() {
-		CleanupContainers(t, branchXPath)
-		CleanupContainers(t, branchYPath)
+		CleanupContainers(t, branchXPath, "branch-x")
+		CleanupContainers(t, branchYPath, "branch-y")
 	})
 
 	// Get volume paths from .env files
@@ -124,8 +124,8 @@ func TestDockerIsolation_VolumeDataIsolation(t *testing.T) {
 	env.RunGitHop(t, branchYPath, "env", "start")
 
 	// Wait for services to be healthy
-	WaitForServiceHealthy(t, branchXPath, "web", 30*time.Second)
-	WaitForServiceHealthy(t, branchYPath, "web", 30*time.Second)
+	WaitForServiceHealthy(t, branchXPath, "branch-x", "web", 30*time.Second)
+	WaitForServiceHealthy(t, branchYPath, "branch-y", "web", 30*time.Second)
 
 	// Get ports for HTTP requests
 	portX := getPortFromEnvFile(t, branchXPath, "HOP_PORT_WEB")
@@ -151,7 +151,7 @@ func TestDockerIsolation_VolumeDataIsolation(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	env.RunGitHop(t, branchXPath, "env", "start")
-	WaitForServiceHealthy(t, branchXPath, "web", 30*time.Second)
+	WaitForServiceHealthy(t, branchXPath, "branch-x", "web", 30*time.Second)
 	t.Log("Restarted branch-x")
 
 	// Verify data persisted

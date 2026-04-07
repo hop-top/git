@@ -59,10 +59,24 @@ func (d *Docker) IsAvailable() bool {
 	return err == nil
 }
 
-// ComposeUp starts services. If overridePath is non-empty, it is used as an
-// additional compose file via -f flags.
-func (d *Docker) ComposeUp(dir string, detached bool, overridePath ...string) error {
+// composeBaseArgs returns the leading docker compose arguments shared by all
+// invocations: `compose -p <project>` when project is non-empty. Callers
+// append the verb and verb-specific flags. Without `-p`, compose derives the
+// project name from the cwd basename, which collides across hops that share
+// branch names. See https://github.com/hop-top/git/issues/12.
+func composeBaseArgs(project string) []string {
 	args := []string{"compose"}
+	if project != "" {
+		args = append(args, "-p", project)
+	}
+	return args
+}
+
+// ComposeUp starts services. project namespaces compose so containers,
+// networks, and volumes are hop-scoped. If overridePath is non-empty, it is
+// used as an additional compose file via -f flags.
+func (d *Docker) ComposeUp(dir, project string, detached bool, overridePath ...string) error {
+	args := composeBaseArgs(project)
 
 	// If override path provided, use explicit -f flags
 	if len(overridePath) > 0 && overridePath[0] != "" {
@@ -87,19 +101,22 @@ func (d *Docker) ComposeUp(dir string, detached bool, overridePath ...string) er
 	return err
 }
 
-// ComposeStop stops services
-func (d *Docker) ComposeStop(dir string) error {
-	_, err := d.Runner.RunInDir(dir, "docker", "compose", "stop")
+// ComposeStop stops services for the given project.
+func (d *Docker) ComposeStop(dir, project string) error {
+	args := append(composeBaseArgs(project), "stop")
+	_, err := d.Runner.RunInDir(dir, "docker", args...)
 	return err
 }
 
-// ComposeDown removes services
-func (d *Docker) ComposeDown(dir string) error {
-	_, err := d.Runner.RunInDir(dir, "docker", "compose", "down")
+// ComposeDown removes services for the given project.
+func (d *Docker) ComposeDown(dir, project string) error {
+	args := append(composeBaseArgs(project), "down")
+	_, err := d.Runner.RunInDir(dir, "docker", args...)
 	return err
 }
 
-// ComposePs lists containers
-func (d *Docker) ComposePs(dir string) (string, error) {
-	return d.Runner.RunInDir(dir, "docker", "compose", "ps", "--format", "json")
+// ComposePs lists containers for the given project.
+func (d *Docker) ComposePs(dir, project string) (string, error) {
+	args := append(composeBaseArgs(project), "ps", "--format", "json")
+	return d.Runner.RunInDir(dir, "docker", args...)
 }

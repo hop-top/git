@@ -99,8 +99,8 @@ func TestDockerRealWorld_Django(t *testing.T) {
 	// Phase 9: Register cleanup to ensure containers are stopped
 	t.Cleanup(func() {
 		t.Log("Cleaning up Docker containers...")
-		CleanupContainers(t, prodPath)
-		CleanupContainers(t, devPath)
+		CleanupContainers(t, prodPath, "main")
+		CleanupContainers(t, devPath, "development")
 	})
 
 	// Phase 10: Read and analyze docker-compose.yml to identify services
@@ -126,11 +126,11 @@ func TestDockerRealWorld_Django(t *testing.T) {
 	t.Log("Waiting for production services to become healthy (this may take several minutes)...")
 
 	// Wait for web service with extended timeout for Django startup
-	WaitForServiceHealthy(t, prodPath, webService, 300*time.Second)
+	WaitForServiceHealthy(t, prodPath, "main", webService, 300*time.Second)
 
 	// If database service exists, wait for it too
 	if strings.Contains(string(dcContent), "postgres") || strings.Contains(string(dcContent), "db:") {
-		WaitForServiceHealthy(t, prodPath, "db", 60*time.Second)
+		WaitForServiceHealthy(t, prodPath, "main", "db", 60*time.Second)
 		t.Log("Database service is healthy")
 	}
 
@@ -160,7 +160,7 @@ func TestDockerRealWorld_Django(t *testing.T) {
 	env.RunGitHop(t, devPath, "env", "start")
 
 	t.Log("Waiting for development services to become healthy...")
-	WaitForServiceHealthy(t, devPath, webService, 300*time.Second)
+	WaitForServiceHealthy(t, devPath, "development", webService, 300*time.Second)
 
 	// Phase 16: Stop development, restart production to verify independence
 	t.Log("Stopping development environment...")
@@ -169,7 +169,7 @@ func TestDockerRealWorld_Django(t *testing.T) {
 
 	t.Log("Restarting production environment...")
 	env.RunGitHop(t, prodPath, "env", "start")
-	WaitForServiceHealthy(t, prodPath, webService, 300*time.Second)
+	WaitForServiceHealthy(t, prodPath, "main", webService, 300*time.Second)
 	t.Log("✓ Production restarts independently after development was used")
 
 	// Phase 17: Final cleanup
