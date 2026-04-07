@@ -71,4 +71,4 @@ jobs:
           go-version-file: go.mod
 
       - name: Build
-        run: go build ./cmd/git-hop
+        run: go build .
