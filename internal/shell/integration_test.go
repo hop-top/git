@@ -69,24 +69,17 @@ func TestShouldPromptForSetup(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore env vars
-			savedEnv := make(map[string]string)
-			for k := range tt.envVars {
-				savedEnv[k] = os.Getenv(k)
-			}
-			defer func() {
-				for k, v := range savedEnv {
-					if v == "" {
-						os.Unsetenv(k)
-					} else {
-						os.Setenv(k, v)
-					}
-				}
-			}()
+			// Clear inherited env vars that ShouldPromptForSetup consults
+			// (via IsInteractive) so the test result depends only on the
+			// case's envVars map. Without this, running under CI would
+			// make the "should prompt" cases fail because IsInteractive
+			// would see the inherited CI=true.
+			t.Setenv("CI", "")
+			t.Setenv("HOP_NO_SHELL_INTEGRATION", "")
+			t.Setenv("HOP_WRAPPER_ACTIVE", "")
 
-			// Set test env vars
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			// Create test config

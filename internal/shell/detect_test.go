@@ -86,24 +86,16 @@ func TestIsInteractive(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Save and restore env vars
-			savedEnv := make(map[string]string)
-			for k := range tt.envVars {
-				savedEnv[k] = os.Getenv(k)
-			}
-			defer func() {
-				for k, v := range savedEnv {
-					if v == "" {
-						os.Unsetenv(k)
-					} else {
-						os.Setenv(k, v)
-					}
-				}
-			}()
+			// Clear inherited env vars that IsInteractive() consults so
+			// the test result depends only on the case's envVars map.
+			// Without this, running under CI (where CI=true is already
+			// set) would make the "interactive terminal" case fail.
+			// t.Setenv auto-restores on test completion.
+			t.Setenv("CI", "")
+			t.Setenv("HOP_NO_SHELL_INTEGRATION", "")
 
-			// Set test env vars
 			for k, v := range tt.envVars {
-				os.Setenv(k, v)
+				t.Setenv(k, v)
 			}
 
 			result := shell.IsInteractive()
