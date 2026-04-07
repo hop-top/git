@@ -104,10 +104,6 @@ var removeCmd = &cobra.Command{
 					output.Fatal("Hook pre-worktree-remove failed: %v", err)
 				}
 
-				// Keep branch entry in hub config so status shows it as Missing.
-				// The directory will be removed below; showHubStatus checks path
-				// existence and displays Missing when the directory is gone.
-
 				// Resolve a live base path for git commands (worktree remove, branch -D).
 				// Prefer the default branch worktree; fall back to any other live worktree;
 				// finally use hubPath itself (bare repo) so git commands always have a
