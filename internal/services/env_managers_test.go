@@ -316,6 +316,13 @@ func TestComposeProjectName(t *testing.T) {
 		{"leading hyphen branch", "acme", "svc", "-main", "acme-svc-main"},
 		{"all-underscore segment stripped", "___", "svc", "main", "svc-main"},
 		{"all-unsafe input yields empty", "___", "___", "___", ""},
+		// Compose's regex ^[a-z0-9][a-z0-9_-]*$ allows trailing "-" and "_".
+		// Preserving them avoids collapsing distinct branches ("foo" vs
+		// "foo-") into the same project name.
+		{"trailing hyphen preserved", "acme", "svc", "foo-", "acme-svc-foo-"},
+		{"trailing underscore preserved", "acme", "svc", "foo_", "acme-svc-foo_"},
+		{"trailing mixed preserved", "acme", "svc", "foo_-", "acme-svc-foo_-"},
+		{"foo vs foo- distinct", "acme", "svc", "foo", "acme-svc-foo"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

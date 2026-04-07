@@ -44,12 +44,14 @@ func repoIdentity(repoConfig *config.HubConfig) (string, string) {
 }
 
 // composeSlugify lowercases the input and replaces every run of characters
-// outside [a-z0-9_] with a single hyphen, then trims leading/trailing
-// hyphens and underscores. Compose requires project names to start with an
-// alphanumeric character, so a leading "_" or "-" (which would otherwise
-// survive the substitution) must be stripped. Empty input → empty output.
-// Input whose only allowed characters are leading separators (e.g. "_foo"
-// becoming "foo") is trimmed to the first alphanumeric.
+// outside [a-z0-9_] with a single hyphen, then trims leading separators.
+//
+// Compose accepts project names matching ^[a-z0-9][a-z0-9_-]*$ — only the
+// first character must be alphanumeric; trailing "-" and "_" are legal and
+// are preserved here to avoid collisions between distinct inputs (e.g.
+// branch "foo" vs branch "foo-" must not slugify to the same name).
+// Empty input → empty output. Input consisting entirely of separators
+// (e.g. "___") also yields "" because TrimLeft strips the whole string.
 func composeSlugify(s string) string {
 	s = strings.ToLower(s)
 	var b strings.Builder
@@ -65,20 +67,7 @@ func composeSlugify(s string) string {
 			prevHyphen = true
 		}
 	}
-	// Trim separators from both ends. Compose requires the result to start
-	// with [a-z0-9]; underscores are allowed internally but not as the
-	// first character.
-	out := strings.Trim(b.String(), "-_")
-	// Defensive: if any non-alphanumeric character still leads (shouldn't
-	// be possible after the trim, but covers future changes), drop it.
-	for len(out) > 0 {
-		r := rune(out[0])
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
-			break
-		}
-		out = out[1:]
-	}
-	return out
+	return strings.TrimLeft(b.String(), "-_")
 }
 
 // EnvironmentManager represents an environment manager (docker-compose, podman, etc.)
@@ -311,7 +300,10 @@ func (m *EnvironmentManager) executeCommand(cmdParts []string, worktreePath stri
 }
 
 // buildComposeCommand assembles the docker compose invocation, injecting:
-//   - -p <project>  always (so containers/networks/volumes are hop-scoped)
+//   - -p <project>  when ComposeProjectName(org, repo, branch) is non-empty
+//     (so containers/networks/volumes are hop-scoped). When all slugify
+//     inputs reduce to "" the flag is omitted and compose falls back to
+//     its default (cwd basename).
 //   - -f <composeFile> -f <overridePath> --env-file .env  when an override
 //     is provided
 //
