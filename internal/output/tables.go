@@ -1,24 +1,27 @@
 package output
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"strings"
+	"text/tabwriter"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/jedib0t/go-pretty/v6/table"
-	"github.com/jedib0t/go-pretty/v6/text"
+	kitout "hop.top/kit/output"
 )
 
-// TableBuilder provides a fluent interface for building styled tables
+// TableBuilder provides a fluent interface for building aligned tables.
+// Internally delegates to kit/output.Render for JSON/YAML and
+// text/tabwriter for human-readable table output.
 type TableBuilder struct {
 	headers []string
 	rows    [][]string
 	style   TableStyle
-	colors  map[int]lipgloss.Color // column index -> color
 }
 
-// TableStyle defines the visual style of the table
+// TableStyle defines the visual style of the table (retained for API
+// compat; the concrete style differences are dropped — kit/output
+// always uses tabwriter alignment).
 type TableStyle int
 
 const (
@@ -28,108 +31,104 @@ const (
 	TableStyleDouble
 )
 
-// NewTable creates a new table builder
+// NewTable creates a new table builder.
 func NewTable(headers ...string) *TableBuilder {
 	return &TableBuilder{
 		headers: headers,
 		rows:    [][]string{},
 		style:   TableStyleRounded,
-		colors:  make(map[int]lipgloss.Color),
 	}
 }
 
-// AddRow adds a row to the table
+// AddRow adds a row to the table.
 func (tb *TableBuilder) AddRow(cols ...string) *TableBuilder {
 	tb.rows = append(tb.rows, cols)
 	return tb
 }
 
-// SetStyle sets the table style
+// SetStyle sets the table style (kept for API compat; no-op under
+// kit/output).
 func (tb *TableBuilder) SetStyle(style TableStyle) *TableBuilder {
 	tb.style = style
 	return tb
 }
 
-// SetColumnColor sets color for a specific column
-func (tb *TableBuilder) SetColumnColor(colIndex int, color lipgloss.Color) *TableBuilder {
-	tb.colors[colIndex] = color
-	return tb
-}
-
-// Render outputs the table
+// Render returns the table as a string. In human mode it uses
+// tabwriter-aligned columns; in non-human modes it returns plain
+// tab-separated output (no ANSI).
 func (tb *TableBuilder) Render() string {
 	if CurrentMode != ModeHuman {
-		// For porcelain/JSON modes, return simple tab-separated output
 		return tb.renderPlain()
 	}
-
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-
-	// Set headers
-	headerRow := make(table.Row, len(tb.headers))
-	for i, h := range tb.headers {
-		headerRow[i] = h
-	}
-	t.AppendHeader(headerRow)
-
-	// Add rows
-	for _, row := range tb.rows {
-		tableRow := make(table.Row, len(row))
-		for i, cell := range row {
-			tableRow[i] = cell
-		}
-		t.AppendRow(tableRow)
-	}
-
-	// Apply style
-	switch tb.style {
-	case TableStyleRounded:
-		t.SetStyle(table.StyleRounded)
-	case TableStyleLight:
-		t.SetStyle(table.StyleLight)
-	case TableStyleBold:
-		t.SetStyle(table.StyleBold)
-	case TableStyleDouble:
-		t.SetStyle(table.StyleDouble)
-	}
-
-	return t.Render()
+	return tb.renderTabwriter()
 }
 
-// renderPlain returns plain text output for non-human modes
+// renderTabwriter produces aligned plain-text output via tabwriter.
+func (tb *TableBuilder) renderTabwriter() string {
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
+	fmt.Fprintln(tw, strings.Join(tb.headers, "\t"))
+	for _, row := range tb.rows {
+		fmt.Fprintln(tw, strings.Join(row, "\t"))
+	}
+	tw.Flush()
+	return strings.TrimRight(buf.String(), "\n")
+}
+
+// renderPlain returns plain text output for non-human modes.
 func (tb *TableBuilder) renderPlain() string {
 	var lines []string
-
-	// Headers
 	lines = append(lines, strings.Join(tb.headers, "\t"))
-
-	// Rows
 	for _, row := range tb.rows {
 		lines = append(lines, strings.Join(row, "\t"))
 	}
-
 	return strings.Join(lines, "\n")
 }
 
-// Print outputs the table to stdout
+// Print outputs the table to stdout.
 func (tb *TableBuilder) Print() {
 	fmt.Println(tb.Render())
 }
 
-// StatusTable creates a table with status indicators
+// RenderTo writes the table to w using kit/output.Render with the
+// specified format. This is the preferred path for commands that
+// support --format (table, json, yaml).
+func (tb *TableBuilder) RenderTo(w *os.File, format kitout.Format) error {
+	if format == kitout.JSON || format == kitout.YAML {
+		return kitout.Render(w, format, tb.toMaps())
+	}
+	_, err := fmt.Fprintln(w, tb.Render())
+	return err
+}
+
+// toMaps converts rows to []map[string]string for JSON/YAML output.
+func (tb *TableBuilder) toMaps() []map[string]string {
+	out := make([]map[string]string, 0, len(tb.rows))
+	for _, row := range tb.rows {
+		m := make(map[string]string, len(tb.headers))
+		for i, h := range tb.headers {
+			if i < len(row) {
+				m[h] = row[i]
+			}
+		}
+		out = append(out, m)
+	}
+	return out
+}
+
+// StatusTable creates a table with status indicators.
 type StatusTable struct {
 	headers []string
 	rows    []StatusRow
 }
 
-// StatusRow represents a row with status information
+// StatusRow represents a row with status information.
 type StatusRow struct {
 	Cells  []string
 	Status string // "success", "error", "warning", "info", "neutral"
 }
 
-// NewStatusTable creates a new status table
+// NewStatusTable creates a new status table.
 func NewStatusTable(headers ...string) *StatusTable {
 	return &StatusTable{
 		headers: headers,
@@ -137,7 +136,7 @@ func NewStatusTable(headers ...string) *StatusTable {
 	}
 }
 
-// AddRow adds a row with status
+// AddRow adds a row with status.
 func (st *StatusTable) AddRow(status string, cells ...string) *StatusTable {
 	st.rows = append(st.rows, StatusRow{
 		Cells:  cells,
@@ -146,58 +145,71 @@ func (st *StatusTable) AddRow(status string, cells ...string) *StatusTable {
 	return st
 }
 
-// Render outputs the status table
+// Render outputs the status table.
 func (st *StatusTable) Render() string {
 	if CurrentMode != ModeHuman {
 		return st.renderPlain()
 	}
 
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 
-	// Set headers
-	headerRow := make(table.Row, len(st.headers))
-	for i, h := range st.headers {
-		headerRow[i] = h
-	}
-	t.AppendHeader(headerRow)
+	fmt.Fprintln(tw, strings.Join(st.headers, "\t"))
 
-	// Add rows with status colors
 	for _, row := range st.rows {
-		tableRow := make(table.Row, len(row.Cells))
+		cells := make([]string, len(row.Cells))
 		for i, cell := range row.Cells {
-			// First cell gets status icon
 			if i == 0 {
 				icon := getStatusIcon(row.Status)
 				cell = icon + " " + cell
 			}
-			tableRow[i] = colorizeCell(cell, row.Status)
+			cells[i] = colorizeCell(cell, row.Status)
 		}
-		t.AppendRow(tableRow)
+		fmt.Fprintln(tw, strings.Join(cells, "\t"))
 	}
 
-	t.SetStyle(table.StyleRounded)
-	return t.Render()
+	tw.Flush()
+	return strings.TrimRight(buf.String(), "\n")
 }
 
-// renderPlain returns plain text output
+// renderPlain returns plain text output.
 func (st *StatusTable) renderPlain() string {
 	var lines []string
-
-	// Headers
 	lines = append(lines, strings.Join(st.headers, "\t"))
-
-	// Rows
 	for _, row := range st.rows {
 		lines = append(lines, strings.Join(row.Cells, "\t"))
 	}
-
 	return strings.Join(lines, "\n")
 }
 
-// Print outputs the status table
+// Print outputs the status table.
 func (st *StatusTable) Print() {
 	fmt.Println(st.Render())
+}
+
+// RenderTo writes the status table to w using the specified format.
+func (st *StatusTable) RenderTo(w *os.File, format kitout.Format) error {
+	if format == kitout.JSON || format == kitout.YAML {
+		return kitout.Render(w, format, st.toMaps())
+	}
+	_, err := fmt.Fprintln(w, st.Render())
+	return err
+}
+
+// toMaps converts rows to []map[string]string for JSON/YAML output.
+func (st *StatusTable) toMaps() []map[string]string {
+	out := make([]map[string]string, 0, len(st.rows))
+	for _, row := range st.rows {
+		m := make(map[string]string, len(st.headers))
+		for i, h := range st.headers {
+			if i < len(row.Cells) {
+				m[h] = row.Cells[i]
+			}
+		}
+		m["Status"] = row.Status
+		out = append(out, m)
+	}
+	return out
 }
 
 // Helper functions
@@ -218,15 +230,13 @@ func getStatusIcon(status string) string {
 }
 
 func colorizeCell(cell string, status string) string {
-	// Only colorize in human mode
 	if CurrentMode != ModeHuman {
 		return cell
 	}
-
 	return Colorize(cell, status)
 }
 
-// SummaryTable creates a simple two-column key-value table
+// SummaryTable creates a simple two-column key-value table.
 func SummaryTable(items map[string]string) string {
 	if CurrentMode != ModeHuman {
 		var lines []string
@@ -236,25 +246,19 @@ func SummaryTable(items map[string]string) string {
 		return strings.Join(lines, "\n")
 	}
 
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleLight)
-
-	// Disable header
-	t.Style().Options.DrawBorder = false
-	t.Style().Options.SeparateHeader = false
-
+	var buf bytes.Buffer
+	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
 	for k, v := range items {
-		t.AppendRow(table.Row{
+		fmt.Fprintf(tw, "%s\t%s\n",
 			StyleKey.Render(k),
 			StyleValue.Render(v),
-		})
+		)
 	}
-
-	return t.Render()
+	tw.Flush()
+	return strings.TrimRight(buf.String(), "\n")
 }
 
-// CompactList creates a compact list with bullets
+// CompactList creates a compact list with bullets.
 func CompactList(items []string, status string) string {
 	if CurrentMode != ModeHuman {
 		return strings.Join(items, "\n")
@@ -268,17 +272,18 @@ func CompactList(items []string, status string) string {
 	return strings.Join(lines, "\n")
 }
 
-// AlignedList creates an aligned list with labels and values
+// AlignedList creates an aligned list with labels and values.
 func AlignedList(items []struct{ Label, Value string }) string {
 	if CurrentMode != ModeHuman {
 		var lines []string
 		for _, item := range items {
-			lines = append(lines, fmt.Sprintf("%s\t%s", item.Label, item.Value))
+			lines = append(lines, fmt.Sprintf(
+				"%s\t%s", item.Label, item.Value,
+			))
 		}
 		return strings.Join(lines, "\n")
 	}
 
-	// Calculate max label width
 	maxWidth := 0
 	for _, item := range items {
 		if len(item.Label) > maxWidth {
@@ -300,7 +305,7 @@ func AlignedList(items []struct{ Label, Value string }) string {
 	return strings.Join(lines, "\n")
 }
 
-// Legend creates a legend for table symbols
+// Legend creates a legend for table symbols.
 func Legend(items map[string]string) string {
 	if CurrentMode != ModeHuman {
 		return ""
@@ -308,22 +313,20 @@ func Legend(items map[string]string) string {
 
 	var parts []string
 	for icon, desc := range items {
-		parts = append(parts, fmt.Sprintf("%s %s", icon, StyleMuted.Render(desc)))
+		parts = append(parts, fmt.Sprintf(
+			"%s %s", icon, StyleMuted.Render(desc),
+		))
 	}
 
 	return StyleMuted.Render("Legend: ") + strings.Join(parts, "  ")
 }
 
-// ConfigureTableWriter configures a go-pretty table writer with common settings
-func ConfigureTableWriter(t table.Writer) {
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleRounded)
-	t.Style().Options.DrawBorder = true
-	t.Style().Options.SeparateColumns = true
-	t.Style().Options.SeparateHeader = true
-	t.Style().Options.SeparateRows = false
-
-	// Color configuration
-	t.Style().Color.Header = text.Colors{text.Bold}
-	t.Style().Color.Border = text.Colors{text.FgHiBlack}
+// RenderStructTable renders a slice of structs using kit/output.Render.
+// Structs must have `table:""` tags for table format. This is the
+// recommended path for new code — use instead of TableBuilder when
+// the data model is known at compile time.
+func RenderStructTable(
+	w *os.File, format kitout.Format, v any,
+) error {
+	return kitout.Render(w, format, v)
 }
