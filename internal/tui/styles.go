@@ -1,8 +1,11 @@
 package tui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"charm.land/lipgloss/v2"
+	"hop.top/git/internal/output"
+)
 
-// Styles defines the TUI styles
+// Styles defines the TUI styles using semantic theme colors.
 type Styles struct {
 	Header lipgloss.Style
 	Cell   lipgloss.Style
@@ -10,20 +13,20 @@ type Styles struct {
 	Error  lipgloss.Style
 }
 
-// DefaultStyles returns the default styles
+// DefaultStyles returns styles derived from the kit/tui theme palette.
 func DefaultStyles() Styles {
 	return Styles{
 		Header: lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("212")).
+			Foreground(output.ColorAccent).
 			Padding(0, 1),
 		Cell: lipgloss.NewStyle().
 			Padding(0, 1),
 		Active: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("2")).
+			Foreground(output.ColorSuccess).
 			Bold(true),
 		Error: lipgloss.NewStyle().
-			Foreground(lipgloss.Color("1")).
+			Foreground(output.ColorError).
 			Bold(true),
 	}
 }
