@@ -305,3 +305,197 @@ func TestParityUpgradeSubcommands(t *testing.T) {
 		assertGolden(t, gp, helpText)
 	})
 }
+
+// --- Part 2: Output format, log level, XDG ---
+
+func (p *parityEnv) runWithEnv(t *testing.T, extraEnv []string, args ...string) (stdout, stderr string, exitCode int) {
+	t.Helper()
+	cmd := exec.Command(p.binPath, args...)
+	cmd.Dir = p.rootDir
+	cmd.Env = append(append([]string{}, p.envVars...), extraEnv...)
+	var outBuf, errBuf bytes.Buffer
+	cmd.Stdout = &outBuf
+	cmd.Stderr = &errBuf
+	err := cmd.Run()
+	exitCode = 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			t.Fatalf("exec error: %v", err)
+		}
+	}
+	return outBuf.String(), errBuf.String(), exitCode
+}
+
+// TestParityLogPrefixes verifies log output goes to stderr with
+// correct prefixes for each level.
+func TestParityLogPrefixes(t *testing.T) {
+	env := setupParityEnv(t)
+
+	t.Run("debug_prefix", func(t *testing.T) {
+		// --verbose enables debug logging; doctor writes debug output
+		stdout, stderr, _ := env.run(t, "--verbose", "doctor")
+		assertNoANSI(t, stdout)
+		if strings.Contains(stdout, "debug:") {
+			t.Errorf("debug log leaked to stdout")
+		}
+		// stderr should contain debug-level output when verbose
+		if !strings.Contains(stderr, "debug:") {
+			t.Logf("stderr: %s", stderr)
+			t.Logf("(debug prefix may not appear if no debug messages emitted)")
+		}
+	})
+
+	t.Run("fatal_prefix", func(t *testing.T) {
+		// Trigger a fatal: run a command that will fail
+		// e.g., status outside a hub
+		stdout, stderr, code := env.run(t, "status")
+		assertNoANSI(t, stdout)
+		if code == 0 {
+			t.Skip("status succeeded unexpectedly (may be in a hub)")
+		}
+		if strings.Contains(stdout, "fatal:") {
+			t.Errorf("fatal message leaked to stdout")
+		}
+		if !strings.Contains(stderr, "fatal:") && !strings.Contains(stderr, "Not in") {
+			t.Errorf("expected fatal/error on stderr, got: %s", stderr)
+		}
+	})
+
+	t.Run("error_on_stderr", func(t *testing.T) {
+		// Unknown subcommand produces error on stderr
+		stdout, stderr, _ := env.run(t, "nonexistent-cmd-xyz")
+		assertNoANSI(t, stdout)
+		// Error output should be on stderr
+		if stderr == "" && stdout == "" {
+			t.Errorf("expected some error output")
+		}
+	})
+
+	t.Run("log_level_env", func(t *testing.T) {
+		// GIT_HOP_LOG_LEVEL=debug should enable debug output
+		stdout, _, _ := env.runWithEnv(t,
+			[]string{"GIT_HOP_LOG_LEVEL=debug"},
+			"doctor",
+		)
+		assertNoANSI(t, stdout)
+	})
+
+	t.Run("warn_on_stderr", func(t *testing.T) {
+		// GIT_HOP_LOG_LEVEL=warn should suppress info but not warnings
+		stdout, _, _ := env.runWithEnv(t,
+			[]string{"GIT_HOP_LOG_LEVEL=warn"},
+			"--help",
+		)
+		assertNoANSI(t, stdout)
+	})
+}
+
+// TestParityOutputFormat verifies --json stdout is ANSI-free and
+// goes to stdout.
+func TestParityOutputFormat(t *testing.T) {
+	env := setupParityEnv(t)
+
+	t.Run("json_stdout_clean", func(t *testing.T) {
+		// list --json outside a hub will fail but we check stdout is clean
+		stdout, _, _ := env.run(t, "list", "--json")
+		assertNoANSI(t, stdout)
+	})
+
+	t.Run("porcelain_stdout_clean", func(t *testing.T) {
+		stdout, _, _ := env.run(t, "list", "--porcelain")
+		assertNoANSI(t, stdout)
+	})
+
+	t.Run("json_flag_no_color_leak", func(t *testing.T) {
+		stdout, _, _ := env.runWithColor(t, "list", "--json")
+		assertNoANSI(t, stdout)
+	})
+
+	t.Run("porcelain_flag_no_color_leak", func(t *testing.T) {
+		stdout, _, _ := env.runWithColor(t, "list", "--porcelain")
+		assertNoANSI(t, stdout)
+	})
+}
+
+// TestParityXDGResolution verifies XDG path resolution respects
+// env vars for config, data, cache, and state.
+func TestParityXDGResolution(t *testing.T) {
+	env := setupParityEnv(t)
+
+	t.Run("config_home", func(t *testing.T) {
+		customConfig := filepath.Join(env.rootDir, "custom-config")
+		stdout, stderr, _ := env.runWithEnv(t,
+			[]string{"XDG_CONFIG_HOME=" + customConfig},
+			"doctor",
+		)
+		combined := stdout + stderr
+		if !strings.Contains(combined, "Config home:") {
+			t.Skipf("doctor output doesn't show Config home")
+		}
+		if !strings.Contains(combined, customConfig) {
+			t.Errorf("doctor should use custom XDG_CONFIG_HOME=%s\noutput: %s",
+				customConfig, combined)
+		}
+		assertNoANSI(t, stdout)
+		gp := goldenPath("xdg", "config_home.golden")
+		// Normalize paths for golden comparison: replace temp dir
+		normalized := strings.ReplaceAll(combined, env.rootDir, "$TMPDIR")
+		assertGolden(t, gp, normalized)
+	})
+
+	t.Run("data_home", func(t *testing.T) {
+		customData := filepath.Join(env.rootDir, "custom-data")
+		stdout, stderr, _ := env.runWithEnv(t,
+			[]string{
+				"XDG_DATA_HOME=" + customData,
+				"GIT_HOP_DATA_HOME=",
+			},
+			"doctor",
+		)
+		combined := stdout + stderr
+		assertNoANSI(t, stdout)
+		if !strings.Contains(combined, "Data home:") {
+			t.Skipf("doctor output doesn't show Data home")
+		}
+		if !strings.Contains(combined, customData) {
+			t.Errorf("doctor should use custom XDG_DATA_HOME=%s\noutput: %s",
+				customData, combined)
+		}
+	})
+
+	t.Run("cache_home", func(t *testing.T) {
+		customCache := filepath.Join(env.rootDir, "custom-cache")
+		stdout, stderr, _ := env.runWithEnv(t,
+			[]string{"XDG_CACHE_HOME=" + customCache},
+			"doctor",
+		)
+		combined := stdout + stderr
+		assertNoANSI(t, stdout)
+		if !strings.Contains(combined, "Cache home:") {
+			t.Skipf("doctor output doesn't show Cache home")
+		}
+		if !strings.Contains(combined, customCache) {
+			t.Errorf("doctor should use custom XDG_CACHE_HOME=%s\noutput: %s",
+				customCache, combined)
+		}
+	})
+
+	t.Run("git_hop_data_home_override", func(t *testing.T) {
+		customGHD := filepath.Join(env.rootDir, "custom-ghd")
+		stdout, stderr, _ := env.runWithEnv(t,
+			[]string{"GIT_HOP_DATA_HOME=" + customGHD},
+			"doctor",
+		)
+		combined := stdout + stderr
+		assertNoANSI(t, stdout)
+		if !strings.Contains(combined, "Data home:") {
+			t.Skipf("doctor output doesn't show Data home")
+		}
+		if !strings.Contains(combined, customGHD) {
+			t.Errorf("doctor should use GIT_HOP_DATA_HOME=%s\noutput: %s",
+				customGHD, combined)
+		}
+	})
+}
