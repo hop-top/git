@@ -1,0 +1,20 @@
+Rename a worktree and its branch
+
+Usage:
+  git-hop move [old-branch] <new-branch> [flags]
+
+Aliases:
+  move, rename, mv
+
+Flags:
+  -h, --help   help for move
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --porcelain       machine-readable output
+  -q, --quiet           suppress output
+  -v, --verbose         verbose output

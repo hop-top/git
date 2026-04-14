@@ -1,0 +1,24 @@
+Check for a newer version of git-hop and optionally install it.
+
+Usage:
+  git-hop upgrade [flags]
+  git-hop upgrade [command]
+
+Available Commands:
+  preamble    Print the upgrade preamble fragment for skill files
+
+Flags:
+      --auto    Install without prompting
+  -h, --help    help for upgrade
+  -q, --quiet   Suppress output when already up to date
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --porcelain       machine-readable output
+  -v, --verbose         verbose output
+
+Use "git-hop upgrade [command] --help" for more information about a command.

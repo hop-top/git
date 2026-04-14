@@ -1,0 +1,21 @@
+Remove a hub, hopspace, or branch
+
+Usage:
+  git-hop remove [target] [flags]
+
+Aliases:
+  remove, rm, delete, del
+
+Flags:
+  -h, --help        help for remove
+      --no-prompt   Do not prompt for confirmation
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --porcelain       machine-readable output
+  -q, --quiet           suppress output
+  -v, --verbose         verbose output
