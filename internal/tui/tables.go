@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+
 	"hop.top/git/internal/output"
 )
 
@@ -16,7 +18,7 @@ type Table struct {
 func NewTable(headers []interface{}) *Table {
 	h := make([]string, len(headers))
 	for i, v := range headers {
-		h[i], _ = v.(string)
+		h[i] = fmt.Sprint(v)
 	}
 	return &Table{tb: output.NewTable(h...)}
 }
@@ -25,7 +27,7 @@ func NewTable(headers []interface{}) *Table {
 func (t *Table) AddRow(row ...interface{}) {
 	cells := make([]string, len(row))
 	for i, v := range row {
-		cells[i], _ = v.(string)
+		cells[i] = fmt.Sprint(v)
 	}
 	t.tb.AddRow(cells...)
 }

@@ -13,7 +13,7 @@ const toolName = "git-hop"
 func GetConfigHome() string {
 	dir, err := xdg.ConfigDir(toolName)
 	if err != nil {
-		return filepath.Join(".config", toolName)
+		return ".config"
 	}
 	return filepath.Dir(dir)
 }

@@ -220,9 +220,9 @@ func (l *GlobalLoader) maybeMigrate() error {
 		return nil // nothing to migrate
 	}
 
-	// Check if git config already has hop values
-	if _, err := l.gc.GetString(KeyBareRepo); err == nil {
-		return nil // already migrated
+	// Check if already migrated via sentinel key
+	if v, err := l.gc.GetString("hop.migrated"); err == nil && v == "true" {
+		return nil
 	}
 
 	content, err := os.ReadFile(jsonPath)
@@ -251,8 +251,18 @@ func (l *GlobalLoader) maybeMigrate() error {
 		}
 	}
 
+	// Mark migration complete
+	if err := l.gc.Set("hop.migrated", "true"); err != nil {
+		return fmt.Errorf("set migration sentinel: %w", err)
+	}
+
 	// Backup original JSON (rename, not delete)
 	bakPath := jsonPath + ".bak"
+	if _, err := os.Stat(bakPath); err == nil {
+		if err := os.Remove(bakPath); err != nil {
+			return fmt.Errorf("remove existing legacy backup: %w", err)
+		}
+	}
 	if err := os.Rename(jsonPath, bakPath); err != nil {
 		return fmt.Errorf("backup legacy config: %w", err)
 	}

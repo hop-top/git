@@ -91,8 +91,10 @@ var ErrKeyNotFound = fmt.Errorf("git config key not found")
 func (gc *GitConfig) get(key string) (string, error) {
 	out, err := gc.RunCmd("config", "--get", key)
 	if err != nil {
-		// git config exits 1 when key is missing
-		return "", ErrKeyNotFound
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return "", ErrKeyNotFound
+		}
+		return "", fmt.Errorf("git config --get %s: %w", key, err)
 	}
 	return out, nil
 }

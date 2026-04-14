@@ -77,25 +77,6 @@ func (p *parityEnv) run(t *testing.T, args ...string) (stdout, stderr string, ex
 	return outBuf.String(), errBuf.String(), exitCode
 }
 
-func (p *parityEnv) runNoColor(t *testing.T, args ...string) (stdout, stderr string, exitCode int) {
-	t.Helper()
-	origEnv := p.envVars
-	p.envVars = append([]string{}, origEnv...)
-	found := false
-	for i, v := range p.envVars {
-		if strings.HasPrefix(v, "NO_COLOR=") {
-			p.envVars[i] = "NO_COLOR=1"
-			found = true
-			break
-		}
-	}
-	if !found {
-		p.envVars = append(p.envVars, "NO_COLOR=1")
-	}
-	defer func() { p.envVars = origEnv }()
-	return p.run(t, args...)
-}
-
 func (p *parityEnv) runWithColor(t *testing.T, args ...string) (stdout, stderr string, exitCode int) {
 	t.Helper()
 	origEnv := p.envVars
@@ -131,9 +112,12 @@ func assertGolden(t *testing.T, path, actual string) {
 	golden, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			t.Logf("Golden file missing; creating: %s", path)
-			updateGolden(t, path, actual)
-			return
+			if os.Getenv("UPDATE_GOLDEN") == "1" {
+				t.Logf("Golden file missing; creating: %s", path)
+				updateGolden(t, path, actual)
+				return
+			}
+			t.Fatalf("golden file missing (set UPDATE_GOLDEN=1 to create): %s", path)
 		}
 		t.Fatalf("read golden: %v", err)
 	}

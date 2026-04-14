@@ -289,7 +289,7 @@ func TestMigration_SkipsWhenAlreadyMigrated(t *testing.T) {
 
 	// Pre-populate git config (simulating already migrated)
 	store := map[string]string{
-		"hop.bareRepo": "true",
+		"hop.migrated": "true",
 	}
 	gc := fakeGitConfig(store)
 	loader := config.NewGlobalLoaderWithGitConfig(gc)
