@@ -14,6 +14,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
 	"hop.top/git/internal/docker"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -22,6 +23,7 @@ import (
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 	"hop.top/kit/xdg"
 )
 
@@ -232,24 +234,51 @@ var addCmd = &cobra.Command{
 			}
 		}
 
-		// Setup dependencies
-		output.Info("Setting up dependencies...")
-		depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
-		if err != nil {
-			output.Warn("Failed to initialize dependency manager: %v", err)
-		} else {
-			if err := depsManager.EnsureDeps(worktreePath, branch); err != nil {
-				output.Warn("Failed to ensure dependencies: %v", err)
-			} else {
+		// Register deps-as-sync-subscriber on worktree.created.
+		// EnsureDeps errors are non-fatal: log warning, return nil
+		// so bus.Publish does not propagate as fatal.
+		cli.EventBus.Subscribe(string(events.WorktreeCreated),
+			func(ctx context.Context, e bus.Event) error {
+				output.Info("Setting up dependencies...")
+				dm, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
+				if err != nil {
+					output.Warn("Failed to initialize dependency manager: %v", err)
+					return nil
+				}
+				payload := e.Payload.(events.WorktreeEvent)
+				if err := dm.EnsureDeps(payload.Path, payload.Branch); err != nil {
+					output.Warn("Failed to ensure dependencies: %v", err)
+					return nil
+				}
 				output.Info("Dependencies installed.")
-			}
-		}
+				// Emit deps.installed for external consumers.
+				_ = cli.EventBus.Publish(ctx, bus.NewEvent(
+					events.DepsInstalled, events.Source,
+					events.DepsEvent{
+						WorktreePath: payload.Path,
+						Branch:       payload.Branch,
+					},
+				))
+				return nil
+			},
+		)
 
 		// Update current symlink to point to new worktree
 		if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
 			// Don't fail on symlink error, just warn
 			output.Warn("Failed to update current symlink: %v", err)
 		}
+
+		// Emit worktree.created — triggers deps subscriber above.
+		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+			events.WorktreeCreated, events.Source,
+			events.WorktreeEvent{
+				Path:         worktreePath,
+				Branch:       branch,
+				HopspacePath: hopspacePath,
+				RepoPath:     hubPath,
+			},
+		))
 
 		output.Info("Created hopspace for '%s'", branch)
 

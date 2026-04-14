@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,12 +9,14 @@ import (
 
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 )
 
 var mergeCmd = &cobra.Command{
@@ -178,6 +181,17 @@ If only one argument is given, the current branch is used as the source.`,
 		} else {
 			output.Info("Symlinked 'current' → %s", intoPath)
 		}
+
+		// Emit worktree.merged event.
+		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+			events.WorktreeMerged, events.Source,
+			events.WorktreeEvent{
+				Path:         srcPath,
+				Branch:       sourceBranch,
+				HopspacePath: hopspacePath,
+				RepoPath:     hubPath,
+			},
+		))
 
 		output.Success("Merged '%s' into '%s' and cleaned up source worktree.", sourceBranch, intoBranch)
 	},

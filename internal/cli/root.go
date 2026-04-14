@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -8,6 +9,7 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 	kitcli "hop.top/kit/cli"
 	"hop.top/kit/upgrade"
 	"hop.top/kit/xdg"
@@ -38,6 +40,10 @@ var Root *kitcli.Root
 // RootCmd is the cobra root command — preserved for backward compat
 // with cmd/*.go init() AddCommand calls.
 var RootCmd *cobra.Command
+
+// EventBus is the application-wide event bus. Initialized during
+// root setup; available to all commands via this package-level var.
+var EventBus bus.Bus
 
 func SetVersion(v, c, d string) {
 	version = v
@@ -79,10 +85,17 @@ func ExpandShorthand(s string, gitDomain string) string {
 }
 
 func Execute() error {
+	defer func() {
+		if EventBus != nil {
+			_ = EventBus.Close(context.Background())
+		}
+	}()
 	return RootCmd.Execute()
 }
 
 func init() {
+	EventBus = bus.New()
+
 	Root = kitcli.New(kitcli.Config{
 		Name:    "git-hop",
 		Version: "dev",

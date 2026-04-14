@@ -11,6 +11,7 @@ import (
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -18,6 +19,7 @@ import (
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 )
 
 var moveCmd = &cobra.Command{
@@ -192,6 +194,17 @@ var moveCmd = &cobra.Command{
 		if err := hookRunner.ExecuteHookWithDetector("post-worktree-move", actualNewPath, repoID, newBranch, detectorEnv); err != nil {
 			output.Warn("Hook post-worktree-move failed: %v", err)
 		}
+
+		// Emit worktree.moved event.
+		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+			events.WorktreeMoved, events.Source,
+			events.WorktreeEvent{
+				Path:         actualNewPath,
+				Branch:       newBranch,
+				HopspacePath: hopspacePath,
+				RepoPath:     hubPath,
+			},
+		))
 
 		output.Info("Moved '%s' → '%s'", oldBranch, newBranch)
 		output.Info("Worktree: %s", actualNewPath)

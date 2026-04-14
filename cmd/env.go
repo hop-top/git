@@ -1,18 +1,21 @@
 package cmd
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 )
 
 var envCmd = &cobra.Command{
@@ -132,10 +135,18 @@ func runEnvCommand(action string) {
 		if err := manager.Start(root, branch, repoPath, hubConfig, overridePath); err != nil {
 			output.Fatal("Failed to start environment: %v", err)
 		}
+		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+			events.EnvStarted, events.Source,
+			events.EnvEvent{Action: "start", Root: root, Branch: branch},
+		))
 	case "stop":
 		if err := manager.Stop(root, branch, repoPath, hubConfig, overridePath); err != nil {
 			output.Fatal("Failed to stop environment: %v", err)
 		}
+		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+			events.EnvStopped, events.Source,
+			events.EnvEvent{Action: "stop", Root: root, Branch: branch},
+		))
 	}
 }
 

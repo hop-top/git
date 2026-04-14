@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -9,6 +10,7 @@ import (
 
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -16,6 +18,7 @@ import (
 	"hop.top/git/internal/shell"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 )
 
 var (
@@ -236,6 +239,18 @@ Or register current structure: git hop init --current`)
 		}
 	}
 
+	// Emit hopspace.initialized after successful conversion.
+	if hub != nil {
+		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+			events.HopspaceInitialized, events.Source,
+			events.HopspaceEvent{
+				Path: repoPath,
+				Org:  hub.Config.Repo.Org,
+				Repo: hub.Config.Repo.Repo,
+			},
+		))
+	}
+
 	fmt.Println("\nConversion successful!")
 	if isRegularRepo {
 		fmt.Printf("Project structure:\n")
@@ -334,6 +349,16 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 		output.Error("Failed to register repository: %v", err)
 		os.Exit(1)
 	}
+
+	// Emit hopspace.initialized for register-as-is path.
+	_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+		events.HopspaceInitialized, events.Source,
+		events.HopspaceEvent{
+			Path: repoPath,
+			Org:  org,
+			Repo: repo,
+		},
+	))
 
 	fmt.Println("Repository registered successfully!")
 	fmt.Printf("  Repo: %s\n", repoKey)

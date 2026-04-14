@@ -10,6 +10,7 @@ import (
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -17,6 +18,7 @@ import (
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 )
 
 var removeCmd = &cobra.Command{
@@ -218,6 +220,17 @@ var removeCmd = &cobra.Command{
 				if err := updateCurrentToDefault(fs, hub, hubPath); err != nil {
 					output.Warn("Failed to update current symlink: %v", err)
 				}
+
+				// Emit worktree.removed event.
+				_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+					events.WorktreeRemoved, events.Source,
+					events.WorktreeEvent{
+						Path:         worktreePath,
+						Branch:       target,
+						HopspacePath: hopspacePath,
+						RepoPath:     hubPath,
+					},
+				))
 
 				output.Info("Successfully removed %s", target)
 				return
