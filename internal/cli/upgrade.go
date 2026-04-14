@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"hop.top/kit/upgrade"
+	"hop.top/kit/upgrade/skill"
 	"hop.top/kit/xdg"
-	"hop.top/upgrade"
-	"hop.top/upgrade/skill"
 )
 
 const hopGitHubRepo = "hop-top/git"

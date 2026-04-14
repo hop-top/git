@@ -13,7 +13,7 @@ import (
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
-	"hop.top/upgrade"
+	"hop.top/kit/upgrade"
 )
 
 var (
