@@ -3,12 +3,11 @@ package state
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
-	"runtime"
 	"time"
 
 	"github.com/spf13/afero"
+	"hop.top/kit/xdg"
 )
 
 // State represents the git-hop state tracking repositories and their locations
@@ -60,27 +59,12 @@ type OrphanedEntry struct {
 	Reason     string    `json:"reason"`
 }
 
-// GetStateHome returns the XDG state home directory for git-hop
 func GetStateHome() string {
-	if env := os.Getenv("XDG_STATE_HOME"); env != "" {
-		return filepath.Join(env, "git-hop")
-	}
-
-	home, err := os.UserHomeDir()
+	dir, err := xdg.StateDir("git-hop")
 	if err != nil {
-		home = os.Getenv("HOME")
-	}
-
-	if home == "" {
 		return filepath.Join(".local", "state", "git-hop")
 	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support", "git-hop", "state")
-	default:
-		return filepath.Join(home, ".local", "state", "git-hop")
-	}
+	return dir
 }
 
 // LoadState loads the state from disk or returns a new empty state

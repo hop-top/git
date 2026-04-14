@@ -71,18 +71,16 @@ func (r *Runner) FindHookFile(hookName string, worktreePath string, repoID strin
 		return hook
 	}
 
-	dataHome := getDataHome()
 	parts := strings.Split(repoID, "/")
 	if len(parts) >= 3 {
-		hopspaceHook := filepath.Join(dataHome, "git-hop", parts[0], parts[1], parts[2], "hooks", hookName)
+		hopspaceHook := filepath.Join(hop.GetGitHopDataHome(), parts[0], parts[1], parts[2], "hooks", hookName)
 		if exists, _ := afero.Exists(r.fs, hopspaceHook); exists {
 			return hopspaceHook
 		}
 	}
 
 	// Priority 3: Global hook
-	configHome := getConfigHome()
-	globalHook := filepath.Join(configHome, "git-hop", "hooks", hookName)
+	globalHook := filepath.Join(hop.GetHooksDir(), hookName)
 	if exists, _ := afero.Exists(r.fs, globalHook); exists {
 		return globalHook
 	}
@@ -221,48 +219,3 @@ func (r *Runner) InstallHooks(worktreePath string) error {
 	return nil
 }
 
-// getDataHome returns the XDG data home directory
-func getDataHome() string {
-	if env := os.Getenv("XDG_DATA_HOME"); env != "" {
-		return env
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.Getenv("HOME")
-	}
-
-	if home == "" {
-		return filepath.Join(".local", "share")
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support")
-	default:
-		return filepath.Join(home, ".local", "share")
-	}
-}
-
-// getConfigHome returns the XDG config home directory
-func getConfigHome() string {
-	if env := os.Getenv("XDG_CONFIG_HOME"); env != "" {
-		return env
-	}
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		home = os.Getenv("HOME")
-	}
-
-	if home == "" {
-		return filepath.Join(".config")
-	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Preferences")
-	default:
-		return filepath.Join(home, ".config")
-	}
-}

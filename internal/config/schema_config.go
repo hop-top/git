@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"runtime"
 
 	"github.com/spf13/afero"
+	"hop.top/kit/xdg"
 )
 
 // SchemaConfig represents the new git-hop configuration schema per config-state-separation plan
@@ -77,27 +77,12 @@ type DoctorSchema struct {
 	ChecksEnabled []string `json:"checksEnabled"`
 }
 
-// getDataHome returns the XDG data home directory
 func getDataHome() string {
-	if env := os.Getenv("XDG_DATA_HOME"); env != "" {
-		return env
-	}
-
-	home, err := os.UserHomeDir()
+	dir, err := xdg.DataDir("git-hop")
 	if err != nil {
-		home = os.Getenv("HOME")
-	}
-
-	if home == "" {
 		return filepath.Join(".local", "share")
 	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Application Support")
-	default:
-		return filepath.Join(home, ".local", "share")
-	}
+	return filepath.Dir(dir)
 }
 
 // NewSchemaConfig returns a new V2 config with default values
@@ -152,27 +137,12 @@ func NewSchemaConfig() *SchemaConfig {
 	}
 }
 
-// GetConfigHome returns the XDG config home directory for git-hop
 func GetConfigHome() string {
-	if env := os.Getenv("XDG_CONFIG_HOME"); env != "" {
-		return filepath.Join(env, "git-hop")
-	}
-
-	home, err := os.UserHomeDir()
+	dir, err := xdg.ConfigDir("git-hop")
 	if err != nil {
-		home = os.Getenv("HOME")
-	}
-
-	if home == "" {
 		return filepath.Join(".config", "git-hop")
 	}
-
-	switch runtime.GOOS {
-	case "darwin":
-		return filepath.Join(home, "Library", "Preferences", "git-hop")
-	default:
-		return filepath.Join(home, ".config", "git-hop")
-	}
+	return dir
 }
 
 // LoadSchemaConfig loads the V2 config from disk or returns default config

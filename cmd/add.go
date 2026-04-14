@@ -22,6 +22,7 @@ import (
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/xdg"
 )
 
 var addCmd = &cobra.Command{
@@ -305,13 +306,12 @@ func agentDirHint(path string) string {
 // opencodeAgentHint prompts the user to choose local or global OpenCode config,
 // then prints the external_directories snippet to add the worktree path.
 func opencodeAgentHint(path string, in *os.File) {
-	xdgConfig := os.Getenv("XDG_CONFIG_HOME")
-	if xdgConfig == "" {
-		home, _ := os.UserHomeDir()
-		xdgConfig = filepath.Join(home, ".config")
+	xdgConfig, err := xdg.ConfigDir("opencode")
+	if err != nil {
+		xdgConfig = filepath.Join(".config", "opencode")
 	}
 	localCfg := ".opencode/opencode.jsonc"
-	globalCfg := filepath.Join(xdgConfig, "opencode", "opencode.jsonc")
+	globalCfg := filepath.Join(xdgConfig, "opencode.jsonc")
 
 	fmt.Fprintf(os.Stderr, "Add %s to OpenCode config. Which?\n  1) local  (%s)\n  2) global (%s)\nChoice [1/2]: ", path, localCfg, globalCfg)
 

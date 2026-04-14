@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"hop.top/kit/xdg"
 )
 
 // GlobalLoader handles loading and saving global configuration
@@ -82,10 +84,10 @@ func (l *GlobalLoader) GetDefaults() *GlobalConfig {
 	}
 }
 
-// getGlobalConfigPath returns the path to the global config file
 func getGlobalConfigPath() string {
-	if env := os.Getenv("XDG_CONFIG_HOME"); env != "" {
-		return filepath.Join(env, "git-hop", "global.json")
+	dir, err := xdg.ConfigDir("git-hop")
+	if err != nil {
+		return filepath.Join(".config", "git-hop", "global.json")
 	}
-	return filepath.Join(os.Getenv("HOME"), ".config", "git-hop", "global.json")
+	return filepath.Join(dir, "global.json")
 }
