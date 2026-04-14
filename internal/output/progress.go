@@ -106,7 +106,7 @@ func (pb *ProgressBar) Start() {
 
 	go func() {
 		if _, err := pb.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running progress bar: %v\n", err)
+			Error("Error running progress bar: %v", err)
 		}
 	}()
 

@@ -251,7 +251,7 @@ func initConfig() {
 	v.AutomaticEnv()
 
 	if err := v.ReadInConfig(); err == nil && verbose {
-		fmt.Fprintln(os.Stderr, "debug: using config file:", v.ConfigFileUsed())
+		output.Debug("using config file: %s", v.ConfigFileUsed())
 	}
 }
 
@@ -269,5 +269,6 @@ func setupOutputMode() {
 		mode = output.ModeHuman
 	}
 
+	output.SetViper(Root.Viper)
 	output.SetupLogger(mode, verbose)
 }

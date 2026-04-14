@@ -99,7 +99,7 @@ func (s *Spinner) Start() {
 
 	go func() {
 		if _, err := s.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running spinner: %v\n", err)
+			Error("Error running spinner: %v", err)
 		}
 	}()
 
