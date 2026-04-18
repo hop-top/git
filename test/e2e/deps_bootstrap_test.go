@@ -75,7 +75,9 @@ func TestAdd_GoProject_VendorPreservedWhenVendored(t *testing.T) {
 	WriteFile(t, filepath.Join(env.SeedRepoPath, "go.mod"), "module example.com/test\n\ngo 1.21\n")
 	WriteFile(t, filepath.Join(env.SeedRepoPath, "go.sum"), "")
 	WriteFile(t, filepath.Join(env.SeedRepoPath, "main.go"), "package main\n\nfunc main() {}\n")
-	os.MkdirAll(filepath.Join(env.SeedRepoPath, "vendor"), 0755)
+	if err := os.MkdirAll(filepath.Join(env.SeedRepoPath, "vendor"), 0755); err != nil {
+		t.Fatalf("failed to create vendor directory: %v", err)
+	}
 	WriteFile(t, filepath.Join(env.SeedRepoPath, "vendor", "modules.txt"), "# vendor manifest\n")
 
 	env.RunCommand(t, env.SeedRepoPath, "git", "add", ".")
@@ -133,7 +135,7 @@ func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 
 	// Verify main worktree has working node_modules before adding feature
 	mainNodeMod := filepath.Join(mainWT, "node_modules")
-	mainModuleBefore, err := os.Stat(mainNodeMod)
+	mainModuleBefore, err := os.Lstat(mainNodeMod)
 	if err != nil {
 		t.Fatalf("main worktree missing node_modules before add: %v", err)
 	}
@@ -151,6 +153,10 @@ func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 		if mainIsSymlinkBefore || mainModuleAfter.Mode()&os.ModeSymlink != 0 {
 			target, err := os.Readlink(mainNodeMod)
 			if err == nil {
+				// Resolve relative symlink targets against parent dir
+				if !filepath.IsAbs(target) {
+					target = filepath.Join(filepath.Dir(mainNodeMod), target)
+				}
 				if _, err := os.Stat(target); err != nil {
 					t.Errorf("main worktree node_modules symlink target "+
 						"broken after adding feature: %s -> %s: %v",
@@ -168,10 +174,10 @@ func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 	}
 
 	// ASSERT: can actually require a module in the feature worktree
-	out, _, exitCode := env.RunCommandWithExit(t, featureWT,
+	out, stderr, exitCode := env.RunCommandWithExit(t, featureWT,
 		"node", "-e", "require('is-odd')")
 	if exitCode != 0 {
-		t.Errorf("node require('is-odd') failed in feature worktree: %s", out)
+		t.Errorf("node require('is-odd') failed in feature worktree: stdout=%s stderr=%s", out, stderr)
 	}
 }
 
@@ -215,20 +221,20 @@ func TestAdd_PnpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 	env.RunGitHop(t, env.HubPath, "add", "feature-pnpm")
 
 	// ASSERT: main node_modules still functional
-	out, _, exitCode := env.RunCommandWithExit(t, mainWT,
+	out, stderr, exitCode := env.RunCommandWithExit(t, mainWT,
 		"node", "-e", "require('is-odd')")
 	if exitCode != 0 {
 		t.Errorf("main worktree deps broken after add: require('is-odd') "+
-			"failed (exit %d): %s", exitCode, out)
+			"failed (exit %d): stdout=%s stderr=%s", exitCode, out, stderr)
 	}
 
 	// ASSERT: feature worktree has working deps
 	featureWT := filepath.Join(env.HubPath, "hops", "feature-pnpm")
-	out, _, exitCode = env.RunCommandWithExit(t, featureWT,
+	out, stderr, exitCode = env.RunCommandWithExit(t, featureWT,
 		"node", "-e", "require('is-odd')")
 	if exitCode != 0 {
 		t.Errorf("feature worktree deps broken: require('is-odd') "+
-			"failed (exit %d): %s", exitCode, out)
+			"failed (exit %d): stdout=%s stderr=%s", exitCode, out, stderr)
 	}
 }
 
