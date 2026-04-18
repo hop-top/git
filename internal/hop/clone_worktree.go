@@ -187,6 +187,10 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 
+	if err := setUpstreamTracking(g, mainPath, defaultBranch); err != nil {
+		return fmt.Errorf("failed to set upstream tracking: %w", err)
+	}
+
 	if err := ensureWorktreeHooksDir(fs, mainPath); err != nil {
 		return fmt.Errorf("failed to seed hooks directory: %w", err)
 	}
@@ -213,11 +217,22 @@ func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, default
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 
+	if err := setUpstreamTracking(g, mainPath, defaultBranch); err != nil {
+		return fmt.Errorf("failed to set upstream tracking: %w", err)
+	}
+
 	if err := ensureWorktreeHooksDir(fs, mainPath); err != nil {
 		return fmt.Errorf("failed to seed hooks directory: %w", err)
 	}
 
 	return nil
+}
+
+// setUpstreamTracking sets the upstream tracking branch so first push
+// doesn't require --set-upstream.
+func setUpstreamTracking(g git.GitInterface, worktreePath, branch string) error {
+	_, err := g.RunInDir(worktreePath, "git", "branch", "--set-upstream-to=origin/"+branch, branch)
+	return err
 }
 
 // ensureWorktreeHooksDir creates the .git-hop/hooks directory inside a

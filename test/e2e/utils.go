@@ -104,6 +104,46 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	}
 }
 
+// RunCommandAllowFail runs a command and returns stdout + error (does not fatal).
+func (e *TestEnv) RunCommandAllowFail(t *testing.T, dir, name string, args ...string) (string, error) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Env = e.EnvVars
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	t.Logf("Running (allow-fail): %s %v in %s", name, args, dir)
+	err := cmd.Run()
+	if err != nil {
+		return stdout.String() + stderr.String(), err
+	}
+	return stdout.String(), nil
+}
+
+// RunCommandWithExit runs a command and returns stdout, stderr, and exit code.
+func (e *TestEnv) RunCommandWithExit(t *testing.T, dir, name string, args ...string) (string, string, int) {
+	t.Helper()
+	cmd := exec.Command(name, args...)
+	cmd.Dir = dir
+	cmd.Env = e.EnvVars
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	t.Logf("Running: %s %v in %s", name, args, dir)
+	err := cmd.Run()
+	exitCode := 0
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitCode = exitErr.ExitCode()
+		} else {
+			t.Logf("exec error (not ExitError): %v", err)
+			exitCode = -1
+		}
+	}
+	return stdout.String(), stderr.String(), exitCode
+}
+
 // RunGitHop runs the git-hop binary with the test environment
 func (e *TestEnv) RunGitHop(t *testing.T, dir string, args ...string) string {
 	t.Helper()
