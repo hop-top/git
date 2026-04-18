@@ -231,7 +231,7 @@ func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, default
 // setUpstreamTracking sets the upstream tracking branch so first push
 // doesn't require --set-upstream.
 func setUpstreamTracking(g git.GitInterface, worktreePath, branch string) error {
-	_, err := g.RunInDir(worktreePath, "git", "branch", "--set-upstream-to=origin/"+branch)
+	_, err := g.RunInDir(worktreePath, "git", "branch", "--set-upstream-to=origin/"+branch, branch)
 	return err
 }
 
