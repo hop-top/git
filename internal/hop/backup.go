@@ -159,8 +159,21 @@ func (b *BackupManager) Exists() bool {
 	return exists
 }
 
+// copyDir recursively copies src into dst, preserving permission bits on every
+// directory and file. Mode preservation is critical for the restore-on-failure
+// path: dropping exec bits silently corrupts .sh scripts and any other
+// executable-flagged file in the user's tree (T-0166 bug 2).
 func (b *BackupManager) copyDir(src, dst string) error {
-	if err := b.fs.MkdirAll(dst, 0755); err != nil {
+	srcInfo, err := b.fs.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := b.fs.MkdirAll(dst, srcInfo.Mode().Perm()); err != nil {
+		return err
+	}
+	// MkdirAll does not chmod when the dir already exists; force parity.
+	if err := b.fs.Chmod(dst, srcInfo.Mode().Perm()); err != nil {
 		return err
 	}
 
@@ -187,13 +200,24 @@ func (b *BackupManager) copyDir(src, dst string) error {
 	return nil
 }
 
+// copyFile copies src to dst, preserving the source's permission bits.
+// WriteFile honours mode only when creating; an explicit Chmod after write
+// keeps exec bits intact even on overwrite (T-0166).
 func (b *BackupManager) copyFile(src, dst string) error {
+	info, err := b.fs.Stat(src)
+	if err != nil {
+		return err
+	}
+
 	data, err := afero.ReadFile(b.fs, src)
 	if err != nil {
 		return err
 	}
 
-	return afero.WriteFile(b.fs, dst, data, 0644)
+	if err := afero.WriteFile(b.fs, dst, data, info.Mode().Perm()); err != nil {
+		return err
+	}
+	return b.fs.Chmod(dst, info.Mode().Perm())
 }
 
 func (b *BackupManager) writeMetadata(stashes []StashRef) error {
