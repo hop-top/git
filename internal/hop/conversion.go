@@ -212,6 +212,15 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 	return nil
 }
 
+// moveFilesToWorktree relocates the source repo's working-tree contents into
+// the freshly-created bare worktree. `git worktree add` has already populated
+// `dst` with every tracked file from the bare ref, so naively renaming source
+// directories on top would collide whenever a tracked subdir exists on both
+// sides (e.g. .github/, scripts/). The merge walks each conflicting dir and
+// renames children individually, so untracked source content moves over and
+// tracked content is left as the worktree placed it. Files always rename
+// last-write-wins (source overwrites dest) to preserve any local modifications
+// that haven't been committed. T-0166.
 func (c *Converter) moveFilesToWorktree(src, dst string) error {
 	entries, err := afero.ReadDir(c.fs, src)
 	if err != nil {
@@ -226,17 +235,56 @@ func (c *Converter) moveFilesToWorktree(src, dst string) error {
 		srcPath := filepath.Join(src, entry.Name())
 		dstPath := filepath.Join(dst, entry.Name())
 
-		if entry.IsDir() {
-			if err := c.fs.Rename(srcPath, dstPath); err != nil {
-				return err
-			}
-		} else {
-			if err := c.fs.Rename(srcPath, dstPath); err != nil {
-				return err
-			}
+		if err := c.mergeRename(srcPath, dstPath); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// mergeRename moves srcPath → dstPath, recursing into sub-entries when the
+// destination directory already exists. Files overwrite the destination
+// (preserves uncommitted local changes); directories are walked. Empty source
+// directories are removed after their contents have moved.
+func (c *Converter) mergeRename(srcPath, dstPath string) error {
+	srcInfo, err := c.fs.Stat(srcPath)
+	if err != nil {
+		return err
+	}
+
+	dstInfo, dstErr := c.fs.Stat(dstPath)
+	if dstErr != nil {
+		// Destination missing — straight rename.
+		return c.fs.Rename(srcPath, dstPath)
+	}
+
+	// Destination exists. If types differ or both are files, overwrite via
+	// remove-then-rename so source content wins.
+	if !srcInfo.IsDir() || !dstInfo.IsDir() {
+		if err := c.fs.RemoveAll(dstPath); err != nil {
+			return err
+		}
+		return c.fs.Rename(srcPath, dstPath)
+	}
+
+	// Both are directories — merge children recursively.
+	children, err := afero.ReadDir(c.fs, srcPath)
+	if err != nil {
+		return err
+	}
+	for _, child := range children {
+		if err := c.mergeRename(
+			filepath.Join(srcPath, child.Name()),
+			filepath.Join(dstPath, child.Name()),
+		); err != nil {
+			return err
+		}
+	}
+	// Source dir is now empty; remove it so swapDirectories sees a clean root.
+	if err := c.fs.Remove(srcPath); err != nil {
+		return err
+	}
 	return nil
 }
 
