@@ -332,7 +332,7 @@ func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string) error {
 
 func init() {
 	cli.RootCmd.AddCommand(removeCmd)
-	removeCmd.Flags().Bool("no-prompt", false, "Do not prompt for confirmation")
-	removeCmd.Flags().Bool("no-verify", false, "Allow removal of unpushed commits or dirty worktrees")
+	removeCmd.Flags().Bool("no-prompt", false, "Skip the confirmation prompt only; does NOT bypass the safety gate")
+	removeCmd.Flags().Bool("no-verify", false, "Allow removal of dirty worktrees or unpushed commits (gate bypass)")
 	removeCmd.ValidArgsFunction = completeBranchNames
 }

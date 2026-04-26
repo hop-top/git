@@ -52,12 +52,16 @@ Global hopspace: `$GIT_HOP_DATA_HOME`
 /usr/bin/git hop merge <source> <into>        # merge, remove source, symlink current
 /usr/bin/git hop merge <source> <into> --no-ff  # force merge commit
 
-# Remove (safety gate — see Error Handling table for blocked cases)
-/usr/bin/git hop remove <branch> --no-prompt              # non-interactive delete (clean+merged only)
+# Remove (safety gate — see Error Handling for blocked cases)
+# IMPORTANT: --no-prompt only skips the confirmation prompt; it does NOT
+# bypass the gate. Risky branches still need --force / --no-verify or
+# the command exits 1.
+/usr/bin/git hop remove <branch> --no-prompt              # non-interactive delete (gate must already be satisfied)
 /usr/bin/git hop remove <branch> --dry-run                # preview
 /usr/bin/git hop remove <branch> --force                  # unmerged but pushed
 /usr/bin/git hop remove <branch> --no-verify              # merged but dirty / unpushed
 /usr/bin/git hop remove <branch> --force --no-verify      # unmerged AND unpushed
+/usr/bin/git hop remove <branch> --force --no-verify --no-prompt  # full automation, all flags
 ```
 
 ---
@@ -133,6 +137,7 @@ cd <path from list>
 | `remove` blocked: "not merged into default" | add `--force` (loses unmerged commits) |
 | `remove` blocked: "uncommitted changes or untracked files" | add `--no-verify` |
 | `remove` blocked: "not merged and not pushed" | add `--force --no-verify` |
+| `remove --no-prompt` exited 1 | `--no-prompt` is NOT a gate bypass — combine with `--force` / `--no-verify` |
 | Wrong config targeted | pass `--config <path>` explicitly |
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |

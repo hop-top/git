@@ -31,9 +31,9 @@ git hop github.com/org/repo ./dest    # shorthand with domain flag optional
 git hop add <branch>                  # create worktree + env (aliases: create, new)
 git hop add <branch> --dry-run        # preview without applying
 git hop remove <branch>               # delete worktree + env (aliases: rm, delete, del)
-git hop remove <branch> --no-prompt   # skip confirmation
-git hop remove <branch> --force       # allow unmerged branch removal
-git hop remove <branch> --no-verify   # allow dirty worktree / unpushed commits
+git hop remove <branch> --no-prompt   # skip confirmation prompt only — does NOT bypass safety gate
+git hop remove <branch> --force       # allow unmerged branch removal (real guardrail bypass)
+git hop remove <branch> --no-verify   # allow dirty worktree / unpushed commits (real guardrail bypass)
 git hop list                          # show all worktrees (aliases: ls, all)
 git hop list --json                   # machine-readable
 git hop status                        # current worktree info (aliases: st, info)
@@ -135,4 +135,5 @@ Available hooks:
 | `remove` blocked: "not merged into default" | `--force` (only if you really want to lose those commits) |
 | `remove` blocked: "uncommitted changes or untracked files" | `--no-verify` |
 | `remove` blocked: "not merged and not pushed" | `--force --no-verify` |
+| `remove --no-prompt` exited 1 on a risky branch | Add `--force` / `--no-verify`; `--no-prompt` is **not** a gate bypass |
 | Need to see changes before committing | `git hop <cmd> --dry-run` |

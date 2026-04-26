@@ -316,8 +316,34 @@ removes silently — no prompt, no warning.
 | Not merged, but pushed to `origin/<branch>` | `--force` |
 | Not merged and not pushed | `--force --no-verify` |
 
-The interactive confirmation prompt is shown only when the gate
-fires; it can be skipped with `--no-prompt` when scripting.
+When the gate is not satisfied, `remove` exits with status 1 and
+prints which flag(s) to add. The gate cannot be bypassed any other
+way.
+
+### `--force` vs `--no-verify` vs `--no-prompt`
+
+These three flags do **different** things. They are not interchangeable.
+
+| Flag | Purpose | Bypasses gate? |
+|------|---------|----------------|
+| `--force` | Allow removing a branch that is **not merged** into the default branch | Yes — for the unmerged case |
+| `--no-verify` | Allow removing a worktree with **uncommitted/untracked files** or **unpushed commits** | Yes — for the dirty/unpushed case |
+| `--no-prompt` | Skip the post-gate "Really delete?" confirmation. Useful in scripts | **No** — never bypasses the gate |
+
+In particular, `--no-prompt` alone on a risky removal will **fail
+fast with exit 1**, not silently delete. You must combine it with
+the appropriate `--force` / `--no-verify` to actually remove. Example:
+
+```bash
+# Branch is unmerged + dirty + unpushed, automated cleanup:
+git hop remove feature-x --force --no-verify --no-prompt
+
+# Just --no-prompt on the same branch → exit 1 with gate error.
+git hop remove feature-x --no-prompt   # ✗ refuses
+```
+
+For hub removal, only `--no-prompt` matters (there is no gate; the
+prompt is the only confirmation).
 
 ### What Gets Removed
 
