@@ -52,9 +52,12 @@ Global hopspace: `$GIT_HOP_DATA_HOME`
 /usr/bin/git hop merge <source> <into>        # merge, remove source, symlink current
 /usr/bin/git hop merge <source> <into> --no-ff  # force merge commit
 
-# Remove
-/usr/bin/git hop remove <branch> --no-prompt  # non-interactive delete
-/usr/bin/git hop remove <branch> --dry-run    # preview
+# Remove (safety gate — see Error Handling table for blocked cases)
+/usr/bin/git hop remove <branch> --no-prompt              # non-interactive delete (clean+merged only)
+/usr/bin/git hop remove <branch> --dry-run                # preview
+/usr/bin/git hop remove <branch> --force                  # unmerged but pushed
+/usr/bin/git hop remove <branch> --no-verify              # merged but dirty / unpushed
+/usr/bin/git hop remove <branch> --force --no-verify      # unmerged AND unpushed
 ```
 
 ---
@@ -127,6 +130,9 @@ cd <path from list>
 |-----------|----------|
 | `remove` fails: worktree still in state | `git hop doctor --fix` |
 | Orphaned dirs in state after manual delete | `git hop prune` |
+| `remove` blocked: "not merged into default" | add `--force` (loses unmerged commits) |
+| `remove` blocked: "uncommitted changes or untracked files" | add `--no-verify` |
+| `remove` blocked: "not merged and not pushed" | add `--force --no-verify` |
 | Wrong config targeted | pass `--config <path>` explicitly |
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |

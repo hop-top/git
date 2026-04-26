@@ -32,10 +32,13 @@ git hop add <branch>                  # create worktree + env (aliases: create, 
 git hop add <branch> --dry-run        # preview without applying
 git hop remove <branch>               # delete worktree + env (aliases: rm, delete, del)
 git hop remove <branch> --no-prompt   # skip confirmation
+git hop remove <branch> --force       # allow unmerged branch removal
+git hop remove <branch> --no-verify   # allow dirty worktree / unpushed commits
 git hop list                          # show all worktrees (aliases: ls, all)
 git hop list --json                   # machine-readable
 git hop status                        # current worktree info (aliases: st, info)
 git hop status --all                  # system-wide: all repos, config, resource usage
+                                      # (hub view shows sync status per branch)
 ```
 
 ---
@@ -129,4 +132,7 @@ Available hooks:
 | Orphaned worktrees in state | `git hop prune` |
 | Stale state after manual branch delete | `git hop doctor --fix` |
 | Services still up after worktree remove | `git hop env stop` first |
+| `remove` blocked: "not merged into default" | `--force` (only if you really want to lose those commits) |
+| `remove` blocked: "uncommitted changes or untracked files" | `--no-verify` |
+| `remove` blocked: "not merged and not pushed" | `--force --no-verify` |
 | Need to see changes before committing | `git hop <cmd> --dry-run` |

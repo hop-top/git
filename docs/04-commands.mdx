@@ -126,7 +126,7 @@ feature-x     ./feature-x         active    11500-11503  api, db, cache
 
 ## git hop status
 
-Show detailed environment state for current worktree.
+Show detailed environment state for current worktree or hub.
 
 ### Usage
 
@@ -140,7 +140,7 @@ git hop status [flags]
 git hop status
 ```
 
-### Output
+### Output (worktree)
 
 ```
 On branch feature-x
@@ -151,6 +151,38 @@ Services:
   db     running  postgresql://localhost:11501
   cache  running  redis://localhost:11502
 ```
+
+### Output (hub)
+
+When run from a hub, the table includes a `Status` column reporting
+each worktree's position relative to the hub's default branch.
+
+```
+Hub: org/repo
+Location: /Users/jadb/.w/git
+╭──────────────┬─────────┬───────────────────────────────┬──────────────╮
+│ BRANCH       │ STATE   │ STATUS                        │ PATH         │
+├──────────────┼─────────┼───────────────────────────────┼──────────────┤
+│ main         │ Linked  │ default                       │ hops/main    │
+│ feat/clean   │ Linked  │ synced                        │ hops/clean   │
+│ feat/done    │ Linked  │ merged (4 behind)             │ hops/done    │
+│ feat/wip     │ Linked  │ 3 ahead                       │ hops/wip     │
+│ feat/old     │ Linked  │ diverged (1 ahead, 12 behind) │ hops/old     │
+│ feat/gone    │ Missing │ -                             │ hops/gone    │
+╰──────────────┴─────────┴───────────────────────────────┴──────────────╯
+```
+
+Status values:
+
+| Value | Meaning |
+|-------|---------|
+| `default` | This is the hub's default branch |
+| `synced` | Same tip as default — no commits ahead or behind |
+| `merged (N behind)` | Branch tip is reachable from default; default has moved on by N commits |
+| `N ahead` | Branch has N commits not yet on default |
+| `diverged (N ahead, M behind)` | Branch and default have both moved |
+| `unknown` | Couldn't compute (e.g. default branch ref missing locally) |
+| `-` | Worktree directory is missing on disk |
 
 ## git hop env
 
@@ -263,9 +295,29 @@ cd ..
 git hop remove my-project
 ```
 
-```bash tab="Force Remove"
+```bash tab="Unmerged Branch"
 git hop remove feature-x --force
 ```
+
+```bash tab="Dirty Worktree"
+git hop remove feature-x --no-verify
+```
+
+### Safety Gate
+
+`remove` probes the worktree before deleting and requires explicit
+flags when the operation would lose work. A clean, merged branch
+removes silently — no prompt, no warning.
+
+| Branch state | Required flags |
+|--------------|----------------|
+| Merged into default, clean | (none — silent pass) |
+| Merged into default, dirty (uncommitted or untracked) | `--no-verify` |
+| Not merged, but pushed to `origin/<branch>` | `--force` |
+| Not merged and not pushed | `--force --no-verify` |
+
+The interactive confirmation prompt is shown only when the gate
+fires; it can be skipped with `--no-prompt` when scripting.
 
 ### What Gets Removed
 
