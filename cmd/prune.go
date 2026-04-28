@@ -31,7 +31,6 @@ func init() {
 func runPrune(cmd *cobra.Command, args []string) {
 	fs := afero.NewOsFs()
 
-	// Load state
 	st, err := state.LoadState(fs)
 	if err != nil {
 		output.Fatal("Failed to load state: %v", err)
@@ -42,38 +41,52 @@ func runPrune(cmd *cobra.Command, args []string) {
 		return
 	}
 
+	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	output.Info("Scanning for orphaned entries...")
 
-	// Prune orphaned worktrees
-	worktreesPruned := pruneOrphanedWorktrees(fs, st)
+	worktreesPruned, hubsPruned := runPruneFS(fs, st, dryRun)
 
-	// Prune orphaned hubs
-	hubsPruned := pruneOrphanedHubs(fs, st)
-
-	// Save updated state
-	if worktreesPruned > 0 || hubsPruned > 0 {
+	if !dryRun && (worktreesPruned > 0 || hubsPruned > 0) {
 		if err := state.SaveState(fs, st); err != nil {
 			output.Fatal("Failed to save state: %v", err)
 		}
 	}
 
-	// Report results
-	if worktreesPruned == 0 && hubsPruned == 0 {
+	switch {
+	case worktreesPruned == 0 && hubsPruned == 0:
 		output.Success("No orphaned entries found.")
-	} else {
+	case dryRun:
+		output.Success("[dry-run] Would prune %d worktree(s) and %d hub(s)", worktreesPruned, hubsPruned)
+	default:
 		output.Success("Pruned %d worktree(s) and %d hub(s)", worktreesPruned, hubsPruned)
 	}
 }
 
-// pruneOrphanedWorktrees removes worktrees whose paths no longer exist
-func pruneOrphanedWorktrees(fs afero.Fs, st *state.State) int {
+// runPruneFS scans st for orphaned worktrees and hubs and returns the counts.
+// When dryRun is false the orphans are removed from st in place; the caller
+// is responsible for persisting. When dryRun is true st is left untouched.
+func runPruneFS(fs afero.Fs, st *state.State, dryRun bool) (worktrees, hubs int) {
+	worktrees = pruneOrphanedWorktrees(fs, st, dryRun)
+	hubs = pruneOrphanedHubs(fs, st, dryRun)
+	return
+}
+
+// pruneOrphanedWorktrees reports worktrees whose paths no longer exist.
+// When dryRun is false it also removes them from st.
+func pruneOrphanedWorktrees(fs afero.Fs, st *state.State, dryRun bool) int {
 	pruned := 0
+	prefix := "Pruning"
+	if dryRun {
+		prefix = "[dry-run] Would prune"
+	}
 
 	for repoID, repo := range st.Repositories {
 		for branch, wt := range repo.Worktrees {
 			if exists, _ := afero.DirExists(fs, wt.Path); !exists {
-				output.Info("Pruning orphaned worktree: %s:%s (%s)", repoID, branch, wt.Path)
-				delete(repo.Worktrees, branch)
+				output.Info("%s orphaned worktree: %s:%s (%s)", prefix, repoID, branch, wt.Path)
+				if !dryRun {
+					delete(repo.Worktrees, branch)
+				}
 				pruned++
 			}
 		}
@@ -82,9 +95,14 @@ func pruneOrphanedWorktrees(fs afero.Fs, st *state.State) int {
 	return pruned
 }
 
-// pruneOrphanedHubs removes hubs whose directories no longer exist
-func pruneOrphanedHubs(fs afero.Fs, st *state.State) int {
+// pruneOrphanedHubs reports hubs whose directories no longer exist.
+// When dryRun is false it also removes them from st.
+func pruneOrphanedHubs(fs afero.Fs, st *state.State, dryRun bool) int {
 	pruned := 0
+	prefix := "Pruning"
+	if dryRun {
+		prefix = "[dry-run] Would prune"
+	}
 
 	for repoID, repo := range st.Repositories {
 		var validHubs []*state.HubState
@@ -93,12 +111,14 @@ func pruneOrphanedHubs(fs afero.Fs, st *state.State) int {
 			if exists, _ := afero.DirExists(fs, hub.Path); exists {
 				validHubs = append(validHubs, hub)
 			} else {
-				output.Info("Pruning orphaned hub: %s (%s)", repoID, hub.Path)
+				output.Info("%s orphaned hub: %s (%s)", prefix, repoID, hub.Path)
 				pruned++
 			}
 		}
 
-		repo.Hubs = validHubs
+		if !dryRun {
+			repo.Hubs = validHubs
+		}
 	}
 
 	return pruned

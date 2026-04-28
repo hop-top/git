@@ -400,8 +400,8 @@ Use --fix to automatically repair issues.`,
 					fixedIssues += missingFixed
 
 					output.Info("\nPruning remaining orphaned entries from state...")
-					worktreesPruned := pruneOrphanedWorktrees(fs, st)
-					hubsPruned := pruneOrphanedHubs(fs, st)
+					worktreesPruned := pruneOrphanedWorktrees(fs, st, false)
+					hubsPruned := pruneOrphanedHubs(fs, st, false)
 
 					if missingFixed > 0 || worktreesPruned > 0 || hubsPruned > 0 {
 						if err := state.SaveState(fs, st); err != nil {
