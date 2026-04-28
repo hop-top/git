@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // Card represents a styled information card
 type Card struct {
-	Title   string
-	Fields  []CardField
-	Style   lipgloss.Style
-	Width   int
+	Title  string
+	Fields []CardField
+	Style  lipgloss.Style
+	Width  int
 }
 
 // CardField represents a key-value field in a card
@@ -104,8 +104,11 @@ func (c *Card) Render() string {
 
 	// Field lines
 	for _, field := range c.Fields {
-		keyPadded := field.Key + strings.Repeat(" ", maxKeyWidth-len(field.Key))
-		line := StyleKey.Render(" "+keyPadded) + " │ " + StyleValue.Render(field.Value)
+		keyPadded := field.Key + strings.Repeat(
+			" ", maxKeyWidth-len(field.Key),
+		)
+		line := StyleKey.Render(" "+keyPadded) +
+			" │ " + StyleValue.Render(field.Value)
 		lines = append(lines, line)
 	}
 

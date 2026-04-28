@@ -1,0 +1,30 @@
+Remove worktrees and hubs that no longer exist on the filesystem.
+
+This command scans the state file and removes entries for:
+  - Worktrees whose paths no longer exist
+  - Hubs whose directories have been deleted
+  - Orphaned entries that have been cleaned up
+
+Use --dry-run to preview what would be pruned without making changes.
+
+Usage:
+  git-hop prune [flags]
+
+Aliases:
+  prune, cleanup, clean
+
+Flags:
+  -h, --help   help for prune
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+      --format string   Output format (table, json, yaml) (default "table")
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --no-color        Disable ANSI colour
+      --no-hints        Suppress next-step hints after command output
+      --porcelain       machine-readable output
+  -q, --quiet           Suppress non-essential output
+  -v, --verbose         verbose output

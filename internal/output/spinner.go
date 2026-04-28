@@ -6,9 +6,10 @@ import (
 	"os"
 	"time"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"hop.top/kit/tui"
 )
 
 // Spinner represents a CLI spinner for long-running operations
@@ -35,7 +36,7 @@ func (m spinnerModel) Init() tea.Cmd {
 
 func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			m.quitting = true
 			return m, tea.Quit
@@ -55,19 +56,27 @@ func (m spinnerModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m spinnerModel) View() string {
+func (m spinnerModel) View() tea.View {
 	if m.done {
 		if m.err != nil {
-			return lipgloss.NewStyle().Foreground(lipgloss.Color("1")).Render("✗ " + m.message + ": " + m.err.Error())
+			s := lipgloss.NewStyle().
+				Foreground(ColorError).
+				Render("✗ " + m.message + ": " + m.err.Error())
+			return tea.NewView(s)
 		}
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓ " + m.message)
+		s := lipgloss.NewStyle().
+			Foreground(ColorSuccess).
+			Render("✓ " + m.message)
+		return tea.NewView(s)
 	}
 
 	if m.quitting {
-		return ""
+		return tea.NewView("")
 	}
 
-	return fmt.Sprintf("%s %s", m.spinner.View(), m.message)
+	return tea.NewView(
+		fmt.Sprintf("%s %s", m.spinner.View(), m.message),
+	)
 }
 
 // NewSpinner creates a new spinner with the given message
@@ -76,9 +85,7 @@ func NewSpinner(message string) *Spinner {
 		return &Spinner{}
 	}
 
-	s := spinner.New()
-	s.Spinner = spinner.Dot
-	s.Style = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
+	s := tui.NewSpinner(theme)
 
 	model := spinnerModel{
 		spinner: s,
@@ -99,7 +106,7 @@ func (s *Spinner) Start() {
 
 	go func() {
 		if _, err := s.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running spinner: %v\n", err)
+			Error("Error running spinner: %v", err)
 		}
 	}()
 
@@ -160,7 +167,10 @@ type ProgressWriter struct {
 }
 
 // NewProgressWriter creates a new progress tracking writer
-func NewProgressWriter(w io.Writer, total int64, onUpdate func(written, total int64)) *ProgressWriter {
+func NewProgressWriter(
+	w io.Writer, total int64,
+	onUpdate func(written, total int64),
+) *ProgressWriter {
 	return &ProgressWriter{
 		writer:   w,
 		total:    total,

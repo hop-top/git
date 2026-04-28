@@ -1,0 +1,32 @@
+Garbage collect orphaned dependencies that are no longer used by any branch.
+
+This command:
+1. Scans all worktrees to identify which dependencies are in use
+2. Finds dependencies that are no longer referenced by any branch
+3. Calculates the total space that can be reclaimed
+4. Optionally deletes orphaned dependencies to free up disk space
+
+Use --dry-run to preview what would be deleted without actually deleting.
+Use --force to skip the confirmation prompt.
+
+Usage:
+  git-hop env gc [flags]
+
+Aliases:
+  gc, cleanup, clean
+
+Flags:
+      --dry-run   Show what would be deleted without deleting
+      --force     Skip confirmation prompt
+  -h, --help      help for gc
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --format string   Output format (table, json, yaml) (default "table")
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --no-color        Disable ANSI colour
+      --no-hints        Suppress next-step hints after command output
+      --porcelain       machine-readable output
+  -q, --quiet           Suppress non-essential output
+  -v, --verbose         verbose output

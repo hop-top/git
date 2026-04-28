@@ -5,8 +5,11 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"hop.top/upgrade"
-	"hop.top/upgrade/skill"
+	"hop.top/kit/upgrade"
+	"hop.top/kit/upgrade/skill"
+	"hop.top/kit/xdg"
+
+	"hop.top/git/internal/output"
 )
 
 const hopGitHubRepo = "hop-top/git"
@@ -64,11 +67,11 @@ Agents read this to know how to self-upgrade git-hop before executing tasks.`,
 }
 
 func installHopPreamble(preamble string) error {
-	configDir, err := os.UserConfigDir()
+	configDir, err := xdg.ConfigDir("git-hop")
 	if err != nil {
 		return fmt.Errorf("upgrade preamble: %w", err)
 	}
-	dir := configDir + "/git-hop/skills"
+	dir := configDir + "/skills"
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("upgrade preamble: mkdir: %w", err)
 	}
@@ -76,7 +79,7 @@ func installHopPreamble(preamble string) error {
 	if err := os.WriteFile(path, []byte(preamble), 0o600); err != nil {
 		return fmt.Errorf("upgrade preamble: write: %w", err)
 	}
-	fmt.Fprintf(os.Stderr, "Installed upgrade preamble → %s\n", path)
+	output.Info("Installed upgrade preamble → %s", path)
 	return nil
 }
 

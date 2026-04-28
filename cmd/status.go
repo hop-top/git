@@ -62,7 +62,7 @@ configuration, and resource usage.`,
 		// Check context
 		hubPath, err := hop.FindHub(fs, cwd)
 		if err == nil {
-			showHubStatus(fs, hubPath)
+			showHubStatus(fs, g, hubPath)
 			return
 		}
 
@@ -77,7 +77,7 @@ configuration, and resource usage.`,
 	},
 }
 
-func showHubStatus(fs afero.Fs, path string) {
+func showHubStatus(fs afero.Fs, g git.GitInterface, path string) {
 	hub, err := hop.LoadHub(fs, path)
 	if err != nil {
 		output.Fatal("Failed to load hub: %v", err)
@@ -86,17 +86,55 @@ func showHubStatus(fs afero.Fs, path string) {
 	output.Info("Hub: %s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	output.Info("Location: %s", hub.Path)
 
-	t := tui.NewTable([]interface{}{"Branch", "State", "Path"})
+	defaultBranch := hub.Config.Repo.DefaultBranch
+	t := tui.NewTable([]interface{}{"Branch", "State", "Status", "Path"})
 	for name, b := range hub.Config.Branches {
-		// Check if path exists
 		state := "Missing"
+		status := "-"
 		resolvedPath := config.ResolveWorktreePath(b.Path, hub.Path)
 		if _, err := fs.Stat(resolvedPath); err == nil {
 			state = "Linked"
+			status = getBranchSyncStatus(g, resolvedPath, name, defaultBranch)
 		}
-		t.AddRow(name, state, resolvedPath)
+		t.AddRow(name, state, status, resolvedPath)
 	}
 	t.Render()
+}
+
+// getBranchSyncStatus reports a worktree's branch position relative to
+// the hub's default branch: "default", "merged", "synced",
+// "<n> ahead", "<n> behind", or "diverged (<n> ahead, <m> behind)".
+// Returns "unknown" when git can't compute the comparison (e.g. the
+// default branch ref is missing in this worktree).
+func getBranchSyncStatus(g git.GitInterface, dir, branch, defaultBranch string) string {
+	if defaultBranch == "" || branch == defaultBranch {
+		return "default"
+	}
+
+	// rev-list --left-right --count <branch>...<default>
+	// Output: "<ahead>\t<behind>"
+	out, err := g.RunInDir(dir, "git", "rev-list", "--left-right", "--count",
+		branch+"..."+defaultBranch)
+	if err != nil {
+		return "unknown"
+	}
+
+	fields := strings.Fields(strings.TrimSpace(out))
+	if len(fields) != 2 {
+		return "unknown"
+	}
+
+	ahead, behind := fields[0], fields[1]
+	switch {
+	case ahead == "0" && behind == "0":
+		return "synced"
+	case ahead == "0":
+		return fmt.Sprintf("merged (%s behind)", behind)
+	case behind == "0":
+		return fmt.Sprintf("%s ahead", ahead)
+	default:
+		return fmt.Sprintf("diverged (%s ahead, %s behind)", ahead, behind)
+	}
 }
 
 func showWorktreeStatus(fs afero.Fs, g git.GitInterface, d *docker.Docker, path string) {

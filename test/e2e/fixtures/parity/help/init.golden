@@ -1,0 +1,28 @@
+Initialize git-hop repository structure with interactive setup for worktree conversion.
+
+Usage:
+  git-hop init [flags]
+
+Aliases:
+  init, setup, install
+
+Flags:
+      --dry-run          Show conversion steps without executing
+      --enable-chdir     Install shell integration for automatic directory switching after hop commands
+      --force            Skip clean repo check and backup requirements (DANGEROUS)
+  -h, --help             help for init
+      --keep-backup      Preserve backup after successful conversion
+      --no-hooks         Skip automatic installation of .git-hop/hooks/ directory
+      --regular          Use regular repo instead of bare
+      --restore string   Restore repository from backup (manual rollback)
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --format string   Output format (table, json, yaml) (default "table")
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --no-color        Disable ANSI colour
+      --no-hints        Suppress next-step hints after command output
+      --porcelain       machine-readable output
+  -q, --quiet           Suppress non-essential output
+  -v, --verbose         verbose output

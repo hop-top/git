@@ -1,0 +1,43 @@
+Generate shell completion scripts for git-hop.
+
+To load completions:
+
+Bash:
+  $ source <(git-hop completion bash)
+
+  # To load completions for each session, execute once:
+  # Linux:
+  $ git-hop completion bash > /etc/bash_completion.d/git-hop
+  # macOS:
+  $ git-hop completion bash > $(brew --prefix)/etc/bash_completion.d/git-hop
+
+Zsh:
+  $ source <(git-hop completion zsh)
+
+  # To load completions for each session, execute once:
+  $ git-hop completion zsh > "${fpath[1]}/_git-hop"
+
+Fish:
+  $ git-hop completion fish | source
+
+  # To load completions for each session, execute once:
+  $ git-hop completion fish > ~/.config/fish/completions/git-hop.fish
+
+Usage:
+  git-hop completion [bash|zsh|fish] [flags]
+
+Flags:
+  -h, --help   help for completion
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+      --format string   Output format (table, json, yaml) (default "table")
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --no-color        Disable ANSI colour
+      --no-hints        Suppress next-step hints after command output
+      --porcelain       machine-readable output
+  -q, --quiet           Suppress non-essential output
+  -v, --verbose         verbose output

@@ -6,9 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/progress"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"hop.top/kit/tui"
 )
 
 // ProgressBar represents a progress bar for operations with known total
@@ -18,7 +18,7 @@ type ProgressBar struct {
 }
 
 type progressModel struct {
-	progress progress.Model
+	progress tui.Progress
 	message  string
 	percent  float64
 	done     bool
@@ -33,7 +33,7 @@ func (m progressModel) Init() tea.Cmd {
 
 func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if msg.String() == "ctrl+c" {
 			m.quitting = true
 			return m, tea.Quit
@@ -42,6 +42,7 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case progressMsg:
 		m.percent = float64(msg)
+		m.progress = m.progress.SetPercent(m.percent)
 		if m.percent >= 1.0 {
 			m.done = true
 			m.quitting = true
@@ -50,10 +51,11 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.WindowSizeMsg:
-		m.progress.Width = msg.Width - 4
-		if m.progress.Width > 80 {
-			m.progress.Width = 80
+		w := msg.Width - 4
+		if w > 80 {
+			w = 80
 		}
+		m.progress = m.progress.SetWidth(w)
 		return m, nil
 
 	default:
@@ -61,17 +63,22 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m progressModel) View() string {
+func (m progressModel) View() tea.View {
 	if m.done {
-		return lipgloss.NewStyle().Foreground(lipgloss.Color("2")).Render("✓ " + m.message + " (100%)")
+		s := lipgloss.NewStyle().
+			Foreground(ColorSuccess).
+			Render("✓ " + m.message + " (100%)")
+		return tea.NewView(s)
 	}
 
 	if m.quitting {
-		return ""
+		return tea.NewView("")
 	}
 
 	percent := fmt.Sprintf(" %.0f%%", m.percent*100)
-	return m.message + "\n" + m.progress.ViewAs(m.percent) + percent
+	return tea.NewView(
+		m.message + "\n" + m.progress.View() + percent,
+	)
 }
 
 // NewProgressBar creates a new progress bar with the given message
@@ -80,11 +87,7 @@ func NewProgressBar(message string) *ProgressBar {
 		return &ProgressBar{}
 	}
 
-	prog := progress.New(
-		progress.WithDefaultGradient(),
-		progress.WithWidth(80),
-		progress.WithoutPercentage(),
-	)
+	prog := tui.NewProgress(theme).SetWidth(80)
 
 	model := progressModel{
 		progress: prog,
@@ -106,7 +109,7 @@ func (pb *ProgressBar) Start() {
 
 	go func() {
 		if _, err := pb.program.Run(); err != nil {
-			fmt.Fprintf(os.Stderr, "Error running progress bar: %v\n", err)
+			Error("Error running progress bar: %v", err)
 		}
 	}()
 
@@ -175,7 +178,11 @@ func (msp *MultiStepProgress) Start() {
 	}
 
 	if msp.current < len(msp.steps) {
-		msg := fmt.Sprintf("[%d/%d] %s", msp.current+1, msp.totalSteps, msp.steps[msp.current])
+		msg := fmt.Sprintf(
+			"[%d/%d] %s",
+			msp.current+1, msp.totalSteps,
+			msp.steps[msp.current],
+		)
 		msp.spinner = NewSpinner(msg)
 		msp.spinner.Start()
 	}
@@ -195,7 +202,11 @@ func (msp *MultiStepProgress) Next() {
 	msp.current++
 
 	if msp.current < len(msp.steps) {
-		msg := fmt.Sprintf("[%d/%d] %s", msp.current+1, msp.totalSteps, msp.steps[msp.current])
+		msg := fmt.Sprintf(
+			"[%d/%d] %s",
+			msp.current+1, msp.totalSteps,
+			msp.steps[msp.current],
+		)
 		msp.spinner = NewSpinner(msg)
 		msp.spinner.Start()
 	}
@@ -231,7 +242,11 @@ func SimpleProgress(current, total int, message string) {
 
 	percent := float64(current) / float64(total) * 100
 	bar := progressBar(current, total, 40)
-	fmt.Fprintf(os.Stderr, "\r%s %s %.0f%% (%d/%d)", message, bar, percent, current, total)
+	fmt.Fprintf(
+		os.Stderr,
+		"\r%s %s %.0f%% (%d/%d)",
+		message, bar, percent, current, total,
+	)
 
 	if current >= total {
 		fmt.Fprintln(os.Stderr)
@@ -248,6 +263,9 @@ func progressBar(current, total, width int) string {
 		filled = width
 	}
 
-	bar := strings.Repeat("━", filled) + strings.Repeat("─", width-filled)
-	return lipgloss.NewStyle().Foreground(lipgloss.Color("205")).Render(bar)
+	bar := strings.Repeat("━", filled) +
+		strings.Repeat("─", width-filled)
+	return lipgloss.NewStyle().
+		Foreground(ColorAccent).
+		Render(bar)
 }

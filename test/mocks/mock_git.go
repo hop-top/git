@@ -17,6 +17,10 @@ type MockGit struct {
 	MovedWorktrees        []string // tracks [oldPath, newPath] pairs flattened
 	RenamedBranches       []string // tracks [oldBranch, newBranch] pairs flattened
 	LocalBranches         []string // tracks local branches for LocalBranchExists
+
+	// StatusOverride lets tests dictate what GetStatus returns. When
+	// nil, GetStatus returns a clean default.
+	StatusOverride *git.Status
 }
 
 // MockCommandRunner is a mock implementation of CommandRunner for testing
@@ -134,8 +138,13 @@ func (m *MockGit) GetCurrentBranch(dir string) (string, error) {
 	return "main", nil
 }
 
-// GetStatus mocks getting repository status
+// GetStatus mocks getting repository status. Tests can set
+// StatusOverride to return a specific Status; otherwise a clean
+// default on branch "main" is returned.
 func (m *MockGit) GetStatus(dir string) (*git.Status, error) {
+	if m.StatusOverride != nil {
+		return m.StatusOverride, nil
+	}
 	return &git.Status{
 		Branch: "main",
 		Clean:  true,

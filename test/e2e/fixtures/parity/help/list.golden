@@ -1,0 +1,26 @@
+List all worktrees tracked by git-hop.
+
+Shows worktrees from the state file with their paths, types, and last access times.
+Can list worktrees for current repository or all repositories.
+
+Usage:
+  git-hop list [flags]
+
+Aliases:
+  list, ls, all
+
+Flags:
+  -h, --help   help for list
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+      --format string   Output format (table, json, yaml) (default "table")
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --no-color        Disable ANSI colour
+      --no-hints        Suppress next-step hints after command output
+      --porcelain       machine-readable output
+  -q, --quiet           Suppress non-essential output
+  -v, --verbose         verbose output

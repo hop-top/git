@@ -1,25 +1,51 @@
 package output
 
 import (
-	"github.com/charmbracelet/lipgloss"
+	"image/color"
+
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/exp/charmtone"
+	"hop.top/kit/cli"
 )
 
-// Color definitions
+// defaultTheme returns a cli.Theme built from the Neon palette.
+// This is a local helper until the root command migrates to cli.New()
+// (task #4), at which point styles should accept Root.Theme instead.
+func defaultTheme() cli.Theme {
+	p := cli.Neon
+	muted := color.Color(charmtone.Squid)
+	white := color.Color(lipgloss.Color("#FFFFFF"))
+
+	return cli.Theme{
+		Palette:   p,
+		Accent:    p.Command,
+		Secondary: p.Flag,
+		Muted:     muted,
+		Error:     color.Color(charmtone.Cherry),
+		Success:   color.Color(charmtone.Guac),
+
+		Title: lipgloss.NewStyle().
+			Bold(true).
+			Foreground(white),
+		Subtle: lipgloss.NewStyle().
+			Foreground(muted),
+		Bold: lipgloss.NewStyle().
+			Bold(true),
+	}
+}
+
+// theme is the package-level default; all styles derive from it.
+var theme = defaultTheme()
+
+// Semantic color aliases derived from the theme.
 var (
-	ColorSuccess      = lipgloss.Color("2")   // Green
-	ColorSuccessBold  = lipgloss.Color("10")  // Bright Green
-	ColorError        = lipgloss.Color("1")   // Red
-	ColorErrorBold    = lipgloss.Color("9")   // Bright Red
-	ColorWarning      = lipgloss.Color("3")   // Yellow
-	ColorWarningBold  = lipgloss.Color("11")  // Bright Yellow
-	ColorInfo         = lipgloss.Color("4")   // Blue
-	ColorInfoBold     = lipgloss.Color("12")  // Bright Blue
-	ColorMuted        = lipgloss.Color("240") // Dark Gray
-	ColorNeutral      = lipgloss.Color("8")   // Gray
-	ColorAccent       = lipgloss.Color("205") // Pink
-	ColorAccentBold   = lipgloss.Color("212") // Bright Pink
-	ColorCyan         = lipgloss.Color("14")  // Cyan for paths
-	ColorMagenta      = lipgloss.Color("5")   // Magenta for config
+	ColorSuccess = theme.Success
+	ColorError   = theme.Error
+	ColorWarning = theme.Secondary // warm secondary
+	ColorInfo    = theme.Accent
+	ColorMuted   = theme.Muted
+	ColorAccent  = theme.Accent
+	ColorPath    = theme.Accent
 )
 
 // Text styles
@@ -47,18 +73,18 @@ var (
 			Bold(true)
 
 	StyleHeader = lipgloss.NewStyle().
-			Foreground(ColorAccentBold).
+			Foreground(ColorAccent).
 			Bold(true)
 
 	StylePath = lipgloss.NewStyle().
-			Foreground(ColorCyan)
+			Foreground(ColorPath)
 
 	StyleKey = lipgloss.NewStyle().
 			Foreground(ColorMuted).
 			Bold(false)
 
 	StyleValue = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("15")) // Bright white
+			Foreground(lipgloss.Color("#FFFFFF"))
 )
 
 // Border styles
@@ -85,7 +111,7 @@ var (
 
 	StyleBorderNeutral = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColorNeutral).
+				BorderForeground(ColorMuted).
 				Padding(0, 1)
 
 	// Heavy border for emphasis (success cards, etc.)
@@ -144,7 +170,7 @@ func RenderHeader(text string) string {
 	return StyleHeader.Render(text)
 }
 
-// RenderPath renders a file path with cyan color
+// RenderPath renders a file path with accent color
 func RenderPath(path string) string {
 	return StylePath.Render(path)
 }

@@ -1,0 +1,24 @@
+Merges the source branch into the receiving (into) branch, removes the source
+worktree, and symlinks "current" to the receiving branch's worktree.
+
+If only one argument is given, the current branch is used as the source.
+
+Usage:
+  git-hop merge [source-branch] <into-branch> [flags]
+
+Flags:
+  -h, --help    help for merge
+      --no-ff   Create a merge commit even when fast-forward is possible
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+      --format string   Output format (table, json, yaml) (default "table")
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --no-color        Disable ANSI colour
+      --no-hints        Suppress next-step hints after command output
+      --porcelain       machine-readable output
+  -q, --quiet           Suppress non-essential output
+  -v, --verbose         verbose output

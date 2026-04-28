@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/charmbracelet/log"
+	"charm.land/log/v2"
+	"github.com/spf13/viper"
+	kitlog "hop.top/kit/log"
 )
 
 type Mode int
@@ -23,98 +25,86 @@ var (
 )
 
 func init() {
+	// Fallback logger until SetupLogger is called with a real viper.
 	logger = log.NewWithOptions(os.Stderr, log.Options{
-		ReportCaller:    false,
-		ReportTimestamp: false,
-		Prefix:          "",
+		Level: log.InfoLevel,
 	})
-
-	level := log.InfoLevel
-	if envLevel := os.Getenv("GIT_HOP_LOG_LEVEL"); envLevel != "" {
-		switch envLevel {
-		case "debug":
-			level = log.DebugLevel
-		case "info":
-			level = log.InfoLevel
-		case "warn", "warning":
-			level = log.WarnLevel
-		case "error":
-			level = log.ErrorLevel
-		case "fatal":
-			level = log.FatalLevel
-		}
-	}
-	logger.SetLevel(level)
-
-	// Use a minimal, Git-like formatter
 	logger.SetFormatter(log.TextFormatter)
 }
 
-// SetupLogger configures the global logger based on mode and verbosity
+// SetupLogger configures the global logger based on mode, verbosity,
+// and the kit/log viper-aware constructor.
 func SetupLogger(mode Mode, verbose bool) {
 	CurrentMode = mode
 	Verbose = verbose
 
+	// Determine desired level from mode + verbose.
+	level := log.InfoLevel
 	switch mode {
-	case ModeJSON:
-		logger.SetFormatter(log.JSONFormatter)
-		logger.SetOutput(os.Stderr)
-	case ModeQuiet:
-		logger.SetLevel(log.ErrorLevel)
-	case ModePorcelain:
-		// Porcelain mode - minimal output, no decorations
-		logger.SetLevel(log.ErrorLevel)
+	case ModeQuiet, ModePorcelain:
+		level = log.ErrorLevel
 	case ModeHuman:
 		if verbose {
-			logger.SetLevel(log.DebugLevel)
-		} else {
-			logger.SetLevel(log.InfoLevel)
+			level = log.DebugLevel
 		}
+	case ModeJSON:
+		// JSON mode keeps info level; formatter set below.
+	}
+
+	logger = kitlog.WithLevel(rootViper(), level)
+
+	if mode == ModeJSON {
+		logger.SetFormatter(log.JSONFormatter)
 	}
 }
 
-// GetLogger returns the global logger instance for advanced usage
-func GetLogger() *log.Logger {
-	return logger
+// rootViper returns the shared viper instance set by SetViper, or a
+// zero-value viper if none has been wired yet.
+var viperInstance *viper.Viper
+
+// SetViper stores the root viper instance for logger initialisation.
+func SetViper(v *viper.Viper) { viperInstance = v }
+
+func rootViper() *viper.Viper {
+	if viperInstance != nil {
+		return viperInstance
+	}
+	return viper.New()
 }
 
-// Fatal prints an error and exits with status 1
+// GetLogger returns the global logger instance for advanced usage.
+func GetLogger() *log.Logger { return logger }
+
+// Fatal prints an error and exits with status 1.
 func Fatal(msg string, args ...interface{}) {
 	formatted := fmt.Sprintf(msg, args...)
-
 	if CurrentMode == ModeJSON {
 		logger.Error(formatted)
 	} else {
-		// Git-style fatal message
 		fmt.Fprintf(os.Stderr, "fatal: %s\n", formatted)
 	}
 	os.Exit(1)
 }
 
-// Error prints a non-fatal error
+// Error prints a non-fatal error.
 func Error(msg string, args ...interface{}) {
 	if CurrentMode == ModeQuiet {
 		return
 	}
-
 	formatted := fmt.Sprintf(msg, args...)
-
 	if CurrentMode == ModeJSON {
 		logger.Error(formatted)
 	} else {
-		// Git-style error message
 		fmt.Fprintf(os.Stderr, "error: %s\n", formatted)
 	}
 }
 
-// Warn prints a warning message
+// Warn prints a warning message.
 func Warn(msg string, args ...interface{}) {
 	if CurrentMode == ModeQuiet {
 		return
 	}
-
 	formatted := fmt.Sprintf(msg, args...)
-
 	if CurrentMode == ModeJSON {
 		logger.Warn(formatted)
 	} else if CurrentMode == ModeHuman {
@@ -122,65 +112,53 @@ func Warn(msg string, args ...interface{}) {
 	}
 }
 
-// Info prints standard feedback (unless quiet/porcelain/json)
+// Info prints standard feedback (unless quiet/porcelain/json).
 func Info(msg string, args ...interface{}) {
 	if CurrentMode != ModeHuman {
 		return
 	}
-
 	formatted := fmt.Sprintf(msg, args...)
-
-	// Direct output to maintain current behavior
-	// charmbracelet/log adds prefixes we don't want for normal info
 	fmt.Println(formatted)
 }
 
-// Debug prints verbose logs
+// Debug prints verbose logs.
 func Debug(msg string, args ...interface{}) {
 	if !Verbose {
 		return
 	}
-
 	formatted := fmt.Sprintf(msg, args...)
-
 	if CurrentMode == ModeJSON {
 		logger.Debug(formatted)
 	} else {
-		// Git-style debug message
 		fmt.Fprintf(os.Stderr, "debug: %s\n", formatted)
 	}
 }
 
-// Success prints a success message with styling
+// Success prints a success message with styling.
 func Success(msg string, args ...interface{}) {
 	if CurrentMode != ModeHuman {
 		return
 	}
-
 	formatted := fmt.Sprintf(msg, args...)
 	fmt.Println(formatted)
 }
 
-// WithField returns a logger with a field attached (for structured logging)
+// WithField returns a logger with a field attached (for structured logging).
 func WithField(key string, value interface{}) *log.Logger {
 	return logger.With(key, value)
 }
 
-// WithFields returns a logger with multiple fields attached
+// WithFields returns a logger with multiple fields attached.
 func WithFields(fields map[string]interface{}) *log.Logger {
-	l := logger
+	kvs := make([]any, 0, len(fields)*2)
 	for k, v := range fields {
-		l = l.With(k, v)
+		kvs = append(kvs, k, v)
 	}
-	return l
+	return logger.With(kvs...)
 }
 
-// IsModeHuman returns true if current mode is human-readable
-func IsModeHuman() bool {
-	return CurrentMode == ModeHuman
-}
+// IsModeHuman returns true if current mode is human-readable.
+func IsModeHuman() bool { return CurrentMode == ModeHuman }
 
-// IsVerbose returns true if verbose logging is enabled
-func IsVerbose() bool {
-	return Verbose
-}
+// IsVerbose returns true if verbose logging is enabled.
+func IsVerbose() bool { return Verbose }

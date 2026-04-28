@@ -10,6 +10,7 @@ import (
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -17,6 +18,7 @@ import (
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/kit/bus"
 )
 
 var removeCmd = &cobra.Command{
@@ -27,6 +29,8 @@ var removeCmd = &cobra.Command{
 	Run: func(cmd *cobra.Command, args []string) {
 		target := args[0]
 		noPrompt, _ := cmd.Flags().GetBool("no-prompt")
+		noVerify, _ := cmd.Flags().GetBool("no-verify")
+		force, _ := cmd.Root().PersistentFlags().GetBool("force")
 
 		fs := afero.NewOsFs()
 		g := git.New()
@@ -59,8 +63,24 @@ var removeCmd = &cobra.Command{
 					output.Fatal("Cannot remove branch '%s': you are currently inside its worktree. Change to a different worktree first.", target)
 				}
 
-				if !noPrompt {
-					// Prompt for confirmation before removing the worktree
+				// Safety gate: probe the worktree and require --force /
+				// --no-verify based on merged/pushed/dirty state. Skip
+				// when the worktree is missing on disk (nothing to lose).
+				gateRequired := false
+				if _, err := fs.Stat(absWorktree); err == nil {
+					safety := inspectBranchSafety(g, absWorktree, target, hub.Config.Repo.DefaultBranch)
+					if err := removeGate(safety, force, noVerify); err != nil {
+						output.Fatal("%s", err.Error())
+					}
+					// Gate fired (and was satisfied by flags) when any of
+					// these are true. We use this to decide whether the
+					// confirmation prompt is appropriate.
+					gateRequired = !safety.Merged || !safety.Clean
+				}
+
+				// Only prompt when the operation is risky. Clean+merged
+				// removals proceed silently per spec.
+				if !noPrompt && gateRequired {
 					branchConfig := hub.Config.Branches[target]
 					worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
 
@@ -201,6 +221,17 @@ var removeCmd = &cobra.Command{
 					output.Warn("Failed to update current symlink: %v", err)
 				}
 
+				// Emit worktree.removed event.
+				_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
+					events.WorktreeRemoved, events.Source,
+					events.WorktreeEvent{
+						Path:         worktreePath,
+						Branch:       target,
+						HopspacePath: hopspacePath,
+						RepoPath:     hubPath,
+					},
+				))
+
 				output.Info("Successfully removed %s", target)
 				return
 			}
@@ -314,6 +345,7 @@ func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string) error {
 
 func init() {
 	cli.RootCmd.AddCommand(removeCmd)
-	removeCmd.Flags().Bool("no-prompt", false, "Do not prompt for confirmation")
+	removeCmd.Flags().Bool("no-prompt", false, "Skip the confirmation prompt only; does NOT bypass the safety gate")
+	removeCmd.Flags().Bool("no-verify", false, "Allow removal of dirty worktrees or unpushed commits (gate bypass)")
 	removeCmd.ValidArgsFunction = completeBranchNames
 }

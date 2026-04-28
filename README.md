@@ -305,8 +305,13 @@ git hop status --json
 ### Clean Up
 
 ```bash
-# Remove a single worktree
+# Remove a single worktree (clean + merged: silent; otherwise the gate fires)
 git hop remove feature-old
+
+# Force flags for risky removals — see `git hop remove --help`:
+#   --force       allow removal of an unmerged branch
+#   --no-verify   allow removal with dirty worktree or unpushed commits
+git hop remove feature-old --force --no-verify
 
 # Clean up orphaned worktrees (deleted on filesystem)
 git hop prune

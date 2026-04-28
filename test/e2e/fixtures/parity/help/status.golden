@@ -1,0 +1,28 @@
+Show the status of the current worktree or hub.
+
+By default, shows status for the current context (worktree or hub).
+Use --all to show system-wide git-hop information including all repositories,
+configuration, and resource usage.
+
+Usage:
+  git-hop status [flags]
+
+Aliases:
+  status, st, info
+
+Flags:
+      --all    Show system-wide git-hop status
+  -h, --help   help for status
+
+Global Flags:
+      --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
+      --dry-run         preview changes without applying
+      --force           bypass safety checks
+      --format string   Output format (table, json, yaml) (default "table")
+  -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)
+      --json            output in JSON format
+      --no-color        Disable ANSI colour
+      --no-hints        Suppress next-step hints after command output
+      --porcelain       machine-readable output
+  -q, --quiet           Suppress non-essential output
+  -v, --verbose         verbose output
