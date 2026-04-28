@@ -6,6 +6,7 @@ import (
 	"sort"
 
 	"hop.top/git/internal/cli"
+	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
@@ -28,6 +29,7 @@ Can list worktrees for current repository or all repositories.
 
 func runList(cmd *cobra.Command, args []string) {
 	fs := afero.NewOsFs()
+	g := git.New()
 
 	// Load state
 	st, err := loadStateOrLegacy(fs)
@@ -53,15 +55,15 @@ func runList(cmd *cobra.Command, args []string) {
 
 	// If in a specific repo, show detailed view
 	if currentRepoID != "" && st.Repositories[currentRepoID] != nil {
-		showRepositoryWorktrees(fs, currentRepoID, st.Repositories[currentRepoID])
+		showRepositoryWorktrees(fs, g, currentRepoID, st.Repositories[currentRepoID])
 		return
 	}
 
 	// Otherwise show all repositories
-	showAllRepositories(fs, st)
+	showAllRepositories(fs, g, st)
 }
 
-func showRepositoryWorktrees(fs afero.Fs, repoID string, repo *state.RepositoryState) {
+func showRepositoryWorktrees(fs afero.Fs, g git.GitInterface, repoID string, repo *state.RepositoryState) {
 	if output.CurrentMode == output.ModeHuman {
 		fmt.Println(output.RenderHeader("Repository: " + repoID))
 		fmt.Println()
@@ -77,20 +79,22 @@ func showRepositoryWorktrees(fs afero.Fs, repoID string, repo *state.RepositoryS
 
 	if output.CurrentMode != output.ModeHuman {
 		// Use old table for non-human modes
-		t := tui.NewTable([]interface{}{"Branch", "Type", "Path", "Status"})
+		t := tui.NewTable([]interface{}{"Branch", "Type", "Path", "State", "Status"})
 		for branch, wt := range repo.Worktrees {
-			status := "missing"
+			state := "missing"
+			sync := "-"
 			if exists, _ := afero.DirExists(fs, wt.Path); exists {
-				status = "active"
+				state = "active"
+				sync = getBranchSyncStatus(g, wt.Path, branch, repo.DefaultBranch)
 			}
-			t.AddRow(branch, wt.Type, wt.Path, status)
+			t.AddRow(branch, wt.Type, wt.Path, state, sync)
 		}
 		t.Render()
 		return
 	}
 
 	// Enhanced table for human mode
-	table := output.NewStatusTable("Branch", "Type", "Path", "Status")
+	table := output.NewStatusTable("Branch", "Type", "Path", "State", "Status")
 
 	// Sort branches for consistent output
 	var branches []string
@@ -107,16 +111,18 @@ func showRepositoryWorktrees(fs afero.Fs, repoID string, repo *state.RepositoryS
 		exists, _ := afero.DirExists(fs, wt.Path)
 
 		status := "error"
-		statusText := "missing"
+		stateText := "missing"
+		sync := "-"
 		if exists {
 			status = "success"
-			statusText = "active"
+			stateText = "active"
+			sync = getBranchSyncStatus(g, wt.Path, branch, repo.DefaultBranch)
 			activeCount++
 		} else {
 			missingCount++
 		}
 
-		table.AddRow(status, branch, wt.Type, wt.Path, statusText)
+		table.AddRow(status, branch, wt.Type, wt.Path, stateText, sync)
 	}
 
 	table.Print()
@@ -133,7 +139,7 @@ func showRepositoryWorktrees(fs afero.Fs, repoID string, repo *state.RepositoryS
 	fmt.Println(summary)
 }
 
-func showAllRepositories(fs afero.Fs, st *state.State) {
+func showAllRepositories(fs afero.Fs, g git.GitInterface, st *state.State) {
 	if output.CurrentMode == output.ModeHuman {
 		fmt.Println(output.RenderHeader("All Repositories"))
 		fmt.Println()
@@ -144,7 +150,7 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 
 	if output.CurrentMode != output.ModeHuman {
 		// Use old table for non-human modes
-		t := tui.NewTable([]interface{}{"Repository", "Branch", "Type", "Path", "Status"})
+		t := tui.NewTable([]interface{}{"Repository", "Branch", "Type", "Path", "State", "Status"})
 
 		var repoIDs []string
 		for repoID := range st.Repositories {
@@ -162,11 +168,13 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 
 			for _, branch := range branches {
 				wt := repo.Worktrees[branch]
-				status := "missing"
+				state := "missing"
+				sync := "-"
 				if exists, _ := afero.DirExists(fs, wt.Path); exists {
-					status = "active"
+					state = "active"
+					sync = getBranchSyncStatus(g, wt.Path, branch, repo.DefaultBranch)
 				}
-				t.AddRow(repoID, branch, wt.Type, wt.Path, status)
+				t.AddRow(repoID, branch, wt.Type, wt.Path, state, sync)
 			}
 		}
 		t.Render()
@@ -174,7 +182,7 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 	}
 
 	// Enhanced table for human mode
-	table := output.NewStatusTable("Repository", "Branch", "Type", "Status")
+	table := output.NewStatusTable("Repository", "Branch", "Type", "State", "Status")
 
 	// Sort repositories for consistent output
 	var repoIDs []string
@@ -203,10 +211,12 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 
 			exists, _ := afero.DirExists(fs, wt.Path)
 			status := "error"
-			statusText := "missing"
+			stateText := "missing"
+			sync := "-"
 			if exists {
 				status = "success"
-				statusText = "active"
+				stateText = "active"
+				sync = getBranchSyncStatus(g, wt.Path, branch, repo.DefaultBranch)
 				activeCount++
 			} else {
 				missingCount++
@@ -218,7 +228,7 @@ func showAllRepositories(fs afero.Fs, st *state.State) {
 				shortRepo = "..." + shortRepo[len(shortRepo)-27:]
 			}
 
-			table.AddRow(status, shortRepo, branch, wt.Type, statusText)
+			table.AddRow(status, shortRepo, branch, wt.Type, stateText, sync)
 		}
 	}
 
