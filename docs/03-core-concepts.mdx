@@ -48,10 +48,16 @@ Create a hub when you:
 
 ```
 my-project/
-  main -> ~/.local/share/git-hop/github.com/org/my-project/main
-  feature-x -> ~/.local/share/git-hop/github.com/org/my-project/feature-x
-  feature-y -> ~/.local/share/git-hop/github.com/org/my-project/feature-y
+  hops/
+    main -> ~/.local/share/git-hop/github.com/org/my-project/main
+    feature-x -> ~/.local/share/git-hop/github.com/org/my-project/feature-x
+    feature-y -> ~/.local/share/git-hop/github.com/org/my-project/feature-y
   hop.json
+  .tlc/             # per-repo task DB (shared across worktrees)
+  .aps/             # per-repo agent profiles (shared)
+  .uhp/             # per-repo hook config (shared)
+  .claude/          # per-repo Claude Code settings (shared)
+  .gemini/          # per-repo Gemini CLI settings (shared)
 ```
 
 ### Hub Configuration
@@ -65,6 +71,34 @@ Each hub has a `hop.json` file for configuration:
   "port_limit": 5000
 }
 ```
+
+### Per-Repo State at the Hub Root
+
+Tool state directories that should be shared across **all** worktrees
+of a repo live at the **hub root**, not inside any individual
+worktree under `hops/<branch>/`. Common examples:
+
+| Directory | Tool | What it holds |
+|-----------|------|---------------|
+| `.tlc/` | tlc | Tasks, tracks, plans — same set regardless of branch viewed |
+| `.aps/` | aps | Agent profiles bound to this repo |
+| `.uhp/` | uhp | Hook registrations + handlers |
+| `.claude/` | Claude Code | Per-repo settings, agents, skills |
+| `.gemini/` | Gemini CLI | Per-repo config |
+| `.codex/` | Codex CLI | Per-repo config |
+
+**Rationale**: a task tracked in `.tlc/` represents work on the
+repo as a whole — the same task is equally relevant whether you're
+checked out on `main` or `feature-x`. Storing state inside a
+specific worktree would either fragment it across branches or
+require constant copying.
+
+**Workflow**:
+- `cd <hub>/hops/main` to edit code
+- `tlc`, `aps`, etc. invoked from anywhere inside the hub walk
+  upward to find the hub-root state dir
+- When asking "does this repo have a tlc DB?", check
+  `<hub>/.tlc/` — never `<hub>/hops/main/.tlc/`
 
 ## Hopspaces
 
