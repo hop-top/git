@@ -463,6 +463,102 @@ The `--fix` flag will:
 |------|-------------|
 | `--fix` | Automatically fix issues |
 
+## git hop repair
+
+Safely repair stale worktree metadata (gitdir pointers, hop.json, git
+registry) with backup + undo support. Follows git porcelain conventions:
+mutates by default with safety nets; `-n`/`--dry-run` previews.
+
+### Usage
+
+```bash
+git hop repair [flags] [-- <pathspec>...]
+```
+
+### Examples
+
+```bash tab="Preview"
+git hop repair -n
+```
+
+```bash tab="Apply with backup (default)"
+git hop repair
+```
+
+```bash tab="Restore from latest backup"
+git hop repair --undo
+```
+
+```bash tab="Restore specific backup"
+git hop repair --undo=repair-20260501T123045Z
+```
+
+```bash tab="List backups"
+git hop repair --list-backups
+```
+
+```bash tab="Stable scripting output"
+git hop repair -n --porcelain
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `-n`, `--dry-run` | Preview the plan without mutating state |
+| `--porcelain` | Stable tab-separated output for scripts |
+| `--undo[=<id>]` | Restore from backup (most recent if no id) |
+| `--list-backups` | List available backups, one per line |
+| `--no-backup` | Skip the safety backup (requires `-f`) |
+| `--force-dirty` | Allow repair when worktrees have uncommitted changes |
+| `-f`, `--force` | Bypass safety checks (combined with `--no-backup`) |
+| `--progress` / `--no-progress` | Force progress on/off (default: auto) |
+| `--color=<when>` | `always`, `auto`, `never` |
+
+### Pipeline
+
+1. Acquire `.hop/repair.lock` (refuses concurrent runs)
+2. Plan: classify each worktree against on-disk + git registry + hop.json
+3. Dirty-check (refuses unless `--force-dirty`)
+4. Print plan; exit if `-n`
+5. Fire `pre-repair` hook
+6. Snapshot to `.hop/backups/repair-<UTC-timestamp>/`
+7. Apply each action; verify post-state predicate
+8. Re-plan; auto-restore from backup if new issues appeared
+9. Fire `post-repair` hook
+
+### Porcelain v1 format
+
+One tab-separated record per worktree:
+
+```
+<status>\t<worktree-path>\t<action>\t<old-value>\t<new-value>
+```
+
+`<status>` ∈ `ok | repaired | failed | skipped`. `<action>` ∈ `noop | rewrite-gitdir | register | unregister | update-hopjson`.
+
+### Exit codes
+
+| Code | Meaning |
+|------|---------|
+| 0 | Success |
+| 1 | Operation failure (dirty worktrees, apply failed, hook aborted) |
+| 128 | Fatal (lock held, not in a hub) |
+| 129 | Usage error (bad flag) |
+
+### Configuration
+
+Tunables read via `git config`:
+
+- `hop.repair.backupRetention` — max age of `.hop/backups/repair-*` before
+  `git hop prune` removes them. Go duration syntax (`720h` = 30d default).
+
+### Hooks
+
+Mutating runs fire `pre-repair` (advisory; non-zero exit aborts) and
+`post-repair` (informational). Place executables at
+`$XDG_CONFIG_HOME/git-hop/hooks/{pre,post}-repair`.
+
 ## Command Aliases
 
 Many commands have shorter aliases for convenience:
@@ -474,7 +570,8 @@ Many commands have shorter aliases for convenience:
 | `remove` | `rm`, `delete`, `del` | Remove a hub, hopspace, or branch |
 | `status` | `st`, `info` | Show the working tree status |
 | `prune` | `cleanup`, `clean` | Remove orphaned data |
-| `doctor` | `check`, `repair` | Check and repair the environment |
+| `doctor` | `check` | Check and report environment issues |
+| `repair` | — | Safely repair stale worktree metadata with backup + undo |
 | `init` | `setup`, `install` | Initialize git-hop repository structure |
 | `env start` | `env up` | Start environment services |
 | `env stop` | `env down` | Stop environment services |
