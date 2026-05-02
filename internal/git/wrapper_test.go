@@ -17,7 +17,7 @@ func TestCreateWorktree_LinkExistingBranch(t *testing.T) {
 	g := &Git{Runner: runner}
 
 	// Success case - existing branch links successfully
-	err := g.CreateWorktree("/hub", "existing-branch", "/path/to/worktree", "", false)
+	err := g.CreateWorktree("/hub", "existing-branch", "/path/to/worktree", "", false, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, runner.callCount, "Should call git once")
 	assert.Contains(t, runner.lastCommand, "worktree add /path/to/worktree existing-branch")
@@ -35,7 +35,7 @@ func TestCreateWorktree_CreateNewBranch(t *testing.T) {
 	runner.errors["/hub:git worktree add /path/to/worktree new-branch"] = fmt.Errorf("branch not found")
 	runner.errors["/hub:git rev-parse --verify refs/heads/new-branch"] = fmt.Errorf("not a valid ref")
 
-	err := g.CreateWorktree("/hub", "new-branch", "/path/to/worktree", "HEAD", false)
+	err := g.CreateWorktree("/hub", "new-branch", "/path/to/worktree", "HEAD", false, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 3, runner.callCount, "Should call git three times - link attempt, rev-parse check, then create")
 	assert.Contains(t, runner.lastCommand, "worktree add -b new-branch /path/to/worktree HEAD")
@@ -53,7 +53,7 @@ func TestCreateWorktree_CreateNewBranchFromBase(t *testing.T) {
 	runner.errors["/hub:git worktree add /path/to/worktree feature-branch"] = fmt.Errorf("branch not found")
 	runner.errors["/hub:git rev-parse --verify refs/heads/feature-branch"] = fmt.Errorf("not a valid ref")
 
-	err := g.CreateWorktree("/hub", "feature-branch", "/path/to/worktree", "develop", false)
+	err := g.CreateWorktree("/hub", "feature-branch", "/path/to/worktree", "develop", false, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 3, runner.callCount)
 	assert.Contains(t, runner.lastCommand, "worktree add -b feature-branch /path/to/worktree develop")
@@ -68,7 +68,7 @@ func TestCreateWorktree_ForceCreate(t *testing.T) {
 	g := &Git{Runner: runner}
 
 	// With forceCreate=true, should create directly without trying to link
-	err := g.CreateWorktree("/hub", "forced-branch", "/path/to/worktree", "HEAD", true)
+	err := g.CreateWorktree("/hub", "forced-branch", "/path/to/worktree", "HEAD", true, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, runner.callCount, "Should call git once with -b flag")
 	assert.Contains(t, runner.lastCommand, "worktree add -b forced-branch /path/to/worktree HEAD")
@@ -82,7 +82,7 @@ func TestCreateWorktree_ForceCreateWithoutBase(t *testing.T) {
 	}
 	g := &Git{Runner: runner}
 
-	err := g.CreateWorktree("/hub", "forced-branch", "/path/to/worktree", "", true)
+	err := g.CreateWorktree("/hub", "forced-branch", "/path/to/worktree", "", true, "")
 	assert.NoError(t, err)
 	assert.Equal(t, 1, runner.callCount)
 	assert.Contains(t, runner.lastCommand, "worktree add -b forced-branch /path/to/worktree")
@@ -102,7 +102,7 @@ func TestCreateWorktree_BothCallsFail(t *testing.T) {
 	runner.errors["/hub:git rev-parse --verify refs/heads/bad-branch"] = fmt.Errorf("not a valid ref")
 	runner.errors["/hub:git worktree add -b bad-branch /path/to/worktree HEAD"] = fmt.Errorf("permission denied")
 
-	err := g.CreateWorktree("/hub", "bad-branch", "/path/to/worktree", "HEAD", false)
+	err := g.CreateWorktree("/hub", "bad-branch", "/path/to/worktree", "HEAD", false, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "permission denied")
 	assert.Equal(t, 3, runner.callCount, "Should try link, rev-parse, then create")
@@ -121,7 +121,7 @@ func TestCreateWorktree_BranchExistsButCheckedOut(t *testing.T) {
 	// rev-parse succeeds — branch exists, so we should NOT try -b
 	// (default mock returns no error)
 
-	err := g.CreateWorktree("/hub", "my-branch", "/path/to/worktree", "HEAD", false)
+	err := g.CreateWorktree("/hub", "my-branch", "/path/to/worktree", "HEAD", false, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "already checked out")
 	assert.Equal(t, 2, runner.callCount, "Should try link and rev-parse, but not -b since branch exists")
@@ -137,7 +137,7 @@ func TestCreateWorktree_ForceCreateFails(t *testing.T) {
 
 	runner.errors["/hub:git worktree add -b fail-branch /path/to/worktree HEAD"] = fmt.Errorf("disk full")
 
-	err := g.CreateWorktree("/hub", "fail-branch", "/path/to/worktree", "HEAD", true)
+	err := g.CreateWorktree("/hub", "fail-branch", "/path/to/worktree", "HEAD", true, "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "disk full")
 	assert.Equal(t, 1, runner.callCount, "Should only try once with forceCreate")
@@ -153,8 +153,47 @@ func TestCreateWorktree_EmptyParameters(t *testing.T) {
 
 	// Should still attempt the command even with empty parameters
 	// (git will handle validation)
-	err := g.CreateWorktree("", "", "", "", false)
+	err := g.CreateWorktree("", "", "", "", false, "")
 	assert.NoError(t, err) // Mock doesn't validate parameters
+}
+
+// TestCreateWorktree_SetsUpstreamTracking tests that --track flag is used when creating branches
+func TestCreateWorktree_SetsUpstreamTracking(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	// First call fails (branch doesn't exist), rev-parse confirms it doesn't exist, then create with tracking
+	runner.errors["/hub:git worktree add /path/to/worktree main"] = fmt.Errorf("branch not found")
+	runner.errors["/hub:git rev-parse --verify refs/heads/main"] = fmt.Errorf("not a valid ref")
+
+	err := g.CreateWorktree("/hub", "main", "/path/to/worktree", "HEAD", false, "origin/main")
+	assert.NoError(t, err)
+	assert.Equal(t, 3, runner.callCount, "Should call git three times")
+	// Verify the create command includes --track flag
+	assert.Contains(t, runner.lastCommand, "worktree add -b main /path/to/worktree --track origin/main HEAD")
+}
+
+// TestCreateWorktree_NoTrackingWhenEmpty tests that --track is omitted when trackBranch is empty
+func TestCreateWorktree_NoTrackingWhenEmpty(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	// First call fails (branch doesn't exist), rev-parse confirms it doesn't exist, then create without tracking
+	runner.errors["/hub:git worktree add /path/to/worktree feature"] = fmt.Errorf("branch not found")
+	runner.errors["/hub:git rev-parse --verify refs/heads/feature"] = fmt.Errorf("not a valid ref")
+
+	err := g.CreateWorktree("/hub", "feature", "/path/to/worktree", "develop", false, "")
+	assert.NoError(t, err)
+	assert.Equal(t, 3, runner.callCount, "Should call git three times")
+	// Verify the create command does NOT include --track flag
+	assert.Contains(t, runner.lastCommand, "worktree add -b feature /path/to/worktree develop")
+	assert.NotContains(t, runner.lastCommand, "--track")
 }
 
 // TestDeleteLocalBranch tests force-deleting a local branch

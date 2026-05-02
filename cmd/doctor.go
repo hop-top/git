@@ -194,7 +194,7 @@ Use --fix to automatically repair issues.`,
 
 							// Recreate the worktree using git
 							g := git.New()
-							if err := g.CreateWorktree(hopspacePath, b.HopspaceBranch, linkPath, "", false); err != nil {
+							if err := g.CreateWorktree(hopspacePath, b.HopspaceBranch, linkPath, "", false, "origin/"+b.HopspaceBranch); err != nil {
 								output.Error("Failed to recreate worktree: %v", err)
 								continue
 							}

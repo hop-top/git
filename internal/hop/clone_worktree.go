@@ -213,7 +213,7 @@ func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, default
 
 	// Create main worktree under hops/
 	mainPath := filepath.Join(hopsDir, defaultBranch)
-	if err := g.CreateWorktree(projectRoot, defaultBranch, mainPath, defaultBranch, false); err != nil {
+	if err := g.CreateWorktree(projectRoot, defaultBranch, mainPath, defaultBranch, false, "origin/"+defaultBranch); err != nil {
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 

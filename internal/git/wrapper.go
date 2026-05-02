@@ -13,7 +13,7 @@ import (
 type GitInterface interface {
 	Clone(uri, path, branch string) error
 	CloneBare(uri, path string) error
-	CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool) error
+	CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool, trackBranch string) error
 	WorktreeRemove(hopspacePath, path string, force bool) error
 	WorktreePrune(hopspacePath string) error
 	WorktreeRepair(basePath string) error
@@ -145,7 +145,8 @@ func (g *Git) CloneBare(uri, path string) error {
 // CreateWorktree creates a new worktree.
 // If the branch exists and forceCreate is false, it links the existing branch.
 // If the branch doesn't exist or forceCreate is true, it creates a new branch from base (or HEAD if base is empty).
-func (g *Git) CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool) error {
+// If trackBranch is specified, the new branch will track it (e.g., "origin/main").
+func (g *Git) CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool, trackBranch string) error {
 	args := []string{"worktree", "add"}
 
 	if forceCreate {
@@ -168,6 +169,9 @@ func (g *Git) CreateWorktree(hopspacePath, branch, path, base string, forceCreat
 		if branchExists != nil {
 			// Branch doesn't exist, create it with -b
 			args = []string{"worktree", "add", "-b", branch, path}
+			if trackBranch != "" {
+				args = append(args, "--track", trackBranch)
+			}
 			if base != "" {
 				args = append(args, base)
 			}

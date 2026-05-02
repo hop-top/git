@@ -199,7 +199,7 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 				continue
 			}
 			worktreePath := c.getWorktreePathForBranch(branch, repoPath)
-			if err := c.git.CreateWorktree(repoPath, branch, worktreePath, "", false); err != nil {
+			if err := c.git.CreateWorktree(repoPath, branch, worktreePath, "", false, "origin/"+branch); err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("failed to create worktree for %s: %v", branch, err))
 			}
 		}

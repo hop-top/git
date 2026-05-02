@@ -118,7 +118,7 @@ var addCmd = &cobra.Command{
 
 		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
-		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, hub.Config.Repo.DefaultBranch)
 		if err != nil {
 			// Check if it's a state error
 			if stateErr, ok := err.(*hop.StateError); ok {

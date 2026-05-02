@@ -25,7 +25,7 @@ func NewWorktreeManager(fs afero.Fs, g git.GitInterface) *WorktreeManager {
 }
 
 // CreateWorktreeTransactional creates a git worktree with validation and auto-cleanup
-func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string) (string, error) {
+func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string) (string, error) {
 	// Validate inputs early (before path computation)
 	if hubPath == "" {
 		return "", fmt.Errorf("hubPath cannot be empty")
@@ -64,7 +64,7 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 	}
 
 	// Step 4: Call existing CreateWorktree method to do the actual work
-	_, err = m.CreateWorktree(hopspace, hubPath, branch, locationPattern, org, repo)
+	_, err = m.CreateWorktree(hopspace, hubPath, branch, locationPattern, org, repo, defaultBranch)
 	if err != nil {
 		// Return our cleaned path on error
 		return worktreePath, err
@@ -74,7 +74,7 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 }
 
 // CreateWorktree creates a git worktree at the configured location
-func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string) (string, error) {
+func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string) (string, error) {
 	// Validate inputs
 	if hubPath == "" {
 		return "", fmt.Errorf("hubPath cannot be empty")
@@ -144,7 +144,11 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 
 	// baseWorktreePath is already absolute after resolution by ResolveWorktreePath
 	// CreateWorktree will automatically try to link existing branch first, then create if needed
-	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, "HEAD", false); err != nil {
+	trackBranch := ""
+	if defaultBranch != "" {
+		trackBranch = "origin/" + defaultBranch
+	}
+	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, "HEAD", false, trackBranch); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)
 	}
 

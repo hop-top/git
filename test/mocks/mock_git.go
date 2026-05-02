@@ -85,7 +85,7 @@ func (m *MockGit) CloneBare(uri, path string) error {
 }
 
 // CreateWorktree mocks creating a worktree and tracks the operation
-func (m *MockGit) CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool) error {
+func (m *MockGit) CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool, trackBranch string) error {
 	m.CreatedWorktrees = append(m.CreatedWorktrees, path)
 	m.LastWorktreeBasePath = hopspacePath
 	m.LastWorktreeBranch = branch
