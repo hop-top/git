@@ -114,6 +114,7 @@ git hop env stop
 | `git hop status` | Show status of current worktree or hub |
 | `git hop remove <target>` | Remove a worktree, hopspace, or hub |
 | `git hop prune` | Clean up orphaned worktrees and hubs |
+| `git hop repair` | Repair a corrupted or stale worktree |
 | `git hop doctor` | Check and repair environment issues |
 
 ### Shell Integration (Optional)
