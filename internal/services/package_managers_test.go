@@ -520,3 +520,65 @@ func stringContains(s, substr string) bool {
 	}
 	return false
 }
+
+func TestIsVendorIgnored(t *testing.T) {
+	tests := []struct {
+		name       string
+		gitignore  string
+		expected   bool
+		hasFile    bool
+	}{
+		{
+			name:      "vendor in .gitignore",
+			gitignore: "vendor\n",
+			expected:  true,
+			hasFile:   true,
+		},
+		{
+			name:      "vendor/ in .gitignore",
+			gitignore: "vendor/\n",
+			expected:  true,
+			hasFile:   true,
+		},
+		{
+			name:      "vendor in .gitignore with comments",
+			gitignore: "# ignore deps\nvendor\nnode_modules/\n",
+			expected:  true,
+			hasFile:   true,
+		},
+		{
+			name:      "vendor not in .gitignore",
+			gitignore: "node_modules/\nbuild/\n",
+			expected:  false,
+			hasFile:   true,
+		},
+		{
+			name:      "empty .gitignore",
+			gitignore: "",
+			expected:  false,
+			hasFile:   true,
+		},
+		{
+			name:     "no .gitignore file",
+			expected: false,
+			hasFile:  false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := afero.NewMemMapFs()
+			worktreePath := "/test"
+			fs.Mkdir(worktreePath, 0755)
+
+			if tt.hasFile {
+				afero.WriteFile(fs, worktreePath+"/.gitignore", []byte(tt.gitignore), 0644)
+			}
+
+			result := services.IsVendorIgnored(fs, worktreePath)
+			if result != tt.expected {
+				t.Errorf("IsVendorIgnored() = %v, want %v", result, tt.expected)
+			}
+		})
+	}
+}

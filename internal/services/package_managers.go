@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bufio"
 	"crypto/sha256"
 	"fmt"
 	"io"
@@ -11,6 +12,30 @@ import (
 	"hop.top/git/internal/config"
 	"github.com/spf13/afero"
 )
+
+// IsVendorIgnored checks if vendor/ is in .gitignore
+func IsVendorIgnored(fs afero.Fs, worktreePath string) bool {
+	gitignorePath := filepath.Join(worktreePath, ".gitignore")
+	file, err := fs.Open(gitignorePath)
+	if err != nil {
+		return false // .gitignore doesn't exist, assume vendor is not ignored
+	}
+	defer file.Close()
+
+	scanner := bufio.NewScanner(file)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		// Skip comments and empty lines
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		// Check for vendor or vendor/ patterns
+		if line == "vendor" || line == "vendor/" {
+			return true
+		}
+	}
+	return false
+}
 
 // ErrBinaryNotFound is returned by Install when the package manager binary is not found in PATH.
 // Callers may choose to skip installation rather than treat this as a hard error.
@@ -68,7 +93,7 @@ func (pm *PackageManager) Install(targetDir string, worktreePath string) error {
 
 	// Check binary availability before attempting to run; avoids confusing
 	// "exec: not found" errors and lets callers skip gracefully.
-	if pm.Name != "pip" {
+	if pm.Name != "pip" && pm.Name != "go" {
 		if _, err := exec.LookPath(pm.InstallCmd[0]); err != nil {
 			return fmt.Errorf("%w: %s", ErrBinaryNotFound, pm.InstallCmd[0])
 		}
@@ -90,6 +115,28 @@ func (pm *PackageManager) Install(targetDir string, worktreePath string) error {
 		installCmd.Dir = worktreePath
 		if err := installCmd.Run(); err != nil {
 			return fmt.Errorf("failed to install pip deps: %w", err)
+		}
+		return nil
+	}
+
+	// Special handling for Go - check if vendor/ is ignored
+	if pm.Name == "go" {
+		fs := afero.NewOsFs()
+		goCmd := "go mod download"
+		if !IsVendorIgnored(fs, worktreePath) {
+			// vendor/ is tracked (not ignored), also run go mod vendor
+			goCmd = "go mod download && go mod vendor"
+		}
+
+		// Check binary availability for go
+		if _, err := exec.LookPath("go"); err != nil {
+			return fmt.Errorf("%w: %s", ErrBinaryNotFound, "go")
+		}
+
+		cmd := exec.Command("sh", "-c", goCmd)
+		cmd.Dir = worktreePath
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("failed to run go install command: %w", err)
 		}
 		return nil
 	}
