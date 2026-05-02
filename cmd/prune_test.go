@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -184,4 +185,69 @@ func TestPruneOrphanedHubs(t *testing.T) {
 	assert.Equal(t, 1, pruned)
 	assert.Len(t, st.Repositories["github.com/test/repo"].Hubs, 1)
 	assert.Equal(t, "/path/to/existing/hub", st.Repositories["github.com/test/repo"].Hubs[0].Path)
+}
+
+func TestPruneRepairBackups_RemovesOldRepairBackups(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hubs/repo"
+	backupsDir := filepath.Join(hubPath, ".hop", "backups")
+	old := filepath.Join(backupsDir, "repair-20200101T000000Z")
+	recent := filepath.Join(backupsDir, "repair-99990101T000000Z")
+	unrelated := filepath.Join(backupsDir, "manual-not-managed")
+
+	require.NoError(t, fs.MkdirAll(old, 0755))
+	require.NoError(t, fs.MkdirAll(recent, 0755))
+	require.NoError(t, fs.MkdirAll(unrelated, 0755))
+
+	// MemMapFs ModTime is set when the dir is created. Force the "old"
+	// backup's ModTime well before the cutoff using Chtimes.
+	require.NoError(t, fs.Chtimes(old, time.Now().Add(-100*24*time.Hour), time.Now().Add(-100*24*time.Hour)))
+
+	st := &state.State{
+		Version:     "1.0.0",
+		LastUpdated: time.Now(),
+		Repositories: map[string]*state.RepositoryState{
+			"github.com/test/repo": {
+				URI:           "git@github.com:test/repo.git",
+				Org:           "test",
+				Repo:          "repo",
+				DefaultBranch: "main",
+				Hubs: []*state.HubState{
+					{Path: hubPath, Mode: "local", CreatedAt: time.Now(), LastAccessed: time.Now()},
+				},
+			},
+		},
+	}
+
+	pruned := pruneRepairBackups(fs, st, false)
+
+	assert.Equal(t, 1, pruned, "expected only the old repair- backup pruned")
+	exists, _ := afero.DirExists(fs, old)
+	assert.False(t, exists, "old backup should be removed")
+	exists, _ = afero.DirExists(fs, recent)
+	assert.True(t, exists, "recent backup should remain")
+	exists, _ = afero.DirExists(fs, unrelated)
+	assert.True(t, exists, "non-repair- entries must not be touched")
+}
+
+func TestPruneRepairBackups_DryRun(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hubs/repo"
+	old := filepath.Join(hubPath, ".hop", "backups", "repair-20200101T000000Z")
+	require.NoError(t, fs.MkdirAll(old, 0755))
+	require.NoError(t, fs.Chtimes(old, time.Now().Add(-100*24*time.Hour), time.Now().Add(-100*24*time.Hour)))
+
+	st := &state.State{
+		Repositories: map[string]*state.RepositoryState{
+			"r": {
+				Hubs: []*state.HubState{{Path: hubPath, Mode: "local"}},
+			},
+		},
+	}
+
+	pruned := pruneRepairBackups(fs, st, true)
+
+	assert.Equal(t, 1, pruned)
+	exists, _ := afero.DirExists(fs, old)
+	assert.True(t, exists, "dry-run must not remove anything")
 }

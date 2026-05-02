@@ -1,7 +1,12 @@
 package cmd
 
 import (
+	"path/filepath"
+	"strings"
+	"time"
+
 	"hop.top/git/internal/cli"
+	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
@@ -45,6 +50,7 @@ func runPrune(cmd *cobra.Command, args []string) {
 	output.Info("Scanning for orphaned entries...")
 
 	worktreesPruned, hubsPruned := runPruneFS(fs, st, dryRun)
+	backupsPruned := pruneRepairBackups(fs, st, dryRun)
 
 	if !dryRun && (worktreesPruned > 0 || hubsPruned > 0) {
 		if err := state.SaveState(fs, st); err != nil {
@@ -53,14 +59,73 @@ func runPrune(cmd *cobra.Command, args []string) {
 	}
 
 	switch {
-	case worktreesPruned == 0 && hubsPruned == 0:
+	case worktreesPruned == 0 && hubsPruned == 0 && backupsPruned == 0:
 		output.Success("No orphaned entries found.")
 	case dryRun:
-		output.Success("[dry-run] Would prune %d worktree(s) and %d hub(s)", worktreesPruned, hubsPruned)
+		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), and %d repair backup(s)", worktreesPruned, hubsPruned, backupsPruned)
 	default:
-		output.Success("Pruned %d worktree(s) and %d hub(s)", worktreesPruned, hubsPruned)
+		output.Success("Pruned %d worktree(s), %d hub(s), and %d repair backup(s)", worktreesPruned, hubsPruned, backupsPruned)
 	}
 }
+
+// pruneRepairBackups removes repair backup directories older than the
+// configured retention. Returns the count removed (or that would be
+// removed when dryRun is true).
+//
+// Retention is read from `git config --get hop.repair.backupRetention`
+// from any hub in state; falls back to 30 days when unconfigured. The
+// value uses Go duration syntax (e.g. "720h" for 30 days, "168h" for 7).
+func pruneRepairBackups(fs afero.Fs, st *state.State, dryRun bool) int {
+	retention := repairBackupRetention(st)
+	cutoff := time.Now().Add(-retention)
+	prefix := "Pruning"
+	if dryRun {
+		prefix = "[dry-run] Would prune"
+	}
+	pruned := 0
+	for _, repo := range st.Repositories {
+		for _, hub := range repo.Hubs {
+			backupsDir := filepath.Join(hub.Path, ".hop", "backups")
+			entries, err := afero.ReadDir(fs, backupsDir)
+			if err != nil {
+				continue
+			}
+			for _, entry := range entries {
+				if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "repair-") {
+					continue
+				}
+				path := filepath.Join(backupsDir, entry.Name())
+				if entry.ModTime().After(cutoff) {
+					continue
+				}
+				output.Info("%s repair backup: %s", prefix, path)
+				if !dryRun {
+					_ = fs.RemoveAll(path)
+				}
+				pruned++
+			}
+		}
+	}
+	return pruned
+}
+
+func repairBackupRetention(st *state.State) time.Duration {
+	const fallback = 30 * 24 * time.Hour
+	g := git.New()
+	for _, repo := range st.Repositories {
+		for _, hub := range repo.Hubs {
+			val, err := g.GetConfig(hub.Path, "hop.repair.backupRetention")
+			if err != nil || val == "" {
+				continue
+			}
+			if d, err := time.ParseDuration(strings.TrimSpace(val)); err == nil {
+				return d
+			}
+		}
+	}
+	return fallback
+}
+
 
 // runPruneFS scans st for orphaned worktrees and hubs and returns the counts.
 // When dryRun is false the orphans are removed from st in place; the caller
