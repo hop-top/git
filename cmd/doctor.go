@@ -23,7 +23,7 @@ var (
 
 var doctorCmd = &cobra.Command{
 	Use:     "doctor",
-	Aliases: []string{"check", "repair"},
+	Aliases: []string{"check"},
 	Short:   "Check and repair the environment",
 	Long: `Run diagnostics on git-hop installation and project setup.
 

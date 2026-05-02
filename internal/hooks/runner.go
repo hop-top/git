@@ -35,6 +35,8 @@ var ValidHookNames = []string{
 	"post-env-start",
 	"pre-env-stop",
 	"post-env-stop",
+	"pre-repair",
+	"post-repair",
 }
 
 // ValidateHookName validates that a hook name is valid
