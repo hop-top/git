@@ -16,6 +16,9 @@ type GitInterface interface {
 	CreateWorktree(hopspacePath, branch, path, base string, forceCreate bool) error
 	WorktreeRemove(hopspacePath, path string, force bool) error
 	WorktreePrune(hopspacePath string) error
+	WorktreeRepair(basePath string) error
+	WorktreeListPorcelain(basePath string) (string, error)
+	WorktreeAdd(basePath, branch, path string) error
 	RevParse(dir string, args ...string) (string, error)
 	IsInsideWorkTree(dir string) bool
 	GetRoot(dir string) (string, error)
@@ -190,6 +193,31 @@ func (g *Git) WorktreeRemove(hopspacePath, path string, force bool) error {
 // WorktreePrune prunes worktree information
 func (g *Git) WorktreePrune(hopspacePath string) error {
 	_, err := g.Runner.RunInDir(hopspacePath, "git", "worktree", "prune")
+	return err
+}
+
+// WorktreeRepair runs `git worktree repair` in basePath. The repair subcommand
+// fixes administrative files (.git/worktrees/<name>/gitdir and per-worktree
+// .git pointers) when the worktree directory has been moved.
+func (g *Git) WorktreeRepair(basePath string) error {
+	_, err := g.Runner.RunInDir(basePath, "git", "worktree", "repair")
+	return err
+}
+
+// WorktreeListPorcelain returns the raw stable porcelain v1 output of
+// `git worktree list --porcelain`. Callers parse the output themselves
+// (record-per-worktree, blank-line separated).
+func (g *Git) WorktreeListPorcelain(basePath string) (string, error) {
+	return g.Runner.RunInDir(basePath, "git", "worktree", "list", "--porcelain")
+}
+
+// WorktreeAdd registers an existing path to an existing branch. Distinct from
+// CreateWorktree, which handles new-branch creation; WorktreeAdd is the
+// minimal `git worktree add <path> <branch>` form used by the repair applier
+// to re-register an orphan that exists on disk + in hop.json but is missing
+// from git's worktree registry.
+func (g *Git) WorktreeAdd(basePath, branch, path string) error {
+	_, err := g.Runner.RunInDir(basePath, "git", "worktree", "add", path, branch)
 	return err
 }
 

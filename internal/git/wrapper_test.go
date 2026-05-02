@@ -233,6 +233,90 @@ func TestDeleteRemoteBranch_Error(t *testing.T) {
 	assert.Error(t, err)
 }
 
+// TestWorktreeRepair tests wrapping git worktree repair
+func TestWorktreeRepair(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	err := g.WorktreeRepair("/hopspace")
+	assert.NoError(t, err)
+	assert.Contains(t, runner.lastCommand, "worktree repair")
+	assert.Equal(t, 1, runner.callCount)
+}
+
+// TestWorktreeRepair_Error propagates git failures
+func TestWorktreeRepair_Error(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	runner.errors["/hopspace:git worktree repair"] = fmt.Errorf("repair failed")
+	err := g.WorktreeRepair("/hopspace")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "repair failed")
+}
+
+// TestWorktreeListPorcelain returns the raw porcelain output
+func TestWorktreeListPorcelain(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	expected := "worktree /hopspace/main\nHEAD abc123\nbranch refs/heads/main\n\nworktree /hopspace/feat\nHEAD def456\nbranch refs/heads/feat"
+	runner.responses["/hopspace:git worktree list --porcelain"] = expected
+
+	out, err := g.WorktreeListPorcelain("/hopspace")
+	assert.NoError(t, err)
+	assert.Equal(t, expected, out)
+}
+
+// TestWorktreeListPorcelain_Error propagates failures
+func TestWorktreeListPorcelain_Error(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	runner.errors["/hopspace:git worktree list --porcelain"] = fmt.Errorf("not a git repo")
+	_, err := g.WorktreeListPorcelain("/hopspace")
+	assert.Error(t, err)
+}
+
+// TestWorktreeAdd registers an existing path to an existing branch
+func TestWorktreeAdd(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	err := g.WorktreeAdd("/hopspace", "feat", "/hopspace/feat")
+	assert.NoError(t, err)
+	assert.Contains(t, runner.lastCommand, "worktree add /hopspace/feat feat")
+	assert.Equal(t, 1, runner.callCount)
+}
+
+// TestWorktreeAdd_Error propagates git failures
+func TestWorktreeAdd_Error(t *testing.T) {
+	runner := &MockRunner{
+		responses: make(map[string]string),
+		errors:    make(map[string]error),
+	}
+	g := &Git{Runner: runner}
+
+	runner.errors["/hopspace:git worktree add /hopspace/feat feat"] = fmt.Errorf("path exists")
+	err := g.WorktreeAdd("/hopspace", "feat", "/hopspace/feat")
+	assert.Error(t, err)
+}
+
 // MockRunner is a test helper for mocking git commands
 type MockRunner struct {
 	responses   map[string]string

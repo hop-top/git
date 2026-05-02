@@ -21,6 +21,15 @@ type MockGit struct {
 	// StatusOverride lets tests dictate what GetStatus returns. When
 	// nil, GetStatus returns a clean default.
 	StatusOverride *git.Status
+
+	// Repair-related call recorders + injectable errors.
+	WorktreeRepairCalls []string
+	WorktreeRepairErr   error
+	WorktreeListCalls   []string
+	WorktreeListOut     string
+	WorktreeListErr     error
+	WorktreeAddCalls    []string
+	WorktreeAddErr      error
 }
 
 // MockCommandRunner is a mock implementation of CommandRunner for testing
@@ -91,6 +100,33 @@ func (m *MockGit) WorktreeRemove(hopspacePath, path string, force bool) error {
 // WorktreePrune mocks pruning worktree information
 func (m *MockGit) WorktreePrune(hopspacePath string) error {
 	return nil
+}
+
+// WorktreeRepairCallCount counts WorktreeRepair invocations for tests.
+// WorktreeRepairErr lets tests inject a failure.
+// WorktreeListPorcelainOut lets tests dictate the porcelain output.
+// WorktreeListPorcelainErr lets tests inject a failure.
+// WorktreeAddCalls flattens [basePath, branch, path] for assertions.
+// WorktreeAddErr lets tests inject a failure.
+//
+// (Fields are added on the struct via the helpers below to avoid
+// breaking existing tests that construct MockGit by literal.)
+func (m *MockGit) WorktreeRepair(basePath string) error {
+	m.WorktreeRepairCalls = append(m.WorktreeRepairCalls, basePath)
+	return m.WorktreeRepairErr
+}
+
+func (m *MockGit) WorktreeListPorcelain(basePath string) (string, error) {
+	m.WorktreeListCalls = append(m.WorktreeListCalls, basePath)
+	if m.WorktreeListErr != nil {
+		return "", m.WorktreeListErr
+	}
+	return m.WorktreeListOut, nil
+}
+
+func (m *MockGit) WorktreeAdd(basePath, branch, path string) error {
+	m.WorktreeAddCalls = append(m.WorktreeAddCalls, basePath, branch, path)
+	return m.WorktreeAddErr
 }
 
 // RevParse mocks git rev-parse command
