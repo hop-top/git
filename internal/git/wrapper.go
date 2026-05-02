@@ -167,12 +167,17 @@ func (g *Git) CreateWorktree(hopspacePath, branch, path, base string, forceCreat
 		// Check if the branch already exists before using -b
 		_, branchExists := g.Runner.RunInDir(hopspacePath, "git", "rev-parse", "--verify", "refs/heads/"+branch)
 		if branchExists != nil {
-			// Branch doesn't exist, create it with -b
+			// Branch doesn't exist, create it with -b.
+			// --track is a boolean flag per git-worktree(1); the upstream
+			// comes from the positional <commit-ish>. When trackBranch is
+			// set, it IS the start-point and supersedes base. Appending
+			// both --track and a separate <commit-ish> yields "too many
+			// positionals" → exit 129.
 			args = []string{"worktree", "add", "-b", branch, path}
-			if trackBranch != "" {
+			switch {
+			case trackBranch != "":
 				args = append(args, "--track", trackBranch)
-			}
-			if base != "" {
+			case base != "":
 				args = append(args, base)
 			}
 			_, err = g.Runner.RunInDir(hopspacePath, "git", args...)

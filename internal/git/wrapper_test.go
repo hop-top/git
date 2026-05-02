@@ -172,8 +172,12 @@ func TestCreateWorktree_SetsUpstreamTracking(t *testing.T) {
 	err := g.CreateWorktree("/hub", "main", "/path/to/worktree", "HEAD", false, "origin/main")
 	assert.NoError(t, err)
 	assert.Equal(t, 3, runner.callCount, "Should call git three times")
-	// Verify the create command includes --track flag
-	assert.Contains(t, runner.lastCommand, "worktree add -b main /path/to/worktree --track origin/main HEAD")
+	// --track is a boolean flag in git-worktree(1); the upstream is the
+	// positional <commit-ish>. When trackBranch is set, it supersedes base
+	// and is the only positional. See wrapper.go CreateWorktree.
+	assert.Contains(t, runner.lastCommand, "worktree add -b main /path/to/worktree --track origin/main")
+	assert.NotContains(t, runner.lastCommand, "--track origin/main HEAD",
+		"must not append base after --track <upstream> — git rejects with exit 129")
 }
 
 // TestCreateWorktree_NoTrackingWhenEmpty tests that --track is omitted when trackBranch is empty
