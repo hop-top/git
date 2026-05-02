@@ -1,10 +1,25 @@
 # Configuration
 
-## Overview
+Git-hop separates three types of data across your system. Here's where they live and what you need to know.
 
-git-hop uses a layered configuration system that separates user preferences (configuration) from repository tracking (state). This follows the XDG Base Directory specification for portability and organization.
+## Quick Start
 
-## Directory Structure
+**TL;DR:** You only edit `global.json`. Everything else is managed automatically.
+
+```bash
+# View your settings
+git hop config
+
+# Change a setting
+git hop config port_base 20000
+
+# See where settings come from
+git hop config --verbose
+```
+
+---
+
+## Where Does git-hop Store Things?
 
 git-hop uses different directories for different types of data:
 
@@ -103,17 +118,31 @@ export GIT_HOP_LOG_LEVEL=debug
 git hop clone https://github.com/org/repo.git
 ```
 
-## Global Configuration
+## Customize Your Settings
 
-The global configuration file (`global.json`) stores user preferences that apply across all repositories.
+The global configuration file (`global.json`) stores your preferences. This is the ONLY file you'll typically edit.
 
-### Location
+**Location:**
+- Linux/Unix: `~/.config/git-hop/global.json`
+- macOS: `~/Library/Preferences/git-hop/global.json`
+- Custom: `$XDG_CONFIG_HOME/git-hop/global.json`
 
-- **Linux/Unix:** `~/.config/git-hop/global.json`
-- **macOS:** `~/Library/Preferences/git-hop/global.json`
-- **Custom:** `$XDG_CONFIG_HOME/git-hop/global.json`
+### Settings Reference
 
-### Schema
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `autoEnvStart` | boolean | `false` | Automatically start environment services when switching to a branch |
+| `showAllManagedRepos` | boolean | `false` | Show all managed repositories in list command |
+| `unusedThresholdDays` | number | `30` | Days before a worktree is considered unused |
+| `bareRepo` | boolean | `true` | Use bare repository structure for new clones |
+| `enforceCleanForConversion` | boolean | `true` | Require clean working directory for repo conversion |
+| `conventionWarning` | boolean | `true` | Warn when worktree doesn't follow naming conventions |
+| `gitDomain` | string | `"github.com"` | Default Git hosting domain |
+| `worktreeLocation` | string | `"hops"` | Directory name for worktrees |
+
+### Full Configuration Schema
+
+For reference, here's the complete JSON structure:
 
 ```json
 {
@@ -150,19 +179,6 @@ The global configuration file (`global.json`) stores user preferences that apply
   }
 }
 ```
-
-### Default Settings
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `autoEnvStart` | boolean | `false` | Automatically start environment services when switching to a branch |
-| `showAllManagedRepos` | boolean | `false` | Show all managed repositories in list command |
-| `unusedThresholdDays` | number | `30` | Days before a worktree is considered unused |
-| `bareRepo` | boolean | `true` | Use bare repository structure for new clones |
-| `enforceCleanForConversion` | boolean | `true` | Require clean working directory for repo conversion |
-| `conventionWarning` | boolean | `true` | Warn when worktree doesn't follow naming conventions |
-| `gitDomain` | string | `"github.com"` | Default Git hosting domain |
-| `worktreeLocation` | string | `"hops"` | Directory name for worktrees |
 
 ### Package Managers
 
@@ -206,7 +222,9 @@ Control repository conversion behavior:
 
 ## Hopspace Configuration
 
-Each repository has its own configuration stored in the hopspace directory.
+**This file is managed automatically by git-hop. Do not edit it manually.**
+
+Each repository has its own hopspace configuration that tracks branches and metadata. You won't need to touch this; git-hop maintains it.
 
 ### Location
 
@@ -306,7 +324,9 @@ Example: `~/projects/myrepo/hop.json`
 
 ## State Tracking
 
-The state file tracks all repositories and their locations across the system.
+**This file is managed automatically by git-hop. Do not edit it manually.**
+
+The state file tracks all repositories and their locations across your system so git-hop can find them quickly.
 
 ### Location
 
@@ -359,8 +379,6 @@ The state file enables:
 - Tracking of repository locations across the system
 - Detection of orphaned worktrees and hubs
 - Multi-hub support for the same repository
-
-**Note:** This file is managed automatically by git-hop. Manual editing is not recommended.
 
 ## Dependency Registry
 
@@ -436,21 +454,28 @@ Port and volume configurations are stored per repository for deterministic alloc
 }
 ```
 
-## Configuration Hierarchy
+## Override Settings for Specific Situations
 
-When git-hop needs a setting, it searches in this order (first found wins):
+Settings follow a hierarchy — git-hop uses the first one it finds:
 
-1. Environment variables
-2. Hub-level config (`<hub>/hop.json`)
-3. Hopspace-level config (`$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`)
-4. Global config (`$XDG_CONFIG_HOME/git-hop/global.json`)
-5. Built-in defaults
+1. **Environment variables** — for one command
+2. **Hub config** (`<hub>/hop.json`) — for one workspace
+3. **Hopspace config** (`$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`) — for one repository
+4. **Global config** (`~/.config/git-hop/global.json`) — for all repositories
+5. **Built-in defaults** — fallback
 
-This allows you to:
-- Set global defaults for all repositories
-- Override for specific repositories (hopspace)
-- Override for specific hubs (workspace-specific)
-- Override for individual commands (environment variables)
+**Example:** Change port base for one repo only (don't affect others):
+
+```bash
+# Edit ~/.local/share/git-hop/github.com/org/repo/hop.json
+# Add this to the JSON: "portBase": 20000
+```
+
+**Example:** Use environment variable for a single command:
+
+```bash
+GIT_HOP_PORT_BASE=20000 git hop add feature-x
+```
 
 ## Best Practices
 

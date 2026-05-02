@@ -9,11 +9,7 @@
 > force-pushed and rewritten** multiple times. Do not fork, clone, or
 > depend on this repo in any capacity until we tag a stable release.
 
-A Git subcommand that wraps `git worktree` with deterministic, isolated, and reproducible multi-branch development environments.
-
-## Overview
-
-git-hop eliminates the friction of managing multiple Git worktrees by automatically organizing worktrees, allocating resources (ports, volumes, networks), and providing lifecycle management for Docker environments. Work on multiple branches in parallel without port conflicts, manual configuration, or lost context.
+Work on multiple branches in parallel without manual port setup, directory management, or lost context. Each branch gets its own isolated environment with deterministic ports and volumes.
 
 **Perfect for:**
 - Multi-branch development workflows
@@ -26,15 +22,6 @@ git-hop eliminates the friction of managing multiple Git worktrees by automatica
 - Production deployment management
 - Multi-tenant setups
 - Monorepo optimization (see Git's native monorepo support)
-
-## Features
-
-- 🚀 **Automatic Navigation** - Optional shell integration for seamless worktree switching
-- 🔗 **Smart Symlinks** - `current` symlink always points to your last worktree
-- 🐳 **Docker Integration** - Isolated environments with deterministic port allocation
-- 📦 **Dependency Management** - Automatic npm/yarn/pnpm installation per worktree
-- 🔄 **State Tracking** - Track all worktrees across your system
-- 🛠️ **Zero Config** - Sensible defaults, works out of the box
 
 ## Quick Start
 
@@ -80,6 +67,12 @@ Then create a worktree for a feature branch:
 ```bash
 git hop add feature-x
 cd feature-x
+```
+
+**Verify:** Confirm setup succeeded:
+```bash
+git hop list  # See all worktrees
+pwd           # Should show .../feature-x
 ```
 
 **Optional:** Install shell integration for automatic directory switching:
@@ -144,114 +137,6 @@ git hop env start    # Start Docker services for current worktree
 git hop env stop     # Stop Docker services
 ```
 
-### Global Flags
-
-Available on all commands:
-
-```bash
---config <path>           # Path to config file
---json                    # Output in JSON format
---porcelain               # Machine-readable output
---quiet, -q               # Suppress output
---verbose, -v             # Verbose output
---force                   # Bypass safety checks
---dry-run                 # Preview changes without applying
---global, -g              # Use global hopspace instead of local
---git-domain <domain>     # Git domain for shorthand notation (default: github.com)
---help, -h                # Show command help
---version                 # Show version information
-```
-
-## Architecture
-
-### Hubs
-
-A **hub** is a directory that serves as your local working context. It contains:
-- A `hop.json` configuration file tracking all worktrees
-- A `.git` reference to the bare repository
-- Direct access to worktrees via paths stored in config
-
-```
-my-repo/                    # Hub directory (local context)
-  .git                      # Bare repository reference
-  hop.json                  # Hub configuration (tracks worktree paths)
-```
-
-The hub's `hop.json` maintains references to all worktrees with their full paths, allowing you to quickly switch between branches without manual path management.
-
-### Hopspaces
-
-A **hopspace** is the canonical storage location for all worktrees of a repository. Located at:
-
-```
-$GIT_HOP_DATA_HOME/<domain>/<org>/<repo>/
-  hop.json                  # Hopspace configuration
-  ports.json                # Port allocations
-  volumes.json              # Volume allocations
-  feature-x/                # Actual worktree directory
-  feature-y/
-  ...
-```
-
-All worktrees for a repository reference the same hopspace, ensuring consistency.
-
-### Deterministic Resource Allocation
-
-Ports, volumes, and networks are derived from stable hashing:
-
-- **Same branch = same ports** across worktrees (reproducible)
-- **Different branches = different ports** (no conflicts)
-- **Predictable allocation** (no manual configuration)
-
-Example: branch `feature-x` always gets ports 11500-11505 if not already assigned.
-
-## Configuration
-
-Configuration follows a hierarchy (higher priority overrides lower):
-
-1. Environment variables
-2. Command-line flags
-3. `$XDG_CONFIG_HOME/git-hop/config.json` (global)
-4. Hub-level `hop.json`
-5. Hopspace-level `hop.json`
-
-### Configuration File
-
-Create `$XDG_CONFIG_HOME/git-hop/config.json`:
-
-```json
-{
-  "auto_env_start": "detect",
-  "port_base": 10000,
-  "port_limit": 5000,
-  "defaults": {
-    "worktree_location": "hops"
-  }
-}
-```
-
-Configuration options:
-
-- `auto_env_start` - Auto-start Docker services (`true`, `false`, or `"detect"` to start only if services exist)
-- `port_base` - Starting port for allocation (default: 10000)
-- `port_limit` - Maximum ports available (default: 5000)
-- `defaults.worktree_location` - Directory for storing worktrees (default: `hops`)
-
-### Environment Variables
-
-```bash
-GIT_HOP_DATA_HOME      # Hopspace storage location (OS-specific default)
-GIT_HOP_CONFIG_HOME    # Config directory (default: $XDG_CONFIG_HOME/git-hop)
-GIT_HOP_CACHE_DIR      # Cache directory (default: $XDG_CACHE_HOME/git-hop)
-GIT_HOP_LOG_LEVEL      # Log level: debug, info, warn, error (default: info)
-```
-
-### Data Directory Defaults
-
-- **Linux/Unix**: `~/.local/share/git-hop`
-- **macOS**: `~/Library/Application Support/git-hop`
-- **Windows**: `%LOCALAPPDATA%\git-hop`
-
 ## Common Workflows
 
 ### Add a New Feature Branch
@@ -262,6 +147,12 @@ git hop add feature-new-ui
 
 # Hop to the new worktree
 cd feature-new-ui
+```
+
+**Verify:** Confirm the worktree was created:
+```bash
+git hop list  # See feature-new-ui in the list
+pwd           # Should show .../feature-new-ui
 ```
 
 ### Switch Between Branches
@@ -276,6 +167,11 @@ cd ../feature-existing
 # Or use your shell navigation (e.g., cd /path/to/hop/feature-existing)
 ```
 
+**Verify:** Confirm you're in the right worktree:
+```bash
+git branch  # Should show the feature branch checked out
+```
+
 ### Start/Stop Services
 
 ```bash
@@ -284,8 +180,16 @@ git hop env start
 
 # Stop services
 git hop env stop
+```
 
-# Auto-start on worktree creation
+**Verify:** Check service status:
+```bash
+git hop status  # Shows running services
+docker ps       # Verify containers are running
+```
+
+To auto-start services on worktree creation:
+```bash
 git hop config auto_env_start detect
 ```
 
@@ -319,6 +223,24 @@ git hop prune
 # Check and fix issues
 git hop doctor --fix
 ```
+
+## Configuration
+
+For detailed configuration, see [Configuration Guide](docs/configuration.md).
+
+Quick setup:
+
+```bash
+git hop config --help          # View all settings
+git hop config port_base 20000  # Change port base
+```
+
+Configuration hierarchy (first found wins):
+1. Environment variables
+2. Hub-level `hop.json`
+3. Hopspace-level `hop.json`
+4. Global `~/.config/git-hop/config.json`
+5. Built-in defaults
 
 ## Troubleshooting
 
@@ -405,7 +327,60 @@ Place hooks in `$GIT_HOP_CONFIG_HOME/hooks/` or hopspace-specific directories to
 
 See [Hooks System](docs/hooks.md) for detailed examples.
 
-## Output Formats
+## Advanced: How It Works
+
+### How git-hop Organizes Your Work
+
+Git-hop keeps your branches isolated across two layers:
+
+**Hub** — the directory where you run `git hop` commands. Usually `~/my-repo/`. Tells git-hop which branches exist locally. Contains `hop.json` and a `.git` reference.
+
+**Hopspace** — centralized storage for all branches of a repository, shared by all hubs. Located at `$GIT_HOP_DATA_HOME/<org>/<repo>/`. Contains actual worktree directories, port allocations, and volume mappings.
+
+Why two? Hubs are your local workspace; hopspace is shared storage. This lets you have multiple hubs (checkouts) of the same repository, all using the same branches without duplication.
+
+### Hubs
+
+A **hub** is a directory that serves as your local working context. It contains:
+- A `hop.json` configuration file tracking all worktrees
+- A `.git` reference to the bare repository
+- Direct access to worktrees via paths stored in config
+
+```
+my-repo/                    # Hub directory (local context)
+  .git                      # Bare repository reference
+  hop.json                  # Hub configuration (tracks worktree paths)
+```
+
+The hub's `hop.json` maintains references to all worktrees with their full paths, allowing you to quickly switch between branches without manual path management.
+
+### Hopspaces
+
+A **hopspace** is the canonical storage location for all worktrees of a repository. Located at:
+
+```
+$GIT_HOP_DATA_HOME/<domain>/<org>/<repo>/
+  hop.json                  # Hopspace configuration
+  ports.json                # Port allocations
+  volumes.json              # Volume allocations
+  feature-x/                # Actual worktree directory
+  feature-y/
+  ...
+```
+
+All worktrees for a repository reference the same hopspace, ensuring consistency.
+
+### Deterministic Resource Allocation
+
+Ports, volumes, and networks are derived from stable hashing:
+
+- **Same branch = same ports** across worktrees (reproducible)
+- **Different branches = different ports** (no conflicts)
+- **Predictable allocation** (no manual configuration)
+
+Example: branch `feature-x` always gets ports 11500-11505 if not already assigned.
+
+### Output Formats
 
 Control output with flags:
 
@@ -423,9 +398,9 @@ git hop list --porcelain
 git hop status --quiet
 ```
 
-## Configuration Examples
+### Configuration Examples
 
-### Multi-Repository Setup
+#### Multi-Repository Setup
 
 Manage multiple repositories with different configurations:
 
@@ -444,7 +419,7 @@ git hop config port_base 20000
 
 Each repository has its own hopspace with independent resource allocation.
 
-### Docker with Custom Services
+#### Docker with Custom Services
 
 Repositories with docker-compose.yml automatically detect and allocate resources:
 
