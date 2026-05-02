@@ -1,0 +1,78 @@
+package hop
+
+// ActionKind enumerates the corrective actions the repair planner can emit.
+// Each kind has a corresponding applier function in repair_apply.go.
+type ActionKind int
+
+const (
+	// ActionNoOp marks a worktree that is already healthy. Skipped during apply.
+	ActionNoOp ActionKind = iota
+	// ActionRewriteGitdir corrects a stale .git/worktrees/<name>/gitdir pointer
+	// (typically after a worktree directory was moved on disk).
+	ActionRewriteGitdir
+	// ActionRegisterWithGit re-adds a worktree to git's registry when the
+	// directory exists on disk and in hop.json but is missing from
+	// `git worktree list --porcelain`.
+	ActionRegisterWithGit
+	// ActionUnregisterFromGit prunes git's registry of an entry whose
+	// worktree directory has been deleted.
+	ActionUnregisterFromGit
+	// ActionUpdateHopJSON realigns hop.json with on-disk + git-registry reality
+	// (e.g. branch entry's path is wrong).
+	ActionUpdateHopJSON
+)
+
+// String returns the porcelain action token (kebab-case) for stable output.
+func (k ActionKind) String() string {
+	switch k {
+	case ActionNoOp:
+		return "noop"
+	case ActionRewriteGitdir:
+		return "rewrite-gitdir"
+	case ActionRegisterWithGit:
+		return "register"
+	case ActionUnregisterFromGit:
+		return "unregister"
+	case ActionUpdateHopJSON:
+		return "update-hopjson"
+	default:
+		return "unknown"
+	}
+}
+
+// Action is one corrective step the planner emits.
+// OldValue/NewValue carry kind-specific context (e.g. for RewriteGitdir
+// they hold the stale and correct gitdir paths). Reason is a short
+// human-readable classification surfaced in plan tables.
+type Action struct {
+	Kind         ActionKind
+	WorktreePath string
+	OldValue     string
+	NewValue     string
+	Reason       string
+}
+
+// Plan is the full set of actions required to bring a hub's worktrees back
+// to a consistent state. Actions are applied in slice order.
+//
+// Warnings record advisory issues that don't translate to actions (e.g.
+// dirty worktrees the operator must resolve before running without
+// --force-dirty, or ambiguous classifications the planner could not
+// resolve unilaterally).
+type Plan struct {
+	HubPath  string
+	Actions  []Action
+	Warnings []string
+}
+
+// HasMutations returns true when the plan contains at least one Action
+// other than NoOp. Used by the command to short-circuit dry-run output
+// when there's nothing to do.
+func (p *Plan) HasMutations() bool {
+	for _, a := range p.Actions {
+		if a.Kind != ActionNoOp {
+			return true
+		}
+	}
+	return false
+}
