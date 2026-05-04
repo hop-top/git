@@ -173,6 +173,20 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 		return fmt.Errorf("failed to create bare repository: %w", err)
 	}
 
+	// `git clone --bare` strips the standard fetch refspec, so
+	// `refs/remotes/origin/*` is never populated and downstream calls like
+	// setUpstreamTracking fail (T-0215). Restore the refspec and re-fetch
+	// so origin/<defaultBranch> exists locally. Real GitHub URLs sometimes
+	// configure this implicitly; local file paths (and some hosts) do not,
+	// so do it unconditionally.
+	if _, err := g.Run("git", "-C", projectRoot, "config",
+		"remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"); err != nil {
+		return fmt.Errorf("failed to set origin fetch refspec: %w", err)
+	}
+	if _, err := g.Run("git", "-C", projectRoot, "fetch", "origin"); err != nil {
+		return fmt.Errorf("failed to fetch origin: %w", err)
+	}
+
 	// Create hops directory
 	hopsDir := filepath.Join(projectRoot, "hops")
 	if err := fs.MkdirAll(hopsDir, 0755); err != nil {
@@ -198,34 +212,19 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 	return nil
 }
 
+// cloneRegularRepo previously attempted a non-bare clone at <projectRoot>
+// plus a worktree at hops/<defaultBranch>. That layout is incoherent —
+// the root and the worktree both claimed <defaultBranch>, and the root's
+// index disagreed with the on-disk hopspace shape (T-0213, T-0214).
+//
+// The hopspace contract (per design and the original CLAUDE.md note on
+// "Bare Worktree Repos") is unconditional: <projectRoot> is a bare repo
+// and source code lives only in hops/<defaultBranch>/. The
+// Defaults.BareRepo flag is therefore effectively a no-op now; kept for
+// backwards compatibility of any persisted config but does not change
+// the hopspace shape. T-0215.
 func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
-	fmt.Println("Creating regular repository with worktrees...")
-
-	if err := g.Clone(uri, projectRoot, defaultBranch); err != nil {
-		return fmt.Errorf("failed to clone repository: %w", err)
-	}
-
-	// Create hops directory
-	hopsDir := filepath.Join(projectRoot, "hops")
-	if err := fs.MkdirAll(hopsDir, 0755); err != nil {
-		return fmt.Errorf("failed to create hops directory: %w", err)
-	}
-
-	// Create main worktree under hops/
-	mainPath := filepath.Join(hopsDir, defaultBranch)
-	if err := g.CreateWorktree(projectRoot, defaultBranch, mainPath, defaultBranch, false, "origin/"+defaultBranch); err != nil {
-		return fmt.Errorf("failed to create main worktree: %w", err)
-	}
-
-	if err := setUpstreamTracking(g, mainPath, defaultBranch); err != nil {
-		return fmt.Errorf("failed to set upstream tracking: %w", err)
-	}
-
-	if err := ensureWorktreeHooksDir(fs, mainPath); err != nil {
-		return fmt.Errorf("failed to seed hooks directory: %w", err)
-	}
-
-	return nil
+	return cloneBareRepo(fs, g, uri, projectRoot, defaultBranch)
 }
 
 // setUpstreamTracking sets the upstream tracking branch so first push

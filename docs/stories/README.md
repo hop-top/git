@@ -20,6 +20,7 @@ Branch Type Detection System implementation stories.
 | [012](012-init-auto-hooks-idempotent.md) | Init Auto-Installs Hooks and Is Idempotent | Completed | High |
 | [013](013-init-flags-no-hooks-enable-chdir.md) | Init --no-hooks and --enable-chdir Flags | Completed | High |
 | [014](014-admin-flag-hidden-commands.md) | Hidden Admin Commands via --admin Flag | Completed | Medium |
+| [015](015-hopspace-shape-contract.md) | Hopspace Shape Contract | Completed | High |
 
 ## Summary
 
