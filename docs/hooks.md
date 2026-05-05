@@ -21,9 +21,9 @@ git-hop includes a flexible hooks system that allows you to run custom scripts a
 
 When git-hop looks for a hook to execute, it searches in this order (first found wins):
 
-1. **Repo-level override** - `.git-hop/hooks/<hook-name>` in the worktree
-2. **Hopspace-level hook** - `$XDG_DATA_HOME/git-hop/<org>/<repo>/hooks/<hook-name>`
-3. **Global hook** - `$XDG_CONFIG_HOME/git-hop/hooks/<hook-name>`
+1. **Repo-level override** — `.git-hop/hooks/<hook-name>` inside the worktree (the runner also walks parent directories so a hub-level `.git-hop/hooks/` is picked up)
+2. **Hopspace-level hook** — `$XDG_DATA_HOME/git-hop/<host>/<org>/<repo>/hooks/<hook-name>` (only matches when the repoID has 3 slash-separated parts; see [Repository identifier](#repository-identifier))
+3. **Global hook** — `$XDG_CONFIG_HOME/git-hop/hooks/<hook-name>`
 
 This allows you to:
 - Set global defaults for all repositories
@@ -32,15 +32,68 @@ This allows you to:
 
 ### Directory Locations by OS
 
-**Linux/Unix:**
-- Global: `~/.config/git-hop/hooks/`
-- Hopspace: `~/.local/share/git-hop/<org>/<repo>/hooks/`
-- Repo: `<worktree>/.git-hop/hooks/`
+git-hop resolves all paths through the XDG Base Directory specification. Linux and macOS share the same layout because the underlying `hop.top/kit/xdg` package follows XDG everywhere, including macOS — it does **not** use `~/Library/Preferences` or `~/Library/Application Support`.
 
-**macOS:**
-- Global: `~/Library/Preferences/git-hop/hooks/`
-- Hopspace: `~/Library/Application Support/git-hop/<org>/<repo>/hooks/`
-- Repo: `<worktree>/.git-hop/hooks/`
+**Linux and macOS:**
+
+| Level | Default path |
+|-------|--------------|
+| Global | `~/.config/git-hop/hooks/` |
+| Hopspace | `~/.local/share/git-hop/<host>/<org>/<repo>/hooks/` |
+| Repo | `<worktree>/.git-hop/hooks/` |
+
+Override with the standard XDG environment variables:
+
+- `XDG_CONFIG_HOME` — relocates the global hooks dir (e.g. `$XDG_CONFIG_HOME/git-hop/hooks/`)
+- `XDG_DATA_HOME` — relocates the hopspace base
+- `GIT_HOP_DATA_HOME` — git-hop-specific override that wins over `XDG_DATA_HOME` for hopspace lookup
+
+**Windows:**
+
+The XDG kit maps to platform-native locations under the hood (typically `%APPDATA%` for config and `%LOCALAPPDATA%` for data). For the canonical resolution see `internal/hop/paths.go`. The repo-level path (`<worktree>/.git-hop/hooks/`) is the same on every platform.
+
+### Repository identifier
+
+The hopspace-level lookup keys off a 3-part repository identifier of the shape `<host>/<org>/<repo>` — for example `github.com/acme/widgets`. The runner splits the ID on `/` and only resolves a hopspace hook when there are at least three parts. So a hook for `github.com/acme/widgets` is looked up at:
+
+```
+~/.local/share/git-hop/github.com/acme/widgets/hooks/<hook-name>
+```
+
+A 2-part identifier such as `acme/widgets` **silently skips the hopspace lookup** — `FindHookFile` falls through to the global hook with no warning. For that reason, callers inside git-hop (e.g. `cmd/add.go`) always construct the repoID as `github.com/<org>/<repo>` so the hopspace lookup actually fires. If you are creating hopspace hooks by hand, mirror that 3-part shape on disk.
+
+## Choosing a hook level
+
+The three levels look interchangeable in the priority list, but they answer different questions. Pick the level that matches who needs the hook and when it must fire.
+
+| Level | Storage | Versioned? | Best for |
+|-------|---------|------------|----------|
+| Repo | `<worktree>/.git-hop/hooks/` | Yes — committed in the repo | Team-shared hooks that travel with the codebase |
+| Hopspace | `~/.local/share/git-hop/<host>/<org>/<repo>/hooks/` | No — local to your machine | Per-repo hooks that must fire on every `git hop add`, including the very first worktree |
+| Global | `~/.config/git-hop/hooks/` | No — local to your machine | Defaults that apply to every repo on this machine unless overridden |
+
+### The `post-worktree-add` chicken-and-egg trap
+
+Repo-level hooks have a sharp edge for `post-worktree-add`. The hook file lives inside the worktree at `.git-hop/hooks/post-worktree-add`. When `git hop add` creates a fresh worktree from a branch that pre-dates the commit introducing the hook, that file is **not present** in the just-created worktree, so `FindHookFile` does not see it and the hook never fires. The first `git hop add` after introducing the hook silently skips it.
+
+The runner does walk parent directories from the worktree path looking for a `.git-hop/hooks/` dir, so a hub-level repo hook can paper over the gap if you maintain one. But the canonical fix is to put the hook somewhere that does not depend on the worktree's content existing first — i.e. at the hopspace level.
+
+### Recommendation
+
+For any hook that **must** fire on every `git hop add` — bootstrap scripts, dependency installers, env-file copiers — install it at the hopspace level. The hopspace path is resolved from the repoID before the worktree is created, so it works on the very first `add` and on every `add` thereafter, regardless of which branch you start from.
+
+For hooks that should travel with the repository so the whole team gets them, commit the canonical script at `<worktree>/.git-hop/hooks/<name>`. To get the best of both worlds, symlink the hopspace path to the committed file:
+
+```bash
+# One-time setup per machine, after cloning
+mkdir -p ~/.local/share/git-hop/github.com/acme/widgets/hooks
+ln -s "$(pwd)/.git-hop/hooks/post-worktree-add" \
+  ~/.local/share/git-hop/github.com/acme/widgets/hooks/post-worktree-add
+```
+
+That way the committed hook is the single source of truth, and the hopspace symlink covers the bootstrap-time chicken-and-egg gap as well as the case where a teammate runs `git hop add <existing-old-branch>`.
+
+> **Future work**: T-0217 will auto-mirror committed `.git-hop/hooks/` into the hopspace at clone/init time, removing the manual symlink step. Until that lands, the symlink pattern above is the recommended workaround.
 
 ## Creating Hooks
 
@@ -49,9 +102,8 @@ This allows you to:
 Global hooks apply to all repositories unless overridden:
 
 ```bash
-# Create hooks directory
-mkdir -p ~/.config/git-hop/hooks  # Linux
-mkdir -p ~/Library/Preferences/git-hop/hooks  # macOS
+# Create hooks directory (same path on Linux and macOS)
+mkdir -p ~/.config/git-hop/hooks
 
 # Create a hook
 cat > ~/.config/git-hop/hooks/post-env-start << 'EOF'
@@ -485,6 +537,11 @@ Global and hopspace hooks are stored locally and never committed to version cont
 - Safe to include sensitive operations (API keys, credentials)
 - Use environment variables for secrets, not hardcoded values
 - Consider using dedicated secret management tools
+
+## Known limitations
+
+- **`git hop add --dry-run` still creates the worktree.** The flag does not currently preview the operation — the worktree, port allocation, and any `post-worktree-add` hooks all run as if `--dry-run` were not passed. Treat the flag as a no-op for now. Tracked separately.
+- **Repo-level `post-worktree-add` does not fire on the bootstrap worktree** when the branch pre-dates the hook commit. See [Choosing a hook level](#choosing-a-hook-level) for the workaround and the planned fix in T-0217.
 
 ## Implementation Details
 
