@@ -95,6 +95,37 @@ git hop remove feature-x
 git hop prune
 ```
 
+### How do I clean up all merged branches?
+
+```bash
+# Interactive (prompts before each removal)
+git hop remove --merged
+
+# Scripted (no prompts)
+git hop remove --merged --no-prompt
+```
+
+`--merged` removes every worktree whose branch is merged into the
+hub's default branch. It skips the default branch itself and the
+worktree you're currently in. Each candidate still goes through the
+standard safety gate, so a dirty merged branch needs `--no-verify`
+just like a single-target remove would.
+
+### What's the difference between `prune`, `remove`, `env gc`, and `doctor`?
+
+They sound similar but solve different problems:
+
+- **`git hop prune`** — removes orphan **state entries** (worktrees
+  and hubs whose paths are gone) and repair backups older than
+  `hop.repair.backupRetention`. It does not touch existing worktrees.
+- **`git hop remove`** — removes a specific worktree (or all merged
+  ones with `--merged`). Touches the worktree on disk plus its state.
+- **`git hop env gc`** — reclaims orphaned dependency directories
+  (e.g. `node_modules` snapshots no longer used by any branch).
+- **`git hop doctor --fix`** — repairs inconsistent state: missing
+  hopspaces, broken symlinks, divergent registries. Auto-drops missing
+  worktree entries whose branch is merged into default.
+
 ## Troubleshooting
 
 ### git hop command not found

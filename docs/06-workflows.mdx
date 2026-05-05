@@ -200,15 +200,24 @@ du -sh ~/.local/share/git-hop/github.com/org/*
 ### Remove Old Branches
 
 ```bash
-# Remove merged branches
+# Remove a single branch
 git hop remove feature-x
 
-# Remove all but main
-cd ..
-for branch in $(ls | grep -v main); do
-  git hop remove "$branch"
-done
+# Remove every branch merged into default in one pass
+git hop remove --merged
+
+# Same, scripted — skips the post-gate confirmation
+git hop remove --merged --no-prompt
 ```
+
+`--merged` walks the hub, removes every worktree whose branch is
+merged into the default branch, and skips both the default branch and
+the worktree you're currently in. Each candidate still passes through
+the same safety gate as a single-target remove.
+
+If a worktree directory was already deleted by hand (so the entry is
+"missing on disk") and its branch is merged, the right tool is
+`git hop doctor --fix` — it will silently drop those entries.
 
 ### Prune Orphaned Resources
 

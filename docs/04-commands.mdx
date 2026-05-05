@@ -240,7 +240,9 @@ git hop env restart
 
 #### gc
 
-Garbage collect orphaned dependencies.
+Garbage collect orphaned dependencies. Aliased as `cleanup` and
+`clean`, so `git hop env gc`, `git hop env cleanup`, and
+`git hop env clean` are the same command.
 
 ```bash
 git hop env gc [flags]
@@ -255,6 +257,13 @@ git hop env gc [flags]
 - Shows dependency info including last used time and size
 - Prompts for confirmation before deletion (unless `--force`)
 - Reports total space reclaimed
+
+> **Note on `cleanup` / `clean`:** `git hop cleanup` (top-level)
+> resolves to [`git hop prune`](#git-hop-prune), while
+> `git hop env cleanup` (under `env`) resolves to `git hop env gc`.
+> They sit at different levels of the command tree and do different
+> things — prune cleans state entries and repair backups, env gc
+> reclaims unused dependency directories.
 
 **Output:**
 
@@ -353,9 +362,39 @@ prompt is the only confirmation).
 - Containers
 - Networks
 
+Repair backups (`.hop/backups/repair-*`) for the removed worktree are
+**not** auto-deleted. Run `git hop prune` to clean those up once the
+retention window has passed; see
+[`hop.repair.backupRetention`](./configuration.md#hoprepairbackupretention).
+
+### `--merged`
+
+Remove every worktree whose branch is merged into the hub's default
+branch in one pass. Useful after a sprint of squash-merged PRs.
+
+```bash
+git hop remove --merged
+```
+
+```bash tab="Non-interactive"
+git hop remove --merged --no-prompt
+```
+
+`--merged` skips the default branch itself and the worktree you are
+currently in. Each candidate still goes through the standard safety
+gate: a merged branch with a clean tree removes silently, a dirty one
+needs `--no-verify`, and so on. The persistent `--force` and
+per-removal `--no-verify` / `--no-prompt` apply uniformly to every
+candidate.
+
+`--merged` and a positional `<target>` are mutually exclusive — pass
+one or the other.
+
 ## git hop prune
 
-Remove orphaned or broken hopspaces.
+Remove orphan state entries and aged-out repair backups. Aliased as
+`cleanup` and `clean` — `git hop prune`, `git hop cleanup`, and
+`git hop clean` are the same command.
 
 ### Usage
 
@@ -373,12 +412,29 @@ git hop prune
 git hop prune --dry-run
 ```
 
+```bash tab="Aliases"
+git hop cleanup
+git hop clean
+```
+
 ### What It Does
 
-- Detects worktrees without corresponding Git refs
-- Identifies containers without hopspaces
-- Finds orphaned volumes
-- Cleans up broken symlinks
+`prune` cleans up three classes of stale data:
+
+- **Orphan worktrees** — state entries whose paths no longer exist on
+  disk. Common when a worktree dir was `rm -rf`'d manually.
+- **Orphan hubs** — hub entries whose directories are gone. Same idea
+  one tier up.
+- **Repair backups older than retention** — `.hop/backups/repair-*`
+  directories created by `git hop repair`, older than
+  `hop.repair.backupRetention` (default `720h` = 30 days). See
+  [git config Settings](./configuration.md#git-config-settings) for
+  how to tune retention.
+
+`prune` does **not** remove merged branches that still exist on disk —
+for that, use [`git hop remove --merged`](#git-hop-remove). It also
+does not touch containers, volumes, or symlinks; those go through
+[`git hop env gc`](#gc) and [`git hop doctor --fix`](#git-hop-doctor).
 
 ## git hop doctor
 
@@ -456,6 +512,22 @@ The `--fix` flag will:
 - Initialize missing hopspaces
 - Register branches from hub to hopspace
 - Sync hub-hopspace configurations
+
+#### Auto-cleanup of missing-on-disk merged branches
+
+When `--fix` finds a worktree entry whose path no longer exists on
+disk, it checks whether the branch is merged into the hub's default
+branch. If it is, doctor silently drops the entry — no prompt, no
+warning. The reasoning: the worktree was already gone, the branch is
+already on default, so there's nothing left to lose.
+
+This applies **only** to worktrees that are missing on disk. Doctor
+does not bulk-remove existing-but-merged worktrees — for that, use
+[`git hop remove --merged`](#--merged).
+
+If the missing entry's branch is not merged (or the merge check
+fails), doctor prompts for one of: provide a new path, delete the
+entry, or skip.
 
 ### Flags
 
@@ -575,6 +647,7 @@ Many commands have shorter aliases for convenience:
 | `init` | `setup`, `install` | Initialize git-hop repository structure |
 | `env start` | `env up` | Start environment services |
 | `env stop` | `env down` | Stop environment services |
+| `env gc` | `env cleanup`, `env clean` | Garbage collect orphaned dependencies |
 
 ### Examples
 

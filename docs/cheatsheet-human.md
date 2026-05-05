@@ -34,6 +34,8 @@ git hop remove <branch>               # delete worktree + env (aliases: rm, dele
 git hop remove <branch> --no-prompt   # skip confirmation prompt only — does NOT bypass safety gate
 git hop remove <branch> --force       # allow unmerged branch removal (real guardrail bypass)
 git hop remove <branch> --no-verify   # allow dirty worktree / unpushed commits (real guardrail bypass)
+git hop remove --merged               # remove every branch merged into default (skips default + current)
+git hop remove --merged --no-prompt   # same, scripted
 git hop list                          # show all worktrees (aliases: ls, all)
 git hop list --json                   # machine-readable
 git hop status                        # current worktree info (aliases: st, info)

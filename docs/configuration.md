@@ -220,6 +220,41 @@ Control repository conversion behavior:
 | `allowDirtyForce` | boolean | `false` | Allow `--force` to bypass clean check |
 | `autoRollback` | boolean | `true` | Automatically rollback on conversion failure |
 
+## git config Settings
+
+A few tunables live in `git config` rather than `global.json` so they
+follow git's own conventions. Set them with `git config --global
+<key> <value>`, or per-repo with `git config <key> <value>` inside any
+hub for that repository.
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of `.hop/backups/repair-*` directories before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
+
+### `hop.repair.backupRetention`
+
+`git hop repair` snapshots state into `.hop/backups/repair-<UTC-timestamp>/`
+before mutating, so `git hop repair --undo` can restore it. Those
+backups accumulate. `git hop prune` cleans up any backup directory
+older than `hop.repair.backupRetention`.
+
+```bash
+# Keep repair backups for 7 days instead of 30
+git config --global hop.repair.backupRetention 168h
+
+# Keep them for an hour (CI/scratch repos)
+git config --global hop.repair.backupRetention 1h
+
+# Disable auto-pruning of repair backups
+git config --global hop.repair.backupRetention 0
+```
+
+The setting is read at prune time. `git hop prune` walks every hub
+recorded in state and reads `hop.repair.backupRetention` from the
+first hub that has it set, falling back to the 720h default if none
+do. There is no separate per-repo override mechanism beyond setting
+the value inside that repo's hub.
+
 ## Hopspace Configuration
 
 **This file is managed automatically by git-hop. Do not edit it manually.**

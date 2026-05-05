@@ -62,6 +62,10 @@ Global hopspace: `$GIT_HOP_DATA_HOME`
 /usr/bin/git hop remove <branch> --no-verify              # merged but dirty / unpushed
 /usr/bin/git hop remove <branch> --force --no-verify      # unmerged AND unpushed
 /usr/bin/git hop remove <branch> --force --no-verify --no-prompt  # full automation, all flags
+
+# Bulk removal of merged branches (skips default + current)
+/usr/bin/git hop remove --merged                                  # interactive
+/usr/bin/git hop remove --merged --no-prompt                      # non-interactive
 ```
 
 ---
