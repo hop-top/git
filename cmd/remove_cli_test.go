@@ -56,19 +56,23 @@ func TestRemoveCommand_Structure(t *testing.T) {
 			},
 		},
 		{
-			name: "requires exactly 1 arg",
+			name: "accepts at most 1 arg",
 			check: func(t *testing.T) {
 				if removeCmd.Args == nil {
 					t.Error("Remove should have Args validator")
 					return
 				}
-				// Test with no args - should error
-				if err := removeCmd.Args(removeCmd, []string{}); err == nil {
-					t.Error("Remove should require exactly 1 arg, accepted 0")
+				// Test with 0 args - should succeed (--merged makes target optional)
+				if err := removeCmd.Args(removeCmd, []string{}); err != nil {
+					t.Errorf("Remove should accept 0 args (paired with --merged), got error: %v", err)
 				}
 				// Test with 1 arg - should succeed
 				if err := removeCmd.Args(removeCmd, []string{"test"}); err != nil {
 					t.Errorf("Remove should accept 1 arg, got error: %v", err)
+				}
+				// Test with 2 args - should error
+				if err := removeCmd.Args(removeCmd, []string{"a", "b"}); err == nil {
+					t.Error("Remove should reject more than 1 arg")
 				}
 			},
 		},
