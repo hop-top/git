@@ -27,6 +27,9 @@ import (
 	"hop.top/kit/xdg"
 )
 
+// addFromFlag holds the --from CLI flag value.
+var addFromFlag string
+
 var addCmd = &cobra.Command{
 	Use:     "add [branch]",
 	Aliases: []string{"create", "new"},
@@ -116,9 +119,13 @@ var addCmd = &cobra.Command{
 			output.Fatal("Hook pre-worktree-add failed: %v", err)
 		}
 
+		// Resolve the branch start-point per precedence:
+		// --from (CLI) > GIT_HOP_ADD_FROM env > hop.add.defaultStartPoint > built-in default ("default-branch").
+		startPoint := resolveAddStartPoint(addFromFlag, os.Getenv("GIT_HOP_ADD_FROM"), globalConfig.Defaults.DefaultStartPoint)
+
 		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
-		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, hub.Config.Repo.DefaultBranch)
+		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, hub.Config.Repo.DefaultBranch, startPoint)
 		if err != nil {
 			// Check if it's a state error
 			if stateErr, ok := err.(*hop.StateError); ok {
@@ -359,7 +366,28 @@ func opencodeAgentHint(path string, in *os.File) {
 	fmt.Fprintf(os.Stderr, "\nAdd to %s:\n\n  \"external_directories\": [\"%s\"]\n\n", cfgPath, path)
 }
 
+// resolveAddStartPoint applies the configured precedence to pick the
+// start-point string passed to WorktreeManager. Empty inputs are skipped.
+// The returned value is fed verbatim into WorktreeManager, which decides
+// the final ref/SHA based on its own resolution rules (see
+// worktree.go:resolveStartPoint). An empty return is interpreted by the
+// manager as the built-in default ("default-branch").
+func resolveAddStartPoint(flagVal, envVal, configVal string) string {
+	if flagVal != "" {
+		return flagVal
+	}
+	if envVal != "" {
+		return envVal
+	}
+	if configVal != "" {
+		return configVal
+	}
+	return ""
+}
+
 func init() {
 	cli.RootCmd.AddCommand(addCmd)
+	addCmd.Flags().StringVar(&addFromFlag, "from", "",
+		"start-point for the new branch (branch name, ref, SHA, or 'initial' for the root commit)")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames
 }

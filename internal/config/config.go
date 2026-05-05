@@ -171,6 +171,15 @@ type DefaultSettings struct {
 	ConventionWarning         bool `json:"conventionWarning"`
 	GitDomain                 string `json:"gitDomain"`
 	WorktreeLocation          string `json:"worktreeLocation,omitempty"`
+	// DefaultStartPoint controls the start-point used by `git hop add` when
+	// creating a new branch. Allowed values: "default-branch" (default — tip
+	// of repo.defaultBranch), "initial" (root commit, legacy behavior), or
+	// any explicit refspec (branch name, "origin/<name>", tag, SHA).
+	DefaultStartPoint string `json:"defaultStartPoint,omitempty"`
+	// HooksInstallMode controls how committed .git-hop/hooks/ scripts are
+	// mirrored into the user's hopspace on clone/init. Allowed values:
+	// "prompt" (default in interactive TTY), "symlink", "copy", "none".
+	HooksInstallMode string `json:"hooksInstallMode,omitempty"`
 }
 
 // ShellIntegrationSettings tracks shell wrapper installation status

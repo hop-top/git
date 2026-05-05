@@ -93,6 +93,8 @@ func TestAddCommand_RecoveryFromOrphanedDirectory(t *testing.T) {
 		"{branch}", // Will expand to tempDir/feature-branch (relative to hubPath)
 		"testorg",
 		"testrepo",
+		"",
+		"",
 	)
 
 	// Assert: Should succeed and return the expected path

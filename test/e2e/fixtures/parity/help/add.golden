@@ -7,7 +7,8 @@ Aliases:
   add, create, new
 
 Flags:
-  -h, --help   help for add
+      --from string   start-point for the new branch (branch name, ref, SHA, or 'initial' for the root commit)
+  -h, --help          help for add
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)

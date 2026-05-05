@@ -23,10 +23,12 @@ const (
 	KeyAutoEnvStart              = "hop.autoEnvStart"
 	KeyConventionWarning         = "hop.conventionWarning"
 	KeyWorktreeLocation          = "hop.worktreeLocation"
+	KeyAddDefaultStartPoint      = "hop.add.defaultStartPoint"
 	KeyShellIntegrationStatus    = "hop.shellIntegration.status"
 	KeyShellIntegrationShell     = "hop.shellIntegration.shell"
 	KeyBackupEnabled             = "hop.backup.enabled"
 	KeyBackupMaxBackups          = "hop.backup.maxBackups"
+	KeyHooksInstallMode          = "hop.hooks.installMode"
 )
 
 // Defaults for keys that have them.
@@ -36,9 +38,11 @@ var defaults = map[string]string{
 	KeyAutoEnvStart:           "true",
 	KeyConventionWarning:      "true",
 	KeyWorktreeLocation:       "{hubPath}/hops/{branch}",
+	KeyAddDefaultStartPoint:   "default-branch",
 	KeyShellIntegrationStatus: "unknown",
 	KeyBackupEnabled:          "true",
 	KeyBackupMaxBackups:       "3",
+	KeyHooksInstallMode:       "prompt",
 }
 
 // NewGitConfig returns a GitConfig that shells out to git.

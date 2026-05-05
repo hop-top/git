@@ -101,6 +101,8 @@ func (l *GlobalLoader) GetDefaults() *GlobalConfig {
 			EnforceCleanForConversion: true,
 			ConventionWarning:         true,
 			WorktreeLocation:          "{hubPath}/hops/{branch}",
+			DefaultStartPoint:         "default-branch",
+			HooksInstallMode:          "prompt",
 		},
 		ShellIntegration: ShellIntegrationSettings{
 			Status: "unknown",
@@ -140,6 +142,8 @@ func (l *GlobalLoader) readFromGitConfig() *GlobalConfig {
 			ConventionWarning:         gc.GetBoolOrDefault(KeyConventionWarning),
 			GitDomain:                 gc.GetStringOrDefault(KeyGitDomain),
 			WorktreeLocation:          gc.GetStringOrDefault(KeyWorktreeLocation),
+			DefaultStartPoint:         gc.GetStringOrDefault(KeyAddDefaultStartPoint),
+			HooksInstallMode:          gc.GetStringOrDefault(KeyHooksInstallMode),
 		},
 		ShellIntegration: ShellIntegrationSettings{
 			Status:         gc.GetStringOrDefault(KeyShellIntegrationStatus),
@@ -177,6 +181,8 @@ func (l *GlobalLoader) writeToGitConfig(cfg *GlobalConfig) error {
 		{KeyConventionWarning, strconv.FormatBool(cfg.Defaults.ConventionWarning)},
 		{KeyGitDomain, cfg.Defaults.GitDomain},
 		{KeyWorktreeLocation, cfg.Defaults.WorktreeLocation},
+		{KeyAddDefaultStartPoint, cfg.Defaults.DefaultStartPoint},
+		{KeyHooksInstallMode, cfg.Defaults.HooksInstallMode},
 
 		{KeyShellIntegrationStatus, cfg.ShellIntegration.Status},
 		{KeyShellIntegrationShell, cfg.ShellIntegration.InstalledShell},

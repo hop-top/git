@@ -57,6 +57,7 @@ func TestCreateWorktreeTransactional_Clean(t *testing.T) {
 		org,
 		repo,
 		"",
+		"",
 	)
 
 	// Assert - expect git error but path should be computed correctly
@@ -121,6 +122,7 @@ func TestCreateWorktreeTransactional_CleansUpOrphanedDirectory(t *testing.T) {
 		locationPattern,
 		org,
 		repo,
+		"",
 		"",
 	)
 
@@ -190,6 +192,7 @@ func TestCreateWorktreeTransactional_AlreadyExists(t *testing.T) {
 		org,
 		repo,
 		"",
+		"",
 	)
 
 	// Assert - should return error from CreateWorktree about already existing
@@ -221,6 +224,7 @@ func TestCreateWorktreeTransactional_EmptyHubPath(t *testing.T) {
 		"{hubPath}/../hops/{branch}",
 		"test-org",
 		"test-repo",
+		"",
 		"",
 	)
 
@@ -256,6 +260,7 @@ func TestCreateWorktreeTransactional_EmptyBranch(t *testing.T) {
 		"{hubPath}/../hops/{branch}",
 		"test-org",
 		"test-repo",
+		"",
 		"",
 	)
 

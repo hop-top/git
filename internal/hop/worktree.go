@@ -2,6 +2,7 @@ package hop
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -9,6 +10,14 @@ import (
 	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
 )
+
+// StartPointInitial is the sentinel string that requests the legacy
+// behavior of branching new worktrees from the repository's root commit.
+const StartPointInitial = "initial"
+
+// StartPointDefaultBranch is the sentinel string that requests branching
+// new worktrees from the tip of repo.defaultBranch (the new default).
+const StartPointDefaultBranch = "default-branch"
 
 // WorktreeManager handles worktree operations
 type WorktreeManager struct {
@@ -24,8 +33,9 @@ func NewWorktreeManager(fs afero.Fs, g git.GitInterface) *WorktreeManager {
 	}
 }
 
-// CreateWorktreeTransactional creates a git worktree with validation and auto-cleanup
-func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string) (string, error) {
+// CreateWorktreeTransactional creates a git worktree with validation and auto-cleanup.
+// startPoint controls where the new branch begins; see CreateWorktree for resolution rules.
+func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string, startPoint string) (string, error) {
 	// Validate inputs early (before path computation)
 	if hubPath == "" {
 		return "", fmt.Errorf("hubPath cannot be empty")
@@ -64,7 +74,7 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 	}
 
 	// Step 4: Call existing CreateWorktree method to do the actual work
-	_, err = m.CreateWorktree(hopspace, hubPath, branch, locationPattern, org, repo, defaultBranch)
+	_, err = m.CreateWorktree(hopspace, hubPath, branch, locationPattern, org, repo, defaultBranch, startPoint)
 	if err != nil {
 		// Return our cleaned path on error
 		return worktreePath, err
@@ -73,8 +83,20 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 	return worktreePath, nil
 }
 
-// CreateWorktree creates a git worktree at the configured location
-func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string) (string, error) {
+// CreateWorktree creates a git worktree at the configured location.
+// startPoint controls the start-point for newly-created branches:
+//   - ""                    → resolve to refs/remotes/origin/<defaultBranch>,
+//                             falling back to refs/heads/<defaultBranch>, then "HEAD".
+//   - "default-branch"      → same as "".
+//   - "initial"             → root commit of the current history (legacy behavior).
+//   - any other value       → passed through verbatim as the start-point ref/SHA.
+//
+// When the resolved start-point is non-empty and not the literal "HEAD", the
+// upstream tracking shortcut is suppressed: the explicit start-point becomes
+// the positional <commit-ish> for `git worktree add -b`. Existing branches
+// (already present in the repo) are linked rather than re-created, and
+// startPoint is irrelevant for that path.
+func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string, startPoint string) (string, error) {
 	// Validate inputs
 	if hubPath == "" {
 		return "", fmt.Errorf("hubPath cannot be empty")
@@ -142,17 +164,67 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 		return worktreePath, fmt.Errorf("worktree already exists at %s", worktreePath)
 	}
 
-	// baseWorktreePath is already absolute after resolution by ResolveWorktreePath
-	// CreateWorktree will automatically try to link existing branch first, then create if needed
+	// Resolve the effective start-point. The wrapper consumes either a
+	// trackBranch (origin/<defaultBranch>) OR a positional base — never both.
+	// When the caller (or the resolved default) names a concrete ref, we
+	// suppress trackBranch so the explicit start-point wins.
+	resolvedBase, suppressTrack := m.resolveStartPoint(baseWorktreePath, startPoint, defaultBranch)
+
 	trackBranch := ""
-	if defaultBranch != "" {
+	if !suppressTrack && defaultBranch != "" {
 		trackBranch = "origin/" + defaultBranch
 	}
-	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, "HEAD", false, trackBranch); err != nil {
+	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, resolvedBase, false, trackBranch); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)
 	}
 
 	return worktreePath, nil
+}
+
+// resolveStartPoint maps the caller's startPoint hint to a concrete ref or
+// SHA suitable for `git worktree add -b <branch> <path> <commit-ish>`. The
+// second return value reports whether the caller's request is specific
+// enough to suppress the implicit `--track origin/<defaultBranch>` shortcut.
+//
+// Resolution rules:
+//   - ""                  / "default-branch": probe refs/remotes/origin/<def>, then refs/heads/<def>;
+//     fall back to "HEAD" (with a stderr warning) if neither resolves. trackBranch stays
+//     active for this case so the new branch tracks origin/<def>.
+//   - "initial":           resolve via `git rev-list --max-parents=0 HEAD` (last line); suppress track.
+//   - explicit ref/SHA:    pass through unchanged; suppress track.
+func (m *WorktreeManager) resolveStartPoint(basePath, startPoint, defaultBranch string) (resolved string, suppressTrack bool) {
+	switch startPoint {
+	case "", StartPointDefaultBranch:
+		if defaultBranch == "" {
+			return "HEAD", false
+		}
+		if _, err := m.git.RevParse(basePath, "--verify", "refs/remotes/origin/"+defaultBranch); err == nil {
+			return "refs/remotes/origin/" + defaultBranch, true
+		}
+		if _, err := m.git.RevParse(basePath, "--verify", "refs/heads/"+defaultBranch); err == nil {
+			return "refs/heads/" + defaultBranch, true
+		}
+		fmt.Fprintf(os.Stderr,
+			"warning: could not resolve default branch %q to a ref; falling back to HEAD\n",
+			defaultBranch)
+		return "HEAD", false
+	case StartPointInitial:
+		out, err := m.git.RunInDir(basePath, "git", "rev-list", "--max-parents=0", "HEAD")
+		if err != nil {
+			fmt.Fprintf(os.Stderr,
+				"warning: could not resolve root commit (--from initial): %v; falling back to HEAD\n",
+				err)
+			return "HEAD", true
+		}
+		lines := strings.Split(strings.TrimSpace(out), "\n")
+		if len(lines) == 0 || lines[len(lines)-1] == "" {
+			return "HEAD", true
+		}
+		return strings.TrimSpace(lines[len(lines)-1]), true
+	default:
+		// Explicit ref / SHA — pass through unchanged.
+		return startPoint, true
+	}
 }
 
 // MoveWorktree renames a worktree: renames the git branch, moves the directory,
