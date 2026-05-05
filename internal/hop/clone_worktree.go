@@ -8,13 +8,31 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
 )
 
-func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, useBare bool, globalConfig bool) error {
+// HookMirrorOptions describes how committed .git-hop/hooks/ scripts should
+// be mirrored into hopspace at the end of clone/init. Carried as an opaque
+// struct so callers in cmd/cli can populate it without internal/hop having
+// to import internal/hooks (which would create an import cycle: hooks → hop).
+type HookMirrorOptions struct {
+	// Mode is one of "symlink", "copy", "prompt", "none", or empty (resolve
+	// from env/config/default at call time).
+	Mode string
+	// Overwrite, when true, replaces an existing hopspace hook with
+	// different content in symlink/copy modes.
+	Overwrite bool
+	// Run, when non-nil, is invoked at the end of CloneWorktree with the
+	// just-created worktree absolute path and the 3-part repo ID
+	// ("host/org/repo"). Callers wire this to hooks.MirrorCommittedHooks.
+	// If nil, no mirror is attempted.
+	Run func(worktreePath, repoID string) error
+}
+
+func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, useBare bool, globalConfig bool, hookOpts HookMirrorOptions) error {
 	projectRoot := projectPath
 
 	if projectRoot == "" {
@@ -138,6 +156,15 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 	// Update current symlink to point to main worktree
 	if err := UpdateCurrentSymlink(fs, projectRoot, absMainWorktreePath); err != nil {
 		fmt.Printf("Warning: failed to create current symlink: %v\n", err)
+	}
+
+	// Mirror committed .git-hop/hooks/ scripts into the user's hopspace
+	// so post-worktree-add (etc.) fires for the very first worktree.
+	// Caller wires HookMirrorOptions.Run; we just invoke it here.
+	if hookOpts.Run != nil {
+		if err := hookOpts.Run(absMainWorktreePath, repoID); err != nil {
+			fmt.Printf("Warning: failed to mirror committed hooks: %v\n", err)
+		}
 	}
 
 	// Get relative path from projectRoot to mainWorktreePath for display

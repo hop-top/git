@@ -16,21 +16,24 @@ import (
 
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
 
 var (
-	cfgFile      string
-	jsonOut      bool
-	porcelain    bool
-	quiet        bool
-	verbose      bool
-	force        bool
-	dryRun       bool
-	gitDomain    string
-	globalConfig bool
-	adminMode    bool
+	cfgFile        string
+	jsonOut        bool
+	porcelain      bool
+	quiet          bool
+	verbose        bool
+	force          bool
+	dryRun         bool
+	gitDomain      string
+	globalConfig   bool
+	adminMode      bool
+	hooksMode      string
+	hooksOverwrite bool
 
 	version string
 )
@@ -178,7 +181,12 @@ Worktree Mode:
 				useBare = globalCfg.Defaults.BareRepo
 			}
 
-			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig); err != nil {
+			hookOpts := hop.HookMirrorOptions{
+				Mode:      hooksMode,
+				Overwrite: hooksOverwrite,
+				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite),
+			}
+			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig, hookOpts); err != nil {
 				output.Fatal("Clone failed: %v", err)
 			}
 			return
@@ -228,6 +236,8 @@ Worktree Mode:
 
 	RootCmd.Flags().StringVar(&gitDomain, "git-domain", "", "Git domain for shorthand notation (e.g., github.com, gitlab.com)")
 	RootCmd.Flags().String("branch", "", "branch name for fork-attach mode")
+	RootCmd.Flags().StringVar(&hooksMode, "hooks", "", "mirror committed .git-hop/hooks/ on clone: symlink|copy|prompt|none (default: prompt)")
+	RootCmd.Flags().BoolVar(&hooksOverwrite, "hooks-overwrite", false, "overwrite an existing hopspace hook with different content (symlink/copy modes)")
 
 	RootCmd.Flags().BoolVar(&adminMode, "admin", false, "")
 	RootCmd.Flags().MarkHidden("admin")
@@ -266,6 +276,58 @@ func initConfig() {
 	if err := v.ReadInConfig(); err == nil && verbose {
 		output.Debug("using config file: %s", v.ConfigFileUsed())
 	}
+}
+
+// buildHookMirrorRun returns a closure that resolves the hooks install
+// mode (flag → env → git config → default "prompt") and invokes
+// hooks.MirrorCommittedHooks against the freshly-cloned worktree.
+//
+// Lives here (not in internal/hop) because internal/hooks already imports
+// internal/hop; flipping the dependency would create an import cycle.
+func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(string, string) error {
+	return func(worktreePath, repoID string) error {
+		envMode := os.Getenv("GIT_HOP_HOOKS")
+		var configured string
+		if gc := config.NewGitConfig(); gc != nil {
+			configured = gc.GetStringOrDefault(config.KeyHooksInstallMode)
+		}
+		mode := hooks.ResolveMode(flagMode, envMode, configured)
+
+		mopts := hooks.MirrorOpts{
+			WorktreePath: worktreePath,
+			RepoID:       repoID,
+			Mode:         mode,
+			Overwrite:    overwrite,
+			Stdout:       os.Stdout,
+			Stderr:       os.Stderr,
+		}
+		// Only attach Stdin in TTY interactive contexts; the install
+		// helper degrades prompt → none when Stdin is nil.
+		if mode == hooks.ModePrompt && isStdinTTY() {
+			mopts.Stdin = os.Stdin
+		}
+
+		res, err := hooks.MirrorCommittedHooks(fs, mopts)
+		if err != nil {
+			return err
+		}
+		if res.Installed > 0 || res.Warned > 0 || res.Skipped > 0 || res.AlreadyPresent > 0 {
+			fmt.Fprintf(os.Stderr,
+				"hooks: installed=%d skipped=%d already-present=%d warned=%d\n",
+				res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
+		}
+		return nil
+	}
+}
+
+// isStdinTTY reports whether os.Stdin is a terminal. Used to decide whether
+// prompt mode should actually prompt (vs degrade to none).
+func isStdinTTY() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 func setupOutputMode() {

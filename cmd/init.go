@@ -22,13 +22,15 @@ import (
 )
 
 var (
-	forceFlag      bool
-	dryRunFlag     bool
-	keepBackupFlag bool
-	regularFlag    bool
-	restorePath    string
-	noHooksFlag    bool
-	enableChdirFlag bool
+	forceFlag           bool
+	dryRunFlag          bool
+	keepBackupFlag      bool
+	regularFlag         bool
+	restorePath         string
+	noHooksFlag         bool
+	enableChdirFlag     bool
+	initHooksMode       string
+	initHooksOverwrite  bool
 )
 
 func init() {
@@ -39,7 +41,11 @@ var initCmd = &cobra.Command{
 	Use:     "init",
 	Aliases: []string{"setup", "install"},
 	Short:   "Initialize git-hop repository structure",
-	Long:    `Initialize git-hop repository structure with interactive setup for worktree conversion.`,
+	Long: `Initialize git-hop repository structure with interactive setup for worktree conversion.
+
+Committed .git-hop/hooks/ scripts are mirrored into the user's hopspace
+when init succeeds; control via --hooks (symlink|copy|prompt|none).
+See docs/hooks.md for details.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		g := git.New()
@@ -297,6 +303,13 @@ Or register current structure: git hop init --current`)
 		}
 	}
 
+	// Mirror any committed .git-hop/hooks/ into the user's hopspace.
+	hookInstallPath := repoPath
+	if mainWorktreePath != "" && !isRegularRepo {
+		hookInstallPath = mainWorktreePath
+	}
+	mirrorInitHooks(fs, g, hookInstallPath, repoPath, initHooksMode, initHooksOverwrite, noHooks)
+
 	if enableChdir {
 		if err := maybeInstallShellIntegration(fs, true); err != nil {
 			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
@@ -383,6 +396,9 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 		}
 	}
 
+	// Mirror any committed .git-hop/hooks/ into the user's hopspace.
+	mirrorInitHooks(fs, g, repoPath, repoPath, initHooksMode, initHooksOverwrite, noHooks)
+
 	if enableChdir {
 		if err := maybeInstallShellIntegration(fs, true); err != nil {
 			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
@@ -411,6 +427,9 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 		}
 	}
 
+	// Mirror any committed .git-hop/hooks/ into the user's hopspace.
+	mirrorInitHooks(fs, g, path, path, initHooksMode, initHooksOverwrite, noHooks)
+
 	if enableChdir {
 		if err := maybeInstallShellIntegration(fs, true); err != nil {
 			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
@@ -431,6 +450,78 @@ func installInitHooks(fs afero.Fs, repoPath, mainWorktreePath string, isRegularR
 		installPath = mainWorktreePath
 	}
 	return hooks.NewRunner(fs).InstallHooks(installPath)
+}
+
+// mirrorInitHooks scans <worktreePath>/.git-hop/hooks/ for committed hook
+// scripts and mirrors them into the user's hopspace at
+// $XDG_DATA_HOME/git-hop/<host>/<org>/<repo>/hooks/. Mode resolution:
+// CLI flag → GIT_HOP_HOOKS env → hop.hooks.installMode git config → "prompt".
+// If --no-hooks was passed and --hooks was not, this is a no-op.
+func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath string, flagMode string, overwrite, noHooks bool) {
+	// --hooks wins over --no-hooks; otherwise --no-hooks → mode=none.
+	mode := flagMode
+	if mode == "" && noHooks {
+		mode = hooks.ModeNone
+	}
+
+	envMode := os.Getenv("GIT_HOP_HOOKS")
+	var configured string
+	if gc := config.NewGitConfig(); gc != nil {
+		configured = gc.GetStringOrDefault(config.KeyHooksInstallMode)
+	}
+	resolved := hooks.ResolveMode(mode, envMode, configured)
+
+	// Resolve org/repo from remote URL to build the 3-part repoID.
+	org, repo := "", ""
+	if g != nil {
+		if remoteURL, err := g.GetRemoteURL(repoPath); err == nil && remoteURL != "" {
+			org, repo = hop.ParseRepoFromURL(remoteURL)
+		}
+	}
+	if org == "" || repo == "" {
+		// Fall back to local path naming (matches registerAsIs behaviour).
+		abs, err := filepath.Abs(repoPath)
+		if err == nil {
+			repo = filepath.Base(abs)
+			org = filepath.Base(filepath.Dir(abs))
+		}
+	}
+	if org == "" || repo == "" {
+		fmt.Fprintln(os.Stderr, "warning: could not determine org/repo for hook mirror; skipping")
+		return
+	}
+	repoID := fmt.Sprintf("github.com/%s/%s", org, repo)
+
+	mopts := hooks.MirrorOpts{
+		WorktreePath: worktreePath,
+		RepoID:       repoID,
+		Mode:         resolved,
+		Overwrite:    overwrite,
+		Stdout:       os.Stdout,
+		Stderr:       os.Stderr,
+	}
+	if resolved == hooks.ModePrompt && isStdinTTYInit() {
+		mopts.Stdin = os.Stdin
+	}
+
+	res, err := hooks.MirrorCommittedHooks(fs, mopts)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "warning: failed to mirror committed hooks: %v\n", err)
+		return
+	}
+	if res.Installed > 0 || res.Warned > 0 || res.Skipped > 0 || res.AlreadyPresent > 0 {
+		fmt.Fprintf(os.Stderr,
+			"hooks: installed=%d skipped=%d already-present=%d warned=%d\n",
+			res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
+	}
+}
+
+func isStdinTTYInit() bool {
+	fi, err := os.Stdin.Stat()
+	if err != nil {
+		return false
+	}
+	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
 // installInitHooksConditional installs hooks unless noHooks is true.
@@ -504,5 +595,7 @@ func init() {
 	initCmd.Flags().StringVar(&restorePath, "restore", "", "Restore repository from backup (manual rollback)")
 	initCmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "Skip automatic installation of .git-hop/hooks/ directory")
 	initCmd.Flags().BoolVar(&enableChdirFlag, "enable-chdir", false, "Install shell integration for automatic directory switching after hop commands")
+	initCmd.Flags().StringVar(&initHooksMode, "hooks", "", "mirror committed .git-hop/hooks/ into hopspace: symlink|copy|prompt|none (overrides --no-hooks)")
+	initCmd.Flags().BoolVar(&initHooksOverwrite, "hooks-overwrite", false, "overwrite an existing hopspace hook with different content (symlink/copy modes)")
 }
 
