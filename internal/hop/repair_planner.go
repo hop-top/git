@@ -125,7 +125,50 @@ func (p *Planner) Build(hubPath string, pathspec []string) (*Plan, error) {
 		})
 	}
 
+	// Hub-level: detect missing remote.origin.fetch refspec. Affects
+	// any hub cloned before cc5def4 (May 3, 2026), where `git clone
+	// --bare` stripped the refspec and the older binary didn't restore
+	// it. The defect is hub-wide, so only emit an action when pathspec
+	// is empty; with a pathspec the user is explicitly targeting
+	// specific worktrees and we shouldn't quietly mutate hub config —
+	// surface it as a warning instead.
+	if p.detectMissingFetchRefspec(hubPath) {
+		if len(pathspec) == 0 {
+			plan.Actions = append(plan.Actions, Action{
+				Kind:         ActionRestoreFetchRefspec,
+				WorktreePath: hubPath,
+				NewValue:     "+refs/heads/*:refs/remotes/origin/*",
+				Reason:       "missing fetch refspec on origin (pre-cc5def4 clone)",
+			})
+		} else {
+			plan.Warnings = append(plan.Warnings,
+				"hub is missing remote.origin.fetch refspec; "+
+					"re-run `git hop repair` without a pathspec to restore it")
+		}
+	}
+
 	return plan, nil
+}
+
+// detectMissingFetchRefspec returns true when the hub has a configured
+// remote.origin.url but no remote.origin.fetch entries. That combination
+// is the local fingerprint of `git clone --bare` minus the post-clone
+// refspec restore that landed in cc5def4. Repos without an origin remote
+// (purely local hubs) are not flagged — there is no upstream to fetch
+// from, so the missing refspec is by design.
+func (p *Planner) detectMissingFetchRefspec(hubPath string) bool {
+	urlOut, err := p.git.GetConfig(hubPath, "remote.origin.url")
+	if err != nil || strings.TrimSpace(urlOut) == "" {
+		// No origin configured — local-only hub, nothing to repair.
+		return false
+	}
+	fetchOut, err := p.git.GetConfig(hubPath, "remote.origin.fetch")
+	if err != nil {
+		// `git config --get` exits non-zero when the key is absent;
+		// that's the defect we're looking for.
+		return true
+	}
+	return strings.TrimSpace(fetchOut) == ""
 }
 
 // classifyBranch decides what (if anything) to do with one hub branch.

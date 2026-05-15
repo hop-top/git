@@ -26,6 +26,17 @@ const (
 	// only when the planner is invoked with the base-inference flag set;
 	// applies idempotently — branches with Base already set are skipped.
 	ActionRecordBase
+	// ActionRestoreFetchRefspec re-adds the standard
+	//   +refs/heads/*:refs/remotes/origin/*
+	// fetch refspec to a bare repo's [remote "origin"] config when it
+	// is missing. `git clone --bare` strips the refspec, and any hub
+	// cloned before commit cc5def4 (May 3, 2026) inherits the defect:
+	// `git fetch origin` lands in FETCH_HEAD without populating
+	// refs/remotes/origin/*, which breaks every downstream call that
+	// asks "does origin/<branch> still exist". Emitted hub-wide (not
+	// per-branch), only when pathspec is empty — the defect is in the
+	// hub config, not a worktree.
+	ActionRestoreFetchRefspec
 )
 
 // String returns the porcelain action token (kebab-case) for stable output.
@@ -43,6 +54,8 @@ func (k ActionKind) String() string {
 		return "update-hopjson"
 	case ActionRecordBase:
 		return "record-base"
+	case ActionRestoreFetchRefspec:
+		return "restore-fetch-refspec"
 	default:
 		return "unknown"
 	}

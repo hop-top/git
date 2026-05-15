@@ -3,6 +3,7 @@ package hop
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 
@@ -59,9 +60,44 @@ func (a *Applier) applyOne(hubPath string, action *Action) (bool, error) {
 		return a.updateHopJSON(hubPath, action)
 	case ActionRecordBase:
 		return a.recordBase(hubPath, action)
+	case ActionRestoreFetchRefspec:
+		return a.restoreFetchRefspec(action)
 	default:
 		return false, fmt.Errorf("unknown action kind %d", action.Kind)
 	}
+}
+
+// restoreFetchRefspec writes the standard +refs/heads/*:refs/remotes/origin/*
+// refspec into the hub's [remote "origin"] config and re-fetches origin
+// so refs/remotes/origin/* gets populated. Idempotent: --replace-all
+// overwrites any prior value (avoiding duplicate entries on re-apply).
+// Post-action verify reads the config back and confirms the value.
+//
+// The fetch is best-effort — a network failure leaves the config fixed
+// (which is what permanently breaks fetches for future runs); the caller
+// gets a non-fatal error so they know the immediate refresh didn't land.
+func (a *Applier) restoreFetchRefspec(action *Action) (bool, error) {
+	hubPath := action.WorktreePath
+	refspec := action.NewValue
+	if refspec == "" {
+		return false, fmt.Errorf("restore-fetch-refspec action has empty NewValue")
+	}
+	if _, err := a.git.RunInDir(hubPath, "git", "config",
+		"--replace-all", "remote.origin.fetch", refspec); err != nil {
+		return false, fmt.Errorf("git config: %w", err)
+	}
+	if _, err := a.git.RunInDir(hubPath, "git", "fetch", "origin"); err != nil {
+		return true, fmt.Errorf("post-action fetch: %w", err)
+	}
+	got, err := a.git.GetConfig(hubPath, "remote.origin.fetch")
+	if err != nil {
+		return true, fmt.Errorf("post-action verify (read): %w", err)
+	}
+	if strings.TrimSpace(got) != refspec {
+		return true, fmt.Errorf("post-action verify: refspec mismatch (got %q, want %q)",
+			strings.TrimSpace(got), refspec)
+	}
+	return true, nil
 }
 
 // recordBase writes HubBranch.Base for a single hub entry. The branch

@@ -328,3 +328,70 @@ func TestApplier_RecordBase_SkipsWhenAlreadySet(t *testing.T) {
 		t.Errorf("expected Base preserved as %q, got %v", existing, b.Base)
 	}
 }
+
+// TestApplier_RestoreFetchRefspec covers the happy path: an action
+// with NewValue=<refspec> sets the config, runs the post-fetch, and
+// the verify reads the same value back. Drives the `git config
+// --replace-all` + `git fetch origin` + verifying `git config --get`
+// through the MockRunner key table.
+func TestApplier_RestoreFetchRefspec(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hub := "/hub"
+	refspec := "+refs/heads/*:refs/remotes/origin/*"
+	// Verify read returns the value we asked to write.
+	g.Runner.Responses[hub+":git config --get remote.origin.fetch"] = refspec
+
+	a := NewApplier(fs, g)
+	plan := &Plan{HubPath: hub, Actions: []Action{
+		{Kind: ActionRestoreFetchRefspec, WorktreePath: hub, NewValue: refspec,
+			Reason: "missing fetch refspec on origin"},
+	}}
+	mut, err := a.Apply(plan)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if mut != 1 {
+		t.Errorf("expected 1 mutation, got %d", mut)
+	}
+}
+
+// TestApplier_RestoreFetchRefspec_FailsWhenVerifyMismatches covers the
+// safety net: if `git config --get remote.origin.fetch` returns a
+// different value after the write, the applier reports failure rather
+// than silently claiming success. Simulates a config file that didn't
+// actually persist the write.
+func TestApplier_RestoreFetchRefspec_FailsWhenVerifyMismatches(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hub := "/hub"
+	refspec := "+refs/heads/*:refs/remotes/origin/*"
+	// Verify returns something else (or nothing) — applier must fail.
+	g.Runner.Responses[hub+":git config --get remote.origin.fetch"] = "+refs/heads/main:refs/remotes/origin/main"
+
+	a := NewApplier(fs, g)
+	plan := &Plan{HubPath: hub, Actions: []Action{
+		{Kind: ActionRestoreFetchRefspec, WorktreePath: hub, NewValue: refspec},
+	}}
+	if _, err := a.Apply(plan); err == nil {
+		t.Errorf("expected error on verify mismatch, got nil")
+	}
+}
+
+// TestApplier_RestoreFetchRefspec_RejectsEmptyValue is a defensive
+// check: a malformed plan with NewValue="" must not silently overwrite
+// the config with an empty string (which would re-break the hub).
+func TestApplier_RestoreFetchRefspec_RejectsEmptyValue(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	a := NewApplier(fs, g)
+	plan := &Plan{HubPath: "/hub", Actions: []Action{
+		{Kind: ActionRestoreFetchRefspec, WorktreePath: "/hub", NewValue: ""},
+	}}
+	if _, err := a.Apply(plan); err == nil {
+		t.Errorf("expected error on empty NewValue, got nil")
+	}
+}

@@ -415,6 +415,124 @@ func TestPlanner_BaseInference_AmbiguousTie(t *testing.T) {
 	}
 }
 
+// TestPlanner_MissingFetchRefspec emits the action when origin.url is
+// set but origin.fetch is absent. This is the local fingerprint of a
+// hub cloned by a pre-cc5def4 git-hop binary: `git clone --bare`
+// strips the refspec, and the older binary didn't restore it.
+func TestPlanner_MissingFetchRefspec(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hubPath := "/hub"
+	writeHub(t, fs, hubPath, map[string]config.HubBranch{})
+	g.WorktreeListOut = ""
+
+	// origin.url present, origin.fetch missing → defect detected.
+	g.Runner.Responses[hubPath+":git config --get remote.origin.url"] = "git@github.com:test/repo.git"
+	g.Runner.Errors[hubPath+":git config --get remote.origin.fetch"] = errBoom("exit 1")
+
+	plan, err := NewPlanner(fs, g).Build(hubPath, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	var got *Action
+	for i, a := range plan.Actions {
+		if a.Kind == ActionRestoreFetchRefspec {
+			got = &plan.Actions[i]
+		}
+	}
+	if got == nil {
+		t.Fatalf("expected restore-fetch-refspec action, got actions=%+v", plan.Actions)
+	}
+	if got.WorktreePath != hubPath {
+		t.Errorf("WorktreePath: got %q, want %q", got.WorktreePath, hubPath)
+	}
+	if got.NewValue != "+refs/heads/*:refs/remotes/origin/*" {
+		t.Errorf("NewValue: got %q, want standard refspec", got.NewValue)
+	}
+}
+
+// TestPlanner_FetchRefspecPresent_NoAction is the negative case: a hub
+// with a correctly-configured fetch refspec gets no action.
+func TestPlanner_FetchRefspecPresent_NoAction(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hubPath := "/hub"
+	writeHub(t, fs, hubPath, map[string]config.HubBranch{})
+	g.WorktreeListOut = ""
+
+	g.Runner.Responses[hubPath+":git config --get remote.origin.url"] = "git@github.com:test/repo.git"
+	g.Runner.Responses[hubPath+":git config --get remote.origin.fetch"] = "+refs/heads/*:refs/remotes/origin/*"
+
+	plan, err := NewPlanner(fs, g).Build(hubPath, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, a := range plan.Actions {
+		if a.Kind == ActionRestoreFetchRefspec {
+			t.Errorf("expected no restore-fetch-refspec action when refspec is present, got %+v", a)
+		}
+	}
+}
+
+// TestPlanner_NoOriginRemote_NoAction is the local-only case: a hub
+// with no origin.url has no upstream to fetch, so the missing refspec
+// is by design and we must not flag it.
+func TestPlanner_NoOriginRemote_NoAction(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hubPath := "/hub"
+	writeHub(t, fs, hubPath, map[string]config.HubBranch{})
+	g.WorktreeListOut = ""
+
+	g.Runner.Errors[hubPath+":git config --get remote.origin.url"] = errBoom("exit 1")
+
+	plan, err := NewPlanner(fs, g).Build(hubPath, nil)
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, a := range plan.Actions {
+		if a.Kind == ActionRestoreFetchRefspec {
+			t.Errorf("expected no action for local-only hub, got %+v", a)
+		}
+	}
+}
+
+// TestPlanner_MissingFetchRefspec_PathspecDowngradesToWarning ensures
+// that a pathspec-scoped run does NOT mutate hub config silently. The
+// defect is still detected; it just surfaces as a warning so the user
+// knows to re-run without a pathspec.
+func TestPlanner_MissingFetchRefspec_PathspecDowngradesToWarning(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hubPath := "/hub"
+	wtPath := "/hub/hops/feat"
+	writeHub(t, fs, hubPath, map[string]config.HubBranch{
+		"feat": {Path: "hops/feat", HopspaceBranch: "feat"},
+	})
+	healthyWorktreeOnDisk(t, fs, hubPath, wtPath, "feat")
+	g.WorktreeListOut = "worktree " + wtPath + "\nHEAD abc\nbranch refs/heads/feat\n"
+
+	g.Runner.Responses[hubPath+":git config --get remote.origin.url"] = "git@github.com:test/repo.git"
+	g.Runner.Errors[hubPath+":git config --get remote.origin.fetch"] = errBoom("exit 1")
+
+	plan, err := NewPlanner(fs, g).Build(hubPath, []string{"feat"})
+	if err != nil {
+		t.Fatalf("Build: %v", err)
+	}
+	for _, a := range plan.Actions {
+		if a.Kind == ActionRestoreFetchRefspec {
+			t.Errorf("expected NO restore action under pathspec; got %+v", a)
+		}
+	}
+	if len(plan.Warnings) == 0 {
+		t.Errorf("expected a warning about the missing refspec under pathspec, got none")
+	}
+}
+
 // TestPlanner_BaseInference_SkipsAlreadyRecorded verifies idempotence:
 // a branch whose Base is already set is not re-proposed, even with
 // inference enabled.
