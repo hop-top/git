@@ -39,7 +39,12 @@ func (g *Git) GetStatus(dir string) (*Status, error) {
 			if parts[1] == "branch.head" {
 				s.Branch = parts[2]
 			}
-		case "1", "2", "?":
+		case "1", "2", "u", "?":
+			// 1 = ordinary change, 2 = renamed/copied,
+			// u = unmerged (conflict), ? = untracked.
+			// All four mean the worktree is not clean and must
+			// surface to callers like remove/merge that gate on
+			// !Clean to refuse silent data loss.
 			s.Clean = false
 			s.Files = append(s.Files, line)
 		}

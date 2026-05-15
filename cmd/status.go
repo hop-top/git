@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"hop.top/git/internal/cli"
@@ -86,26 +87,75 @@ func showHubStatus(fs afero.Fs, g git.GitInterface, path string) {
 	output.Info("Hub: %s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	output.Info("Location: %s", hub.Path)
 
-	defaultBranch := hub.Config.Repo.DefaultBranch
-	t := tui.NewTable([]interface{}{"Branch", "State", "Status", "Path"})
+	t := tui.NewTable([]interface{}{"Branch", "Base", "State", "Status", "Path"})
 	for name, b := range hub.Config.Branches {
 		state := "Missing"
 		status := "-"
+		compare := resolveCompareBranch(hub.Config, b)
 		resolvedPath := config.ResolveWorktreePath(b.Path, hub.Path)
 		if _, err := fs.Stat(resolvedPath); err == nil {
 			state = "Linked"
-			status = getBranchSyncStatus(g, resolvedPath, name, defaultBranch)
+			status = getBranchSyncStatus(g, resolvedPath, name, compare)
 		}
-		t.AddRow(name, state, status, resolvedPath)
+		t.AddRow(name, compare, state, status, resolvedPath)
 	}
 	t.Render()
 }
 
+// resolveCompareBranch picks the branch to use as the ahead/behind/merged
+// comparison target for a worktree. Precedence:
+//   1. HubBranch.Base (per-branch override, recorded at `git hop add` time
+//      or back-filled by `git hop repair --base`)
+//   2. HubSettings.CompareBranch (hub-wide override, when configured)
+//   3. RepoConfig.DefaultBranch (final fallback)
+//
+// The returned value is the bare branch name. An empty result means the
+// hub has no usable comparison target — callers receive "default" from
+// getBranchSyncStatus in that case (see its first branch).
+func resolveCompareBranch(cfg *config.HubConfig, b config.HubBranch) string {
+	if b.Base != nil && *b.Base != "" {
+		return *b.Base
+	}
+	if cfg.Settings.CompareBranch != nil && *cfg.Settings.CompareBranch != "" {
+		return *cfg.Settings.CompareBranch
+	}
+	return cfg.Repo.DefaultBranch
+}
+
 // getBranchSyncStatus reports a worktree's branch position relative to
-// the hub's default branch: "default", "merged", "synced",
-// "<n> ahead", "<n> behind", or "diverged (<n> ahead, <m> behind)".
-// Returns "unknown" when git can't compute the comparison (e.g. the
-// default branch ref is missing in this worktree).
+// the hub's default branch: "default", "synced", "merged (N behind)",
+// "behind (N)", "N ahead", "diverged (N ahead, M behind)", or "unknown".
+//
+// The "merged" label is gated on more than commit reachability. rev-list
+// alone treats three different histories identically (all produce
+// ahead==0): a branch that was actually merged into default via a merge
+// commit, an unborn branch with no commits of its own, and a branch
+// that was reset back to default. To distinguish the genuine merge case
+// from the unborn/reset cases, we additionally require:
+//
+//  1. The local tracking ref refs/remotes/origin/<branch> is absent
+//     (gh pr merge --delete-branch prunes it locally via fetch), AND
+//  2. branch.<name>.merge config is present (= the branch was once
+//     tracking a remote, so "ref is gone" means "remote deleted",
+//     not "never pushed")
+//
+// When either signal is missing we drop the merge claim and report
+// "behind (N)" — honest about position without overclaiming. The
+// trade-off: branches merged via merge-commit whose remote was not
+// deleted lose the "merged" label here. They remain detectable via
+// `git hop remove --merged`, which has its own probe.
+//
+// Squash- and rebase-merges produce ahead>0 in rev-list (commits have
+// different SHAs even when content is equivalent) and fall into the
+// "diverged" or "ahead" buckets — except when --delete-branch also
+// runs, in which case the absent remote ref is invisible to this
+// function (still ahead>0). Detecting those requires content-based
+// comparison (git cherry / patch-id) which is out of scope here.
+//
+// When the worktree has tracked-but-uncommitted edits, staged changes,
+// or untracked files, the label is suffixed with ", dirty". "default"
+// and "unknown" are never suffixed: the default branch's dirtiness is
+// surfaced elsewhere, and "unknown" already signals we couldn't probe.
 func getBranchSyncStatus(g git.GitInterface, dir, branch, defaultBranch string) string {
 	if defaultBranch == "" || branch == defaultBranch {
 		return "default"
@@ -125,16 +175,171 @@ func getBranchSyncStatus(g git.GitInterface, dir, branch, defaultBranch string) 
 	}
 
 	ahead, behind := fields[0], fields[1]
+	var label string
 	switch {
 	case ahead == "0" && behind == "0":
-		return "synced"
+		label = "synced"
 	case ahead == "0":
-		return fmt.Sprintf("merged (%s behind)", behind)
+		if branchWasMergedByRemoteDeletion(g, dir, branch) {
+			label = fmt.Sprintf("merged (%s behind)", behind)
+		} else {
+			label = fmt.Sprintf("behind (%s)", behind)
+		}
 	case behind == "0":
-		return fmt.Sprintf("%s ahead", ahead)
+		label = fmt.Sprintf("%s ahead", ahead)
 	default:
-		return fmt.Sprintf("diverged (%s ahead, %s behind)", ahead, behind)
+		label = fmt.Sprintf("diverged (%s ahead, %s behind)", ahead, behind)
 	}
+
+	// Probe working-tree state. On any error, fail open (no suffix):
+	// the commit-derived label is still useful; we just couldn't prove
+	// dirtiness either way.
+	if status, err := g.GetStatus(dir); err == nil && !status.Clean {
+		label += ", " + formatDirtyDetail(g, dir, status)
+	}
+	return label
+}
+
+// formatDirtyDetail builds the dirty suffix detail block. Returns
+// "dirty (T tracked +X/-Y, C unmerged, U untracked)" with only nonzero
+// segments included. Falls back to bare "dirty" when no segment can
+// be counted (defensive — Status.Clean=false should always have at
+// least one categorized file, but the parser could surface unknown
+// porcelain prefixes from future git versions).
+//
+// Line deltas (+X/-Y) come from `git diff --shortstat` (unstaged) and
+// `git diff --cached --shortstat` (staged), summed. When both probes
+// fail or return empty, the tracked segment drops the delta and shows
+// the count alone — readers still see "1 tracked" rather than nothing.
+func formatDirtyDetail(g git.GitInterface, dir string, status *git.Status) string {
+	tracked, unmerged, untracked := categorizeDirtyFiles(status.Files)
+	if tracked == 0 && unmerged == 0 && untracked == 0 {
+		return "dirty"
+	}
+
+	var segments []string
+	if tracked > 0 {
+		seg := fmt.Sprintf("%d tracked", tracked)
+		if ins, dels, ok := dirtyLineDeltas(g, dir); ok {
+			seg += fmt.Sprintf(" +%d/-%d", ins, dels)
+		}
+		segments = append(segments, seg)
+	}
+	if unmerged > 0 {
+		segments = append(segments, fmt.Sprintf("%d unmerged", unmerged))
+	}
+	if untracked > 0 {
+		segments = append(segments, fmt.Sprintf("%d untracked", untracked))
+	}
+	return "dirty (" + strings.Join(segments, ", ") + ")"
+}
+
+// categorizeDirtyFiles counts porcelain v2 entries by category. Files
+// is the slice populated by Git.GetStatus: each entry is the raw
+// porcelain line, so the prefix (the first whitespace-separated token)
+// is the category key. "1" and "2" are tracked changes (modified,
+// staged, renamed, copied); "u" is an unmerged conflict; "?" is
+// untracked. Lines that don't match any of these are ignored
+// defensively (future porcelain extensions).
+func categorizeDirtyFiles(files []string) (tracked, unmerged, untracked int) {
+	for _, line := range files {
+		if line == "" {
+			continue
+		}
+		// First field only — porcelain v2 prefixes are single chars.
+		switch line[:1] {
+		case "1", "2":
+			tracked++
+		case "u":
+			unmerged++
+		case "?":
+			untracked++
+		}
+	}
+	return
+}
+
+// dirtyLineDeltas returns total insertions and deletions across
+// unstaged and staged diffs, summed. Returns ok=false when both
+// probes produce no parseable output (failed probe or genuinely no
+// diffable changes — caller drops the delta segment).
+func dirtyLineDeltas(g git.GitInterface, dir string) (insertions, deletions int, ok bool) {
+	addFromShortstat := func(args ...string) bool {
+		out, err := g.RunInDir(dir, "git", args...)
+		if err != nil {
+			return false
+		}
+		ins, dels, parsed := parseShortstat(out)
+		if !parsed {
+			return false
+		}
+		insertions += ins
+		deletions += dels
+		return true
+	}
+	unstagedOK := addFromShortstat("diff", "--shortstat")
+	stagedOK := addFromShortstat("diff", "--cached", "--shortstat")
+	return insertions, deletions, unstagedOK || stagedOK
+}
+
+// parseShortstat extracts insertion and deletion counts from a
+// `git diff --shortstat` line. The output shape is one of:
+//
+//	" N files changed, X insertions(+), Y deletions(-)"
+//	" N file changed, X insertions(+)"            (no deletions)
+//	" N file changed, Y deletions(-)"             (no insertions)
+//	""                                              (no diff)
+//
+// Singular ("file"/"insertion"/"deletion") and plural forms both
+// appear; we match by suffix. Returns ok=false on empty input so the
+// caller can tell "no diff" from "0 insertions, 0 deletions".
+func parseShortstat(out string) (insertions, deletions int, ok bool) {
+	out = strings.TrimSpace(out)
+	if out == "" {
+		return 0, 0, false
+	}
+	// Split on commas; first segment is "N files changed" (discarded),
+	// the rest carry the counts. Each count segment ends in
+	// "insertion(s)(+)" or "deletion(s)(-)".
+	for _, seg := range strings.Split(out, ",") {
+		seg = strings.TrimSpace(seg)
+		fields := strings.Fields(seg)
+		if len(fields) < 2 {
+			continue
+		}
+		n, err := strconv.Atoi(fields[0])
+		if err != nil {
+			continue
+		}
+		switch {
+		case strings.HasPrefix(fields[1], "insertion"):
+			insertions = n
+		case strings.HasPrefix(fields[1], "deletion"):
+			deletions = n
+		}
+	}
+	return insertions, deletions, true
+}
+
+// branchWasMergedByRemoteDeletion reports whether the branch's local
+// tracking ref is gone AND the branch was once configured to track a
+// remote. The combination is the local fingerprint left behind by
+// `gh pr merge --delete-branch` (and equivalent flows): the PR merge
+// deletes the remote branch, the subsequent fetch+prune removes the
+// local refs/remotes/origin/<branch> ref, but branch.<name>.merge in
+// .git/config persists. Distinguishes a deleted-after-merge branch
+// from a never-pushed unborn branch (both have ahead==0).
+func branchWasMergedByRemoteDeletion(g git.GitInterface, dir, branch string) bool {
+	if _, err := g.RunInDir(dir, "git", "rev-parse", "--verify",
+		"refs/remotes/origin/"+branch); err == nil {
+		// Remote tracking ref still present — branch may yet be merged
+		// (e.g. merge-commit merge without remote-delete), but we can't
+		// prove it from this signal alone.
+		return false
+	}
+	out, err := g.RunInDir(dir, "git", "config", "--get",
+		"branch."+branch+".merge")
+	return err == nil && strings.TrimSpace(out) != ""
 }
 
 func showWorktreeStatus(fs afero.Fs, g git.GitInterface, d *docker.Docker, path string) {

@@ -389,3 +389,69 @@ func (m *MockRunner) RunInDir(dir string, cmd string, args ...string) (string, e
 
 	return "", nil
 }
+
+// TestGetStatus_PorcelainPrefixes covers the four porcelain v2 line
+// prefixes that signal a non-clean worktree:
+//
+//	"1" — ordinary change (modified/staged tracked file)
+//	"2" — renamed/copied tracked file
+//	"u" — unmerged (conflict)
+//	"?" — untracked
+//
+// All four must flip Clean=false and be recorded in Files. The "u"
+// case is a regression guard: it was silently dropped before, which
+// meant a worktree mid-merge-conflict reported Clean=true and could
+// be removed without warning.
+func TestGetStatus_PorcelainPrefixes(t *testing.T) {
+	cases := []struct {
+		name      string
+		porcelain string
+		wantClean bool
+		wantFiles int
+	}{
+		{
+			"clean",
+			"# branch.head main\n",
+			true, 0,
+		},
+		{
+			"modified tracked file (1)",
+			"# branch.head main\n1 .M N... 100644 100644 100644 abc abc README.md\n",
+			false, 1,
+		},
+		{
+			"renamed tracked file (2)",
+			"# branch.head main\n2 R. N... 100644 100644 100644 abc abc R100 new.go\told.go\n",
+			false, 1,
+		},
+		{
+			"unmerged conflict (u)",
+			"# branch.head main\nu UU N... 100644 100644 100644 100644 abc def ghi conflict.go\n",
+			false, 1,
+		},
+		{
+			"untracked (?)",
+			"# branch.head main\n? new.go\n",
+			false, 1,
+		},
+		{
+			"mixed — tracked + unmerged + untracked",
+			"# branch.head main\n" +
+				"1 .M N... 100644 100644 100644 a a tracked.go\n" +
+				"u UU N... 100644 100644 100644 100644 a b c conflict.go\n" +
+				"? untracked.go\n",
+			false, 3,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			runner := &MockRunner{responses: make(map[string]string), errors: make(map[string]error)}
+			runner.responses["/wt:git status --porcelain=v2 --branch"] = tc.porcelain
+			g := &Git{Runner: runner}
+			s, err := g.GetStatus("/wt")
+			assert.NoError(t, err)
+			assert.Equal(t, tc.wantClean, s.Clean, "Clean")
+			assert.Len(t, s.Files, tc.wantFiles, "Files count")
+		})
+	}
+}

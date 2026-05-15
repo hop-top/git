@@ -24,6 +24,16 @@ type HubBranch struct {
 	Path           string  `json:"path"`
 	HopspaceBranch string  `json:"hopspaceBranch"`
 	Fork           *string `json:"fork,omitempty"`
+	// Base is the branch this worktree was forked from, used as the
+	// comparison target for "ahead/behind" and "merged" labels in
+	// `git hop status` and `git hop list`. nil means "fall back to the
+	// hub's compare branch and then DefaultBranch" — the historical
+	// behavior. Set explicitly when the worktree was branched from a
+	// non-default base (e.g. a long-lived integration branch or a
+	// stacked feature branch); recorded by `git hop add` at creation
+	// time and back-filled for legacy worktrees by `git hop repair
+	// --base`.
+	Base *string `json:"base,omitempty"`
 }
 
 // EnvHooks defines lifecycle hooks for an environment manager
