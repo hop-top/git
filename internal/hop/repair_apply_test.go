@@ -262,3 +262,69 @@ type boomErr string
 
 func (e boomErr) Error() string { return string(e) }
 func errBoom(s string) error    { return boomErr(s) }
+
+// TestApplier_RecordBase covers the happy path: an ActionRecordBase for
+// a branch with Base=nil writes the inferred base into hop.json and the
+// post-action reload verifies it.
+func TestApplier_RecordBase(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hub := "/hub"
+	wt := "/hub/hops/feat"
+	writeHub(t, fs, hub, map[string]config.HubBranch{
+		"main": {Path: "hops/main", HopspaceBranch: "main"},
+		"feat": {Path: "hops/feat", HopspaceBranch: "feat"},
+	})
+
+	a := NewApplier(fs, g)
+	plan := &Plan{HubPath: hub, Actions: []Action{
+		{Kind: ActionRecordBase, WorktreePath: wt, NewValue: "develop",
+			Reason: "branch.feat.merge=refs/heads/develop"},
+	}}
+	mut, err := a.Apply(plan)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if mut != 1 {
+		t.Errorf("expected 1 mutation, got %d", mut)
+	}
+	reloaded, _ := LoadHub(fs, hub)
+	b := reloaded.Config.Branches["feat"]
+	if b.Base == nil || *b.Base != "develop" {
+		t.Errorf("expected Base=develop, got %v", b.Base)
+	}
+}
+
+// TestApplier_RecordBase_SkipsWhenAlreadySet confirms idempotence: if
+// another run beats this one to it (or the user set Base manually), the
+// apply is a no-op rather than overwriting their choice.
+func TestApplier_RecordBase_SkipsWhenAlreadySet(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	g := mocks.NewMockGit()
+
+	hub := "/hub"
+	wt := "/hub/hops/feat"
+	existing := "release/2026-05"
+	writeHub(t, fs, hub, map[string]config.HubBranch{
+		"main": {Path: "hops/main", HopspaceBranch: "main"},
+		"feat": {Path: "hops/feat", HopspaceBranch: "feat", Base: &existing},
+	})
+
+	a := NewApplier(fs, g)
+	plan := &Plan{HubPath: hub, Actions: []Action{
+		{Kind: ActionRecordBase, WorktreePath: wt, NewValue: "develop"},
+	}}
+	mut, err := a.Apply(plan)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if mut != 0 {
+		t.Errorf("expected 0 mutations (idempotent skip), got %d", mut)
+	}
+	reloaded, _ := LoadHub(fs, hub)
+	b := reloaded.Config.Branches["feat"]
+	if b.Base == nil || *b.Base != existing {
+		t.Errorf("expected Base preserved as %q, got %v", existing, b.Base)
+	}
+}

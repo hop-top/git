@@ -22,13 +22,25 @@ import (
 //
 // Mismatches between these sources translate into Actions.
 type Planner struct {
-	fs  afero.Fs
-	git git.GitInterface
+	fs            afero.Fs
+	git           git.GitInterface
+	inferBaseFlag bool
 }
 
 // NewPlanner constructs a Planner.
 func NewPlanner(fs afero.Fs, g git.GitInterface) *Planner {
 	return &Planner{fs: fs, git: g}
+}
+
+// WithBaseInference enables/disables emitting ActionRecordBase entries
+// for HubBranch entries with Base unset. Off by default — the base
+// inference is heuristic (best-effort branch.<name>.merge then
+// most-recent merge-base across known branches) and we don't want to
+// surprise users running plain `git hop repair`. Wired by the
+// `--base` flag on the repair command.
+func (p *Planner) WithBaseInference(enabled bool) *Planner {
+	p.inferBaseFlag = enabled
+	return p
 }
 
 // Build classifies every entry in the hub config (and every dir registered
@@ -60,6 +72,27 @@ func (p *Planner) Build(hubPath string, pathspec []string) (*Plan, error) {
 		}
 		action := p.classifyBranch(branchName, wtPath, registered)
 		plan.Actions = append(plan.Actions, action)
+
+		// Emit a base-record action only when the user asked, the
+		// branch has no recorded base, the worktree dir actually
+		// exists (otherwise we have nothing to probe), and inference
+		// produced a non-empty result.
+		if p.inferBaseFlag && branch.Base == nil && branchName != hub.Config.Repo.DefaultBranch {
+			if exists, _ := afero.DirExists(p.fs, wtPath); exists {
+				base, reason, ok := p.inferBranchBase(hub, branchName, wtPath)
+				if ok {
+					plan.Actions = append(plan.Actions, Action{
+						Kind:         ActionRecordBase,
+						WorktreePath: wtPath,
+						NewValue:     base,
+						Reason:       reason,
+					})
+				} else if reason != "" {
+					plan.Warnings = append(plan.Warnings,
+						fmt.Sprintf("branch %q: cannot infer base (%s)", branchName, reason))
+				}
+			}
+		}
 	}
 
 	// Worktrees git knows about but hop.json doesn't — orphan-in-git.
@@ -131,6 +164,77 @@ func (p *Planner) classifyBranch(name, wtPath string, registered []string) Actio
 		}
 		return Action{Kind: ActionNoOp, WorktreePath: wtPath, Reason: "ok"}
 	}
+}
+
+// inferBranchBase guesses the upstream branch a worktree was forked
+// from, for back-filling HubBranch.Base. Two signals, in order:
+//
+//  1. branch.<name>.merge — set by git when push/pull establishes a
+//     tracking relationship. Reflects the user's declared PR target.
+//     We trust it iff the configured value resolves to a branch the
+//     hub knows about; arbitrary remote-only refs are skipped to
+//     avoid recording a base that local commands can't compare against.
+//
+//  2. Most-recent merge-base — iterate other hub branches, compute the
+//     merge-base commit timestamp for each candidate, pick the one
+//     whose merge-base is newest. The candidate whose history this
+//     branch diverged from most recently is, by construction, its
+//     most-likely parent. Ties (same timestamp) are reported as
+//     ambiguous via warning rather than guessed.
+//
+// Returns (base, reason, true) on success. On failure, reason explains
+// why so the caller can surface a Warning; base is empty.
+func (p *Planner) inferBranchBase(hub *Hub, branchName, wtPath string) (string, string, bool) {
+	// Signal 1: tracking config.
+	if cfg, err := p.git.RunInDir(wtPath, "git", "config", "--get",
+		"branch."+branchName+".merge"); err == nil {
+		cfg = strings.TrimSpace(cfg)
+		// Expected shape: "refs/heads/<branch>"
+		if ref := strings.TrimPrefix(cfg, "refs/heads/"); ref != "" && ref != cfg {
+			if _, known := hub.Config.Branches[ref]; known && ref != branchName {
+				return ref, "branch." + branchName + ".merge=" + cfg, true
+			}
+		}
+	}
+
+	// Signal 2: most-recent merge-base across other hub branches.
+	type candidate struct {
+		name string
+		ts   int64
+	}
+	var best candidate
+	var tied bool
+	for other := range hub.Config.Branches {
+		if other == branchName {
+			continue
+		}
+		mb, err := p.git.MergeBase(wtPath, branchName, other)
+		if err != nil || mb == "" {
+			continue
+		}
+		out, err := p.git.RunInDir(wtPath, "git", "log", "-1", "--format=%ct", mb)
+		if err != nil {
+			continue
+		}
+		var ts int64
+		if _, err := fmt.Sscanf(strings.TrimSpace(out), "%d", &ts); err != nil {
+			continue
+		}
+		switch {
+		case best.name == "" || ts > best.ts:
+			best = candidate{other, ts}
+			tied = false
+		case ts == best.ts:
+			tied = true
+		}
+	}
+	switch {
+	case best.name == "":
+		return "", "no merge-base with any known branch", false
+	case tied:
+		return "", "ambiguous: multiple branches share the most-recent merge-base", false
+	}
+	return best.name, "most-recent merge-base with " + best.name, true
 }
 
 // gitdirStale checks whether the worktree's .git pointer file references

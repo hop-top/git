@@ -57,9 +57,51 @@ func (a *Applier) applyOne(hubPath string, action *Action) (bool, error) {
 		return a.unregisterFromGit(hubPath, action)
 	case ActionUpdateHopJSON:
 		return a.updateHopJSON(hubPath, action)
+	case ActionRecordBase:
+		return a.recordBase(hubPath, action)
 	default:
 		return false, fmt.Errorf("unknown action kind %d", action.Kind)
 	}
+}
+
+// recordBase writes HubBranch.Base for a single hub entry. The branch
+// is located by reverse-lookup from the worktree path; the new base is
+// taken from action.NewValue. Skipped when Base is already set
+// (idempotent: a second run is a no-op).
+func (a *Applier) recordBase(hubPath string, action *Action) (bool, error) {
+	hub, err := LoadHub(a.fs, hubPath)
+	if err != nil {
+		return false, fmt.Errorf("load hub: %w", err)
+	}
+	branchName := branchKeyForPath(hub, hubPath, action.WorktreePath)
+	if branchName == "" {
+		return false, fmt.Errorf("cannot determine branch for %s from hop.json", action.WorktreePath)
+	}
+	b := hub.Config.Branches[branchName]
+	if b.Base != nil {
+		// Already set — either the planner raced with another run or
+		// this is a re-apply. Either way, nothing to do.
+		return false, nil
+	}
+	if action.NewValue == "" {
+		return false, fmt.Errorf("record-base action has empty NewValue for %s", branchName)
+	}
+	newBase := action.NewValue
+	b.Base = &newBase
+	hub.Config.Branches[branchName] = b
+	if err := hub.Save(); err != nil {
+		return true, fmt.Errorf("save hub: %w", err)
+	}
+
+	reloaded, err := LoadHub(a.fs, hubPath)
+	if err != nil {
+		return true, fmt.Errorf("post-action verify (reload): %w", err)
+	}
+	got := reloaded.Config.Branches[branchName].Base
+	if got == nil || *got != newBase {
+		return true, fmt.Errorf("post-action verify: base not persisted for %s", branchName)
+	}
+	return true, nil
 }
 
 // rewriteGitdir delegates to `git worktree repair` from the hub. Git's

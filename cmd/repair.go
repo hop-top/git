@@ -24,6 +24,7 @@ var (
 	repairProgressFlag    bool
 	repairNoProgressFlag  bool
 	repairColor           string
+	repairBaseFlag        bool
 )
 
 var repairCmd = &cobra.Command{
@@ -52,6 +53,7 @@ func init() {
 	f.BoolVar(&repairProgressFlag, "progress", false, "force progress to stderr")
 	f.BoolVar(&repairNoProgressFlag, "no-progress", false, "force progress off")
 	f.StringVar(&repairColor, "color", "auto", "color output: always|auto|never")
+	f.BoolVar(&repairBaseFlag, "base", false, "infer and record HubBranch.Base for legacy entries (best-effort heuristic; use --dry-run to preview)")
 }
 
 // exit codes follow git porcelain convention: 0 success, 1 op failure,
@@ -132,7 +134,7 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 	defer lock.Release()
 
 	// 2. Detect / build plan.
-	plan, err := hop.NewPlanner(fs, g).Build(hubPath, pathspec)
+	plan, err := hop.NewPlanner(fs, g).WithBaseInference(repairBaseFlag).Build(hubPath, pathspec)
 	if err != nil {
 		return fatal("plan: " + err.Error())
 	}
@@ -261,12 +263,15 @@ func printPlan(plan *hop.Plan, porcelainMode bool) {
 		return
 	}
 	fmt.Printf("Repair plan for %s:\n", plan.HubPath)
-	if len(plan.Actions) == 0 {
+	if len(plan.Actions) == 0 && len(plan.Warnings) == 0 {
 		fmt.Println("  (nothing to do)")
 		return
 	}
 	for _, a := range plan.Actions {
 		fmt.Printf("  %-15s %s — %s\n", a.Kind.String(), a.WorktreePath, a.Reason)
+	}
+	for _, w := range plan.Warnings {
+		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
 }
 

@@ -20,6 +20,12 @@ const (
 	// ActionUpdateHopJSON realigns hop.json with on-disk + git-registry reality
 	// (e.g. branch entry's path is wrong).
 	ActionUpdateHopJSON
+	// ActionRecordBase backfills HubBranch.Base on a legacy branch entry
+	// using local inference signals (branch.<name>.merge config first;
+	// most-recent merge-base across known branches as fallback). Emitted
+	// only when the planner is invoked with the base-inference flag set;
+	// applies idempotently — branches with Base already set are skipped.
+	ActionRecordBase
 )
 
 // String returns the porcelain action token (kebab-case) for stable output.
@@ -35,6 +41,8 @@ func (k ActionKind) String() string {
 		return "unregister"
 	case ActionUpdateHopJSON:
 		return "update-hopjson"
+	case ActionRecordBase:
+		return "record-base"
 	default:
 		return "unknown"
 	}

@@ -22,6 +22,11 @@ type MockGit struct {
 	// nil, GetStatus returns a clean default.
 	StatusOverride *git.Status
 
+	// MergeBase response table, keyed by "<dir>:<c1>:<c2>". Used by
+	// the repair planner's base-inference probes.
+	MergeBaseResponses map[string]string
+	MergeBaseErrors    map[string]error
+
 	// Repair-related call recorders + injectable errors.
 	WorktreeRepairCalls []string
 	WorktreeRepairErr   error
@@ -144,8 +149,21 @@ func (m *MockGit) GetRoot(dir string) (string, error) {
 	return "", nil
 }
 
-// MergeBase mocks checking merge base between commits
+// MergeBase mocks checking merge base between commits. Tests can populate
+// MergeBaseResponses keyed by "<dir>:<c1>:<c2>" to return specific SHAs;
+// unset keys fall through to "" (no merge base).
 func (m *MockGit) MergeBase(dir, commit1, commit2 string) (string, error) {
+	key := dir + ":" + commit1 + ":" + commit2
+	if m.MergeBaseErrors != nil {
+		if err, ok := m.MergeBaseErrors[key]; ok {
+			return "", err
+		}
+	}
+	if m.MergeBaseResponses != nil {
+		if v, ok := m.MergeBaseResponses[key]; ok {
+			return v, nil
+		}
+	}
 	return "", nil
 }
 
