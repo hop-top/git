@@ -152,6 +152,17 @@ var addCmd = &cobra.Command{
 			output.Fatal("Failed to add branch to hub: %v", err)
 		}
 
+		// Record the comparison base when the worktree was forked from a
+		// non-default branch. status/list use this for accurate ahead/behind
+		// labels (default-branch forks fall through to the hub default).
+		// Skip "initial" (root commit, not a branch) and any input that
+		// doesn't resolve to a local or remote branch ref (raw SHA, tag).
+		if base := resolveBranchBase(g, worktreePath, startPoint, hub.Config.Repo.DefaultBranch); base != "" {
+			if err := hub.SetBranchBase(branch, base); err != nil {
+				output.Warn("Failed to record branch base: %v", err)
+			}
+		}
+
 		// Update global state
 		st, err := state.LoadState(fs)
 		if err != nil {
@@ -364,6 +375,35 @@ func opencodeAgentHint(path string, in *os.File) {
 	}
 
 	fmt.Fprintf(os.Stderr, "\nAdd to %s:\n\n  \"external_directories\": [\"%s\"]\n\n", cfgPath, path)
+}
+
+// resolveBranchBase normalizes the start-point string fed to
+// WorktreeManager into the branch name to persist in HubBranch.Base.
+// Returns "" when the base should NOT be recorded:
+//   - empty / "default-branch" sentinel (= hub default; fallback handles it)
+//   - "initial" sentinel (root commit, not a branch)
+//   - input equal to the hub default branch (redundant with fallback)
+//   - input that doesn't resolve to a local or remote-tracking branch ref
+//     (raw SHA, tag, or a name that no longer exists)
+//
+// When the input resolves only via `refs/remotes/origin/<name>`, the
+// returned base is the bare branch name (no `origin/` prefix) — that's
+// the form used for comparison everywhere else.
+func resolveBranchBase(g git.GitInterface, worktreePath, startPoint, defaultBranch string) string {
+	switch startPoint {
+	case "", "default-branch", "initial":
+		return ""
+	}
+	if startPoint == defaultBranch {
+		return ""
+	}
+	if _, err := g.RevParse(worktreePath, "--verify", "refs/heads/"+startPoint); err == nil {
+		return startPoint
+	}
+	if _, err := g.RevParse(worktreePath, "--verify", "refs/remotes/origin/"+startPoint); err == nil {
+		return startPoint
+	}
+	return ""
 }
 
 // resolveAddStartPoint applies the configured precedence to pick the

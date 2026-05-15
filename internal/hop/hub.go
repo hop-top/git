@@ -112,6 +112,24 @@ func (h *Hub) AddBranch(branchName, hopspaceBranch, worktreePath string) error {
 	return h.Save()
 }
 
+// SetBranchBase records the branch this worktree was forked from, for
+// use as the comparison target in status/list. base="" clears the
+// field (falls back to hub default). Returns an error if the branch is
+// not registered in this hub. Persists immediately.
+func (h *Hub) SetBranchBase(branchName, base string) error {
+	b, ok := h.Config.Branches[branchName]
+	if !ok {
+		return fmt.Errorf("branch %q not in hub", branchName)
+	}
+	if base == "" {
+		b.Base = nil
+	} else {
+		b.Base = &base
+	}
+	h.Config.Branches[branchName] = b
+	return h.Save()
+}
+
 // RemoveBranch removes a branch from the hub
 func (h *Hub) RemoveBranch(branchName string) error {
 	// Update config - no symlinks to remove
