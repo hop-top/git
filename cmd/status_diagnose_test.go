@@ -17,18 +17,36 @@ func writeBareConfig(t *testing.T, fs afero.Fs, root string) {
 }
 
 func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
+	// Helpers fail the test via t.Fatalf on any setup error, so a
+	// silent setup failure can't masquerade as a passing "not detected"
+	// case (relevant because afero.MemMapFs creates parent dirs on
+	// WriteFile, but explicit checks keep the test honest if that
+	// behavior ever changes).
+	mkdir := func(t *testing.T, fs afero.Fs, p string) {
+		t.Helper()
+		if err := fs.MkdirAll(p, 0755); err != nil {
+			t.Fatalf("mkdir %s: %v", p, err)
+		}
+	}
+	writeFile := func(t *testing.T, fs afero.Fs, p string, body string) {
+		t.Helper()
+		if err := afero.WriteFile(fs, p, []byte(body), 0644); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+	}
+
 	cases := []struct {
 		name      string
-		setup     func(fs afero.Fs)
+		setup     func(t *testing.T, fs afero.Fs)
 		startPath string
 		wantRoot  string
 		wantOK    bool
 	}{
 		{
 			name: "bare repo with hops/ and no hop.json — detected from root",
-			setup: func(fs afero.Fs) {
+			setup: func(t *testing.T, fs afero.Fs) {
 				writeBareConfig(t, fs, "/repo")
-				_ = fs.MkdirAll("/repo/hops/main", 0755)
+				mkdir(t, fs, "/repo/hops/main")
 			},
 			startPath: "/repo",
 			wantRoot:  "/repo",
@@ -36,9 +54,9 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 		},
 		{
 			name: "bare repo with hops/ and no hop.json — detected from inside hops/main",
-			setup: func(fs afero.Fs) {
+			setup: func(t *testing.T, fs afero.Fs) {
 				writeBareConfig(t, fs, "/repo")
-				_ = fs.MkdirAll("/repo/hops/main", 0755)
+				mkdir(t, fs, "/repo/hops/main")
 			},
 			startPath: "/repo/hops/main",
 			wantRoot:  "/repo",
@@ -46,9 +64,9 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 		},
 		{
 			name: "bare repo with hops/ and no hop.json — detected from nested branch path",
-			setup: func(fs afero.Fs) {
+			setup: func(t *testing.T, fs afero.Fs) {
 				writeBareConfig(t, fs, "/repo")
-				_ = fs.MkdirAll("/repo/hops/feat/x", 0755)
+				mkdir(t, fs, "/repo/hops/feat/x")
 			},
 			startPath: "/repo/hops/feat/x",
 			wantRoot:  "/repo",
@@ -56,10 +74,10 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 		},
 		{
 			name: "bare repo with hops/ AND hop.json — already registered, NOT detected",
-			setup: func(fs afero.Fs) {
+			setup: func(t *testing.T, fs afero.Fs) {
 				writeBareConfig(t, fs, "/repo")
-				_ = fs.MkdirAll("/repo/hops/main", 0755)
-				_ = afero.WriteFile(fs, "/repo/hop.json", []byte("{}"), 0644)
+				mkdir(t, fs, "/repo/hops/main")
+				writeFile(t, fs, "/repo/hop.json", "{}")
 			},
 			startPath: "/repo/hops/main",
 			wantRoot:  "",
@@ -67,7 +85,7 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 		},
 		{
 			name: "bare repo WITHOUT hops/ — not a worktree-shaped repo, NOT detected",
-			setup: func(fs afero.Fs) {
+			setup: func(t *testing.T, fs afero.Fs) {
 				writeBareConfig(t, fs, "/repo")
 			},
 			startPath: "/repo",
@@ -76,11 +94,10 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 		},
 		{
 			name: "non-bare config with hops/ — NOT detected (regular repo, not bare-worktree-shaped)",
-			setup: func(fs afero.Fs) {
-				// Non-bare: bare = false
-				content := "[core]\n\trepositoryformatversion = 0\n\tbare = false\n"
-				_ = afero.WriteFile(fs, "/repo/config", []byte(content), 0644)
-				_ = fs.MkdirAll("/repo/hops/main", 0755)
+			setup: func(t *testing.T, fs afero.Fs) {
+				writeFile(t, fs, "/repo/config",
+					"[core]\n\trepositoryformatversion = 0\n\tbare = false\n")
+				mkdir(t, fs, "/repo/hops/main")
 			},
 			startPath: "/repo",
 			wantRoot:  "",
@@ -88,7 +105,7 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 		},
 		{
 			name: "empty filesystem — NOT detected",
-			setup: func(fs afero.Fs) {
+			setup: func(t *testing.T, fs afero.Fs) {
 			},
 			startPath: "/repo",
 			wantRoot:  "",
@@ -96,9 +113,9 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 		},
 		{
 			name: "bare repo with EMPTY hops/ — NOT detected (no actual worktrees)",
-			setup: func(fs afero.Fs) {
+			setup: func(t *testing.T, fs afero.Fs) {
 				writeBareConfig(t, fs, "/repo")
-				_ = fs.MkdirAll("/repo/hops", 0755)
+				mkdir(t, fs, "/repo/hops")
 			},
 			startPath: "/repo",
 			wantRoot:  "",
@@ -109,7 +126,7 @@ func TestDetectUnregisteredBareWorktreeRepo(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
-			tc.setup(fs)
+			tc.setup(t, fs)
 			gotRoot, gotOK := detectUnregisteredBareWorktreeRepo(fs, tc.startPath)
 			if gotOK != tc.wantOK || gotRoot != tc.wantRoot {
 				t.Fatalf("detectUnregisteredBareWorktreeRepo(%q) = (%q, %v), want (%q, %v)",
