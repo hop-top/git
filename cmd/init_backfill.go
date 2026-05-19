@@ -178,9 +178,18 @@ func resolveBackfillRoot(fs afero.Fs, cwd string, s config.StructureType) (strin
 }
 
 // hubFromWorktreeChild reads <cwd>/.git's "gitdir: ..." line and
-// returns the bare-repo root, which is the parent of the "worktrees"
-// directory in the gitdir path. Returns ("", false) on any parse
-// failure — caller falls back to "not our case".
+// returns the hub root. The gitdir takes one of two shapes depending
+// on whether the hub is bare:
+//
+//   - bare hub (git hop's own layout): "<hub>/worktrees/<name>" → hub
+//     is the parent of "worktrees".
+//   - regular hub (vanilla `git worktree add` from a non-bare repo):
+//     "<hub>/.git/worktrees/<name>" → hub is the grandparent of
+//     "worktrees" (i.e. the parent of the ".git" segment).
+//
+// Returns ("", false) when the .git file is unreadable, the gitdir
+// line is absent, or the path doesn't end in ".../worktrees/<name>"
+// — the caller falls back to "not our case" rather than guessing.
 func hubFromWorktreeChild(fs afero.Fs, cwd string) (string, bool) {
 	data, err := afero.ReadFile(fs, filepath.Join(cwd, ".git"))
 	if err != nil {
@@ -196,10 +205,18 @@ func hubFromWorktreeChild(fs afero.Fs, cwd string) (string, bool) {
 	if gitdir == "" {
 		return "", false
 	}
-	// gitdir shape: <hub>/worktrees/<name>. Strip the last two segments.
-	dir := filepath.Dir(gitdir) // <hub>/worktrees
-	if filepath.Base(dir) != "worktrees" {
+	// Expect ".../worktrees/<name>". Strip "<name>" → parent should be
+	// "worktrees"; otherwise the pointer doesn't refer to a worktree.
+	parent := filepath.Dir(gitdir)
+	if filepath.Base(parent) != "worktrees" {
 		return "", false
 	}
-	return filepath.Dir(dir), true
+	hub := filepath.Dir(parent)
+	// Regular-hub shape: hub ends in "/.git". Strip that segment so we
+	// return the actual hub root (where hop.json should live), not the
+	// ".git" directory.
+	if filepath.Base(hub) == ".git" {
+		hub = filepath.Dir(hub)
+	}
+	return hub, true
 }

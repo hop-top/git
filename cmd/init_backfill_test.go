@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"hop.top/git/internal/config"
-	"hop.top/git/internal/hop"
 	"hop.top/git/test/mocks"
 	"github.com/spf13/afero"
 )
@@ -239,11 +238,11 @@ func TestBackfillHubConfigIfMissing(t *testing.T) {
 	})
 }
 
-var _ = hop.ParseRepoFromURL
-
 // resolveBackfillRoot picks the path to back-fill given the cwd and the
-// repo structure detected there. BareWorktreeRoot → cwd; WorktreeChild
-// → walk up via FindProjectRoot. Anything else → ("", false).
+// repo structure detected there. BareWorktreeRoot/WorktreeRoot → cwd;
+// WorktreeChild → derived from the worktree's .git gitdir pointer
+// (handling both bare-hub "<hub>/worktrees/<n>" and regular-hub
+// "<hub>/.git/worktrees/<n>" shapes). Anything else → ("", false).
 func TestResolveBackfillRoot(t *testing.T) {
 	t.Run("BareWorktreeRoot returns cwd", func(t *testing.T) {
 		fs := afero.NewMemMapFs()
@@ -252,35 +251,47 @@ func TestResolveBackfillRoot(t *testing.T) {
 			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
 		}
 	})
-	t.Run("WorktreeChild walks up to the bare-worktree root", func(t *testing.T) {
-		// FindProjectRoot's internal HEAD-file probe uses os.Stat (not
-		// afero), so this case has to run against the real filesystem in
-		// a tempdir to avoid spuriously failing on afero.MemMapFs.
-		tmp := t.TempDir()
-		fs := afero.NewOsFs()
-		repo := filepath.Join(tmp, "repo")
-		// Bare repo at <tmp>/repo: HEAD + objects/ + refs/.
-		if err := fs.MkdirAll(filepath.Join(repo, "objects"), 0755); err != nil {
+	t.Run("WorktreeChild of a bare hub: gitdir is <hub>/worktrees/<name>", func(t *testing.T) {
+		// Bare-hub shape: git hop's own layout. gitdir has no ".git".
+		fs := afero.NewMemMapFs()
+		hopsMain := "/repo/hops/main"
+		if err := afero.WriteFile(fs, filepath.Join(hopsMain, ".git"),
+			[]byte("gitdir: /repo/worktrees/main\n"), 0644); err != nil {
 			t.Fatal(err)
 		}
-		if err := fs.MkdirAll(filepath.Join(repo, "refs"), 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := afero.WriteFile(fs, filepath.Join(repo, "HEAD"), []byte("ref: refs/heads/main\n"), 0644); err != nil {
-			t.Fatal(err)
-		}
-		// A worktree child under <tmp>/repo/hops/main.
-		hopsMain := filepath.Join(repo, "hops", "main")
-		if err := fs.MkdirAll(hopsMain, 0755); err != nil {
-			t.Fatal(err)
-		}
-		if err := afero.WriteFile(fs, filepath.Join(hopsMain, ".git"), []byte("gitdir: "+filepath.Join(repo, "worktrees", "main")+"\n"), 0644); err != nil {
-			t.Fatal(err)
-		}
-
 		got, ok := resolveBackfillRoot(fs, hopsMain, config.WorktreeChild)
-		if !ok || got != repo {
-			t.Errorf("got (%q, %v), want (%q, true)", got, ok, repo)
+		if !ok || got != "/repo" {
+			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
+		}
+	})
+	t.Run("WorktreeChild of a regular hub: gitdir is <hub>/.git/worktrees/<name>", func(t *testing.T) {
+		// Regular-hub shape: `git worktree add` from a non-bare repo
+		// places the per-worktree gitdir under <hub>/.git/worktrees/.
+		// hubFromWorktreeChild must strip the ".git" segment so the
+		// returned root is the hub itself, not <hub>/.git.
+		fs := afero.NewMemMapFs()
+		wt := "/repo/wt-feature"
+		if err := afero.WriteFile(fs, filepath.Join(wt, ".git"),
+			[]byte("gitdir: /repo/.git/worktrees/feature\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		got, ok := resolveBackfillRoot(fs, wt, config.WorktreeChild)
+		if !ok || got != "/repo" {
+			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
+		}
+	})
+	t.Run("WorktreeChild with malformed gitdir returns false", func(t *testing.T) {
+		// gitdir parent isn't "worktrees" — pointer doesn't refer to a
+		// worktree, so we can't infer a hub.
+		fs := afero.NewMemMapFs()
+		wt := "/repo/wt"
+		if err := afero.WriteFile(fs, filepath.Join(wt, ".git"),
+			[]byte("gitdir: /some/random/dir/main\n"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		_, ok := resolveBackfillRoot(fs, wt, config.WorktreeChild)
+		if ok {
+			t.Errorf("got ok=true for malformed gitdir; want false")
 		}
 	})
 	t.Run("WorktreeRoot returns cwd (regular non-bare with worktrees)", func(t *testing.T) {
