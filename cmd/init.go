@@ -414,7 +414,22 @@ func handleAlreadyInitialized(fs afero.Fs, g git.GitInterface, path string, stru
 // handleAlreadyInitializedWithFlags is called when git hop init is run in a repo that is
 // already using the worktree structure. It ensures hooks are installed (unless --no-hooks)
 // and prints a summary so the command is idempotent.
+//
+// Before printing the "already initialized" summary, it back-fills a
+// missing hop.json from runtime git state — needed for legacy bare-
+// worktree repos cloned/created outside `git hop` (or where hop.json
+// was lost). Without the back-fill, those repos report "already
+// initialized" and yet downstream commands (status, list, add) treat
+// the directory as an un-registered hub. See cmd/init_backfill.go.
 func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path string, structure config.StructureType, noHooks, enableChdir bool) {
+	if hubPath, ok := resolveBackfillRoot(fs, path, structure); ok {
+		if created, err := backfillHubConfigIfMissing(fs, g, hubPath); err != nil {
+			fmt.Fprintf(os.Stderr, "warning: failed to back-fill hop.json at %s: %v\n", hubPath, err)
+		} else if created {
+			fmt.Printf("Created missing hop.json at %s.\n", hubPath)
+		}
+	}
+
 	fmt.Println("Repository already initialized with git-hop worktree structure.")
 	fmt.Printf("Structure: %s\n", structure)
 	fmt.Printf("Path:      %s\n", path)

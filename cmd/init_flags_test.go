@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"hop.top/git/test/mocks"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,8 +81,13 @@ func TestIdempotentRun_NoHooksFlag_DoesNotInstallHooks(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(repoPath, ".git", "HEAD"),
 		[]byte("ref: refs/heads/main\n"), 0644))
 
+	// handleAlreadyInitializedWithFlags now back-fills a missing hop.json
+	// from runtime git state, so it requires a non-nil GitInterface.
+	g := mocks.NewMockGit()
+	g.Runner.Responses[repoPath+":git symbolic-ref HEAD"] = "refs/heads/main\n"
+
 	out := captureStdout(t, func() {
-		handleAlreadyInitializedWithFlags(fs, nil, repoPath, "bare-worktree", true, false)
+		handleAlreadyInitializedWithFlags(fs, g, repoPath, "bare-worktree", true, false)
 	})
 
 	_ = out
@@ -96,8 +102,11 @@ func TestIdempotentRun_NoFlagsInstallsHooks(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(repoPath, ".git", "HEAD"),
 		[]byte("ref: refs/heads/main\n"), 0644))
 
+	g := mocks.NewMockGit()
+	g.Runner.Responses[repoPath+":git symbolic-ref HEAD"] = "refs/heads/main\n"
+
 	captureStdout(t, func() {
-		handleAlreadyInitializedWithFlags(fs, nil, repoPath, "bare-worktree", false, false)
+		handleAlreadyInitializedWithFlags(fs, g, repoPath, "bare-worktree", false, false)
 	})
 
 	exists, _ := afero.DirExists(fs, filepath.Join(repoPath, ".git-hop", "hooks"))
