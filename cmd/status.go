@@ -67,6 +67,21 @@ configuration, and resource usage.`,
 			return
 		}
 
+		// Before falling through to a worktree probe or "Not in a hub or
+		// worktree.", check whether we're sitting in a bare-worktree-shaped
+		// repo that's just missing hop.json. Without this branch:
+		//   - at the bare-repo root we'd print "Not in a hub or worktree.",
+		//     which is wrong (it IS a worktree-shaped repo);
+		//   - inside hops/<branch>/ we'd fall into showWorktreeStatus and
+		//     print a 2-line git-status-shaped summary with no hub context,
+		//     looking accidentally identical to plain `git status`.
+		// Either way the user can't tell what to do next. Surface the actual
+		// problem and the fix.
+		if root, ok := detectUnregisteredBareWorktreeRepo(fs, cwd); ok {
+			fmt.Fprintln(os.Stderr, unregisteredBareWorktreeHint(root))
+			return
+		}
+
 		// Check if inside a worktree
 		// We can check if we are in a git worktree
 		if g.IsInsideWorkTree(cwd) {
