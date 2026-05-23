@@ -3,7 +3,7 @@ Running git-hop diagnostics...
 === Checking Paths ===
 Data home:   $TMPDIR/data
 Config home: $TMPDIR/custom-config
-Cache home:  $TMPDIR/Library/Caches
+Cache home:  $TMPDIR/cache
 
 === Checking Hub ===
 Not in a hub. Skipping hub-specific checks.
@@ -21,4 +21,4 @@ No repositories in state. Skipping state checks.
 Issues found. Run 'git hop doctor --fix' to automatically repair them.
 error: data directory does not exist: $TMPDIR/data/git-hop
 error: config directory does not exist: $TMPDIR/custom-config/git-hop
-error: cache directory does not exist: $TMPDIR/Library/Caches/git-hop
+error: cache directory does not exist: $TMPDIR/cache/git-hop
