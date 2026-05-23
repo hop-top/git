@@ -2,7 +2,7 @@
 // git-hop event bus.
 package events
 
-import "hop.top/kit/bus"
+import "hop.top/kit/go/runtime/bus"
 
 // Topic constants follow dot-separated MQTT convention.
 const (

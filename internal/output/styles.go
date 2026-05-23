@@ -5,7 +5,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/exp/charmtone"
-	"hop.top/kit/cli"
+	"hop.top/kit/go/console/cli"
 )
 
 // defaultTheme returns a cli.Theme built from the Neon palette.

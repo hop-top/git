@@ -9,7 +9,7 @@ import (
 	"charm.land/bubbles/v2/spinner"
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"hop.top/kit/tui"
+	"hop.top/kit/go/console/tui"
 )
 
 // Spinner represents a CLI spinner for long-running operations

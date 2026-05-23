@@ -15,7 +15,7 @@ import (
 	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"hop.top/kit/bus"
+	"hop.top/kit/go/runtime/bus"
 )
 
 var envCmd = &cobra.Command{

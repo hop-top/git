@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"hop.top/kit/upgrade"
+	"hop.top/kit/go/core/upgrade"
 )
 
 func TestNewUpgradeChecker_ReturnsChecker(t *testing.T) {

@@ -4,7 +4,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/core/xdg"
 )
 
 const toolName = "git-hop"

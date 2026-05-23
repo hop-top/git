@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/core/xdg"
 )
 
 // Additional hop.* config keys not defined in gitconfig.go.

@@ -9,10 +9,10 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"hop.top/kit/bus"
-	kitcli "hop.top/kit/cli"
-	"hop.top/kit/upgrade"
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/runtime/bus"
+	kitcli "hop.top/kit/go/console/cli"
+	"hop.top/kit/go/core/upgrade"
+	"hop.top/kit/go/core/xdg"
 
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"

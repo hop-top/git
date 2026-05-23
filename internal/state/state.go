@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/spf13/afero"
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/core/xdg"
 )
 
 // State represents the git-hop state tracking repositories and their locations

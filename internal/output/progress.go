@@ -8,7 +8,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
-	"hop.top/kit/tui"
+	"hop.top/kit/go/console/tui"
 )
 
 // ProgressBar represents a progress bar for operations with known total
