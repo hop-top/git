@@ -521,47 +521,71 @@ func stringContains(s, substr string) bool {
 	return false
 }
 
-func TestIsVendorIgnored(t *testing.T) {
+// TestShouldRunModVendor exercises the decision used by package_managers.go
+// to gate `go mod vendor`. Semantics: refresh vendor/ only when it already
+// exists in the source tree AND is not gitignored. Absent vendor/ → never
+// run vendor (this is the bug fix for TestAdd_GoProject_NoVendorWhenNotVendored).
+func TestShouldRunModVendor(t *testing.T) {
 	tests := []struct {
-		name       string
-		gitignore  string
-		expected   bool
-		hasFile    bool
+		name        string
+		gitignore   string
+		hasGitignore bool
+		hasVendor   bool
+		expected    bool
 	}{
 		{
-			name:      "vendor in .gitignore",
-			gitignore: "vendor\n",
-			expected:  true,
-			hasFile:   true,
+			name:        "vendor exists, no .gitignore -> run vendor",
+			hasVendor:   true,
+			hasGitignore: false,
+			expected:    true,
 		},
 		{
-			name:      "vendor/ in .gitignore",
-			gitignore: "vendor/\n",
-			expected:  true,
-			hasFile:   true,
+			name:        "vendor exists, .gitignore does not list vendor -> run vendor",
+			gitignore:   "node_modules/\nbuild/\n",
+			hasGitignore: true,
+			hasVendor:   true,
+			expected:    true,
 		},
 		{
-			name:      "vendor in .gitignore with comments",
-			gitignore: "# ignore deps\nvendor\nnode_modules/\n",
-			expected:  true,
-			hasFile:   true,
+			name:        "vendor exists but gitignored (vendor) -> skip",
+			gitignore:   "vendor\n",
+			hasGitignore: true,
+			hasVendor:   true,
+			expected:    false,
 		},
 		{
-			name:      "vendor not in .gitignore",
-			gitignore: "node_modules/\nbuild/\n",
-			expected:  false,
-			hasFile:   true,
+			name:        "vendor exists but gitignored (vendor/) -> skip",
+			gitignore:   "vendor/\n",
+			hasGitignore: true,
+			hasVendor:   true,
+			expected:    false,
 		},
 		{
-			name:      "empty .gitignore",
-			gitignore: "",
-			expected:  false,
-			hasFile:   true,
+			name:        "vendor exists but gitignored with comments -> skip",
+			gitignore:   "# ignore deps\nvendor\nnode_modules/\n",
+			hasGitignore: true,
+			hasVendor:   true,
+			expected:    false,
 		},
 		{
-			name:     "no .gitignore file",
-			expected: false,
-			hasFile:  false,
+			name:        "no vendor, no .gitignore -> skip (the regression case)",
+			hasVendor:   false,
+			hasGitignore: false,
+			expected:    false,
+		},
+		{
+			name:        "no vendor, .gitignore present but no vendor entry -> skip",
+			gitignore:   "node_modules/\n",
+			hasGitignore: true,
+			hasVendor:   false,
+			expected:    false,
+		},
+		{
+			name:        "no vendor, vendor gitignored -> skip",
+			gitignore:   "vendor/\n",
+			hasGitignore: true,
+			hasVendor:   false,
+			expected:    false,
 		},
 	}
 
@@ -569,15 +593,23 @@ func TestIsVendorIgnored(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			fs := afero.NewMemMapFs()
 			worktreePath := "/test"
-			fs.Mkdir(worktreePath, 0755)
-
-			if tt.hasFile {
-				afero.WriteFile(fs, worktreePath+"/.gitignore", []byte(tt.gitignore), 0644)
+			if err := fs.Mkdir(worktreePath, 0755); err != nil {
+				t.Fatalf("mkdir worktree: %v", err)
+			}
+			if tt.hasGitignore {
+				if err := afero.WriteFile(fs, worktreePath+"/.gitignore", []byte(tt.gitignore), 0644); err != nil {
+					t.Fatalf("write .gitignore: %v", err)
+				}
+			}
+			if tt.hasVendor {
+				if err := fs.Mkdir(worktreePath+"/vendor", 0755); err != nil {
+					t.Fatalf("mkdir vendor: %v", err)
+				}
 			}
 
-			result := services.IsVendorIgnored(fs, worktreePath)
+			result := services.ShouldRunModVendor(fs, worktreePath)
 			if result != tt.expected {
-				t.Errorf("IsVendorIgnored() = %v, want %v", result, tt.expected)
+				t.Errorf("ShouldRunModVendor() = %v, want %v", result, tt.expected)
 			}
 		})
 	}

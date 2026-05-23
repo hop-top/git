@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"hop.top/git/internal/config"
@@ -126,6 +127,33 @@ func (m *DepsManager) EnsureDeps(worktreePath, branch string) error {
 func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManager) error {
 	lockfilePath, err := pm.FindLockfile(m.fs, worktreePath)
 	if err != nil {
+		return nil
+	}
+
+	// Go projects bypass the cache+symlink pipeline entirely. The pipeline
+	// assumes its DepsDir (here: vendor/) is a regenerable cache living
+	// outside source control, but Go vendor/ is fundamentally different:
+	// it is committed to git when used, lives in the worktree, and is
+	// materialised by `git checkout`. Running the pipeline against
+	// vendor/ would:
+	//   - trash a user's committed vendor/ in cleanWorktreeDepsPath, and
+	//   - auto-create an unwanted vendor/ via `go mod vendor` even when
+	//     the source tree has none (regression in
+	//     TestAdd_GoProject_NoVendorWhenNotVendored).
+	//
+	// We also never auto-invoke `go mod vendor`: with a mismatched go.mod
+	// (e.g. no requires) it removes a user's committed vendor/
+	// (regression in TestAdd_GoProject_VendorPreservedWhenVendored).
+	// vendor/ is the user's source of truth — git-hop must not mutate it.
+	// `go mod download` is the only side-effect-free warm-up we need; it
+	// populates GOMODCACHE without touching the worktree.
+	if pm.Name == "go" {
+		if _, err := exec.LookPath("go"); err != nil {
+			return nil
+		}
+		cmd := exec.Command("go", "mod", "download")
+		cmd.Dir = worktreePath
+		_ = cmd.Run() // best effort; module cache is regenerable
 		return nil
 	}
 
