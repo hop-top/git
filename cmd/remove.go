@@ -254,14 +254,14 @@ func removeBranchWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 	detectorCtx := context.Background()
 	branchInfo, err := detectorMgr.ExecutePreRemove(detectorCtx, branch, hubPath, worktreePath)
 	if err != nil {
-		return fmt.Errorf("Branch type detector failed: %v", err)
+		return fmt.Errorf("branch type detector failed: %v", err)
 	}
 
 	// Execute pre-worktree-remove hook with detector env vars
 	hookRunner := hooks.NewRunner(fs)
 	detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
 	if err := hookRunner.ExecuteHookWithDetector("pre-worktree-remove", worktreePath, repoID, branch, detectorEnv); err != nil {
-		return fmt.Errorf("Hook pre-worktree-remove failed: %v", err)
+		return fmt.Errorf("hook pre-worktree-remove failed: %v", err)
 	}
 
 	// Resolve a live base path for git commands (worktree remove, branch -D).
