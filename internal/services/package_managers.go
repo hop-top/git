@@ -13,12 +13,14 @@ import (
 	"github.com/spf13/afero"
 )
 
-// IsVendorIgnored checks if vendor/ is in .gitignore
-func IsVendorIgnored(fs afero.Fs, worktreePath string) bool {
+// isVendorGitIgnored reports whether vendor/ is explicitly listed in
+// .gitignore. Returns false when .gitignore is missing or unreadable; the
+// caller must combine this with a presence check via ShouldRunModVendor.
+func isVendorGitIgnored(fs afero.Fs, worktreePath string) bool {
 	gitignorePath := filepath.Join(worktreePath, ".gitignore")
 	file, err := fs.Open(gitignorePath)
 	if err != nil {
-		return false // .gitignore doesn't exist, assume vendor is not ignored
+		return false // .gitignore doesn't exist
 	}
 	defer file.Close()
 
@@ -35,6 +37,28 @@ func IsVendorIgnored(fs afero.Fs, worktreePath string) bool {
 		}
 	}
 	return false
+}
+
+// ShouldRunModVendor reports whether `go mod vendor` should run for the
+// Go module at worktreePath.
+//
+// Vendor mode is "active" iff a vendor/ directory exists in the source
+// tree. The previous helper (IsVendorIgnored) only checked .gitignore, so
+// a Go project with no .gitignore and no vendor/ wrongly returned false
+// for "ignored", which the call site interpreted as "vendor is tracked,
+// refresh it" and auto-created an unwanted vendor/ directory. The
+// regression is covered by TestAdd_GoProject_NoVendorWhenNotVendored.
+//
+// Correct semantics: refresh vendor/ only when it already exists AND is
+// not gitignored (gitignored = user manages it manually). Absent vendor/
+// → never run `go mod vendor`.
+func ShouldRunModVendor(fs afero.Fs, worktreePath string) bool {
+	vendorPath := filepath.Join(worktreePath, "vendor")
+	info, err := fs.Stat(vendorPath)
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	return !isVendorGitIgnored(fs, worktreePath)
 }
 
 // ErrBinaryNotFound is returned by Install when the package manager binary is not found in PATH.
@@ -119,12 +143,13 @@ func (pm *PackageManager) Install(targetDir string, worktreePath string) error {
 		return nil
 	}
 
-	// Special handling for Go - check if vendor/ is ignored
+	// Special handling for Go - only run `go mod vendor` when vendor/
+	// is actively in use (i.e. exists in the source tree and is not
+	// gitignored). See ShouldRunModVendor for the rationale.
 	if pm.Name == "go" {
 		fs := afero.NewOsFs()
 		goCmd := "go mod download"
-		if !IsVendorIgnored(fs, worktreePath) {
-			// vendor/ is tracked (not ignored), also run go mod vendor
+		if ShouldRunModVendor(fs, worktreePath) {
 			goCmd = "go mod download && go mod vendor"
 		}
 

@@ -16,7 +16,7 @@ import (
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"hop.top/kit/bus"
+	"hop.top/kit/go/runtime/bus"
 )
 
 var mergeCmd = &cobra.Command{

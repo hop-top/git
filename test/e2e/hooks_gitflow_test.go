@@ -148,7 +148,12 @@ exit 0
 		t.Errorf("Post-hook marker missing worktree path, got: %s", contentStr)
 	}
 
-	env.RunGitHop(t, env.HubPath, "remove", branch, "--no-prompt")
+	// The post-worktree-add hook just wrote .post-add-marker into the
+	// worktree, leaving it dirty. The cleanup remove here is incidental
+	// (not the system under test); bypass the dirty-state gate with
+	// --no-verify. (--no-prompt only suppresses the confirmation prompt;
+	// the two flags are orthogonal.)
+	env.RunGitHop(t, env.HubPath, "remove", branch, "--no-prompt", "--no-verify")
 }
 
 func TestHooks_PreWorktreeRemove_GitFlow(t *testing.T) {

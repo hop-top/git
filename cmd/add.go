@@ -23,8 +23,8 @@ import (
 	"hop.top/git/internal/state"
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
-	"hop.top/kit/bus"
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/runtime/bus"
+	"hop.top/kit/go/core/xdg"
 )
 
 // addFromFlag holds the --from CLI flag value.
@@ -255,15 +255,30 @@ var addCmd = &cobra.Command{
 		// Register deps-as-sync-subscriber on worktree.created.
 		// EnsureDeps errors are non-fatal: log warning, return nil
 		// so bus.Publish does not propagate as fatal.
+		//
+		// The "Setting up dependencies…" / "Dependencies installed." UX
+		// pair is gated on a package manager actually being detected —
+		// emitting them for a plain project (no package.json, no go.mod,
+		// etc.) is misleading noise. Covered by
+		// TestAdd_NoDockerProject_NoEnvNoise.
 		cli.EventBus.Subscribe(string(events.WorktreeCreated),
 			func(ctx context.Context, e bus.Event) error {
-				output.Info("Setting up dependencies...")
 				dm, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
 				if err != nil {
 					output.Warn("Failed to initialize dependency manager: %v", err)
 					return nil
 				}
 				payload := e.Payload.(events.WorktreeEvent)
+				detected, err := dm.DetectInWorktree(payload.Path)
+				if err != nil {
+					output.Warn("Failed to detect package managers: %v", err)
+					return nil
+				}
+				if len(detected) == 0 {
+					// No PM → no UX, no work. Stay silent.
+					return nil
+				}
+				output.Info("Setting up dependencies...")
 				if err := dm.EnsureDeps(payload.Path, payload.Branch); err != nil {
 					output.Warn("Failed to ensure dependencies: %v", err)
 					return nil

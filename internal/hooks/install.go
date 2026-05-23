@@ -308,16 +308,8 @@ func installHook(fs afero.Fs, mode, srcPath, dstPath string, srcInfo os.FileInfo
 }
 
 func removePathIfPresent(fs afero.Fs, path string) error {
-	// Check via lstat-style: afero exposes Stat (which follows symlinks for
-	// OsFs) — that's fine here, we just want to know if anything exists.
-	exists, _ := afero.Exists(fs, path)
-	if !exists {
-		// Even if Exists is false (broken symlink), Remove will succeed or
-		// silently fail; try anyway.
-	}
 	if err := fs.Remove(path); err != nil && !os.IsNotExist(err) {
-		// If removal failed, attempt with os.Remove directly (for symlinks
-		// on OsFs that afero may not handle).
+		// Fall back to os.Remove for symlinks afero may not handle on OsFs.
 		if rerr := os.Remove(path); rerr != nil && !os.IsNotExist(rerr) {
 			return fmt.Errorf("remove existing %s: %w", path, err)
 		}

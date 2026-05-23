@@ -21,16 +21,6 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Cache Go Modules
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
       - name: Install staticcheck
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 

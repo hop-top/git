@@ -409,9 +409,17 @@ func TestParityXDGResolution(t *testing.T) {
 	env := setupParityEnv(t)
 
 	t.Run("config_home", func(t *testing.T) {
+		// Pin all three XDG roots to test-controlled subdirs so doctor
+		// output is platform-independent (OS defaults for cache/data
+		// differ between macOS, Linux, Windows and would leak into the
+		// golden if left unset).
 		customConfig := filepath.Join(env.rootDir, "custom-config")
 		stdout, stderr, _ := env.runWithEnv(t,
-			[]string{"XDG_CONFIG_HOME=" + customConfig},
+			[]string{
+				"XDG_CONFIG_HOME=" + customConfig,
+				"XDG_DATA_HOME=" + filepath.Join(env.rootDir, "data"),
+				"XDG_CACHE_HOME=" + filepath.Join(env.rootDir, "cache"),
+			},
 			"doctor",
 		)
 		combined := stdout + stderr

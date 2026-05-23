@@ -189,13 +189,28 @@ func TestCommands(t *testing.T) {
 	// (user `rm -rf`) while the hub config entry still exists — see
 	// remove_missing_test.go for that path.
 	t.Run("Remove", func(t *testing.T) {
-		out := env.RunGitHop(t, env.HubPath, "remove", "feature-1", "--no-prompt")
+		// Be self-sufficient: when the subtest is selected in isolation
+		// (e.g. `-run TestCommands/Remove`), the Add subtest hasn't
+		// created feature-1, so add it on demand. Safe no-op when the
+		// previous Add subtest already added it (RunGitHop fatals on
+		// non-zero exit, so guard with a stat).
+		wtPath := filepath.Join(env.HubPath, "hops", "feature-1")
+		if _, err := os.Stat(wtPath); err != nil {
+			env.RunGitHop(t, env.HubPath, "add", "feature-1")
+		}
+
+		// The preceding Env subtest can leave generated docker-compose
+		// artifacts in the feature-1 worktree, tripping the dirty-state
+		// safety gate. The Remove subtest is exercising the general
+		// remove flow, not safety-gate semantics, so bypass with
+		// --no-verify. (--no-prompt only suppresses the y/n confirmation;
+		// it does NOT bypass safety gates — the two flags are orthogonal.)
+		out := env.RunGitHop(t, env.HubPath, "remove", "feature-1", "--no-prompt", "--no-verify")
 		if !strings.Contains(out, "Removed") && !strings.Contains(out, "Successfully") {
 			t.Logf("Remove output: %s", out)
 		}
 
 		// Worktree directory should be physically gone.
-		wtPath := filepath.Join(env.HubPath, "hops", "feature-1")
 		if _, err := os.Stat(wtPath); err == nil {
 			t.Errorf("Worktree feature-1 should be gone at hops/feature-1")
 		}

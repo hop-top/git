@@ -5,9 +5,9 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
-	"hop.top/kit/upgrade"
-	"hop.top/kit/upgrade/skill"
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/core/upgrade"
+	"hop.top/kit/go/core/upgrade/skill"
+	"hop.top/kit/go/core/xdg"
 
 	"hop.top/git/internal/output"
 )

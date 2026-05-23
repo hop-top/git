@@ -132,8 +132,13 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 	// ===== REMOVE THE MISTAKEN HUBSPACE =====
 	t.Log("Removing the mistaken hubspace 'feature-auth'")
 
-	// Test removal from hub directory
-	removeOut := env.RunGitHop(t, env.HubPath, "remove", "feature-auth", "--no-prompt")
+	// Test removal from hub directory. feature-auth carries its own
+	// commit (auth.go) and is not merged into main, so we trip the
+	// unmerged-branch safety gate. Bypass with --force; the test is
+	// exercising the remove lifecycle, not safety-gate semantics.
+	// (--no-prompt only suppresses the y/n confirmation; --force /
+	// --no-verify bypass safety gates — they are orthogonal.)
+	removeOut := env.RunGitHop(t, env.HubPath, "remove", "feature-auth", "--no-prompt", "--force")
 	t.Logf("Remove output:\n%s", removeOut)
 
 	// Check for success message
@@ -382,10 +387,15 @@ func TestRemoveMultipleBranches(t *testing.T) {
 		}
 	}
 
-	// Remove branches one by one
+	// Remove branches one by one. Each feat-N branch has its own commit
+	// (feat-N.txt) and is not merged into main, so we trip the
+	// unmerged-branch safety gate. Bypass with --force; the test is
+	// exercising sequential removal, not safety-gate semantics.
+	// (--no-prompt and --force are orthogonal: the former suppresses the
+	// y/n confirmation, the latter bypasses the safety gate.)
 	for i, branch := range branches[:3] { // Remove first 3, keep last one
 		t.Logf("Removing branch %d of 3: %s", i+1, branch)
-		env.RunGitHop(t, env.HubPath, "remove", branch, "--no-prompt")
+		env.RunGitHop(t, env.HubPath, "remove", branch, "--no-prompt", "--force")
 
 		// Verify this branch is gone
 		branchPath := filepath.Join(env.HubPath, "hops", branch)
@@ -459,11 +469,13 @@ func TestRemoveWithUncommittedChanges(t *testing.T) {
 		t.Logf("Git status:\n%s", gitStatusOut)
 	}
 
-	// Remove the branch despite uncommitted changes
-	// The --no-prompt flag should allow this to proceed
-	// (In a real scenario, the user might want a warning, but for testing we proceed)
+	// Remove the branch despite uncommitted changes. This is the test's
+	// explicit intent — verifying that --no-verify lets the user
+	// bulldoze a dirty worktree. --no-prompt only suppresses the y/n
+	// confirmation; the dirty-state safety gate is bypassed by
+	// --no-verify (the two flags are orthogonal).
 	t.Log("Removing branch with uncommitted changes")
-	removeOut := env.RunGitHop(t, env.HubPath, "remove", "wip-feature", "--no-prompt")
+	removeOut := env.RunGitHop(t, env.HubPath, "remove", "wip-feature", "--no-prompt", "--no-verify")
 	t.Logf("Remove output:\n%s", removeOut)
 
 	// Verify the worktree is removed (uncommitted work is lost - this is expected behavior)

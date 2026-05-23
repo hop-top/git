@@ -2,21 +2,22 @@
 // git-hop event bus.
 package events
 
-import "hop.top/kit/bus"
+import "hop.top/kit/go/runtime/bus"
 
-// Topic constants follow dot-separated MQTT convention.
+// Topic constants follow kit's 4-segment grammar:
+// [source].[category].[object].[action] with a past-tense action.
 const (
-	WorktreeCreated bus.Topic = "worktree.created"
-	WorktreeRemoved bus.Topic = "worktree.removed"
-	WorktreeMerged  bus.Topic = "worktree.merged"
-	WorktreeMoved   bus.Topic = "worktree.moved"
+	WorktreeCreated bus.Topic = "git.runtime.worktree.created"
+	WorktreeRemoved bus.Topic = "git.runtime.worktree.removed"
+	WorktreeMerged  bus.Topic = "git.runtime.worktree.merged"
+	WorktreeMoved   bus.Topic = "git.runtime.worktree.moved"
 
-	EnvStarted bus.Topic = "env.started"
-	EnvStopped bus.Topic = "env.stopped"
+	EnvStarted bus.Topic = "git.runtime.env.started"
+	EnvStopped bus.Topic = "git.runtime.env.stopped"
 
-	HopspaceInitialized bus.Topic = "hopspace.initialized"
+	HopspaceInitialized bus.Topic = "git.runtime.hopspace.initialized"
 
-	DepsInstalled bus.Topic = "deps.installed"
+	DepsInstalled bus.Topic = "git.runtime.deps.installed"
 )
 
 // Source identifies the emitter in Event.Source.

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/afero"
-	"hop.top/kit/xdg"
+	"hop.top/kit/go/core/xdg"
 )
 
 // SchemaConfig represents the new git-hop configuration schema per config-state-separation plan

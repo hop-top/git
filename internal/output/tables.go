@@ -7,7 +7,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	kitout "hop.top/kit/output"
+	kitout "hop.top/kit/go/console/output"
 )
 
 // TableBuilder provides a fluent interface for building aligned tables.
