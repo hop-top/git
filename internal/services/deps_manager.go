@@ -91,6 +91,16 @@ func NewDepsManagerFromParts(fs afero.Fs, repoPath string, registry *DepsRegistr
 	}
 }
 
+// DetectInWorktree returns the package managers detected in the given
+// worktree. Callers use this to decide whether to surface
+// "Setting up dependencies…" UX before invoking EnsureDeps — emitting
+// that message unconditionally produces misleading output for projects
+// with no detectable package manager. Covered by
+// TestAdd_NoDockerProject_NoEnvNoise.
+func (m *DepsManager) DetectInWorktree(worktreePath string) ([]PackageManager, error) {
+	return DetectPackageManagers(m.fs, worktreePath, m.PackageManagers)
+}
+
 // EnsureDeps ensures dependencies are set up for a worktree
 func (m *DepsManager) EnsureDeps(worktreePath, branch string) error {
 	// Detect package managers in this worktree
