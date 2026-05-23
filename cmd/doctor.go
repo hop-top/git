@@ -115,7 +115,7 @@ Use --fix to automatically repair issues.`,
 						} else {
 							// Register all branches from hub
 							for branchName, branch := range hub.Config.Branches {
-								branchWorktreePath := filepath.Join(hubPath, branch.Path)
+								branchWorktreePath := config.ResolveWorktreePath(branch.Path, hubPath)
 								if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
 									output.Error("Failed to register branch %s: %v", branchName, err)
 								}
@@ -141,7 +141,7 @@ Use --fix to automatically repair issues.`,
 								issuesFound = true
 
 								if doctorFix {
-									branchWorktreePath := filepath.Join(hubPath, hub.Config.Branches[branchName].Path)
+									branchWorktreePath := config.ResolveWorktreePath(hub.Config.Branches[branchName].Path, hubPath)
 									if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
 										output.Error("Failed to register branch %s: %v", branchName, err)
 									} else {
@@ -158,7 +158,7 @@ Use --fix to automatically repair issues.`,
 
 				// Check branch paths (worktrees)
 				for name, b := range hub.Config.Branches {
-					linkPath := filepath.Join(hub.Path, b.Path)
+					linkPath := config.ResolveWorktreePath(b.Path, hub.Path)
 					if _, err := fs.Stat(linkPath); err != nil {
 						output.Error("Broken link for branch %s: %s", name, linkPath)
 						issuesFound = true
@@ -244,7 +244,7 @@ Use --fix to automatically repair issues.`,
 					// Collect all worktree paths
 					worktrees := make(map[string]string, len(hub.Config.Branches))
 					for branchName, branch := range hub.Config.Branches {
-						worktrees[branchName] = filepath.Join(hubPath, branch.Path)
+						worktrees[branchName] = config.ResolveWorktreePath(branch.Path, hubPath)
 					}
 
 					// Run audit
