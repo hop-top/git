@@ -100,9 +100,10 @@ func init() {
 	EventBus = bus.New()
 
 	Root = kitcli.New(kitcli.Config{
-		Name:    "git-hop",
-		Version: "dev",
-		Short:   "Manage git worktrees and environments",
+		Name:            "git-hop",
+		Version:         "dev",
+		Short:           "Manage git worktrees and environments",
+		DisableValidate: true, // Layer-A annotations not yet adopted; see follow-up track.
 	})
 
 	RootCmd = Root.Cmd
