@@ -125,6 +125,21 @@ func init() {
 			Config: true,
 			DryRun: true,
 		},
+		Hooks: kitcli.Hooks{
+			// Direct assignment to RootCmd.PersistentPreRunE silently
+			// overwrites kit's built-in chain (chdir → identity → peer
+			// init). The Hooks slot composes additively. Order matters:
+			// setupOutputMode initializes output.Verbose via SetupLogger
+			// so initConfig's Debug call can actually emit.
+			PrePersistentRunE: func(cmd *cobra.Command, args []string) error {
+				setupOutputMode()
+				initConfig()
+				if cmd.Name() != "upgrade" {
+					upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
+				}
+				return nil
+			},
+		},
 	})
 
 	RootCmd = Root.Cmd
@@ -143,14 +158,6 @@ Worktree Mode:
   Inside a project root: create/sync worktree for a branch`
 
 	RootCmd.Args = cobra.ArbitraryArgs
-
-	RootCmd.PersistentPreRun = func(cmd *cobra.Command, args []string) {
-		initConfig()
-		setupOutputMode()
-		if cmd.Name() != "upgrade" {
-			upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
-		}
-	}
 
 	RootCmd.Run = func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
@@ -251,8 +258,6 @@ Worktree Mode:
 	if f := pf.Lookup("quiet"); f != nil {
 		f.Shorthand = "q"
 	}
-	// --verbose is registered by kit (count flag, -V shorthand). See
-	// verboseEnabled() and the Disable block above.
 	pf.BoolVar(&force, "force", false, "bypass safety checks")
 	pf.BoolVar(&dryRun, "dry-run", false, "preview changes without applying")
 	pf.BoolVarP(&globalConfig, "global", "g", false, "use global hopspace in $GIT_HOP_DATA_HOME (default: local)")
@@ -266,8 +271,6 @@ Worktree Mode:
 	RootCmd.Flags().MarkHidden("admin")
 
 	_ = Root.Viper.BindPFlag("json", pf.Lookup("json"))
-	// Note: kit binds --verbose to viper key "verbose" at registration; no
-	// rebind needed here.
 }
 
 func printAdminHelp(cmd *cobra.Command) {
