@@ -26,7 +26,6 @@ var (
 	jsonOut        bool
 	porcelain      bool
 	quiet          bool
-	verbose        bool
 	force          bool
 	dryRun         bool
 	gitDomain      string
@@ -37,6 +36,17 @@ var (
 
 	version string
 )
+
+// verboseEnabled reports whether kit's --verbose count flag was raised at
+// least once (-V, -VV, ...). Reads from kit's viper key "verbose"; safe to
+// call before flag parsing (returns false). Replaces the v0.3-era boolean
+// package var that collided with kit v0.4's default --verbose -V Count flag.
+func verboseEnabled() bool {
+	if Root == nil || Root.Viper == nil {
+		return false
+	}
+	return Root.Viper.GetInt("verbose") > 0
+}
 
 var Root *kitcli.Root
 
@@ -104,6 +114,17 @@ func init() {
 		Version:         "dev",
 		Short:           "Manage git worktrees and environments",
 		DisableValidate: true, // Layer-A annotations not yet adopted; see follow-up track.
+		Disable: kitcli.Disable{
+			// kit v0.4 registers --config -c (StringArrayP) and --dry-run
+			// (Bool) unconditionally; both collide with git-hop's own flags
+			// of the same name. Suppress kit's defaults so git-hop keeps
+			// its existing single-file --config and per-command --dry-run
+			// semantics. NOTE: kit v0.4 has no Disable.Verbose opt-out, so
+			// git-hop adopts kit's --verbose -V Count flag instead (was
+			// --verbose -v Bool in v0.3). See verboseEnabled() above.
+			Config: true,
+			DryRun: true,
+		},
 	})
 
 	RootCmd = Root.Cmd
@@ -230,7 +251,8 @@ Worktree Mode:
 	if f := pf.Lookup("quiet"); f != nil {
 		f.Shorthand = "q"
 	}
-	pf.BoolVarP(&verbose, "verbose", "v", false, "verbose output")
+	// --verbose is registered by kit (count flag, -V shorthand). See
+	// verboseEnabled() and the Disable block above.
 	pf.BoolVar(&force, "force", false, "bypass safety checks")
 	pf.BoolVar(&dryRun, "dry-run", false, "preview changes without applying")
 	pf.BoolVarP(&globalConfig, "global", "g", false, "use global hopspace in $GIT_HOP_DATA_HOME (default: local)")
@@ -244,7 +266,8 @@ Worktree Mode:
 	RootCmd.Flags().MarkHidden("admin")
 
 	_ = Root.Viper.BindPFlag("json", pf.Lookup("json"))
-	_ = Root.Viper.BindPFlag("verbose", pf.Lookup("verbose"))
+	// Note: kit binds --verbose to viper key "verbose" at registration; no
+	// rebind needed here.
 }
 
 func printAdminHelp(cmd *cobra.Command) {
@@ -274,7 +297,7 @@ func initConfig() {
 	v.SetEnvPrefix("GIT_HOP")
 	v.AutomaticEnv()
 
-	if err := v.ReadInConfig(); err == nil && verbose {
+	if err := v.ReadInConfig(); err == nil && verboseEnabled() {
 		output.Debug("using config file: %s", v.ConfigFileUsed())
 	}
 }
@@ -346,5 +369,5 @@ func setupOutputMode() {
 	}
 
 	output.SetViper(Root.Viper)
-	output.SetupLogger(mode, verbose)
+	output.SetupLogger(mode, verboseEnabled())
 }
