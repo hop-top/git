@@ -279,7 +279,7 @@ version" higher than the intended tag); the fix is the
 [`references/troubleshooting/go.md` § Ghost versions][trbl-go]
 in the SKILL.
 
-[trbl-go]: ../../../dotgithub/references/troubleshooting/go.md
+[trbl-go]: https://github.com/hop-top/.github/blob/main/references/troubleshooting/go.md
 
 ### Binary version string
 
@@ -288,7 +288,7 @@ The Makefile's `VERSION` ldflag uses
 `git describe` returns:
 
 - `vX.Y.Z-alpha.N` on the tag itself, or
-- `vX.Y.Z-alpha.N-N-gSHA` between tags (N commits since the tag,
+- `vX.Y.Z-alpha.N-K-gSHA` between tags (K commits since the tag,
   current short SHA),
 
 and that string gets stamped into the binary as `main.version`.
