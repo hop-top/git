@@ -124,10 +124,73 @@ Do NOT delete + force-push tags by hand — proxy.golang.org caches
 tag content and re-pushing the same tag with different content
 produces ambiguous module versions in the wild.
 
+## Why there is no publish.yml
+
+The hop-top/.github decision table for single-language repos is
+explicit: for Go-only repos, **drop `publish.yml` entirely**. This
+repo follows that path.
+
+### Why it's intentionally absent
+
+`publish-on-tag.yml` has two jobs to do — publish to a language
+registry, and push a read-only mirror. Neither applies here:
+
+- **No language-registry publish.** Go has no
+  `publish-from-source` step. proxy.golang.org pulls tags directly
+  from this repo within minutes of a tag push.
+- **No mirror to push.** Go always takes the bare-name slot in the
+  hop-top org (`hop-top/git` is the canonical repo for
+  `hop.top/git`). There is no second-slot `hop-top/git-go` mirror
+  — convention forbids it, and the vanity resolver depends on the
+  bare slot pointing at the Go source of truth. With nothing to
+  mirror to, the mirror job would be a no-op at best and an
+  upstream tag-shape mismatch at worst.
+
+Keeping `publish.yml` anyway would only fire the unwanted mirror
+push, with no offsetting benefit.
+
+### How a release actually ships
+
+The full chain, no `publish.yml` involved:
+
+```
+merge release PR
+    ↓
+release-please-action pushes git-hop/vX.Y.Z-alpha.N
+    ↓
+GitHub Release is created from the tag
+    ↓
+proxy.golang.org indexer picks the tag up (≤ a few minutes)
+    ↓
+go install hop.top/git@git-hop/vX.Y.Z-alpha.N  works
+```
+
+That's the whole thing. The release-please workflow and the Go
+module proxy together cover what `publish.yml` would do in a
+polyglot repo.
+
+### When to revisit
+
+Add `publish.yml` only if `hop.top/git` ships a non-Go artifact.
+Triggers worth noting:
+
+- A TypeScript wrapper (would need an `npm publish` step).
+- A Homebrew tap formula for `git-hop` binaries (Scoop/WinGet
+  parallel).
+- Signed release binaries (would need
+  GoReleaser/ship-binaries machinery).
+
+For any of those, follow
+`~/.w/ideacrafterslabs/dotgithub/references/how-to/ship-binaries.md`
+to add `publish.yml` at that point. Until then, leaving it out is
+the documented choice.
+
 ## References
 
 - Skill: `~/.w/ideacrafterslabs/dotgithub/SKILL.md`
 - Quick-start: `~/.w/ideacrafterslabs/dotgithub/references/quick-start.md`
+- Single-language repo: `~/.w/ideacrafterslabs/dotgithub/references/how-to/single-language-repo.md`
 - Prerelease channel: `~/.w/ideacrafterslabs/dotgithub/references/how-to/prerelease-channel.md`
 - Preflight check: `~/.w/ideacrafterslabs/dotgithub/references/how-to/add-preflight.md`
 - Retrigger failed publish: `~/.w/ideacrafterslabs/dotgithub/references/how-to/retrigger-failed-publish.md`
+- Ship binaries (if revisiting): `~/.w/ideacrafterslabs/dotgithub/references/how-to/ship-binaries.md`
