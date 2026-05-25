@@ -25,16 +25,19 @@ For a normal release:
 
 3. **Ship by merging that PR.** When you're ready to cut a release,
    merge the release PR. release-please then:
-   - pushes the tag `git-hop/vX.Y.Z-alpha.N`,
+   - pushes the bare tag `vX.Y.Z-alpha.N`,
    - creates the matching GitHub Release,
    - proxy.golang.org picks the tag up within minutes.
 
 4. **Install the new version.**
 
    ```sh
-   go install hop.top/git@git-hop/v0.1.0-alpha.2   # pin to the exact tag
-   go install hop.top/git@latest                    # resolve to highest semver
+   go install hop.top/git@vX.Y.Z-alpha.N   # pin to the exact tag
+   go install hop.top/git@latest           # resolve to highest semver
    ```
+
+   See [Tag shape](#tag-shape) for why tags are bare `vX.Y.Z` and
+   not the `<component>/vX.Y.Z` shape used by other hop-top repos.
 
 That's the whole loop. Every step after committing is automated.
 
@@ -69,8 +72,7 @@ Three sanctioned overrides. Each has an explicit gate.
 When a bug ships in a tagged release and `main` has drifted past
 the safe-to-ship line:
 
-1. Branch from the release tag: `git switch -c hotfix-X.Y.Z
-   git-hop/vX.Y.Z-alpha.N`.
+1. Branch from the release tag: `git switch -c hotfix-X.Y.Z vX.Y.Z-alpha.N`.
 2. Cherry-pick the fix commits onto the hotfix branch. Each
    cherry-pick keeps its original Conventional Commit message.
 3. Dry-run release-please against the hotfix branch BEFORE merging:
@@ -118,11 +120,41 @@ Reference: hop-top/.github SKILL
 
 Out of scope for this runbook. If a tag was published with a
 broken artifact and needs to be re-cut, follow the dedicated SKILL
-runbook:
-`~/.w/ideacrafterslabs/dotgithub/references/how-to/retrigger-failed-publish.md`.
+runbook
+[`references/how-to/retrigger-failed-publish.md`](https://github.com/hop-top/.github/blob/main/references/how-to/retrigger-failed-publish.md).
 Do NOT delete + force-push tags by hand — proxy.golang.org caches
 tag content and re-pushing the same tag with different content
 produces ambiguous module versions in the wild.
+
+## Tag shape
+
+Tags here are bare `vX.Y.Z-alpha.N` — not the `<component>/vX.Y.Z`
+shape the hop-top org uses elsewhere. The deviation is deliberate
+and load-bearing: the Go module proxy at `proxy.golang.org`
+rejects `/` characters in version queries against a root module.
+A `git-hop/vX.Y.Z` tag would parse as a request for a submodule
+`hop.top/git/git-hop`, which doesn't exist:
+
+```
+$ go install hop.top/git@git-hop/v0.1.0-alpha.1
+go: invalid version: ... "git-hop/v0.1.0-alpha.1" invalid:
+    disallowed version string
+```
+
+The `<component>/v<version>` convention exists for `publish.yml`'s
+`tags: ['*/v*']` glob — but this repo doesn't ship `publish.yml`
+(see [Why there is no publish.yml](#why-there-is-no-publishyml)).
+With the convention's beneficiary absent, paying its cost (broken
+`go install`) is a net loss. release-please's
+`include-component-in-tag: false` keeps tags bare and `go install`
+working.
+
+Submodule repos (module path like `hop.top/foo/bar` instead of
+`hop.top/foo`) can use the prefixed shape — the proxy treats
+`foo/bar/vX.Y.Z` as `module=foo/bar, version=vX.Y.Z`. Root-module
+repos like this one cannot. See the SKILL's
+[`references/concepts/vanity-imports.md`](https://github.com/hop-top/.github/blob/main/references/concepts/vanity-imports.md)
+for the resolver mechanics.
 
 ## Why there is no publish.yml
 
@@ -156,13 +188,13 @@ The full chain, no `publish.yml` involved:
 ```
 merge release PR
     ↓
-release-please-action pushes git-hop/vX.Y.Z-alpha.N
+release-please-action pushes vX.Y.Z-alpha.N
     ↓
 GitHub Release is created from the tag
     ↓
 proxy.golang.org indexer picks the tag up (≤ a few minutes)
     ↓
-go install hop.top/git@git-hop/vX.Y.Z-alpha.N  works
+go install hop.top/git@vX.Y.Z-alpha.N  works
 ```
 
 That's the whole thing. The release-please workflow and the Go
@@ -181,7 +213,7 @@ Triggers worth noting:
   GoReleaser/ship-binaries machinery).
 
 For any of those, follow
-`~/.w/ideacrafterslabs/dotgithub/references/how-to/ship-binaries.md`
+[`references/how-to/ship-binaries.md`](https://github.com/hop-top/.github/blob/main/references/how-to/ship-binaries.md)
 to add `publish.yml` at that point. Until then, leaving it out is
 the documented choice.
 
@@ -217,66 +249,68 @@ repo — the resolver is live and the mapping is correct.
 ### Install commands
 
 ```sh
-go install hop.top/git@latest                       # highest semver
-go install hop.top/git@git-hop/v0.1.0-alpha.2       # new prefixed tag
-go install hop.top/git@v0.1.0-alpha.1               # legacy bare tag (preserved)
+go install hop.top/git@latest          # highest semver
+go install hop.top/git@vX.Y.Z-alpha.N  # pin to exact tag
 ```
 
-The legacy `v0.1.0-alpha.1` tag stays in the repo — proxy.golang.org
-has it cached and anyone pinned to it keeps working. New releases
-ship under the `git-hop/v...` prefix from
-`git-hop/v0.1.0-alpha.2` forward.
+The legacy `v0.1.0-alpha.1` tag stays installable —
+proxy.golang.org has it cached. New releases ship under the same
+bare `vX.Y.Z-alpha.N` shape, linear from there.
 
 ### Post-merge verification
 
-The three install probes below MUST be run AFTER the first
-`git-hop/v0.1.0-alpha.2` tag actually exists in the repo (i.e.,
-after the release-please bot ships its first release PR merge).
-They're deferred from this track because the new prefixed tag
-hasn't been cut yet:
+Run after the first release-please-bot PR merges and the new tag
+exists. Verifies the proxy indexed the new tag and `@latest`
+resolves correctly:
 
-```
-GOPATH=$(mktemp -d) go install hop.top/git@v0.1.0-alpha.1            # legacy bare tag
-GOPATH=$(mktemp -d) go install hop.top/git@git-hop/v0.1.0-alpha.2    # new prefixed tag
-GOPATH=$(mktemp -d) go install hop.top/git@latest                    # resolves to highest semver
+```sh
+curl -s 'https://proxy.golang.org/hop.top/git/@v/list'
+# Expect: vX.Y.Z-alpha.N for every released tag (including legacy v0.1.0-alpha.1)
+
+GOPATH=$(mktemp -d) go install hop.top/git@v0.1.0-alpha.1   # legacy still installs
+GOPATH=$(mktemp -d) go install hop.top/git@latest           # resolves to highest semver
 ```
 
-If `@latest` resolves to the legacy bare tag instead of the new
-prefixed one, the proxy's SemVer ordering is reading the bare tag
-as higher — escalate per the SKILL's vanity-imports override
-path: add a `<pkg>.rb` formula in `hop-top/homebrew-tap` only as a
-last resort (the convention fallback is what's expected here).
-The more likely fix is to wait for the proxy to re-index after the
-new tag lands.
+If `@latest` doesn't resolve to the newest tag, wait a few minutes
+and retry — the proxy indexer is asynchronous. Persistent
+mis-resolution would indicate a SemVer ordering issue (a "ghost
+version" higher than the intended tag); the fix is the
+`Release-As:` base-jump pattern documented in
+[`references/troubleshooting/go.md` § Ghost versions][trbl-go]
+in the SKILL.
+
+[trbl-go]: ../../../dotgithub/references/troubleshooting/go.md
 
 ### Binary version string
 
 The Makefile's `VERSION` ldflag uses
-`git describe --tags --always --dirty`. With the new tag shape,
-`git describe` returns either:
+`git describe --tags --always --dirty`. With bare-tag shape,
+`git describe` returns:
 
-- `git-hop/v0.1.0-alpha.2` on the tag itself, or
-- `git-hop/v0.1.0-alpha.2-N-gSHA` between tags (N commits since the
-  tag, current SHA),
+- `vX.Y.Z-alpha.N` on the tag itself, or
+- `vX.Y.Z-alpha.N-N-gSHA` between tags (N commits since the tag,
+  current short SHA),
 
 and that string gets stamped into the binary as `main.version`.
-End users see it via `git-hop --version`. The new shape reads
-slightly longer than the legacy bare `v0.1.0-alpha.1-...`, but
-proxy.golang.org consumers see the same value via the module's
-own tag — no functional change, just docs to set expectations.
+End users see it via `git-hop --version`. No functional change
+versus the legacy flow — same shape, same stamping, same proxy
+semantics.
 
 ### Deep dive
 
 Resolver internals, override mechanics, and edge cases:
-`~/.w/ideacrafterslabs/dotgithub/references/concepts/vanity-imports.md`.
+[`references/concepts/vanity-imports.md`](https://github.com/hop-top/.github/blob/main/references/concepts/vanity-imports.md).
 
 ## References
 
-- Skill: `~/.w/ideacrafterslabs/dotgithub/SKILL.md`
-- Quick-start: `~/.w/ideacrafterslabs/dotgithub/references/quick-start.md`
-- Single-language repo: `~/.w/ideacrafterslabs/dotgithub/references/how-to/single-language-repo.md`
-- Prerelease channel: `~/.w/ideacrafterslabs/dotgithub/references/how-to/prerelease-channel.md`
-- Preflight check: `~/.w/ideacrafterslabs/dotgithub/references/how-to/add-preflight.md`
-- Retrigger failed publish: `~/.w/ideacrafterslabs/dotgithub/references/how-to/retrigger-failed-publish.md`
-- Vanity imports concept: `~/.w/ideacrafterslabs/dotgithub/references/concepts/vanity-imports.md`
-- Ship binaries (if revisiting): `~/.w/ideacrafterslabs/dotgithub/references/how-to/ship-binaries.md`
+All paths below resolve to `https://github.com/hop-top/.github/blob/main/`:
+
+- [`SKILL.md`](https://github.com/hop-top/.github/blob/main/SKILL.md)
+- [`references/quick-start.md`](https://github.com/hop-top/.github/blob/main/references/quick-start.md)
+- [`references/how-to/single-language-repo.md`](https://github.com/hop-top/.github/blob/main/references/how-to/single-language-repo.md)
+- [`references/how-to/prerelease-channel.md`](https://github.com/hop-top/.github/blob/main/references/how-to/prerelease-channel.md)
+- [`references/how-to/add-preflight.md`](https://github.com/hop-top/.github/blob/main/references/how-to/add-preflight.md)
+- [`references/how-to/retrigger-failed-publish.md`](https://github.com/hop-top/.github/blob/main/references/how-to/retrigger-failed-publish.md)
+- [`references/concepts/vanity-imports.md`](https://github.com/hop-top/.github/blob/main/references/concepts/vanity-imports.md)
+- [`references/how-to/ship-binaries.md`](https://github.com/hop-top/.github/blob/main/references/how-to/ship-binaries.md) (if revisiting `publish.yml`)
+- [`references/troubleshooting/go.md`](https://github.com/hop-top/.github/blob/main/references/troubleshooting/go.md) (Go-specific failures, ghost versions)
