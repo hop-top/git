@@ -185,6 +185,91 @@ For any of those, follow
 to add `publish.yml` at that point. Until then, leaving it out is
 the documented choice.
 
+## Vanity URL
+
+End users install via the vanity path `hop.top/git`, never via
+the bare GitHub path. The mapping:
+
+```
+hop.top/git   →   github.com/hop-top/git
+```
+
+### Resolver mechanism
+
+A Cloudflare Worker bound to `hop.top/*` answers `?go-get=1` by
+checking `hop-top/homebrew-tap` for a `<pkg>.rb` override (1h
+edge-cached) and falling back to convention `github.com/hop-top/<pkg>`
+when no override exists. For `git`, the convention fallback is what
+runs — no override formula is needed because the bare-name slot
+already points at this repo.
+
+Live probe (run today):
+
+```sh
+$ curl -sSL 'https://hop.top/git?go-get=1' | grep -i 'go-import\|go-source'
+<meta name="go-import" content="hop.top/git git https://github.com/hop-top/git">
+<meta name="go-source" content="hop.top/git https://github.com/hop-top/git https://github.com/hop-top/git/tree/main{/dir} https://github.com/hop-top/git/blob/main{/dir}/{file}#L{line}">
+```
+
+Both the `go-import` and `go-source` meta tags resolve to this
+repo — the resolver is live and the mapping is correct.
+
+### Install commands
+
+```sh
+go install hop.top/git@latest                       # highest semver
+go install hop.top/git@git-hop/v0.1.0-alpha.2       # new prefixed tag
+go install hop.top/git@v0.1.0-alpha.1               # legacy bare tag (preserved)
+```
+
+The legacy `v0.1.0-alpha.1` tag stays in the repo — proxy.golang.org
+has it cached and anyone pinned to it keeps working. New releases
+ship under the `git-hop/v...` prefix from
+`git-hop/v0.1.0-alpha.2` forward.
+
+### Post-merge verification
+
+The three install probes below MUST be run AFTER the first
+`git-hop/v0.1.0-alpha.2` tag actually exists in the repo (i.e.,
+after the release-please bot ships its first release PR merge).
+They're deferred from this track because the new prefixed tag
+hasn't been cut yet:
+
+```
+GOPATH=$(mktemp -d) go install hop.top/git@v0.1.0-alpha.1            # legacy bare tag
+GOPATH=$(mktemp -d) go install hop.top/git@git-hop/v0.1.0-alpha.2    # new prefixed tag
+GOPATH=$(mktemp -d) go install hop.top/git@latest                    # resolves to highest semver
+```
+
+If `@latest` resolves to the legacy bare tag instead of the new
+prefixed one, the proxy's SemVer ordering is reading the bare tag
+as higher — escalate per the SKILL's vanity-imports override
+path: add a `<pkg>.rb` formula in `hop-top/homebrew-tap` only as a
+last resort (the convention fallback is what's expected here).
+The more likely fix is to wait for the proxy to re-index after the
+new tag lands.
+
+### Binary version string
+
+The Makefile's `VERSION` ldflag uses
+`git describe --tags --always --dirty`. With the new tag shape,
+`git describe` returns either:
+
+- `git-hop/v0.1.0-alpha.2` on the tag itself, or
+- `git-hop/v0.1.0-alpha.2-N-gSHA` between tags (N commits since the
+  tag, current SHA),
+
+and that string gets stamped into the binary as `main.version`.
+End users see it via `git-hop --version`. The new shape reads
+slightly longer than the legacy bare `v0.1.0-alpha.1-...`, but
+proxy.golang.org consumers see the same value via the module's
+own tag — no functional change, just docs to set expectations.
+
+### Deep dive
+
+Resolver internals, override mechanics, and edge cases:
+`~/.w/ideacrafterslabs/dotgithub/references/concepts/vanity-imports.md`.
+
 ## References
 
 - Skill: `~/.w/ideacrafterslabs/dotgithub/SKILL.md`
@@ -193,4 +278,5 @@ the documented choice.
 - Prerelease channel: `~/.w/ideacrafterslabs/dotgithub/references/how-to/prerelease-channel.md`
 - Preflight check: `~/.w/ideacrafterslabs/dotgithub/references/how-to/add-preflight.md`
 - Retrigger failed publish: `~/.w/ideacrafterslabs/dotgithub/references/how-to/retrigger-failed-publish.md`
+- Vanity imports concept: `~/.w/ideacrafterslabs/dotgithub/references/concepts/vanity-imports.md`
 - Ship binaries (if revisiting): `~/.w/ideacrafterslabs/dotgithub/references/how-to/ship-binaries.md`
