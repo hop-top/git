@@ -5,7 +5,10 @@ on:
     paths:
       - '.github/release-please-config.json'
       - '.github/.release-please-manifest.json'
+      - '.github/version.json'
       - '.github/workflows/release-please.yml'
+      - '.github/workflows/release-please-preflight.yml'
+      - 'Makefile'
   workflow_dispatch: {}
 
 jobs:
