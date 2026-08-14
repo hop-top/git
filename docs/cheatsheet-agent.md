@@ -86,7 +86,7 @@ Global hopspace: `$GIT_HOP_DATA_HOME`
 
 ```bash
 /usr/bin/git hop doctor --json        # structured diagnostics: paths, hubs, orphans
-/usr/bin/git hop doctor --fix         # auto-repair (symlinks, state consistency)
+/usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json)
 /usr/bin/git hop prune --dry-run      # list orphaned state + hop.json entries
 /usr/bin/git hop prune                # remove orphaned entries (clears status Missing rows)
 ```

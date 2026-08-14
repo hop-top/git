@@ -135,8 +135,16 @@ This will automatically fix issues that can be safely resolved:
 - Remove orphaned directories (if they have no uncommitted changes)
 - Prune stale git worktree metadata
 - Clean up broken dependency symlinks (e.g., node_modules, vendor)
+- Prune orphaned worktree and hub entries from the state file
+- Drop the current hub's `hop.json` branch entries whose worktree directory is
+  gone — the rows `git hop status` reports as `Missing`
 
 **Safety:** The doctor command will never remove directories with uncommitted changes. You'll need to manually resolve those cases.
+
+Before rewriting `hop.json`, doctor snapshots it to
+`.hop/backups/repair-<timestamp>Z`, so the change can be reverted with
+`git hop repair --undo <id>`. Only the hub you run doctor from is touched;
+use `git hop prune` to sweep every hub registered in state.
 
 ## Error Types Reference
 
