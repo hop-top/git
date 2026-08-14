@@ -361,6 +361,24 @@ prompt is the only confirmation).
 - Port and volume allocations
 - Containers
 - Networks
+- Local branch
+
+The branch on `origin` is **not** touched. Removal is a local
+operation and never contacts the network unless you ask it to.
+
+### `--delete-remote`
+
+Also delete the branch on `origin`, after the local removal:
+
+```bash
+git hop remove feature-x --delete-remote
+```
+
+Without this flag `remove` issues no network calls at all, so an
+unreachable, slow, or credential-gated origin cannot stall the
+command. With it, the `ls-remote` probe and the delete push run under
+[`hop.remote.timeout`](./configuration.md#hopremotetimeout) and fail
+with a stated cause rather than hanging.
 
 Repair backups (`.hop/backups/repair-*`) for the removed worktree are
 **not** auto-deleted. Run `git hop prune` to clean those up once the

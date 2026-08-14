@@ -339,16 +339,30 @@ func (g *Git) DeleteLocalBranch(dir, branch string) error {
 	return err
 }
 
-// HasRemoteBranch checks whether a branch exists on the remote
+// HasRemoteBranch checks whether a branch exists on the remote.
+// Runs under a deadline (see runRemote): an unreachable origin fails
+// fast instead of blocking indefinitely.
 func (g *Git) HasRemoteBranch(dir, branch string) bool {
-	out, err := g.Runner.RunInDir(dir, "git", "ls-remote", "--heads", "origin", branch)
+	out, err := g.runRemote(dir, "ls-remote", "--heads", "origin", branch)
 	return err == nil && out != ""
 }
 
-// DeleteRemoteBranch deletes a branch from the remote
+// DeleteRemoteBranch deletes a branch from the remote, under the same
+// deadline as HasRemoteBranch.
 func (g *Git) DeleteRemoteBranch(dir, branch string) error {
-	_, err := g.Runner.RunInDir(dir, "git", "push", "origin", "--delete", branch)
+	_, err := g.runRemote(dir, "push", "origin", "--delete", branch)
 	return err
+}
+
+// runRemote dispatches a remote-touching git command. With the real
+// runner it goes through runNetwork so the process carries a deadline.
+// An injected runner (tests, xrr cassettes) never reaches the network,
+// so it is used as-is and the deadline is unnecessary.
+func (g *Git) runRemote(dir string, args ...string) (string, error) {
+	if _, real := g.Runner.(*RealRunner); !real {
+		return g.Runner.RunInDir(dir, "git", args...)
+	}
+	return runNetwork(dir, args...)
 }
 
 // ListRemoteBranches returns remote branch names with the origin/ prefix stripped.

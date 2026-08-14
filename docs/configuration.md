@@ -230,6 +230,25 @@ hub for that repository.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of `.hop/backups/repair-*` directories before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
+| `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
+
+### `hop.remote.timeout`
+
+Git applies no wall-clock deadline to remote operations, so an
+unreachable host or a stalled SSH/TLS handshake blocks forever.
+Commands that contact a remote run under `hop.remote.timeout` and fail
+with a stated cause when it expires.
+
+```bash
+# Allow 30s for a slow remote
+git config --global hop.remote.timeout 30
+
+# Wait indefinitely (pre-existing behavior)
+git config --global hop.remote.timeout 0
+```
+
+Note that `git hop remove` does not contact the remote at all unless
+you pass `--delete-remote`; removal is a local operation by default.
 
 ### `hop.repair.backupRetention`
 

@@ -27,6 +27,16 @@ type MockGit struct {
 	MergeBaseResponses map[string]string
 	MergeBaseErrors    map[string]error
 
+	// HasRemoteBranchCalls records every HasRemoteBranch invocation as
+	// "<dir>:<branch>". Tests assert this stays empty when the removal
+	// path must not touch the network.
+	HasRemoteBranchCalls []string
+
+	// HasRemoteBranchFunc overrides HasRemoteBranch when non-nil. Tests
+	// inject a blocking implementation to reproduce an unreachable
+	// origin deterministically, without shelling out.
+	HasRemoteBranchFunc func(dir, branch string) bool
+
 	// Repair-related call recorders + injectable errors.
 	WorktreeRepairCalls []string
 	WorktreeRepairErr   error
@@ -214,8 +224,13 @@ func (m *MockGit) DeleteLocalBranch(dir, branch string) error {
 	return nil
 }
 
-// HasRemoteBranch mocks checking for a remote branch
+// HasRemoteBranch mocks checking for a remote branch. Every call is
+// recorded so tests can assert the removal path stayed offline.
 func (m *MockGit) HasRemoteBranch(dir, branch string) bool {
+	m.HasRemoteBranchCalls = append(m.HasRemoteBranchCalls, dir+":"+branch)
+	if m.HasRemoteBranchFunc != nil {
+		return m.HasRemoteBranchFunc(dir, branch)
+	}
 	return m.RemoteBranchExists
 }
 

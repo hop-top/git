@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
@@ -16,8 +18,6 @@ import (
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 	"hop.top/kit/go/runtime/bus"
 )
 
@@ -30,6 +30,7 @@ var removeCmd = &cobra.Command{
 		noPrompt, _ := cmd.Flags().GetBool("no-prompt")
 		noVerify, _ := cmd.Flags().GetBool("no-verify")
 		merged, _ := cmd.Flags().GetBool("merged")
+		deleteRemote, _ := cmd.Flags().GetBool("delete-remote")
 		force, _ := cmd.Root().PersistentFlags().GetBool("force")
 
 		// Validate flag/arg combinations.
@@ -50,7 +51,7 @@ var removeCmd = &cobra.Command{
 
 		// --merged path: collect merged worktrees and remove each.
 		if merged {
-			runRemoveMerged(fs, g, cwd, force, noVerify, noPrompt)
+			runRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
 			return
 		}
 
@@ -112,7 +113,7 @@ var removeCmd = &cobra.Command{
 					}
 				}
 
-				if err := removeBranchWorktree(fs, g, hub, hubPath, target); err != nil {
+				if err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, target, deleteRemote); err != nil {
 					output.Fatal("%s", err.Error())
 				}
 				return
@@ -236,6 +237,20 @@ func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string) error {
 // failures (detector, pre-hook) are returned as errors so callers can
 // decide whether to abort (single-target) or report-and-continue (--merged).
 func removeBranchWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string) error {
+	return removeBranchWorktreeWithRemote(fs, g, hub, hubPath, branch, false)
+}
+
+// removeBranchWorktreeWithRemote is removeBranchWorktree plus explicit
+// control over remote-branch deletion.
+//
+// deleteRemote gates every origin-touching call. When false (the
+// default) removal is fully local: no `git ls-remote` probe, no
+// `git push --delete`. Probing origin on every removal made the command
+// hang indefinitely whenever origin was unreachable, slow, or required
+// credentials — a local worktree removal has no reason to wait on the
+// network. Deleting the remote branch is a separate, destructive act
+// the user must ask for via --delete-remote.
+func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) error {
 	output.Info("Removing branch %s from hub...", branch)
 
 	// Get the worktree path from the hub config BEFORE removing from config
@@ -311,9 +326,13 @@ func removeBranchWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 		output.Warn("Failed to delete local branch: %v", err)
 	}
 
-	if g.HasRemoteBranch(absBasePath, branch) {
-		if err := g.DeleteRemoteBranch(absBasePath, branch); err != nil {
-			output.Warn("Failed to delete remote branch: %v", err)
+	// Remote deletion is opt-in. Both calls below reach the network, so
+	// they run only when the user explicitly asked for them.
+	if deleteRemote {
+		if g.HasRemoteBranch(absBasePath, branch) {
+			if err := g.DeleteRemoteBranch(absBasePath, branch); err != nil {
+				output.Warn("Failed to delete remote branch: %v", err)
+			}
 		}
 	}
 
@@ -448,7 +467,7 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 // each candidate through removeGate + removeBranchWorktree. Track removed
 // vs. skipped counts and exit non-zero if any candidate was skipped due
 // to a safety-gate failure.
-func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt bool) {
+func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt, deleteRemote bool) {
 	hubPath, err := hop.FindHub(fs, cwd)
 	if err != nil {
 		output.Fatal("Not in a hub: %v", err)
@@ -500,7 +519,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 			continue
 		}
 
-		if err := removeBranchWorktree(fs, g, hub, hubPath, c.Branch); err != nil {
+		if err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, c.Branch, deleteRemote); err != nil {
 			reason := fmt.Sprintf("%s: %s", c.Branch, err.Error())
 			output.Warn("Failed to remove %s", reason)
 			skippedReasons = append(skippedReasons, reason)
@@ -523,5 +542,6 @@ func init() {
 	removeCmd.Flags().Bool("no-prompt", false, "Skip the confirmation prompt only; does NOT bypass the safety gate")
 	removeCmd.Flags().Bool("no-verify", false, "Allow removal of dirty worktrees or unpushed commits (gate bypass)")
 	removeCmd.Flags().Bool("merged", false, "Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)")
+	removeCmd.Flags().Bool("delete-remote", false, "Also delete the branch on origin; without it removal stays local and never contacts the network")
 	removeCmd.ValidArgsFunction = completeBranchNames
 }
