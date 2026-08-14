@@ -25,7 +25,7 @@ Additional Commands:
   list        List all managed worktrees
   merge       Merge a worktree branch into a receiving branch, then delete the source worktree
   move        Rename a worktree and its branch
-  prune       Remove orphaned worktrees and hubs from state
+  prune       Remove orphaned worktrees and hubs from state and hop.json
   remove      Remove a hub, hopspace, or branch
   repair      Safely repair stale worktree metadata
   status      Show the working tree status

@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"hop.top/git/internal/config"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 )
 
 // Hub represents a git-hop hub
@@ -151,6 +151,17 @@ func (h *Hub) RenameBranch(oldBranch, newBranch, newPath string) error {
 		HopspaceBranch: old.HopspaceBranch,
 	}
 	return h.Save()
+}
+
+// BranchPath resolves a registered branch's worktree to an absolute
+// path, applying the same relative-to-hub-root rule the repair planner
+// uses. Returns "" when the branch is not registered in this hub.
+func (h *Hub) BranchPath(branchName string) string {
+	b, ok := h.Config.Branches[branchName]
+	if !ok {
+		return ""
+	}
+	return absHubBranchPath(h.Path, b.Path)
 }
 
 // Save persists the hub config
