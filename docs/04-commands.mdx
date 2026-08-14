@@ -513,9 +513,14 @@ git hop doctor
 git hop doctor --fix
 ```
 
+```bash tab="Preview Repairs"
+git hop doctor --fix --dry-run
+```
+
 ### Flags
 
 - `--fix` - Automatically repair detected issues
+- `--dry-run` - With `--fix`, report every repair without applying any of it
 
 ### What It Checks
 
@@ -569,6 +574,24 @@ The `--fix` flag will:
 - Initialize missing hopspaces
 - Register branches from hub to hopspace
 - Sync hub-hopspace configurations
+
+#### Previewing repairs
+
+Add `--dry-run` to see exactly what `--fix` would do without changing
+anything:
+
+```bash
+git hop doctor --fix --dry-run
+```
+
+Every planned repair is printed with a `[dry-run] Would ...` prefix. No
+directories are created, no worktrees recreated, no dependencies touched,
+and neither `state.json` nor the hub's `hop.json` is rewritten — not even
+the `.hop/backups/` snapshot that a real `--fix` takes first, since
+writing a backup is itself a change.
+
+`--dry-run` on its own (without `--fix`) changes nothing either way: a
+doctor run that is not repairing never mutates.
 
 #### Auto-cleanup of missing-on-disk merged branches
 

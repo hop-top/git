@@ -28,7 +28,7 @@ func TestDoctorFixStateIssues_ClearsHopJSONRows(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 
-	fixed := fixStateIssues(fs, mocks.NewMockGit(), st, hubPath)
+	fixed := fixStateIssues(fs, mocks.NewMockGit(), st, hubPath, doctorOpts{fix: true})
 
 	assert.Equal(t, 1, fixed, "doctor must count the pruned hop.json row")
 	assert.ElementsMatch(t, []string{"main"}, hubBranchKeys(t, fs, hubPath),
@@ -46,7 +46,7 @@ func TestDoctorFixStateIssues_BacksUpHopJSON(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 
-	require.Equal(t, 1, fixStateIssues(fs, mocks.NewMockGit(), st, hubPath))
+	require.Equal(t, 1, fixStateIssues(fs, mocks.NewMockGit(), st, hubPath, doctorOpts{fix: true}))
 
 	backup := hop.NewRepairBackup(fs, hubPath)
 	backups, err := backup.List()
@@ -68,7 +68,7 @@ func TestDoctorFixStateIssues_NoOpWhenClean(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 
-	assert.Equal(t, 0, fixStateIssues(fs, mocks.NewMockGit(), st, hubPath))
+	assert.Equal(t, 0, fixStateIssues(fs, mocks.NewMockGit(), st, hubPath, doctorOpts{fix: true}))
 	assert.ElementsMatch(t, []string{"main"}, hubBranchKeys(t, fs, hubPath))
 	exists, _ := afero.DirExists(fs, filepath.Join(hubPath, ".hop", "backups"))
 	assert.False(t, exists, "clean hub must not accumulate backups")
@@ -94,7 +94,7 @@ func TestDoctorFixStateIssues_ScopedToCurrentHub(t *testing.T) {
 		Hubs:          []*state.HubState{{Path: otherHub, Mode: "local"}},
 	}
 
-	assert.Equal(t, 1, fixStateIssues(fs, mocks.NewMockGit(), st, hubPath))
+	assert.Equal(t, 1, fixStateIssues(fs, mocks.NewMockGit(), st, hubPath, doctorOpts{fix: true}))
 	assert.ElementsMatch(t, []string{"main", "feat/also-gone"},
 		hubBranchKeys(t, fs, otherHub),
 		"doctor --fix in one hub must leave other hubs' hop.json alone")
@@ -111,7 +111,7 @@ func TestDoctorFixStateIssues_NoHubFallsBackToState(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 
-	assert.Equal(t, 0, fixStateIssues(fs, mocks.NewMockGit(), st, ""))
+	assert.Equal(t, 0, fixStateIssues(fs, mocks.NewMockGit(), st, "", doctorOpts{fix: true}))
 	assert.ElementsMatch(t, []string{"main", "feat/gone"}, hubBranchKeys(t, fs, hubPath),
 		"outside a hub, doctor must not rewrite hop.json")
 }

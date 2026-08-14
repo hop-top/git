@@ -1,25 +1,41 @@
 package cmd
 
 import (
-	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
-	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 )
 
 var (
 	doctorFix bool
 )
+
+// doctorOpts carries the flags that decide whether a check may mutate.
+//
+// fix and dryRun are deliberately separate rather than a tri-state: --fix
+// alone repairs, --fix --dry-run previews the same repairs, and --dry-run
+// alone is a no-op because a run without --fix never mutates anyway.
+type doctorOpts struct {
+	fix    bool
+	dryRun bool
+}
+
+// mutating reports whether a repair may actually be applied. Every
+// mutation site in doctor gates on this, never on opts.fix — the whole
+// point of the flag is that --dry-run reports without applying.
+func (o doctorOpts) mutating() bool { return o.fix && !o.dryRun }
+
+// planning reports whether doctor is previewing repairs instead of
+// applying them, i.e. whether output should be phrased as "would".
+func (o doctorOpts) planning() bool { return o.fix && o.dryRun }
 
 var doctorCmd = &cobra.Command{
 	Use:     "doctor",
@@ -38,7 +54,11 @@ Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows
 'git hop status' reports as Missing), backing hop.json up to
 .hop/backups/repair-<timestamp>Z first so the change can be undone with
-'git hop repair --undo'.`,
+'git hop repair --undo'.
+
+Combine --fix with --dry-run to preview every repair without applying any
+of it: no directories created, no worktrees recreated, no dependencies
+touched, no state or hop.json rewritten, and no backup snapshot taken.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		cwd, err := os.Getwd()
@@ -46,398 +66,214 @@ drops hop.json branch entries whose worktree directory is gone (the rows
 			output.Fatal("Failed to get current directory: %v", err)
 		}
 
-		output.Info("Running git-hop diagnostics...")
-		issuesFound := false
-		fixedIssues := 0
-
-		// Check Paths
-		output.Info("\n=== Checking Paths ===")
-		dataHome := hop.GetGitHopDataHome()
-		configHome := hop.GetConfigHome()
-		cacheHome := hop.GetCacheHome()
-
-		output.Info("Data home:   %s", dataHome)
-		output.Info("Config home: %s", configHome)
-		output.Info("Cache home:  %s", cacheHome)
-
-		// Verify directories exist
-		for _, dir := range []struct {
-			name string
-			path string
-		}{
-			{"data", filepath.Join(dataHome, "git-hop")},
-			{"config", filepath.Join(configHome, "git-hop")},
-			{"cache", filepath.Join(cacheHome, "git-hop")},
-		} {
-			if exists, _ := afero.DirExists(fs, dir.path); !exists {
-				issuesFound = true
-				if doctorFix {
-					if err := fs.MkdirAll(dir.path, 0755); err != nil {
-						output.Error("Failed to create %s directory: %v", dir.name, err)
-					} else {
-						output.Info("✓ Created %s directory", dir.name)
-						fixedIssues++
-					}
-				} else {
-					output.Error("%s directory does not exist: %s", dir.name, dir.path)
-				}
-			}
-		}
-
-		// Check Hub
-		output.Info("\n=== Checking Hub ===")
-		hubPath, err := hop.FindHub(fs, cwd)
-		if err == nil {
-			output.Info("Hub found at: %s", hubPath)
-			hub, err := hop.LoadHub(fs, hubPath)
-			if err != nil {
-				output.Error("Failed to load hub config: %v", err)
-				issuesFound = true
-			} else {
-				// Check if hopspace exists
-				dataHome := hop.GetGitHopDataHome()
-				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-
-				output.Info("Expected hopspace: %s", hopspacePath)
-
-				if exists, _ := afero.Exists(fs, filepath.Join(hopspacePath, "hop.json")); !exists {
-					issuesFound = true
-
-					if doctorFix {
-						output.Info("Creating missing hopspace...")
-						// Get the default branch
-						defaultBranch := hub.Config.Repo.DefaultBranch
-						if defaultBranch == "" {
-							defaultBranch = "main"
-						}
-
-						// Initialize hopspace
-						hopspace, err := hop.InitHopspace(fs, hopspacePath, hub.Config.Repo.URI,
-							hub.Config.Repo.Org, hub.Config.Repo.Repo, defaultBranch)
-						if err != nil {
-							output.Error("Failed to initialize hopspace: %v", err)
-						} else {
-							// Register all branches from hub
-							for branchName, branch := range hub.Config.Branches {
-								branchWorktreePath := config.ResolveWorktreePath(branch.Path, hubPath)
-								if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
-									output.Error("Failed to register branch %s: %v", branchName, err)
-								}
-							}
-							output.Info("✓ Created hopspace")
-							fixedIssues++
-						}
-					} else {
-						output.Error("Hopspace does not exist at %s", hopspacePath)
-					}
-				} else {
-					output.Info("✓ Hopspace exists")
-
-					// Check consistency between hub and hopspace
-					hopspace, err := hop.LoadHopspace(fs, hopspacePath)
-					if err != nil {
-						output.Error("Failed to load hopspace: %v", err)
-						issuesFound = true
-					} else {
-						// Check if all hub branches are in hopspace
-						for branchName := range hub.Config.Branches {
-							if _, ok := hopspace.Config.Branches[branchName]; !ok {
-								issuesFound = true
-
-								if doctorFix {
-									branchWorktreePath := config.ResolveWorktreePath(hub.Config.Branches[branchName].Path, hubPath)
-									if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
-										output.Error("Failed to register branch %s: %v", branchName, err)
-									} else {
-										output.Info("✓ Registered branch %s in hopspace", branchName)
-										fixedIssues++
-									}
-								} else {
-									output.Error("Branch %s in hub but not in hopspace", branchName)
-								}
-							}
-						}
-					}
-				}
-
-				// Check branch paths (worktrees)
-				for name, b := range hub.Config.Branches {
-					linkPath := config.ResolveWorktreePath(b.Path, hub.Path)
-					if _, err := fs.Stat(linkPath); err != nil {
-						output.Error("Broken link for branch %s: %s", name, linkPath)
-						issuesFound = true
-
-						if doctorFix {
-							// Attempt to recreate the worktree
-							output.Info("Attempting to fix broken worktree for branch %s...", name)
-
-							// Get hopspace path for git worktree commands
-							dataHome := hop.GetGitHopDataHome()
-							hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-
-							// Load hopspace to verify it exists
-							hopspace, err := hop.LoadHopspace(fs, hopspacePath)
-							if err != nil {
-								output.Error("Cannot fix: failed to load hopspace: %v", err)
-								continue
-							}
-
-							// Check if branch is registered in hopspace
-							_, existsInHopspace := hopspace.Config.Branches[b.HopspaceBranch]
-							if !existsInHopspace {
-								output.Error("Cannot fix: branch %s not found in hopspace", b.HopspaceBranch)
-								continue
-							}
-
-							// Create parent directories if needed
-							linkDir := filepath.Dir(linkPath)
-							if err := fs.MkdirAll(linkDir, 0755); err != nil {
-								output.Error("Failed to create parent directory: %v", err)
-								continue
-							}
-
-							// Recreate the worktree using git
-							g := git.New()
-							if err := g.CreateWorktree(hopspacePath, b.HopspaceBranch, linkPath, "", false, "origin/"+b.HopspaceBranch); err != nil {
-								output.Error("Failed to recreate worktree: %v", err)
-								continue
-							}
-
-							// Update hopspace to reflect the restored worktree
-							if err := hopspace.RegisterBranch(b.HopspaceBranch, linkPath); err != nil {
-								output.Error("Failed to update hopspace: %v", err)
-								// Continue anyway as the worktree was created
-							}
-
-							// Verify the worktree was created successfully
-							if _, err := fs.Stat(linkPath); err == nil {
-								output.Info("✓ Fixed worktree for branch %s", name)
-								fixedIssues++
-							} else {
-								output.Error("Worktree creation appeared to succeed but path still not accessible")
-							}
-						}
-					}
-				}
-			}
-		} else {
-			output.Info("Not in a hub. Skipping hub-specific checks.")
-		}
-
-		// Check Dependencies
-		output.Info("\n=== Checking Dependencies ===")
-		if hubPath != "" {
-			hub, err := hop.LoadHub(fs, hubPath)
-			if err == nil {
-				dataHome := hop.GetGitHopDataHome()
-				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-
-				// Load global config
-				globalLoader := config.NewGlobalLoader()
-				globalConfig, err := globalLoader.Load()
-				if err != nil {
-					globalConfig = globalLoader.GetDefaults()
-				}
-
-				// Create deps manager
-				depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
-				if err != nil {
-					output.Error("Failed to initialize dependency manager: %v", err)
-					issuesFound = true
-				} else {
-					// Collect all worktree paths
-					worktrees := make(map[string]string, len(hub.Config.Branches))
-					for branchName, branch := range hub.Config.Branches {
-						worktrees[branchName] = config.ResolveWorktreePath(branch.Path, hubPath)
-					}
-
-					// Run audit
-					issues, err := depsManager.Audit(worktrees)
-					if err != nil {
-						output.Error("Failed to audit dependencies: %v", err)
-						issuesFound = true
-					} else if len(issues) > 0 {
-						// Only error-severity issues make the installation
-						// unhealthy. Stale symlinks are warnings: the deps
-						// still work and the next install refreshes them, so
-						// they must not on their own drive the "issues found"
-						// verdict — while staying visible in the report.
-						if hasErrorSeverity(issues) {
-							issuesFound = true
-						}
-						output.Info("\nDependency Issues:")
-
-						var totalReclaimableSize int64
-						for _, issue := range issues {
-							switch issue.Type {
-							case services.IssueLocalFolder:
-								sizeMB := float64(issue.Size) / 1024 / 1024
-								output.Error("  ⚠ %s: local %s (%.1fMB) instead of symlink", issue.Branch, issue.PM.DepsDir, sizeMB)
-								totalReclaimableSize += issue.Size
-							case services.IssueBrokenSymlink:
-								output.Error("  ✗ %s: broken symlink %s → %s (missing)", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget))
-							case services.IssueStaleSymlink:
-								output.Warn("  %s: stale symlink %s → %s (lockfile changed to %s); refreshed by the next install", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
-							case services.IssueMissingDeps:
-								output.Error("  ✗ %s: missing %s", issue.Branch, issue.PM.DepsDir)
-							}
-						}
-
-						if totalReclaimableSize > 0 {
-							sizeMB := float64(totalReclaimableSize) / 1024 / 1024
-							output.Info("\nPotential space savings: %.1fMB", sizeMB)
-						}
-
-						if doctorFix {
-							output.Info("\nFixing dependency issues...")
-							if err := depsManager.Fix(issues, false); err != nil {
-								output.Error("Failed to fix some issues: %v", err)
-							} else {
-								output.Info("✓ Fixed %d dependency issue(s)", len(issues))
-								fixedIssues += len(issues)
-
-								if totalReclaimableSize > 0 {
-									sizeMB := float64(totalReclaimableSize) / 1024 / 1024
-									output.Info("✓ Reclaimed %.1fMB", sizeMB)
-								}
-							}
-						}
-
-						// Check for orphaned deps
-						orphaned := depsManager.Registry.GetOrphaned()
-						if len(orphaned) > 0 {
-							var orphanedSize int64
-							for _, depsKey := range orphaned {
-								depsPath := filepath.Join(hopspacePath, "deps", depsKey)
-								size := getDirSize(fs, depsPath)
-								orphanedSize += size
-							}
-							orphanedSizeMB := float64(orphanedSize) / 1024 / 1024
-							output.Info("\n  ⚠ %d orphaned dependencies (%.1fMB)", len(orphaned), orphanedSizeMB)
-							output.Info("    Run 'git hop env gc' to reclaim space")
-						}
-					} else {
-						output.Info("✓ All dependencies are properly configured")
-
-						// Still check for orphaned deps
-						orphaned := depsManager.Registry.GetOrphaned()
-						if len(orphaned) > 0 {
-							var orphanedSize int64
-							for _, depsKey := range orphaned {
-								depsPath := filepath.Join(hopspacePath, "deps", depsKey)
-								size := getDirSize(fs, depsPath)
-								orphanedSize += size
-							}
-							orphanedSizeMB := float64(orphanedSize) / 1024 / 1024
-							output.Info("  ⚠ %d orphaned dependencies (%.1fMB)", len(orphaned), orphanedSizeMB)
-							output.Info("    Run 'git hop env gc' to reclaim space")
-						}
-					}
-				}
-			}
-		} else {
-			output.Info("Not in a hub. Skipping dependency checks.")
-		}
-
-		// Check Worktree State
-		output.Info("\n=== Checking Worktree State ===")
-		if hubPath != "" {
-			hub, err := hop.LoadHub(fs, hubPath)
-			if err == nil {
-				dataHome := hop.GetGitHopDataHome()
-				hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-
-				// Load hopspace
-				hopspace, err := hop.LoadHopspace(fs, hopspacePath)
-				if err != nil {
-					output.Error("Failed to load hopspace: %v", err)
-					issuesFound = true
-				} else {
-					g := git.New()
-					validator := hop.NewStateValidator(fs, g)
-					cleanup := hop.NewCleanupManager(fs, g)
-
-					// Check for orphaned directories
-					orphanedDirs, err := validator.DetectOrphanedDirectories(hopspace)
-					if err != nil {
-						output.Error("Failed to detect orphaned directories: %v", err)
-					} else if len(orphanedDirs) > 0 {
-						issuesFound = true
-						output.Error("Found %d orphaned directories", len(orphanedDirs))
-						for _, dir := range orphanedDirs {
-							output.Error("  - %s", dir)
-							if doctorFix {
-								output.Info("    Cleaning up...")
-								fullPath := filepath.Join(hopspacePath, "hops", dir)
-								if err := cleanup.CleanupOrphanedDirectory(fullPath); err != nil {
-									output.Error("    Failed to remove: %v", err)
-								} else {
-									output.Info("    ✓ Removed")
-									fixedIssues++
-								}
-							}
-						}
-						if !doctorFix {
-							output.Info("  Run 'git hop doctor --fix' to clean up orphaned directories")
-						}
-					} else {
-						output.Info("✓ No orphaned directories found")
-					}
-				}
-			}
-		} else {
-			output.Info("Not in a hub. Skipping worktree state checks.")
-		}
-
-		// Check State Consistency
-		output.Info("\n=== Checking State ===")
-		st, err := state.LoadState(fs)
-		if err != nil {
-			output.Warn("Could not load state: %v", err)
-			output.Info("Run 'git hop migrate' if you have legacy data to migrate.")
-		} else if len(st.Repositories) > 0 {
-			stateIssues := checkStateConsistency(fs, st)
-			if len(stateIssues) > 0 {
-				issuesFound = true
-				output.Info("Found %d state consistency issue(s):", len(stateIssues))
-				for _, issue := range stateIssues {
-					output.Error("  %s", issue)
-				}
-
-				if doctorFix {
-					fixedIssues += fixStateIssues(fs, git.New(), st, hubPath)
-				} else {
-					output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
-				}
-			} else {
-				output.Info("✓ State is consistent")
-			}
-		} else {
-			output.Info("No repositories in state. Skipping state checks.")
-		}
-
-		// Summary
-		output.Info("\n=== Summary ===")
-		if !issuesFound {
-			output.Info("✓ No issues found. Your git-hop installation is healthy!")
-		} else {
-			if doctorFix {
-				if fixedIssues > 0 {
-					output.Info("Fixed %d issue(s).", fixedIssues)
-				}
-				if issuesFound {
-					output.Info("Some issues could not be automatically fixed. Please review the errors above.")
-				}
-			} else {
-				output.Info("Issues found. Run 'git hop doctor --fix' to automatically repair them.")
-			}
-		}
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		runDoctor(fs, git.New(), cwd, doctorOpts{fix: doctorFix, dryRun: dryRun})
 	},
 }
 
 func init() {
 	cli.RootCmd.AddCommand(doctorCmd)
 	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Automatically fix issues")
+}
+
+// doctorReport accumulates the verdict across every check.
+//
+// fixed counts repairs that genuinely landed; under --dry-run it counts
+// repairs that would land. The summary distinguishes the two so a preview
+// never claims to have fixed anything.
+type doctorReport struct {
+	issuesFound bool
+	fixed       int
+}
+
+// runDoctor executes every diagnostic and, when opts.fix is set, the
+// repairs. It is the wiring layer the tests drive: the cobra Run closure
+// does nothing but resolve flags and call it, so a test exercising
+// runDoctor exercises the same path a user gets — including whether each
+// call site honours --dry-run.
+func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doctorReport {
+	var r doctorReport
+
+	output.Info("Running git-hop diagnostics...")
+	if opts.planning() {
+		output.Info("[dry-run] Previewing repairs; no changes will be applied.")
+	}
+
+	checkPaths(fs, opts, &r)
+	hubPath := checkHub(fs, g, cwd, opts, &r)
+	checkDependencies(fs, hubPath, opts, &r)
+	checkWorktreeState(fs, g, hubPath, opts, &r)
+	checkState(fs, g, hubPath, opts, &r)
+
+	summarizeDoctor(opts, r)
+	return r
+}
+
+// checkPaths verifies the XDG-derived directories exist, creating them
+// under --fix.
+func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
+	output.Info("\n=== Checking Paths ===")
+	dataHome := hop.GetGitHopDataHome()
+	configHome := hop.GetConfigHome()
+	cacheHome := hop.GetCacheHome()
+
+	output.Info("Data home:   %s", dataHome)
+	output.Info("Config home: %s", configHome)
+	output.Info("Cache home:  %s", cacheHome)
+
+	for _, dir := range []struct {
+		name string
+		path string
+	}{
+		{"data", filepath.Join(dataHome, "git-hop")},
+		{"config", filepath.Join(configHome, "git-hop")},
+		{"cache", filepath.Join(cacheHome, "git-hop")},
+	} {
+		if exists, _ := afero.DirExists(fs, dir.path); exists {
+			continue
+		}
+		r.issuesFound = true
+
+		if !opts.fix {
+			output.Error("%s directory does not exist: %s", dir.name, dir.path)
+			continue
+		}
+		if !opts.mutating() {
+			output.Info("[dry-run] Would create %s directory: %s", dir.name, dir.path)
+			r.fixed++
+			continue
+		}
+		if err := fs.MkdirAll(dir.path, 0755); err != nil {
+			output.Error("Failed to create %s directory: %v", dir.name, err)
+		} else {
+			output.Info("✓ Created %s directory", dir.name)
+			r.fixed++
+		}
+	}
+}
+
+// checkWorktreeState detects hopspace directories with no corresponding
+// worktree and, under --fix, deletes them.
+func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts, r *doctorReport) {
+	output.Info("\n=== Checking Worktree State ===")
+	if hubPath == "" {
+		output.Info("Not in a hub. Skipping worktree state checks.")
+		return
+	}
+
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil {
+		return
+	}
+
+	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(),
+		hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
+	if err != nil {
+		output.Error("Failed to load hopspace: %v", err)
+		r.issuesFound = true
+		return
+	}
+
+	validator := hop.NewStateValidator(fs, g)
+	cleanup := hop.NewCleanupManager(fs, g)
+
+	orphanedDirs, err := validator.DetectOrphanedDirectories(hopspace)
+	if err != nil {
+		output.Error("Failed to detect orphaned directories: %v", err)
+		return
+	}
+	if len(orphanedDirs) == 0 {
+		output.Info("✓ No orphaned directories found")
+		return
+	}
+
+	r.issuesFound = true
+	output.Error("Found %d orphaned directories", len(orphanedDirs))
+	for _, dir := range orphanedDirs {
+		output.Error("  - %s", dir)
+		if !opts.fix {
+			continue
+		}
+		fullPath := filepath.Join(hopspacePath, "hops", dir)
+		if !opts.mutating() {
+			output.Info("    [dry-run] Would remove %s", fullPath)
+			r.fixed++
+			continue
+		}
+		output.Info("    Cleaning up...")
+		if err := cleanup.CleanupOrphanedDirectory(fullPath); err != nil {
+			output.Error("    Failed to remove: %v", err)
+		} else {
+			output.Info("    ✓ Removed")
+			r.fixed++
+		}
+	}
+	if !opts.fix {
+		output.Info("  Run 'git hop doctor --fix' to clean up orphaned directories")
+	}
+}
+
+// checkState reconciles the global state file (and the current hub's
+// hop.json) against the filesystem.
+func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts, r *doctorReport) {
+	output.Info("\n=== Checking State ===")
+	st, err := state.LoadState(fs)
+	if err != nil {
+		output.Warn("Could not load state: %v", err)
+		output.Info("Run 'git hop migrate' if you have legacy data to migrate.")
+		return
+	}
+	if len(st.Repositories) == 0 {
+		output.Info("No repositories in state. Skipping state checks.")
+		return
+	}
+
+	stateIssues := checkStateConsistency(fs, st)
+	if len(stateIssues) == 0 {
+		output.Info("✓ State is consistent")
+		return
+	}
+
+	r.issuesFound = true
+	output.Info("Found %d state consistency issue(s):", len(stateIssues))
+	for _, issue := range stateIssues {
+		output.Error("  %s", issue)
+	}
+
+	if opts.fix {
+		r.fixed += fixStateIssues(fs, g, st, hubPath, opts)
+	} else {
+		output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
+	}
+}
+
+// summarizeDoctor prints doctor's verdict. Under --dry-run the counts
+// describe what a real --fix would do, so the wording must never claim a
+// repair landed.
+func summarizeDoctor(opts doctorOpts, r doctorReport) {
+	output.Info("\n=== Summary ===")
+	if !r.issuesFound {
+		output.Info("✓ No issues found. Your git-hop installation is healthy!")
+		return
+	}
+
+	switch {
+	case opts.planning():
+		if r.fixed > 0 {
+			output.Info("[dry-run] Would fix %d issue(s). Re-run without --dry-run to apply.", r.fixed)
+		} else {
+			output.Info("[dry-run] No issues could be automatically fixed. Please review the errors above.")
+		}
+	case opts.fix:
+		if r.fixed > 0 {
+			output.Info("Fixed %d issue(s).", r.fixed)
+		}
+		output.Info("Some issues could not be automatically fixed. Please review the errors above.")
+	default:
+		output.Info("Issues found. Run 'git hop doctor --fix' to automatically repair them.")
+	}
 }
 
 // hasErrorSeverity reports whether any issue is severe enough to make the
@@ -482,166 +318,4 @@ func checkStateConsistency(fs afero.Fs, st *state.State) []string {
 	}
 
 	return issues
-}
-
-// fixStateIssues is doctor's --fix pass over stale bookkeeping. It
-// returns the number of entries that actually changed.
-//
-// Three surfaces, not one: the global state.json worktree/hub rows, and
-// the current hub's hop.json branch rows. `git hop status` renders its
-// hub table from hop.json, so a --fix that only cleared state left every
-// deleted worktree listed as Missing — the user's view was untouched by
-// the fix. The hop.json half reuses prune's helper (repair's
-// ActionUpdateHopJSON + Applier, with RepairBackup snapshotting first),
-// so a doctor rewrite is undoable via 'git hop repair --undo'.
-//
-// Scoped deliberately: prune is a global command and visits every hub in
-// state, but doctor runs from one hub, so only that hub's hop.json is
-// eligible. Outside a hub (hubPath empty) the hop.json pass is skipped.
-//
-// Counts reported are what landed, never what was planned.
-func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath string) int {
-	output.Info("\nFixing missing worktrees...")
-	missingFixed := fixMissingWorktrees(fs, g, st)
-
-	output.Info("\nPruning remaining orphaned entries from state...")
-	worktreesPruned := pruneOrphanedWorktrees(fs, st, false)
-	hubsPruned := pruneOrphanedHubs(fs, st, false)
-
-	fixed := missingFixed
-	if missingFixed > 0 || worktreesPruned > 0 || hubsPruned > 0 {
-		if err := state.SaveState(fs, st); err != nil {
-			output.Error("Failed to save state: %v", err)
-		} else {
-			output.Info("✓ Pruned %d worktree(s) and %d hub(s) from state", worktreesPruned, hubsPruned)
-			fixed += worktreesPruned + hubsPruned
-		}
-	}
-
-	if scoped := stateScopedToHub(hubPath); scoped != nil {
-		if rows := pruneOrphanedHubBranches(fs, g, scoped, false); rows > 0 {
-			output.Info("✓ Pruned %d hop.json entry(ies) from %s", rows, hubPath)
-			fixed += rows
-		}
-	}
-
-	return fixed
-}
-
-// fixMissingWorktrees handles worktrees whose paths no longer exist on disk.
-// For each missing worktree it checks whether the branch was merged; if so it
-// removes the state entry automatically. Otherwise it asks the user to either
-// provide a new location, delete the entry, or keep it as-is.
-// Returns the number of entries resolved (relocated or deleted).
-func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State) int {
-	resolved := 0
-
-	for repoID, repo := range st.Repositories {
-		for branch, wt := range repo.Worktrees {
-			if exists, _ := afero.DirExists(fs, wt.Path); exists {
-				continue
-			}
-
-			output.Info("\nMissing worktree: %s:%s (was at %s)", repoID, branch, wt.Path)
-
-			// Try to determine a git dir to run branch-merged check.
-			// Prefer the hub path recorded in state; fall back to hopspace.
-			gitDir := findGitDirForRepo(fs, repoID, wt.HubPath)
-
-			if gitDir != "" && isBranchMerged(g, gitDir, branch, repo.DefaultBranch) {
-				output.Info("  Branch '%s' is merged into '%s' — auto-removing entry.", branch, repo.DefaultBranch)
-				delete(repo.Worktrees, branch)
-				resolved++
-				continue
-			}
-
-			// Not merged (or unable to check): ask user.
-			idx, _ := output.Select(
-				fmt.Sprintf("Worktree for '%s' is missing. What would you like to do?", branch),
-				[]string{
-					"Provide new location",
-					"Delete the entry",
-					"Keep as-is (skip)",
-				},
-			)
-
-			switch idx {
-			case 0: // new location
-				newPath := output.Input("Enter new path for worktree")
-				newPath = strings.TrimSpace(newPath)
-				if newPath == "" {
-					output.Warn("  No path entered — skipping.")
-					continue
-				}
-				if exists, _ := afero.DirExists(fs, newPath); !exists {
-					output.Error("  Path does not exist: %s — skipping.", newPath)
-					continue
-				}
-				wt.Path = newPath
-				repo.Worktrees[branch] = wt
-				output.Info("  ✓ Updated path to %s", newPath)
-				resolved++
-
-			case 1: // delete
-				delete(repo.Worktrees, branch)
-				output.Info("  ✓ Deleted entry for '%s'", branch)
-				resolved++
-
-			default: // skip / invalid
-				output.Info("  Kept as-is.")
-			}
-		}
-	}
-
-	return resolved
-}
-
-// findGitDirForRepo returns a usable git directory for running git commands
-// against the given repository. It tries the hub path first, then falls back
-// to the hopspace derived from the repoID.
-func findGitDirForRepo(fs afero.Fs, repoID, hubPath string) string {
-	if hubPath != "" {
-		if exists, _ := afero.DirExists(fs, hubPath); exists {
-			return hubPath
-		}
-	}
-
-	// repoID is typically "github.com/org/repo" — extract org/repo suffix.
-	parts := strings.SplitN(repoID, "/", 3)
-	if len(parts) == 3 {
-		dataHome := hop.GetGitHopDataHome()
-		hopspacePath := hop.GetHopspacePath(dataHome, parts[1], parts[2])
-		if exists, _ := afero.DirExists(fs, hopspacePath); exists {
-			return hopspacePath
-		}
-	}
-
-	return ""
-}
-
-// isBranchMerged reports whether branch has been merged into defaultBranch
-// (or into HEAD when defaultBranch is empty). It uses `git branch --merged`.
-func isBranchMerged(g git.GitInterface, dir, branch, defaultBranch string) bool {
-	base := defaultBranch
-	if base == "" {
-		base = "HEAD"
-	}
-
-	out, err := g.RunInDir(dir, "git", "branch", "--merged", base)
-	if err != nil {
-		return false
-	}
-
-	for _, line := range strings.Split(out, "\n") {
-		// Strip leading markers: "* " (current branch), "+ " (worktree), "  " (others)
-		trimmed := strings.TrimSpace(line)
-		trimmed = strings.TrimPrefix(trimmed, "* ")
-		trimmed = strings.TrimPrefix(trimmed, "+ ")
-		name := strings.TrimSpace(trimmed)
-		if name == branch {
-			return true
-		}
-	}
-
-	return false
 }
