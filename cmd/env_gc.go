@@ -6,12 +6,12 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/services"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 )
 
 var (

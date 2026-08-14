@@ -336,4 +336,3 @@ func TestAdd_GoProject_NoDepsMessageWhenNoPM(t *testing.T) {
 		t.Errorf("port output shown for Go project with no Docker: %s", combined)
 	}
 }
-

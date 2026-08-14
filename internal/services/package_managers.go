@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"hop.top/git/internal/config"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 )
 
 // isVendorGitIgnored reports whether vendor/ is explicitly listed in

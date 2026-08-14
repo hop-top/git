@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/hop"
 )
 
 func TestInitHopspace(t *testing.T) {
@@ -324,4 +324,3 @@ func TestHopspaceRegisterMultipleBranches(t *testing.T) {
 		t.Errorf("After reload: expected %d branches, got %d", len(branches), len(hopspace2.Config.Branches))
 	}
 }
-

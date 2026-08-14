@@ -5,12 +5,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/config"
-	"hop.top/git/internal/hop"
-	"hop.top/git/test/mocks"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/hop"
+	"hop.top/git/test/mocks"
 )
 
 // TestRemoveCommand_PartialFailureHandling tests that the remove command
@@ -288,8 +288,8 @@ func TestRemoveCommand_RelativePathBug(t *testing.T) {
 	require.NoError(t, hub.AddBranch("feature", "feature", featureRelativePath))
 
 	// Get the basePath and worktreePath as they would be in remove command
-	basePath := hub.Config.Branches["main"].Path          // "hops/main" (relative)
-	worktreePath := hub.Config.Branches["feature"].Path  // "hops/feature" (relative)
+	basePath := hub.Config.Branches["main"].Path        // "hops/main" (relative)
+	worktreePath := hub.Config.Branches["feature"].Path // "hops/feature" (relative)
 
 	// THE BUG: using filepath.Abs on a relative path resolves from CWD
 	// If we just used filepath.Abs(basePath), it would resolve from current directory

@@ -65,9 +65,9 @@ func TestOpencodeAgentHint_GlobalConfig(t *testing.T) {
 
 func TestAgentDirHint(t *testing.T) {
 	tests := []struct {
-		name    string
-		env     map[string]string
-		want    string
+		name string
+		env  map[string]string
+		want string
 	}{
 		{
 			name: "claude code",

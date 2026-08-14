@@ -4,9 +4,9 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/git/internal/state"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/state"
 )
 
 func TestAddWorktreeToState(t *testing.T) {

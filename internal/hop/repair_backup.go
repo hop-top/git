@@ -31,12 +31,12 @@ const repairBackupTimeFormat = "20060102T150405Z"
 // "worktree:<path>/.git") to its sha256 hex digest at backup time. The
 // applier and undo path use Files to verify byte-identity on restore.
 type RepairManifest struct {
-	Version    int               `json:"version"`
-	ID         string            `json:"id"`
-	Timestamp  time.Time         `json:"timestamp"`
-	HubPath    string            `json:"hubPath"`
-	Actions    []Action          `json:"actions"`
-	Files      map[string]string `json:"files"`
+	Version   int               `json:"version"`
+	ID        string            `json:"id"`
+	Timestamp time.Time         `json:"timestamp"`
+	HubPath   string            `json:"hubPath"`
+	Actions   []Action          `json:"actions"`
+	Files     map[string]string `json:"files"`
 }
 
 // RepairBackup creates per-repair snapshots and exposes them for undo.
@@ -44,10 +44,10 @@ type RepairManifest struct {
 // Backup root: <hub>/.hop/backups/. Each snapshot lives in a sibling
 // directory `repair-<UTC-timestamp>/` containing:
 //
-//   .git_worktrees/          copy of <hub>/.git/worktrees (full subtree)
-//   hop.json                 copy of <hub>/hop.json
-//   pointers/<wtBase>.gitptr  copy of each affected worktree's .git pointer file
-//   manifest.json            RepairManifest
+//	.git_worktrees/          copy of <hub>/.git/worktrees (full subtree)
+//	hop.json                 copy of <hub>/hop.json
+//	pointers/<wtBase>.gitptr  copy of each affected worktree's .git pointer file
+//	manifest.json            RepairManifest
 type RepairBackup struct {
 	fs      afero.Fs
 	hubPath string

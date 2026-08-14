@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/hop"
 )
 
 func TestCurrentSymlinkOnHop(t *testing.T) {

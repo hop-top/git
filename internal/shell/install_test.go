@@ -4,18 +4,18 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/shell"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/shell"
 )
 
 func TestIsWrapperInstalled(t *testing.T) {
 	fs := afero.NewMemMapFs()
 
 	tests := []struct {
-		name         string
-		shellType    string
-		setupFile    func(string) error
-		expected     bool
+		name      string
+		shellType string
+		setupFile func(string) error
+		expected  bool
 	}{
 		{
 			name:      "no rc file exists",
@@ -29,7 +29,7 @@ func TestIsWrapperInstalled(t *testing.T) {
 			setupFile: func(path string) error {
 				return afero.WriteFile(fs, path, []byte("# some other content\nalias foo=bar\n"), 0644)
 			},
-			expected:  false,
+			expected: false,
 		},
 		{
 			name:      "wrapper is installed",
@@ -43,7 +43,7 @@ git-hop() {
 `
 				return afero.WriteFile(fs, path, []byte(content), 0644)
 			},
-			expected:  true,
+			expected: true,
 		},
 		{
 			name:      "partial match should not count",
@@ -54,7 +54,7 @@ alias hop="git hop"
 `
 				return afero.WriteFile(fs, path, []byte(content), 0644)
 			},
-			expected:  false,
+			expected: false,
 		},
 	}
 

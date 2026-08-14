@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/git"
 	"hop.top/git/test/mocks"
-	"github.com/spf13/afero"
 )
 
 // stubGit wraps mocks.MockGit and overrides RevParse + RunInDir so

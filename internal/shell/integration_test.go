@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/shell"
-	"github.com/spf13/afero"
 )
 
 func TestShouldPromptForSetup(t *testing.T) {

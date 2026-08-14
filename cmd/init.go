@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/events"
@@ -14,22 +16,20 @@ import (
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/shell"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 	"hop.top/kit/go/runtime/bus"
 )
 
 var (
-	forceFlag           bool
-	dryRunFlag          bool
-	keepBackupFlag      bool
-	regularFlag         bool
-	restorePath         string
-	noHooksFlag         bool
-	noPromptFlag        bool
-	enableChdirFlag     bool
-	initHooksMode       string
-	initHooksOverwrite  bool
+	forceFlag          bool
+	dryRunFlag         bool
+	keepBackupFlag     bool
+	regularFlag        bool
+	restorePath        string
+	noHooksFlag        bool
+	noPromptFlag       bool
+	enableChdirFlag    bool
+	initHooksMode      string
+	initHooksOverwrite bool
 )
 
 func init() {
@@ -659,4 +659,3 @@ func init() {
 	initCmd.Flags().StringVar(&initHooksMode, "hooks", "", "mirror committed .git-hop/hooks/ into hopspace: symlink|copy|prompt|none (overrides --no-hooks)")
 	initCmd.Flags().BoolVar(&initHooksOverwrite, "hooks-overwrite", false, "overwrite an existing hopspace hook with different content (symlink/copy modes)")
 }
-

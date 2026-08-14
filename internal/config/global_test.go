@@ -67,13 +67,13 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 
 func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	store := map[string]string{
-		"hop.bareRepo":              "false",
-		"hop.gitDomain":             "gitlab.com",
-		"hop.autoEnvStart":          "false",
-		"hop.conventionWarning":     "false",
-		"hop.worktreeLocation":      "/custom/{branch}",
-		"hop.backup.maxBackups":     "10",
-		"hop.backup.enabled":        "false",
+		"hop.bareRepo":                "false",
+		"hop.gitDomain":               "gitlab.com",
+		"hop.autoEnvStart":            "false",
+		"hop.conventionWarning":       "false",
+		"hop.worktreeLocation":        "/custom/{branch}",
+		"hop.backup.maxBackups":       "10",
+		"hop.backup.enabled":          "false",
 		"hop.shellIntegration.status": "approved",
 		"hop.shellIntegration.shell":  "zsh",
 	}

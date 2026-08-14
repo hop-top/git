@@ -37,8 +37,8 @@ func TestDoctorCommand_Structure(t *testing.T) {
 
 	// Test command properties
 	tests := []struct {
-		name     string
-		check    func(*testing.T)
+		name  string
+		check func(*testing.T)
 	}{
 		{
 			name: "has correct use",
@@ -96,10 +96,10 @@ func TestDoctorCommand_Structure(t *testing.T) {
 
 func TestDoctorCommand_FlagCombinations(t *testing.T) {
 	tests := []struct {
-		name           string
-		args           []string
-		expectError    bool
-		checkOutput    func(t *testing.T, output string, err error)
+		name        string
+		args        []string
+		expectError bool
+		checkOutput func(t *testing.T, output string, err error)
 	}{
 		{
 			name:        "with --fix",
@@ -200,8 +200,8 @@ func TestDoctorCommand_ExecutionWithoutSetup(t *testing.T) {
 
 func TestDoctorCommand_OutputModes(t *testing.T) {
 	tests := []struct {
-		name string
-		args []string
+		name        string
+		args        []string
 		checkOutput func(t *testing.T, output string)
 	}{
 		{

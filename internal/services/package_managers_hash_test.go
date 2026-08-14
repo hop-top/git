@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/services"
 )
 
 func TestPackageManager_HashLockfile(t *testing.T) {

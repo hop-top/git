@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/services"
 )
 
 func TestLoadRegistry_EmptyRegistry(t *testing.T) {

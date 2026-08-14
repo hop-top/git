@@ -3,8 +3,8 @@ package hop
 import (
 	"path/filepath"
 
-	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/git"
 )
 
 // StateIssue represents a detected state inconsistency

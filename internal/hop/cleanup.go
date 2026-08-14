@@ -3,8 +3,8 @@ package hop
 import (
 	"path/filepath"
 
-	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/git"
 )
 
 // CleanupManager handles cleanup operations for orphaned artifacts

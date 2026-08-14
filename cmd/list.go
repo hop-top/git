@@ -5,6 +5,8 @@ import (
 	"os"
 	"sort"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
@@ -12,8 +14,6 @@ import (
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
 	"hop.top/git/internal/tui"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 )
 
 // displayBase renders the per-branch compare branch for the Base column.

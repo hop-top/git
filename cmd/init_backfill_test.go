@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/test/mocks"
-	"github.com/spf13/afero"
 )
 
 // Test the worktree-list parser directly. The input shape is what

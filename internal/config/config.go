@@ -58,9 +58,9 @@ type HubSettings struct {
 
 // HopspaceConfig represents $GIT_HOP_DATA_HOME/<org>/<repo>/hop.json
 type HopspaceConfig struct {
-	Repo            RepoConfig                       `json:"repo"`
-	Branches        map[string]HopspaceBranch        `json:"branches"`
-	Forks           map[string]HopspaceFork          `json:"forks"`
+	Repo            RepoConfig                        `json:"repo"`
+	Branches        map[string]HopspaceBranch         `json:"branches"`
+	Forks           map[string]HopspaceFork           `json:"forks"`
 	PackageManagers map[string]PackageManagerOverride `json:"packageManagers,omitempty"` // Repo-level PM overrides
 }
 
@@ -156,8 +156,8 @@ type PackageManagerConfig struct {
 
 // EnvManagerConfig represents an environment manager configuration
 type EnvManagerConfig struct {
-	Name        string     `json:"name"`
-	DetectFiles []string   `json:"detectFiles"`
+	Name        string      `json:"name"`
+	DetectFiles []string    `json:"detectFiles"`
 	Commands    EnvCommands `json:"commands"`
 	Hooks       EnvHooks    `json:"hooks,omitempty"`
 }
@@ -173,12 +173,12 @@ type EnvCommands struct {
 
 // DefaultSettings represents global default settings
 type DefaultSettings struct {
-	AutoEnvStart              bool `json:"autoEnvStart"`
-	ShowAllManagedRepos       bool `json:"showAllManagedRepos"`
-	UnusedThresholdDays       int  `json:"unusedThresholdDays"`
-	BareRepo                  bool `json:"bareRepo"`
-	EnforceCleanForConversion bool `json:"enforceCleanForConversion"`
-	ConventionWarning         bool `json:"conventionWarning"`
+	AutoEnvStart              bool   `json:"autoEnvStart"`
+	ShowAllManagedRepos       bool   `json:"showAllManagedRepos"`
+	UnusedThresholdDays       int    `json:"unusedThresholdDays"`
+	BareRepo                  bool   `json:"bareRepo"`
+	EnforceCleanForConversion bool   `json:"enforceCleanForConversion"`
+	ConventionWarning         bool   `json:"conventionWarning"`
 	GitDomain                 string `json:"gitDomain"`
 	WorktreeLocation          string `json:"worktreeLocation,omitempty"`
 	// DefaultStartPoint controls the start-point used by `git hop add` when
@@ -194,7 +194,7 @@ type DefaultSettings struct {
 
 // ShellIntegrationSettings tracks shell wrapper installation status
 type ShellIntegrationSettings struct {
-	Status         string    `json:"status"`         // unknown, approved, declined, disabled
+	Status         string    `json:"status"`                   // unknown, approved, declined, disabled
 	InstalledShell string    `json:"installedShell,omitempty"` // bash, zsh, fish
 	InstalledPath  string    `json:"installedPath,omitempty"`  // path to rc file
 	InstalledAt    time.Time `json:"installedAt,omitempty"`

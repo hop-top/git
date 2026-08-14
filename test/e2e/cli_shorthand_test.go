@@ -4,9 +4,9 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/hop"
-	"github.com/spf13/afero"
 )
 
 func TestShorthandClone_E2E(t *testing.T) {
@@ -17,39 +17,39 @@ func TestShorthandClone_E2E(t *testing.T) {
 	// both unsafe once tests run concurrently, and neither was ever read.
 
 	tests := []struct {
-		name           string
-		input          string
-		gitDomain      string
-		expectedURI    string
-		shouldExpand   bool
+		name         string
+		input        string
+		gitDomain    string
+		expectedURI  string
+		shouldExpand bool
 	}{
 		{
-			name:           "shorthand with default domain",
-			input:          "testorg/testrepo",
-			gitDomain:      "",
-			expectedURI:    "git@github.com:testorg/testrepo.git",
-			shouldExpand:   true,
+			name:         "shorthand with default domain",
+			input:        "testorg/testrepo",
+			gitDomain:    "",
+			expectedURI:  "git@github.com:testorg/testrepo.git",
+			shouldExpand: true,
 		},
 		{
-			name:           "shorthand with custom domain",
-			input:          "myorg/myrepo",
-			gitDomain:      "gitlab.com",
-			expectedURI:    "git@gitlab.com:myorg/myrepo.git",
-			shouldExpand:   true,
+			name:         "shorthand with custom domain",
+			input:        "myorg/myrepo",
+			gitDomain:    "gitlab.com",
+			expectedURI:  "git@gitlab.com:myorg/myrepo.git",
+			shouldExpand: true,
 		},
 		{
-			name:           "full URI not expanded",
-			input:          "git@github.com:realorg/realrepo.git",
-			gitDomain:      "",
-			expectedURI:    "git@github.com:realorg/realrepo.git",
-			shouldExpand:   false,
+			name:         "full URI not expanded",
+			input:        "git@github.com:realorg/realrepo.git",
+			gitDomain:    "",
+			expectedURI:  "git@github.com:realorg/realrepo.git",
+			shouldExpand: false,
 		},
 		{
-			name:           "branch name not expanded",
-			input:          "feat/awesome",
-			gitDomain:      "",
-			expectedURI:    "feat/awesome",
-			shouldExpand:   false,
+			name:         "branch name not expanded",
+			input:        "feat/awesome",
+			gitDomain:    "",
+			expectedURI:  "feat/awesome",
+			shouldExpand: false,
 		},
 	}
 
@@ -76,10 +76,10 @@ func TestShorthandInCloneContext(t *testing.T) {
 	fs := afero.NewMemMapFs()
 
 	tests := []struct {
-		name      string
-		input     string
-		domain    string
-		wantURI   bool
+		name    string
+		input   string
+		domain  string
+		wantURI bool
 	}{
 		{
 			name:    "org/repo becomes URI",

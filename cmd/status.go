@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
@@ -17,8 +19,6 @@ import (
 	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 	"hop.top/git/internal/tui"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -119,10 +119,10 @@ func showHubStatus(fs afero.Fs, g git.GitInterface, path string) {
 
 // resolveCompareBranch picks the branch to use as the ahead/behind/merged
 // comparison target for a worktree. Precedence:
-//   1. HubBranch.Base (per-branch override, recorded at `git hop add` time
-//      or back-filled by `git hop repair --base`)
-//   2. HubSettings.CompareBranch (hub-wide override, when configured)
-//   3. RepoConfig.DefaultBranch (final fallback)
+//  1. HubBranch.Base (per-branch override, recorded at `git hop add` time
+//     or back-filled by `git hop repair --base`)
+//  2. HubSettings.CompareBranch (hub-wide override, when configured)
+//  3. RepoConfig.DefaultBranch (final fallback)
 //
 // The returned value is the bare branch name. An empty result means the
 // hub has no usable comparison target — callers receive "default" from

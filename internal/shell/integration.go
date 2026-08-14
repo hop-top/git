@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"hop.top/git/internal/config"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 )
 
 // IntegrationResult contains information about the shell integration setup

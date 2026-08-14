@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 
-	"hop.top/git/internal/config"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 )
 
 // VolumeManager handles volume creation

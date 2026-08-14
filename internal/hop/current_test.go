@@ -5,19 +5,19 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/hop"
 )
 
 func TestUpdateCurrentSymlink(t *testing.T) {
 	fs := afero.NewOsFs()
 
 	tests := []struct {
-		name           string
+		name            string
 		worktreeSubpath string
-		setupHub       func(string) error
-		expectError    bool
-		validateResult func(*testing.T, string, string)
+		setupHub        func(string) error
+		expectError     bool
+		validateResult  func(*testing.T, string, string)
 	}{
 		{
 			name:            "create new symlink",

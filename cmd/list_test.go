@@ -4,12 +4,12 @@ import (
 	"testing"
 	"time"
 
-	"hop.top/git/internal/output"
-	"hop.top/git/internal/state"
-	"hop.top/git/test/mocks"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/output"
+	"hop.top/git/internal/state"
+	"hop.top/git/test/mocks"
 )
 
 func TestListWorktrees_FromState(t *testing.T) {

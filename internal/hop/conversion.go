@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
-	"github.com/spf13/afero"
 )
 
 type Converter struct {

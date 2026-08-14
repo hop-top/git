@@ -5,9 +5,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/config"
 )
 
 func TestLoadEnvManagers(t *testing.T) {

@@ -3,10 +3,10 @@ package services_test
 import (
 	"testing"
 
-	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/services"
 )
 
 // goPM returns a PackageManager for Go without requiring go on PATH.

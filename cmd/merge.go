@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/events"
@@ -14,8 +16,6 @@ import (
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 	"hop.top/kit/go/runtime/bus"
 )
 

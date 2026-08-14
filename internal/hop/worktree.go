@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
-	"github.com/spf13/afero"
 )
 
 // StartPointInitial is the sentinel string that requests the legacy
@@ -86,7 +86,7 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 // CreateWorktree creates a git worktree at the configured location.
 // startPoint controls the start-point for newly-created branches:
 //   - ""                    → resolve to refs/remotes/origin/<defaultBranch>,
-//                             falling back to refs/heads/<defaultBranch>, then "HEAD".
+//     falling back to refs/heads/<defaultBranch>, then "HEAD".
 //   - "default-branch"      → same as "".
 //   - "initial"             → root commit of the current history (legacy behavior).
 //   - any other value       → passed through verbatim as the start-point ref/SHA.

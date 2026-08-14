@@ -8,9 +8,9 @@ import (
 	"os/exec"
 	"path/filepath"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
-	"github.com/spf13/afero"
 )
 
 // DepsManager manages shared dependencies across worktrees
@@ -804,4 +804,3 @@ func (m *DepsManager) getDirSize(path string) int64 {
 	})
 	return size
 }
-

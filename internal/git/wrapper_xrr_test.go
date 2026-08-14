@@ -87,4 +87,3 @@ func TestNew_WithRunner_Replaces(t *testing.T) {
 		t.Fatalf("Runner not replaced by WithRunner option")
 	}
 }
-

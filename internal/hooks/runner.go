@@ -220,4 +220,3 @@ func (r *Runner) InstallHooks(worktreePath string) error {
 
 	return nil
 }
-

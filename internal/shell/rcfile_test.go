@@ -17,9 +17,9 @@ func TestGetRcFile(t *testing.T) {
 	os.Setenv("HOME", testHome)
 
 	tests := []struct {
-		name     string
+		name      string
 		shellType string
-		expected string
+		expected  string
 	}{
 		{
 			name:      "bash rc file",

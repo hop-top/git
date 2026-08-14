@@ -4,11 +4,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/config"
-	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
 )
 
 func TestNewStateValidator(t *testing.T) {

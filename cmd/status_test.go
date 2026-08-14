@@ -50,11 +50,12 @@ func TestComposePsHasRunning(t *testing.T) {
 // (`git reset --hard <default>` wiped them) — both produce ahead==0
 // indistinguishable from a real merge-commit-merged branch. To avoid
 // the false positive we gate `merged` on two additional local signals:
-//   1. The local tracking ref `refs/remotes/origin/<branch>` is absent
-//      (PR-merge with --delete-branch removes it via fetch+prune)
-//   2. AND `branch.<name>.merge` config is present (= branch was once
-//      tracking a remote, so the ref being gone means deletion, not
-//      "never pushed")
+//  1. The local tracking ref `refs/remotes/origin/<branch>` is absent
+//     (PR-merge with --delete-branch removes it via fetch+prune)
+//  2. AND `branch.<name>.merge` config is present (= branch was once
+//     tracking a remote, so the ref being gone means deletion, not
+//     "never pushed")
+//
 // When either signal is missing, we drop the "merged" claim and report
 // the honest position: `behind (N)`.
 //

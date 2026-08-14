@@ -7,11 +7,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
 )
 
 // ForkAttach handles "Fork-Attach Mode" (git hop <uri> --branch <branch>)

@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/hop"
 )
 
 // DepsRegistry manages the dependency registry for a repository
@@ -229,4 +229,3 @@ func getDepsBasePath(repoPath string) string {
 func getDepsPath(repoPath, depsKey string) string {
 	return filepath.Join(getDepsBasePath(repoPath), depsKey)
 }
-

@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/hooks"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/hooks"
 )
 
 func TestInstallHooksCommand(t *testing.T) {

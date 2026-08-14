@@ -3,10 +3,10 @@ package hop_test
 import (
 	"testing"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/test/mocks"
-	"github.com/spf13/afero"
 )
 
 func setupMoveTestHopspace(fs afero.Fs, hubPath, branch, worktreePath string) *hop.Hopspace {
@@ -137,7 +137,7 @@ func TestMoveWorktree_NewBranchAlreadyExists(t *testing.T) {
 	fs.MkdirAll(hubPath+"/hops/feature-b", 0755)
 
 	cfg := &config.HopspaceConfig{
-		Repo:     config.RepoConfig{DefaultBranch: "main"},
+		Repo: config.RepoConfig{DefaultBranch: "main"},
 		Branches: map[string]config.HopspaceBranch{
 			"feature/a": {Exists: true, Path: hubPath + "/hops/feature-a"},
 			"feature/b": {Exists: true, Path: hubPath + "/hops/feature-b"},
@@ -149,7 +149,7 @@ func TestMoveWorktree_NewBranchAlreadyExists(t *testing.T) {
 	hopspace, _ := hop.LoadHopspace(fs, hubPath)
 
 	hubCfg := &config.HubConfig{
-		Repo:     config.RepoConfig{DefaultBranch: "main"},
+		Repo: config.RepoConfig{DefaultBranch: "main"},
 		Branches: map[string]config.HubBranch{
 			"feature/a": {Path: hubPath + "/hops/feature-a"},
 			"feature/b": {Path: hubPath + "/hops/feature-b"},

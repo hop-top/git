@@ -3,9 +3,9 @@ package services_test
 import (
 	"testing"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/services"
-	"github.com/spf13/afero"
 )
 
 func TestLoadPackageManagers_OverrideBuiltIn(t *testing.T) {

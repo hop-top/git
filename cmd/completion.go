@@ -3,8 +3,8 @@ package cmd
 import (
 	"os"
 
-	"hop.top/git/internal/cli"
 	"github.com/spf13/cobra"
+	"hop.top/git/internal/cli"
 )
 
 var completionCmd = &cobra.Command{

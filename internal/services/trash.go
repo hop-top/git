@@ -7,8 +7,8 @@ import (
 	"path/filepath"
 	"time"
 
-	"hop.top/git/internal/hop"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/hop"
 )
 
 // Trash provides safe file deletion with recovery capabilities

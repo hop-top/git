@@ -20,13 +20,13 @@ type State struct {
 
 // RepositoryState represents the state of a single repository
 type RepositoryState struct {
-	URI            string                   `json:"uri"`
-	Org            string                   `json:"org"`
-	Repo           string                   `json:"repo"`
-	DefaultBranch  string                   `json:"defaultBranch"`
+	URI            string                    `json:"uri"`
+	Org            string                    `json:"org"`
+	Repo           string                    `json:"repo"`
+	DefaultBranch  string                    `json:"defaultBranch"`
 	Worktrees      map[string]*WorktreeState `json:"worktrees"`
-	Hubs           []*HubState              `json:"hubs"`
-	GlobalHopspace *GlobalHopspaceState     `json:"globalHopspace"`
+	Hubs           []*HubState               `json:"hubs"`
+	GlobalHopspace *GlobalHopspaceState      `json:"globalHopspace"`
 }
 
 // WorktreeState represents the state of a single worktree

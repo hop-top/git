@@ -3,8 +3,8 @@ package services_test
 import (
 	"testing"
 
-	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/services"
 )
 
 func TestDetectPackageManagers_BuiltIn(t *testing.T) {
@@ -274,11 +274,11 @@ func TestLoadPackageManagers_BuiltInOnly(t *testing.T) {
 
 func TestPackageManager_FindLockfile(t *testing.T) {
 	tests := []struct {
-		name          string
-		pm            services.PackageManager
-		files         []string
-		expectedFile  string
-		expectError   bool
+		name         string
+		pm           services.PackageManager
+		files        []string
+		expectedFile string
+		expectError  bool
 	}{
 		{
 			name: "finds first priority lockfile",
@@ -527,65 +527,65 @@ func stringContains(s, substr string) bool {
 // run vendor (this is the bug fix for TestAdd_GoProject_NoVendorWhenNotVendored).
 func TestShouldRunModVendor(t *testing.T) {
 	tests := []struct {
-		name        string
-		gitignore   string
+		name         string
+		gitignore    string
 		hasGitignore bool
-		hasVendor   bool
-		expected    bool
+		hasVendor    bool
+		expected     bool
 	}{
 		{
-			name:        "vendor exists, no .gitignore -> run vendor",
-			hasVendor:   true,
+			name:         "vendor exists, no .gitignore -> run vendor",
+			hasVendor:    true,
 			hasGitignore: false,
-			expected:    true,
+			expected:     true,
 		},
 		{
-			name:        "vendor exists, .gitignore does not list vendor -> run vendor",
-			gitignore:   "node_modules/\nbuild/\n",
+			name:         "vendor exists, .gitignore does not list vendor -> run vendor",
+			gitignore:    "node_modules/\nbuild/\n",
 			hasGitignore: true,
-			hasVendor:   true,
-			expected:    true,
+			hasVendor:    true,
+			expected:     true,
 		},
 		{
-			name:        "vendor exists but gitignored (vendor) -> skip",
-			gitignore:   "vendor\n",
+			name:         "vendor exists but gitignored (vendor) -> skip",
+			gitignore:    "vendor\n",
 			hasGitignore: true,
-			hasVendor:   true,
-			expected:    false,
+			hasVendor:    true,
+			expected:     false,
 		},
 		{
-			name:        "vendor exists but gitignored (vendor/) -> skip",
-			gitignore:   "vendor/\n",
+			name:         "vendor exists but gitignored (vendor/) -> skip",
+			gitignore:    "vendor/\n",
 			hasGitignore: true,
-			hasVendor:   true,
-			expected:    false,
+			hasVendor:    true,
+			expected:     false,
 		},
 		{
-			name:        "vendor exists but gitignored with comments -> skip",
-			gitignore:   "# ignore deps\nvendor\nnode_modules/\n",
+			name:         "vendor exists but gitignored with comments -> skip",
+			gitignore:    "# ignore deps\nvendor\nnode_modules/\n",
 			hasGitignore: true,
-			hasVendor:   true,
-			expected:    false,
+			hasVendor:    true,
+			expected:     false,
 		},
 		{
-			name:        "no vendor, no .gitignore -> skip (the regression case)",
-			hasVendor:   false,
+			name:         "no vendor, no .gitignore -> skip (the regression case)",
+			hasVendor:    false,
 			hasGitignore: false,
-			expected:    false,
+			expected:     false,
 		},
 		{
-			name:        "no vendor, .gitignore present but no vendor entry -> skip",
-			gitignore:   "node_modules/\n",
+			name:         "no vendor, .gitignore present but no vendor entry -> skip",
+			gitignore:    "node_modules/\n",
 			hasGitignore: true,
-			hasVendor:   false,
-			expected:    false,
+			hasVendor:    false,
+			expected:     false,
 		},
 		{
-			name:        "no vendor, vendor gitignored -> skip",
-			gitignore:   "vendor/\n",
+			name:         "no vendor, vendor gitignored -> skip",
+			gitignore:    "vendor/\n",
 			hasGitignore: true,
-			hasVendor:   false,
-			expected:    false,
+			hasVendor:    false,
+			expected:     false,
 		},
 	}
 

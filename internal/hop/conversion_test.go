@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/git"
 )
 
 func TestConvertToBareWorktree_NoRemote(t *testing.T) {

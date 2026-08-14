@@ -5,10 +5,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
-	"github.com/spf13/afero"
 )
 
 // porcelainWorktree is one record from `git worktree list --porcelain`.

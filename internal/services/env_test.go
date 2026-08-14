@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
-	"hop.top/git/internal/config"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
+	"hop.top/git/internal/config"
 )
 
 // TestWriteEnvFile_PortKeyNaming verifies that HOP_PORT_* keys in .env

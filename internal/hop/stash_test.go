@@ -3,9 +3,9 @@ package hop_test
 import (
 	"testing"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
-	"github.com/spf13/afero"
 )
 
 func TestNewStashManager(t *testing.T) {

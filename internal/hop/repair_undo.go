@@ -12,9 +12,9 @@ import (
 // the most recent backup. Returns the restored manifest on success.
 //
 // Restore is a pure file operation:
-//   1. Replace <hub>/.git/worktrees with the snapshot copy.
-//   2. Replace <hub>/hop.json with the snapshot copy.
-//   3. Replace each affected worktree's .git pointer with its snapshot copy.
+//  1. Replace <hub>/.git/worktrees with the snapshot copy.
+//  2. Replace <hub>/hop.json with the snapshot copy.
+//  3. Replace each affected worktree's .git pointer with its snapshot copy.
 //
 // Each restored file is checksum-validated against manifest.Files
 // before being written; a mismatch aborts the restore (refuse to write

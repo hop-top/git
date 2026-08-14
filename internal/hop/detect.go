@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
-	"github.com/spf13/afero"
 )
 
 // LooksLikeGitCheckout reports whether path is any flavor of git checkout

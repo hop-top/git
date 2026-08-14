@@ -25,10 +25,10 @@ const Source = "git-hop"
 
 // WorktreeEvent is the payload for worktree lifecycle events.
 type WorktreeEvent struct {
-	Path          string // Worktree directory path.
-	Branch        string // Branch name.
-	HopspacePath  string // Hopspace root path.
-	RepoPath      string // Hub/bare-repo path.
+	Path         string // Worktree directory path.
+	Branch       string // Branch name.
+	HopspacePath string // Hopspace root path.
+	RepoPath     string // Hub/bare-repo path.
 }
 
 // EnvEvent is the payload for environment lifecycle events.
@@ -40,9 +40,9 @@ type EnvEvent struct {
 
 // HopspaceEvent is the payload for hopspace initialization.
 type HopspaceEvent struct {
-	Path   string // Path where hopspace was initialized.
-	Org    string
-	Repo   string
+	Path string // Path where hopspace was initialized.
+	Org  string
+	Repo string
 }
 
 // DepsEvent is the payload emitted after dependency installation.

@@ -4,9 +4,9 @@ import (
 	"errors"
 	"testing"
 
-	"hop.top/git/internal/hop"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/hop"
 )
 
 func TestTransaction_Success(t *testing.T) {

@@ -240,4 +240,3 @@ func findAndModifyPythonFile(t *testing.T, dir string) {
 
 	t.Log("No Python file found to modify (non-critical)")
 }
-

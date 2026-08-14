@@ -4,11 +4,11 @@ import (
 	"os"
 	"strings"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 )
 
 // completeBranchNames returns hub branch names for shell completion.

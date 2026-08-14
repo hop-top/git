@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"hop.top/git/internal/git"
 	"github.com/spf13/afero"
+	"hop.top/git/internal/git"
 )
 
 type BackupMetadata struct {

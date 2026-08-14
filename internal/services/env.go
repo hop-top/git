@@ -10,10 +10,10 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
 	"hop.top/git/internal/hop"
-	"github.com/spf13/afero"
 )
 
 // hopVolumeRefRe matches ${HOP_VOLUME_NAME} references in compose files.

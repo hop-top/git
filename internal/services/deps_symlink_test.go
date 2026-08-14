@@ -6,10 +6,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"hop.top/git/internal/services"
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"hop.top/git/internal/services"
 )
 
 // pnpmPM returns a PackageManager for pnpm without requiring pnpm on PATH.
@@ -430,4 +430,3 @@ func TestAudit_DetectsBrokenSymlinkWhenTargetDeleted(t *testing.T) {
 		"issue type should be IssueBrokenSymlink when target was GC'd")
 	assert.Equal(t, depsKey, issues[0].DepsKey)
 }
-

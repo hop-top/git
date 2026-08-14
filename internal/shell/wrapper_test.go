@@ -93,11 +93,11 @@ func TestGenerateWrapperFunctionLogic(t *testing.T) {
 
 	// Check for command detection logic
 	requiredLogic := []string{
-		"should_cd",                    // Variable for tracking cd decision
-		"add|init|clone",               // Commands that trigger cd
-		"list|status|doctor",           // Commands that don't trigger cd
+		"should_cd",                     // Variable for tracking cd decision
+		"add|init|clone",                // Commands that trigger cd
+		"list|status|doctor",            // Commands that don't trigger cd
 		"git rev-parse --show-toplevel", // Hub root detection
-		"exit_code",                    // Exit code preservation
+		"exit_code",                     // Exit code preservation
 	}
 
 	for _, logic := range requiredLogic {
