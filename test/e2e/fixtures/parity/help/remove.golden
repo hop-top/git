@@ -7,10 +7,11 @@ Aliases:
   remove, rm, delete, del
 
 Flags:
-  -h, --help        help for remove
-      --merged      Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)
-      --no-prompt   Skip the confirmation prompt only; does NOT bypass the safety gate
-      --no-verify   Allow removal of dirty worktrees or unpushed commits (gate bypass)
+      --delete-remote   Also delete the branch on origin; without it removal stays local and never contacts the network
+  -h, --help            help for remove
+      --merged          Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)
+      --no-prompt       Skip the confirmation prompt only; does NOT bypass the safety gate
+      --no-verify       Allow removal of dirty worktrees or unpushed commits (gate bypass)
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
