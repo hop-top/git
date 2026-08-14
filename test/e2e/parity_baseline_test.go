@@ -30,15 +30,7 @@ func setupParityEnv(t *testing.T) *parityEnv {
 	rootDir := CreateTempDir(t)
 	t.Cleanup(func() { os.RemoveAll(rootDir) })
 
-	binPath := filepath.Join(rootDir, "git-hop")
-	projectRoot, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("getwd: %v", err)
-	}
-	if filepath.Base(projectRoot) == "e2e" {
-		projectRoot = filepath.Dir(filepath.Dir(projectRoot))
-	}
-	RunCommand(t, projectRoot, "go", "build", "-buildvcs=false", "-o", binPath, "main.go")
+	binPath := SharedBinary(t)
 
 	gitConfigPath := filepath.Join(rootDir, "gitconfig")
 	WriteFile(t, gitConfigPath, "[user]\n\tname = Test\n\temail = t@t.com\n[init]\n\tdefaultBranch = main\n")
