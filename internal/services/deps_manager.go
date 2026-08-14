@@ -33,6 +33,31 @@ const (
 	IssueMissingDeps   IssueType = "missing_deps"
 )
 
+// Severity classifies how much attention an Issue deserves.
+type Severity string
+
+const (
+	// SeverityError marks a broken state that will not resolve itself and
+	// needs repair (missing or dangling deps, an unshared local folder).
+	SeverityError Severity = "error"
+	// SeverityWarning marks a benign, self-healing state: the deps are
+	// present and usable, they simply predate the current lockfile. The
+	// next install refreshes them. Reported, but never on its own a reason
+	// for doctor to declare the installation unhealthy.
+	SeverityWarning Severity = "warning"
+)
+
+// Severity returns the severity of an issue type. Stale symlinks are
+// warnings: a worktree that has not re-run its installer since the
+// lockfile changed still has working deps, so calling it an error
+// overstated the problem and made `doctor` look broken on healthy repos.
+func (t IssueType) Severity() Severity {
+	if t == IssueStaleSymlink {
+		return SeverityWarning
+	}
+	return SeverityError
+}
+
 // Issue represents a dependency issue found during audit
 type Issue struct {
 	Type          IssueType
@@ -455,6 +480,20 @@ func (m *DepsManager) createSymlink(target, linkPath string) error {
 	return fmt.Errorf("filesystem does not support symlinks")
 }
 
+// skipGoVendor reports whether the Go package manager's vendor/ directory
+// at worktreePath is outside git-hop's remit and must therefore be left
+// alone by audit and repair. The rule is IsGoVendorActive, shared with the
+// worktree-create install path so the two can never drift apart. Only the
+// built-in "go" package manager is affected: other managers whose DepsDir
+// happens to be vendor/ (composer, bundler) treat it as a regenerable
+// cache and are audited normally.
+func skipGoVendor(fs afero.Fs, pm PackageManager, worktreePath string) bool {
+	if pm.Name != "go" || pm.DepsDir != "vendor" {
+		return false
+	}
+	return !IsGoVendorActive(fs, worktreePath)
+}
+
 // Audit scans all worktrees and identifies dependency issues.
 // worktrees is a map of branchName → worktreePath.
 func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
@@ -475,6 +514,15 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 		}
 
 		for _, pm := range detectedPMs {
+			// Go vendor/ is only ours to audit when vendor mode is active.
+			// Skipping here mirrors the create path (see ensurePMDeps and
+			// IsGoVendorActive); without it doctor reported "missing
+			// vendor" for every Go repo that gitignores vendor/, and
+			// --fix materialised the unwanted directory.
+			if skipGoVendor(m.fs, pm, worktreePath) {
+				continue
+			}
+
 			// Find lockfile
 			lockfilePath, err := pm.FindLockfile(m.fs, worktreePath)
 			if err != nil {
@@ -591,6 +639,15 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 // Fix repairs dependency issues
 func (m *DepsManager) Fix(issues []Issue, force bool) error {
 	for _, issue := range issues {
+		// Defence in depth: Audit already filters these out, but Fix is
+		// exported and may be handed an issue list assembled elsewhere or
+		// by an older audit. Creating vendor/ in a repo that gitignores it
+		// is the exact harm this fix exists to prevent, so re-check here
+		// rather than trust the caller.
+		if skipGoVendor(m.fs, issue.PM, issue.WorktreePath) {
+			continue
+		}
+
 		switch issue.Type {
 		case IssueLocalFolder:
 			// Move local folder to trash and create symlink
