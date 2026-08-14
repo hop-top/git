@@ -83,6 +83,24 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 	return pruned
 }
 
+// stateScopedToHub returns a state view containing only hubPath, so a
+// caller can drive pruneOrphanedHubBranches against a single hub instead
+// of every hub in global state.
+//
+// prune is a global command and rightly visits them all; doctor runs
+// from one hub and must not rewrite a sibling repo's hop.json. Returns
+// nil when hubPath is empty (not in a hub) — nothing to scope to.
+func stateScopedToHub(hubPath string) *state.State {
+	if hubPath == "" {
+		return nil
+	}
+	return &state.State{
+		Repositories: map[string]*state.RepositoryState{
+			hubPath: {Hubs: []*state.HubState{{Path: hubPath}}},
+		},
+	}
+}
+
 // hubPathsFromState returns every hub path in state, deduplicated and
 // sorted. Multiple repositories can register the same hub path; visiting
 // it twice would snapshot and rewrite hop.json twice.

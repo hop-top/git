@@ -34,7 +34,11 @@ Checks:
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
 
-Use --fix to automatically repair issues.`,
+Use --fix to automatically repair issues. In the current hub, --fix also
+drops hop.json branch entries whose worktree directory is gone (the rows
+'git hop status' reports as Missing), backing hop.json up to
+.hop/backups/repair-<timestamp>Z first so the change can be undone with
+'git hop repair --undo'.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		cwd, err := os.Getwd()
@@ -394,23 +398,7 @@ Use --fix to automatically repair issues.`,
 				}
 
 				if doctorFix {
-					output.Info("\nFixing missing worktrees...")
-					g := git.New()
-					missingFixed := fixMissingWorktrees(fs, g, st)
-					fixedIssues += missingFixed
-
-					output.Info("\nPruning remaining orphaned entries from state...")
-					worktreesPruned := pruneOrphanedWorktrees(fs, st, false)
-					hubsPruned := pruneOrphanedHubs(fs, st, false)
-
-					if missingFixed > 0 || worktreesPruned > 0 || hubsPruned > 0 {
-						if err := state.SaveState(fs, st); err != nil {
-							output.Error("Failed to save state: %v", err)
-						} else {
-							output.Info("✓ Pruned %d worktree(s) and %d hub(s)", worktreesPruned, hubsPruned)
-							fixedIssues += worktreesPruned + hubsPruned
-						}
-					}
+					fixedIssues += fixStateIssues(fs, git.New(), st, hubPath)
 				} else {
 					output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
 				}
@@ -474,6 +462,50 @@ func checkStateConsistency(fs afero.Fs, st *state.State) []string {
 	}
 
 	return issues
+}
+
+// fixStateIssues is doctor's --fix pass over stale bookkeeping. It
+// returns the number of entries that actually changed.
+//
+// Three surfaces, not one: the global state.json worktree/hub rows, and
+// the current hub's hop.json branch rows. `git hop status` renders its
+// hub table from hop.json, so a --fix that only cleared state left every
+// deleted worktree listed as Missing — the user's view was untouched by
+// the fix. The hop.json half reuses prune's helper (repair's
+// ActionUpdateHopJSON + Applier, with RepairBackup snapshotting first),
+// so a doctor rewrite is undoable via 'git hop repair --undo'.
+//
+// Scoped deliberately: prune is a global command and visits every hub in
+// state, but doctor runs from one hub, so only that hub's hop.json is
+// eligible. Outside a hub (hubPath empty) the hop.json pass is skipped.
+//
+// Counts reported are what landed, never what was planned.
+func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath string) int {
+	output.Info("\nFixing missing worktrees...")
+	missingFixed := fixMissingWorktrees(fs, g, st)
+
+	output.Info("\nPruning remaining orphaned entries from state...")
+	worktreesPruned := pruneOrphanedWorktrees(fs, st, false)
+	hubsPruned := pruneOrphanedHubs(fs, st, false)
+
+	fixed := missingFixed
+	if missingFixed > 0 || worktreesPruned > 0 || hubsPruned > 0 {
+		if err := state.SaveState(fs, st); err != nil {
+			output.Error("Failed to save state: %v", err)
+		} else {
+			output.Info("✓ Pruned %d worktree(s) and %d hub(s) from state", worktreesPruned, hubsPruned)
+			fixed += worktreesPruned + hubsPruned
+		}
+	}
+
+	if scoped := stateScopedToHub(hubPath); scoped != nil {
+		if rows := pruneOrphanedHubBranches(fs, g, scoped, false); rows > 0 {
+			output.Info("✓ Pruned %d hop.json entry(ies) from %s", rows, hubPath)
+			fixed += rows
+		}
+	}
+
+	return fixed
 }
 
 // fixMissingWorktrees handles worktrees whose paths no longer exist on disk.

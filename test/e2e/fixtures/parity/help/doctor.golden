@@ -7,7 +7,11 @@ Checks:
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
 
-Use --fix to automatically repair issues.
+Use --fix to automatically repair issues. In the current hub, --fix also
+drops hop.json branch entries whose worktree directory is gone (the rows
+'git hop status' reports as Missing), backing hop.json up to
+.hop/backups/repair-<timestamp>Z first so the change can be undone with
+'git hop repair --undo'.
 
 Usage:
   git-hop doctor [flags]
