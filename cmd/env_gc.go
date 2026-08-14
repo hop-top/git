@@ -15,8 +15,9 @@ import (
 )
 
 var (
-	gcForce  bool
-	gcDryRun bool
+	gcForce    bool
+	gcNoPrompt bool
+	gcDryRun   bool
 )
 
 var envGcCmd = &cobra.Command{
@@ -32,7 +33,9 @@ This command:
 4. Optionally deletes orphaned dependencies to free up disk space
 
 Use --dry-run to preview what would be deleted without actually deleting.
-Use --force to skip the confirmation prompt.`,
+Use --no-prompt (or --force) to skip the confirmation prompt; without it a
+non-interactive run with nothing to read on stdin fails rather than
+silently cancelling.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		cwd, err := os.Getwd()
@@ -125,15 +128,8 @@ Use --force to skip the confirmation prompt.`,
 			return
 		}
 
-		// Confirm deletion unless --force
-		if !gcForce {
-			output.Info("\nDelete these dependencies? [y/N]: ")
-			var response string
-			fmt.Scanln(&response)
-			if response != "y" && response != "Y" {
-				output.Info("Cancelled.")
-				return
-			}
+		if !confirmEnvGC(gcNoPrompt || gcForce) {
+			return
 		}
 
 		// Perform deletion
@@ -149,8 +145,27 @@ Use --force to skip the confirmation prompt.`,
 	},
 }
 
+// confirmEnvGC gates the destructive half of `env gc`.
+//
+// It routes through the shared confirmation helper rather than reading
+// stdin itself, so it inherits the loud-failure contract: an
+// unanswerable prompt (nothing readable on stdin) exits non-zero with a
+// fatal: message naming --no-prompt instead of printing a cancellation
+// that a batch script would read as a successful collection. A piped
+// answer is still a real answer, so `echo y | git hop env gc` keeps
+// working; the trigger is an unanswerable prompt, not a non-TTY stdin.
+func confirmEnvGC(skipPrompt bool) bool {
+	if skipPrompt {
+		return true
+	}
+	output.Info("")
+	confirmed, err := output.ConfirmAnswer("Delete these dependencies?")
+	return resolveConfirmation(confirmed, err)
+}
+
 func init() {
 	envCmd.AddCommand(envGcCmd)
 	envGcCmd.Flags().BoolVar(&gcForce, "force", false, "Skip confirmation prompt")
+	envGcCmd.Flags().BoolVar(&gcNoPrompt, "no-prompt", false, "Skip the confirmation prompt (non-interactive callers)")
 	envGcCmd.Flags().BoolVar(&gcDryRun, "dry-run", false, "Show what would be deleted without deleting")
 }

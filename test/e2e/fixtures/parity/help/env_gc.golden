@@ -7,7 +7,9 @@ This command:
 4. Optionally deletes orphaned dependencies to free up disk space
 
 Use --dry-run to preview what would be deleted without actually deleting.
-Use --force to skip the confirmation prompt.
+Use --no-prompt (or --force) to skip the confirmation prompt; without it a
+non-interactive run with nothing to read on stdin fails rather than
+silently cancelling.
 
 Usage:
   git-hop env gc [flags]
@@ -16,9 +18,10 @@ Aliases:
   gc, cleanup, clean
 
 Flags:
-      --dry-run   Show what would be deleted without deleting
-      --force     Skip confirmation prompt
-  -h, --help      help for gc
+      --dry-run     Show what would be deleted without deleting
+      --force       Skip confirmation prompt
+  -h, --help        help for gc
+      --no-prompt   Skip the confirmation prompt (non-interactive callers)
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -37,6 +38,19 @@ func TestMain(m *testing.M) {
 			os.Exit(3) // must report "proceed" on a confirmation
 		}
 		os.Exit(0)
+	case "envgc-unanswerable", "envgc-piped-yes", "envgc-piped-no":
+		// env gc's own confirmation gate, driven only by stdin: empty
+		// stdin is the unanswerable batch case, "n" declines, "y"
+		// proceeds. The piped variants prove a non-TTY with a readable
+		// answer still works.
+		output.CurrentMode = output.ModeHuman
+		if confirmEnvGC(false) {
+			// The real command would delete here. Either way the exit
+			// status stays 0; the tests tell proceed from decline by
+			// the presence of "Cancelled." on stdout.
+			fmt.Println("Deleting orphaned dependencies...")
+		}
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }
@@ -45,11 +59,18 @@ func TestMain(m *testing.M) {
 // with an empty stdin and returns its stderr, stdout and exit status.
 func runPromptScenario(t *testing.T, scenario string) (stdout, stderr string, code int) {
 	t.Helper()
+	// Empty stdin reproduces a non-interactive shell with nothing to read.
+	return runPromptScenarioStdin(t, scenario, "")
+}
+
+// runPromptScenarioStdin is runPromptScenario with a caller-supplied
+// stdin, so scenarios can exercise the piped-answer path.
+func runPromptScenarioStdin(t *testing.T, scenario, stdin string) (stdout, stderr string, code int) {
+	t.Helper()
 
 	cmd := exec.Command(os.Args[0], "-test.run=TestPromptScenarioSubprocessGuard")
 	cmd.Env = append(os.Environ(), promptExitScenarioEnv+"="+scenario)
-	// Empty stdin reproduces a non-interactive shell with nothing to read.
-	cmd.Stdin = strings.NewReader("")
+	cmd.Stdin = strings.NewReader(stdin)
 
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf

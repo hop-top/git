@@ -65,7 +65,7 @@ git hop env start                     # start services (aliases: up)
 git hop env stop                      # stop services (aliases: down)
 git hop env gc                        # GC orphaned deps (aliases: cleanup, clean)
 git hop env gc --dry-run              # preview what would be freed
-git hop env gc --force                # skip confirmation
+git hop env gc --no-prompt            # skip confirmation (--force equivalent)
 ```
 
 ---
@@ -138,5 +138,6 @@ Available hooks:
 | `remove` blocked: "uncommitted changes or untracked files" | `--no-verify` |
 | `remove` blocked: "not merged and not pushed" | `--force --no-verify` |
 | `remove --no-prompt` exited 1 on a risky branch | Add `--force` / `--no-verify`; `--no-prompt` is **not** a gate bypass |
+| `env gc` exited 129: "cannot prompt for confirmation" | Same cause — add `--no-prompt`. |
 | `remove` exited 129: "cannot prompt for confirmation" | Prompt could not read stdin (script / non-TTY) — add `--no-prompt` |
 | Need to see changes before committing | `git hop <cmd> --dry-run` |
