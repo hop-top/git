@@ -64,6 +64,13 @@ func inspectBranchSafety(g git.GitInterface, dir, branch, defaultBranch string) 
 //	  no   |  yes   |  any  | --force
 //	 yes   |  any   | dirty | --no-verify
 //	 yes   |  any   | clean | (silent pass)
+//
+// Every hint also names --no-prompt. Satisfying the gate is necessary
+// but not sufficient for a scripted removal: any branch that trips the
+// gate also trips the confirmation prompt that runs straight after, so
+// a hint listing only the gate flags is a dead end on a
+// non-interactive stdin. The hint names the complete flag set that
+// makes the retry succeed in one shot.
 func removeGate(s branchSafety, force, noVerify bool) error {
 	dirty := !s.Clean
 
@@ -72,20 +79,24 @@ func removeGate(s branchSafety, force, noVerify bool) error {
 		if !force || !noVerify {
 			return fmt.Errorf(
 				"branch is not merged into default and not pushed to origin; " +
-					"pass --force --no-verify to remove it anyway",
+					"pass --force --no-verify to remove it anyway " +
+					"(add --no-prompt when running non-interactively)",
 			)
 		}
 	case !s.Merged:
 		if !force {
 			return fmt.Errorf(
-				"branch is not merged into default; pass --force to remove it anyway",
+				"branch is not merged into default; " +
+					"pass --force to remove it anyway " +
+					"(add --no-prompt when running non-interactively)",
 			)
 		}
 	case dirty:
 		if !noVerify {
 			return fmt.Errorf(
 				"worktree has uncommitted changes or untracked files; " +
-					"pass --no-verify to remove it anyway",
+					"pass --no-verify to remove it anyway " +
+					"(add --no-prompt when running non-interactively)",
 			)
 		}
 	}

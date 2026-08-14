@@ -329,6 +329,11 @@ When the gate is not satisfied, `remove` exits with status 1 and
 prints which flag(s) to add. The gate cannot be bypassed any other
 way.
 
+Any branch that trips the gate also triggers the confirmation prompt
+that runs immediately after it, so each gate message also names
+`--no-prompt` for non-interactive callers. Following the printed hint
+verbatim succeeds on the first retry.
+
 ### `--force` vs `--no-verify` vs `--no-prompt`
 
 These three flags do **different** things. They are not interchangeable.
@@ -353,6 +358,18 @@ git hop remove feature-x --no-prompt   # ✗ refuses
 
 For hub removal, only `--no-prompt` matters (there is no gate; the
 prompt is the only confirmation).
+
+### Non-interactive runs
+
+The confirmation prompt reads stdin. When it cannot be answered —
+a non-interactive shell with nothing piped in — `remove` exits **129**
+with a `fatal:` message on stderr telling you to pass `--no-prompt`.
+It does **not** print `Cancelled.` and exit 0, which would let a batch
+script mistake a skipped removal for a completed one.
+
+Piping an answer works as expected, so `yes | git hop remove …` and
+`echo n | git hop remove …` both behave like a typed reply. A typed
+`n` remains a normal cancellation: `Cancelled.` on stdout, exit 0.
 
 ### What Gets Removed
 
