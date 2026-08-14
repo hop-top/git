@@ -75,7 +75,7 @@ git hop env gc --force                # skip confirmation
 ```bash
 git hop doctor                        # diagnose paths, hubs, hopspaces, orphans
 git hop doctor --fix                  # auto-repair issues (aliases: check, repair)
-git hop prune                         # remove orphaned worktrees/hubs from state
+git hop prune                         # drop orphaned worktrees/hubs from state + hop.json
 git hop prune --dry-run               # preview without applying (aliases: cleanup, clean)
 git hop upgrade                       # check + install newer version
 git hop upgrade --auto                # non-interactive upgrade

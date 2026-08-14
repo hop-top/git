@@ -5,24 +5,29 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
+	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
-	"github.com/spf13/cobra"
 )
 
 var pruneCmd = &cobra.Command{
 	Use:     "prune",
 	Aliases: []string{"cleanup", "clean"},
-	Short:   "Remove orphaned worktrees and hubs from state",
+	Short:   "Remove orphaned worktrees and hubs from state and hop.json",
 	Long: `Remove worktrees and hubs that no longer exist on the filesystem.
 
-This command scans the state file and removes entries for:
+This command scans the state file and each hub's hop.json, removing:
   - Worktrees whose paths no longer exist
   - Hubs whose directories have been deleted
-  - Orphaned entries that have been cleaned up
+  - hop.json branch entries whose worktree directory is gone
+    (the rows 'git hop status' reports as Missing)
+  - Repair backups older than hop.repair.backupRetention
+
+hop.json is backed up to .hop/backups/repair-<timestamp>Z before any
+entry is dropped, so a prune can be undone with 'git hop repair --undo'.
 
 Use --dry-run to preview what would be pruned without making changes.
 `,
@@ -35,6 +40,7 @@ func init() {
 
 func runPrune(cmd *cobra.Command, args []string) {
 	fs := afero.NewOsFs()
+	g := git.New()
 
 	st, err := state.LoadState(fs)
 	if err != nil {
@@ -49,23 +55,54 @@ func runPrune(cmd *cobra.Command, args []string) {
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	output.Info("Scanning for orphaned entries...")
 
-	worktreesPruned, hubsPruned := runPruneFS(fs, st, dryRun)
-	backupsPruned := pruneRepairBackups(fs, st, dryRun)
+	counts := runPruneAll(fs, g, st, dryRun)
 
-	if !dryRun && (worktreesPruned > 0 || hubsPruned > 0) {
+	if !dryRun && (counts.worktrees > 0 || counts.hubs > 0) {
 		if err := state.SaveState(fs, st); err != nil {
 			output.Fatal("Failed to save state: %v", err)
 		}
 	}
 
 	switch {
-	case worktreesPruned == 0 && hubsPruned == 0 && backupsPruned == 0:
+	case counts.total() == 0:
 		output.Success("No orphaned entries found.")
 	case dryRun:
-		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), and %d repair backup(s)", worktreesPruned, hubsPruned, backupsPruned)
+		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), and %d repair backup(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups)
 	default:
-		output.Success("Pruned %d worktree(s), %d hub(s), and %d repair backup(s)", worktreesPruned, hubsPruned, backupsPruned)
+		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), and %d repair backup(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups)
 	}
+}
+
+// pruneCounts tallies each class of stale data prune reclaims. Every
+// field is what genuinely landed (or, under dry-run, what would land) —
+// the summary line is rendered straight from it, so an over-reported
+// count here is a lie to the user.
+type pruneCounts struct {
+	worktrees      int
+	hubs           int
+	hopJSONEntries int
+	repairBackups  int
+}
+
+func (c pruneCounts) total() int {
+	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups
+}
+
+// runPruneAll performs every prune pass against st and returns the
+// counts. Mutations to st are in-memory; the caller persists.
+//
+// Ordering matters: hop.json entries are pruned first because the hub
+// entries in st are what tell us which hop.json files to visit, and
+// pruneOrphanedHubs drops those same entries from st in the pass right
+// after.
+func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) pruneCounts {
+	var c pruneCounts
+	c.hopJSONEntries = pruneOrphanedHubBranches(fs, g, st, dryRun)
+	c.worktrees, c.hubs = runPruneFS(fs, st, dryRun)
+	c.repairBackups = pruneRepairBackups(fs, st, dryRun)
+	return c
 }
 
 // pruneRepairBackups removes repair backup directories older than the
@@ -125,7 +162,6 @@ func repairBackupRetention(st *state.State) time.Duration {
 	}
 	return fallback
 }
-
 
 // runPruneFS scans st for orphaned worktrees and hubs and returns the counts.
 // When dryRun is false the orphans are removed from st in place; the caller

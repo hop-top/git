@@ -1,9 +1,14 @@
 Remove worktrees and hubs that no longer exist on the filesystem.
 
-This command scans the state file and removes entries for:
+This command scans the state file and each hub's hop.json, removing:
   - Worktrees whose paths no longer exist
   - Hubs whose directories have been deleted
-  - Orphaned entries that have been cleaned up
+  - hop.json branch entries whose worktree directory is gone
+    (the rows 'git hop status' reports as Missing)
+  - Repair backups older than hop.repair.backupRetention
+
+hop.json is backed up to .hop/backups/repair-<timestamp>Z before any
+entry is dropped, so a prune can be undone with 'git hop repair --undo'.
 
 Use --dry-run to preview what would be pruned without making changes.
 

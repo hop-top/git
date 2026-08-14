@@ -184,6 +184,10 @@ Status values:
 | `unknown` | Couldn't compute (e.g. default branch ref missing locally) |
 | `-` | Worktree directory is missing on disk |
 
+A `Missing` row means `hop.json` still lists a branch whose worktree
+directory is gone. Run [`git hop prune`](#git-hop-prune) to drop those
+rows.
+
 ## git hop env
 
 Control environment services.
@@ -419,17 +423,27 @@ git hop clean
 
 ### What It Does
 
-`prune` cleans up three classes of stale data:
+`prune` cleans up four classes of stale data:
 
 - **Orphan worktrees** — state entries whose paths no longer exist on
   disk. Common when a worktree dir was `rm -rf`'d manually.
 - **Orphan hubs** — hub entries whose directories are gone. Same idea
   one tier up.
+- **Orphan `hop.json` entries** — branch rows in a hub's `hop.json`
+  whose worktree directory is gone. These are the rows
+  [`git hop status`](#git-hop-status) renders as `State: Missing`;
+  pruning them is what clears the row from the table.
 - **Repair backups older than retention** — `.hop/backups/repair-*`
   directories created by `git hop repair`, older than
   `hop.repair.backupRetention` (default `720h` = 30 days). See
   [git config Settings](./configuration.md#git-config-settings) for
   how to tune retention.
+
+Rewriting `hop.json` goes through the same backup mechanism
+`git hop repair` uses: the pre-prune file is snapshotted to
+`.hop/backups/repair-<timestamp>Z` before any row is dropped, so a
+prune can be rolled back with
+[`git hop repair --undo`](#git-hop-repair).
 
 `prune` does **not** remove merged branches that still exist on disk —
 for that, use [`git hop remove --merged`](#git-hop-remove). It also
