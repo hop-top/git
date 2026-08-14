@@ -51,6 +51,18 @@ func TestMain(m *testing.M) {
 			fmt.Println("Deleting orphaned dependencies...")
 		}
 		os.Exit(0)
+	case "init-choice-unanswerable", "init-choice-piped":
+		// init's conversion menu, driven only by stdin. Empty stdin is
+		// the unanswerable batch case that used to loop forever; a piped
+		// choice is a real answer and must still be honoured.
+		output.CurrentMode = output.ModeHuman
+		choice, err := promptInitChoice()
+		if err != nil {
+			// Same loud-failure path the command takes.
+			output.FatalCode(exitPromptUnanswerable, "%s", err.Error())
+		}
+		fmt.Printf("chose:%s\n", choice)
+		os.Exit(0)
 	}
 	os.Exit(m.Run())
 }

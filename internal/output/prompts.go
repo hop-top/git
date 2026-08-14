@@ -32,13 +32,34 @@ func isPromptUnanswerable(err error) bool {
 // reads real stdin.
 var promptIn io.Reader = os.Stdin
 
+// promptReader is the buffered view of promptIn, cached so successive
+// reads continue where the previous one stopped. A fresh bufio.Reader
+// per call would read ahead into its buffer and then discard the
+// remainder, so a second prompt would lose every line the first one
+// over-read — invisible to single-prompt callers, fatal to a retry loop
+// fed by a pipe. promptSrc records which reader the cache belongs to so
+// a test swapping promptIn transparently invalidates it.
+var (
+	promptReader *bufio.Reader
+	promptSrc    io.Reader
+)
+
+// bufferedPromptIn returns the buffered reader for the current promptIn,
+// rebuilding it if promptIn has been swapped since the last call.
+func bufferedPromptIn() *bufio.Reader {
+	if promptReader == nil || promptSrc != promptIn {
+		promptReader = bufio.NewReader(promptIn)
+		promptSrc = promptIn
+	}
+	return promptReader
+}
+
 // readPromptLine reads one answer from promptIn. It returns
 // ErrPromptUnanswerable when nothing at all could be read — EOF on an
 // empty stdin, or a read failure. A partial final line without a
 // trailing newline still counts as an answer.
 func readPromptLine() (string, error) {
-	reader := bufio.NewReader(promptIn)
-	response, err := reader.ReadString('\n')
+	response, err := bufferedPromptIn().ReadString('\n')
 	if err != nil && response == "" {
 		return "", ErrPromptUnanswerable
 	}
@@ -80,6 +101,59 @@ func ConfirmAnswer(prompt string) (bool, error) {
 func Confirm(prompt string) bool {
 	ok, _ := ConfirmAnswer(prompt)
 	return ok
+}
+
+// maxPromptRetries bounds how many invalid answers a choice prompt will
+// re-ask for before giving up. A human who has mistyped this many times
+// is better served by an error than another identical prompt, and it
+// stops a stdin that endlessly yields unusable input from spinning.
+const maxPromptRetries = 10
+
+// ChoiceAnswer prompts the user to pick one of validChoices and reports
+// whether the prompt could be answered at all. It is the multi-choice
+// sibling of ConfirmAnswer and shares its contract exactly: the same
+// ErrPromptUnanswerable sentinel, the same promptIn injection seam, and
+// the same rule that an unanswerable prompt is a failed precondition
+// rather than a decision.
+//
+// Returns (choice, nil) once a reply matches validChoices. Invalid
+// replies are re-prompted up to maxPromptRetries times. Returns
+// ("", ErrPromptUnanswerable) when stdin carries no answer at all, when
+// the retry budget is exhausted, or when the output mode cannot prompt.
+//
+// The bound is the point. Reading to EOF must terminate: an unbounded
+// retry loop turns a non-interactive run into a hang that emits retry
+// lines until something kills it.
+func ChoiceAnswer(prompt string, validChoices []string) (string, error) {
+	if CurrentMode != ModeHuman {
+		// Non-human modes have no channel to prompt on.
+		return "", ErrPromptUnanswerable
+	}
+
+	for attempt := 0; attempt < maxPromptRetries; attempt++ {
+		fmt.Print(prompt)
+
+		response, err := readPromptLine()
+		if err != nil {
+			// Close the dangling prompt line so the following error
+			// message starts at column zero.
+			fmt.Println()
+			return "", err
+		}
+
+		response = strings.TrimSpace(response)
+		for _, valid := range validChoices {
+			if response == valid {
+				return response, nil
+			}
+		}
+
+		fmt.Println("Invalid choice. Please try again.")
+	}
+
+	// Readable but never usable: treat it as unanswerable so the caller
+	// takes the same loud-failure path as an empty stdin.
+	return "", ErrPromptUnanswerable
 }
 
 // ConfirmWithWarning prompts with a warning-styled message
