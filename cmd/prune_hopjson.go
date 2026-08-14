@@ -37,7 +37,8 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 	}
 
 	pruned := 0
-	for _, hubPath := range hubPathsFromState(st) {
+	for _, h := range hubPathsFromState(st) {
+		hubPath := h.path
 		hub, err := hop.LoadHub(fs, hubPath)
 		if err != nil {
 			// State references a path that is no longer a hub (or was
@@ -52,7 +53,7 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 			if exists, _ := afero.DirExists(fs, wtPath); exists {
 				continue
 			}
-			output.Info("%s hop.json entry: %s (%s)", prefix, branch, wtPath)
+			output.Info("%s hop.json entry: %s:%s (%s)", prefix, h.repoID, branch, wtPath)
 			plan.Actions = append(plan.Actions, hop.Action{
 				Kind:         hop.ActionUpdateHopJSON,
 				WorktreePath: wtPath,
@@ -85,11 +86,15 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 
 // stateScopedToHub returns a state view containing only hubPath, so a
 // caller can drive pruneOrphanedHubBranches against a single hub instead
-// of every hub in global state.
+// of every hub in the state it was handed.
 //
-// prune is a global command and rightly visits them all; doctor runs
-// from one hub and must not rewrite a sibling repo's hop.json. Returns
-// nil when hubPath is empty (not in a hub) — nothing to scope to.
+// Used by doctor, which runs from one hub and must not rewrite a sibling
+// repo's hop.json. prune does not use it: prune scopes by repository
+// (resolvePruneScope) rather than by hub, because its other passes must
+// mutate the real *RepositoryState entries that get saved back to
+// state.json — a synthetic single-hub view keyed by path has no repo ID
+// and no worktree rows for those passes to act on. Returns nil when
+// hubPath is empty (not in a hub) — nothing to scope to.
 func stateScopedToHub(hubPath string) *state.State {
 	if hubPath == "" {
 		return nil
@@ -101,14 +106,29 @@ func stateScopedToHub(hubPath string) *state.State {
 	}
 }
 
-// hubPathsFromState returns every hub path in state, deduplicated and
+// stateHub pairs a hub path with the repository that registered it, so
+// prune's hop.json pass can name the affected repo in its output instead
+// of printing a bare path the user has to map back themselves.
+type stateHub struct {
+	path   string
+	repoID string
+}
+
+// hubPathsFromState returns every hub in state, deduplicated by path and
 // sorted. Multiple repositories can register the same hub path; visiting
-// it twice would snapshot and rewrite hop.json twice.
-func hubPathsFromState(st *state.State) []string {
+// it twice would snapshot and rewrite hop.json twice. On such a
+// collision the first repository in sorted order wins the attribution.
+func hubPathsFromState(st *state.State) []stateHub {
+	repoIDs := make([]string, 0, len(st.Repositories))
+	for id := range st.Repositories {
+		repoIDs = append(repoIDs, id)
+	}
+	sort.Strings(repoIDs)
+
 	seen := make(map[string]struct{})
-	var paths []string
-	for _, repo := range st.Repositories {
-		for _, hub := range repo.Hubs {
+	var hubs []stateHub
+	for _, repoID := range repoIDs {
+		for _, hub := range st.Repositories[repoID].Hubs {
 			if hub == nil || hub.Path == "" {
 				continue
 			}
@@ -116,11 +136,11 @@ func hubPathsFromState(st *state.State) []string {
 				continue
 			}
 			seen[hub.Path] = struct{}{}
-			paths = append(paths, hub.Path)
+			hubs = append(hubs, stateHub{path: hub.Path, repoID: repoID})
 		}
 	}
-	sort.Strings(paths)
-	return paths
+	sort.Slice(hubs, func(i, j int) bool { return hubs[i].path < hubs[j].path })
+	return hubs
 }
 
 func sortedBranchNames(hub *hop.Hub) []string {

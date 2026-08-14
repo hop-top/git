@@ -1,16 +1,27 @@
 Remove worktrees and hubs that no longer exist on the filesystem.
 
-This command scans the state file and each hub's hop.json, removing:
+By default only the current repository is pruned — the one whose hub
+contains the working directory. Pass --all to sweep every repository in
+the state file. Outside any known repository prune refuses to run rather
+than defaulting to a global sweep; use --all there if that is the intent.
+
+For the repositories in scope this command reads the state file and each
+hub's hop.json, removing:
   - Worktrees whose paths no longer exist
   - Hubs whose directories have been deleted
   - hop.json branch entries whose worktree directory is gone
     (the rows 'git hop status' reports as Missing)
   - Repair backups older than hop.repair.backupRetention
 
+Every line naming a pruned entry is prefixed with the repository it
+belongs to, so a --all sweep shows exactly which repositories it touched.
+
 hop.json is backed up to .hop/backups/repair-<timestamp>Z before any
 entry is dropped, so a prune can be undone with 'git hop repair --undo'.
+Removals from the state file are not recoverable from the CLI.
 
-Use --dry-run to preview what would be pruned without making changes.
+Use the global --dry-run flag to preview what would be pruned without
+making changes.
 
 Usage:
   git-hop prune [flags]
@@ -19,6 +30,7 @@ Aliases:
   prune, cleanup, clean
 
 Flags:
+      --all    prune every repository in state, not just the current one
   -h, --help   help for prune
 
 Global Flags:

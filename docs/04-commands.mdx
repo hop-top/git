@@ -459,14 +459,47 @@ git hop prune
 git hop prune --dry-run
 ```
 
+```bash tab="All Repositories"
+git hop prune --all
+```
+
 ```bash tab="Aliases"
 git hop cleanup
 git hop clean
 ```
 
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--all` | Prune every repository in the state file, not just the current one |
+| `-n`, `--dry-run` | Preview what would be pruned without applying (global flag) |
+
+### Scope
+
+By default `prune` only touches the **current repository** — the one whose
+hub contains your working directory, resolved the same way
+[`git hop list`](#git-hop-list) resolves it. Entries belonging to other
+registered repositories are left alone.
+
+Pass `--all` to sweep every repository in the state file. Run outside any
+known repository, `prune` exits with an error rather than defaulting to a
+global sweep; pass `--all` there if a global sweep is what you want.
+
+Every line naming a pruned entry is prefixed with the repository it belongs
+to, so an `--all` run shows exactly which repositories it touched.
+
+Scoping matters because the two halves of a prune are not equally
+recoverable: `hop.json` rewrites are snapshotted and can be rolled back
+with [`git hop repair --undo`](#git-hop-repair), but removals from the
+state file cannot be undone from the CLI. A repo-local prune that reached
+a sibling repository would silently drop its registration, surfacing later
+as `repository not found`.
+
 ### What It Does
 
-`prune` cleans up four classes of stale data:
+For the repositories in scope, `prune` cleans up four classes of stale
+data:
 
 - **Orphan worktrees** — state entries whose paths no longer exist on
   disk. Common when a worktree dir was `rm -rf`'d manually.

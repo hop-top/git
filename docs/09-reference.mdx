@@ -200,7 +200,8 @@ git hop remove &lt;target&gt; [flags]
 
 ### git hop prune
 
-Remove orphaned hopspaces and resources.
+Remove orphaned state entries, `hop.json` rows, and aged-out repair
+backups. Scoped to the current repository unless `--all` is given.
 
 **Synopsis:**
 ```bash
@@ -210,8 +211,8 @@ git hop prune [flags]
 **Flags:**
 | Flag | Description |
 |------|-------------|
+| `--all` | Prune every repository in state, not just the current one |
 | `--dry-run` | Show what would be removed without action |
-| `--force` | Remove without confirmation |
 
 **Exit Codes:**
 | Code | Description |

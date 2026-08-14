@@ -85,7 +85,8 @@ git hop env gc --no-prompt            # skip confirmation (--force equivalent)
 git hop doctor                        # diagnose paths, hubs, hopspaces, orphans
 git hop doctor --fix                  # auto-repair issues + clear this hub's status Missing rows
 git hop doctor --fix --dry-run        # preview every repair; nothing is written
-git hop prune                         # drop orphaned worktrees/hubs from state + hop.json
+git hop prune                         # drop this repo's orphaned worktrees/hubs from state + hop.json
+git hop prune --all                   # same sweep across every registered repo
 git hop prune --dry-run               # preview without applying (aliases: cleanup, clean)
 git hop upgrade                       # check + install newer version
 git hop upgrade --auto                # non-interactive upgrade

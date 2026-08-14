@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"hop.top/git/internal/state"
+	"hop.top/git/test/mocks"
 )
 
 func TestPruneOrphanedWorktrees(t *testing.T) {
@@ -219,7 +220,7 @@ func TestPruneRepairBackups_RemovesOldRepairBackups(t *testing.T) {
 		},
 	}
 
-	pruned := pruneRepairBackups(fs, st, false)
+	pruned := pruneRepairBackups(fs, mocks.NewMockGit(), st, false)
 
 	assert.Equal(t, 1, pruned, "expected only the old repair- backup pruned")
 	exists, _ := afero.DirExists(fs, old)
@@ -245,7 +246,7 @@ func TestPruneRepairBackups_DryRun(t *testing.T) {
 		},
 	}
 
-	pruned := pruneRepairBackups(fs, st, true)
+	pruned := pruneRepairBackups(fs, mocks.NewMockGit(), st, true)
 
 	assert.Equal(t, 1, pruned)
 	exists, _ := afero.DirExists(fs, old)

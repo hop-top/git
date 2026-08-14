@@ -122,8 +122,9 @@ exits 0 without prompting.
 /usr/bin/git hop doctor --json        # structured diagnostics: paths, hubs, orphans
 /usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json)
 /usr/bin/git hop doctor --fix --dry-run  # preview those repairs; writes nothing, no backups
-/usr/bin/git hop prune --dry-run      # list orphaned state + hop.json entries
-/usr/bin/git hop prune                # remove orphaned entries (clears status Missing rows)
+/usr/bin/git hop prune --dry-run      # list this repo's orphaned state + hop.json entries
+/usr/bin/git hop prune                # remove them (clears status Missing rows); current repo only
+/usr/bin/git hop prune --all          # sweep every registered repo; state removals are not undoable
 ```
 
 ---
