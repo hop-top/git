@@ -26,8 +26,11 @@ clean:
 	go clean
 	rm -f $(BINARY_NAME)
 
+# Mirrors the CI timeout. See .github/workflows/ci.yml for the rationale.
+TEST_TIMEOUT ?= 900s
+
 test:
-	go test -buildvcs=false -v ./internal/...
+	go test -buildvcs=false -timeout $(TEST_TIMEOUT) -v ./internal/...
 
 # Requires staticcheck installed: go install honnef.co/go/tools/cmd/staticcheck@latest
 lint:
