@@ -153,31 +153,51 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 	}
 
 	if useBare {
+		// The default branch drives every name downstream: the worktree
+		// directory, hop.json's branches key and path, and the `current`
+		// symlink target. Resolve it once, here, so they cannot disagree.
+		defaultBranch, err := c.git.GetCurrentBranch(repoPath)
+		if err != nil || defaultBranch == "" {
+			return fmt.Errorf("failed to resolve current branch for worktree naming: %w", err)
+		}
+
 		if err := c.git.CloneBare(repoPath, bareRepoPath); err != nil {
 			return fmt.Errorf("failed to create bare repository: %w", err)
 		}
 
-		currentBranch, _ := c.git.GetCurrentBranch(repoPath)
-		_ = currentBranch
-
-		// Create worktrees directory
-		worktreesDir := filepath.Join(bareRepoPath, "worktrees")
-		if err := c.fs.MkdirAll(worktreesDir, 0755); err != nil {
-			return fmt.Errorf("failed to create worktrees directory: %w", err)
+		// Worktree checkouts live under hops/<branch>, matching `git hop
+		// add` and config.MakeWorktreePath. They must NOT go under
+		// <bare>/worktrees/, which is git's own per-worktree admin
+		// directory — writing a checkout there collides with git's
+		// metadata for that same worktree.
+		hopsDir := filepath.Join(bareRepoPath, "hops")
+		if err := c.fs.MkdirAll(hopsDir, 0755); err != nil {
+			return fmt.Errorf("failed to create hops directory: %w", err)
 		}
 
-		mainPath := filepath.Join(worktreesDir, "main")
-		_, err := c.git.Run("git", "-C", bareRepoPath, "worktree", "add", mainPath, "main")
-		if err != nil {
-			return fmt.Errorf("failed to create main worktree: %w", err)
+		defaultPath := filepath.Join(hopsDir, defaultBranch)
+		if _, err := c.git.Run("git", "-C", bareRepoPath, "worktree", "add", defaultPath, defaultBranch); err != nil {
+			return fmt.Errorf("failed to create %s worktree: %w", defaultBranch, err)
 		}
 
-		if err := c.moveFilesToWorktree(repoPath, mainPath); err != nil {
+		if err := c.moveFilesToWorktree(repoPath, defaultPath); err != nil {
 			return fmt.Errorf("failed to move files to worktree: %w", err)
 		}
 
 		if err := c.swapDirectories(parentDir, projectName, bareRepoPath); err != nil {
 			return fmt.Errorf("failed to swap directories: %w", err)
+		}
+
+		// `git worktree add` recorded absolute paths under the pre-swap
+		// location (<repo>.new/...) on BOTH sides of the link: the
+		// worktree's .git file and the admin dir's gitdir file. The swap
+		// moved the repo out from under them, so neither side can be
+		// discovered from the other — bare `git worktree repair` cannot
+		// self-heal. Naming the worktree's new path explicitly gives git
+		// the anchor it needs to rewrite both.
+		repairedPath := filepath.Join(repoPath, "hops", defaultBranch)
+		if _, err := c.git.Run("git", "-C", repoPath, "worktree", "repair", repairedPath); err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to repair worktree links: %v", err))
 		}
 	} else {
 		// For regular repo conversion, the repo root remains as the working tree
@@ -190,15 +210,24 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		// Note: No worktree created for current branch - repo root is its working tree
 	}
 
+	defaultBranch, _ := c.git.GetCurrentBranch(repoPath)
+
 	worktrees, err := ListWorktrees(c.git, repoPath)
 	if err != nil {
 		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to list worktrees: %v", err))
 	} else {
 		for _, branch := range worktrees {
-			if branch == "main" {
+			// The default branch's worktree was materialized above (bare)
+			// or is the repo root itself (regular).
+			if branch == defaultBranch {
 				continue
 			}
 			worktreePath := c.getWorktreePathForBranch(branch, repoPath)
+			// ListWorktrees only reports branches that already have a
+			// worktree; re-adding one would fail. Skip anything present.
+			if exists, _ := afero.DirExists(c.fs, worktreePath); exists {
+				continue
+			}
 			if err := c.git.CreateWorktree(repoPath, branch, worktreePath, "", false, "origin/"+branch); err != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("failed to create worktree for %s: %v", branch, err))
 			}

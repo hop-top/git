@@ -95,9 +95,10 @@ func TestConvertToBareWorktree_PreservesDotGithub(t *testing.T) {
 		t.Fatalf("conversion not marked success; errors=%v", result.Errors)
 	}
 
-	// Bare conversion places main worktree under worktrees/main per
-	// performConversion's mainPath. .github/ + scripts/ must survive.
-	mainWT := filepath.Join(repoPath, "worktrees", "main")
+	// Bare conversion places the default-branch worktree under
+	// hops/<branch>, matching `git hop add` and hop.json. .github/ +
+	// scripts/ must survive the move.
+	mainWT := filepath.Join(repoPath, "hops", "main")
 	for _, want := range []string{
 		filepath.Join(mainWT, ".github", "workflows", "ci.yml"),
 		filepath.Join(mainWT, "scripts", "build.sh"),

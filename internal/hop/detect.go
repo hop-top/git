@@ -189,6 +189,13 @@ func GetRepoRoot(g git.GitInterface, path string) (string, error) {
 	return root, nil
 }
 
+// ListWorktrees returns the branch name of every attached worktree.
+//
+// `git worktree list --porcelain` emits, per worktree, a `worktree <path>`
+// line followed by `HEAD <sha>` and then either `branch refs/heads/<name>`
+// (attached) or `detached`. The branch name lives on the `branch` line only;
+// the `HEAD` line always carries a raw commit SHA. Detached and bare entries
+// have no branch and are skipped.
 func ListWorktrees(g git.GitInterface, repoRoot string) ([]string, error) {
 	out, err := g.RunInDir(repoRoot, "git", "worktree", "list", "--porcelain")
 	if err != nil {
@@ -202,8 +209,8 @@ func ListWorktrees(g git.GitInterface, repoRoot string) ([]string, error) {
 	for _, line := range lines {
 		if strings.HasPrefix(line, "worktree ") {
 			currentWorktree = strings.TrimPrefix(line, "worktree ")
-		} else if strings.HasPrefix(line, "HEAD ") {
-			branch := strings.TrimPrefix(line, "HEAD ")
+		} else if strings.HasPrefix(line, "branch ") {
+			branch := strings.TrimSpace(strings.TrimPrefix(line, "branch "))
 			branch = strings.TrimPrefix(branch, "refs/heads/")
 			if currentWorktree != "" && branch != "" {
 				worktrees = append(worktrees, branch)
@@ -223,11 +230,11 @@ func GetWorktreePath(g git.GitInterface, repoRoot, branch string) (string, error
 	lines := strings.Split(out, "\n")
 	var currentPath string
 
-	for i, line := range lines {
+	for _, line := range lines {
 		if strings.HasPrefix(line, "worktree ") {
 			currentPath = strings.TrimPrefix(line, "worktree ")
-		} else if strings.HasPrefix(line, "HEAD ") && i > 0 {
-			branchRef := strings.TrimPrefix(line, "HEAD ")
+		} else if strings.HasPrefix(line, "branch ") {
+			branchRef := strings.TrimSpace(strings.TrimPrefix(line, "branch "))
 			branchRef = strings.TrimPrefix(branchRef, "refs/heads/")
 			if branchRef == branch && currentPath != "" {
 				return currentPath, nil
