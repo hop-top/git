@@ -5,8 +5,68 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync"
 	"testing"
 )
+
+var (
+	sharedBinOnce sync.Once
+	sharedBinPath string
+	sharedBinErr  error
+)
+
+// ProjectRoot walks up from the test's working directory to the repo root.
+// Tests run with the CWD set to their own package dir, so the number of
+// levels depends on which package called.
+func ProjectRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current working directory: %v", err)
+	}
+	switch filepath.Base(dir) {
+	case "e2e":
+		return filepath.Dir(filepath.Dir(dir))
+	case "docker":
+		// test/e2e/docker
+		return filepath.Dir(filepath.Dir(filepath.Dir(dir)))
+	}
+	return dir
+}
+
+// SharedBinary builds the git-hop binary once per test binary and returns the
+// path. The binary is byte-identical for every test, so rebuilding it per test
+// only re-runs the linker against a fresh output path -- pure waste. The path
+// is only ever executed, never mutated, so sharing it is safe.
+//
+// The binary lives outside any test's RootDir/HOME so tests that inspect their
+// own temp tree never see it.
+func SharedBinary(t *testing.T) string {
+	t.Helper()
+	sharedBinOnce.Do(func() {
+		dir, err := os.MkdirTemp("", "git-hop-e2e-bin-*")
+		if err != nil {
+			sharedBinErr = err
+			return
+		}
+		bin := filepath.Join(dir, "git-hop")
+		cmd := exec.Command("go", "build", "-buildvcs=false", "-o", bin, "main.go")
+		cmd.Dir = ProjectRoot(t)
+		var stdout, stderr bytes.Buffer
+		cmd.Stdout = &stdout
+		cmd.Stderr = &stderr
+		if err := cmd.Run(); err != nil {
+			sharedBinErr = err
+			t.Logf("go build failed: %v\nStdout: %s\nStderr: %s", err, stdout.String(), stderr.String())
+			return
+		}
+		sharedBinPath = bin
+	})
+	if sharedBinErr != nil {
+		t.Fatalf("Failed to build git-hop test binary: %v", sharedBinErr)
+	}
+	return sharedBinPath
+}
 
 // TestEnv holds the environment for an e2e test
 type TestEnv struct {
@@ -32,19 +92,7 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	seedRepoPath := filepath.Join(rootDir, "seed")
 	hubPath := filepath.Join(rootDir, "hub")
 	dataHome := filepath.Join(rootDir, "data")
-	binPath := filepath.Join(rootDir, "git-hop")
-
-	projectRoot, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("Failed to get current working directory: %v", err)
-	}
-	if filepath.Base(projectRoot) == "e2e" {
-		projectRoot = filepath.Dir(filepath.Dir(projectRoot))
-	} else if filepath.Base(projectRoot) == "docker" {
-		// Handle test/e2e/docker subdirectory
-		projectRoot = filepath.Dir(filepath.Dir(filepath.Dir(projectRoot)))
-	}
-	RunCommand(t, projectRoot, "go", "build", "-o", binPath, "main.go")
+	binPath := SharedBinary(t)
 
 	gitConfigPath := filepath.Join(rootDir, "gitconfig")
 	WriteFile(t, gitConfigPath, "[user]\n\tname = Test User\n\temail = test@example.com\n[init]\n\tdefaultBranch = main\n")
