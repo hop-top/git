@@ -39,26 +39,41 @@ func isVendorGitIgnored(fs afero.Fs, worktreePath string) bool {
 	return false
 }
 
-// ShouldRunModVendor reports whether `go mod vendor` should run for the
+// IsGoVendorActive reports whether vendor/ is under git-hop's remit for the
 // Go module at worktreePath.
 //
 // Vendor mode is "active" iff a vendor/ directory exists in the source
-// tree. The previous helper (IsVendorIgnored) only checked .gitignore, so
-// a Go project with no .gitignore and no vendor/ wrongly returned false
-// for "ignored", which the call site interpreted as "vendor is tracked,
-// refresh it" and auto-created an unwanted vendor/ directory. The
-// regression is covered by TestAdd_GoProject_NoVendorWhenNotVendored.
+// tree AND is not gitignored. Two distinct failure modes motivate each
+// half of the rule:
 //
-// Correct semantics: refresh vendor/ only when it already exists AND is
-// not gitignored (gitignored = user manages it manually). Absent vendor/
-// → never run `go mod vendor`.
-func ShouldRunModVendor(fs afero.Fs, worktreePath string) bool {
+//   - Absent vendor/: an earlier helper (IsVendorIgnored) only checked
+//     .gitignore, so a Go project with no .gitignore and no vendor/
+//     wrongly reported "not ignored", which callers read as "vendor is
+//     tracked, materialise it" and auto-created an unwanted vendor/.
+//     Covered by TestAdd_GoProject_NoVendorWhenNotVendored.
+//   - Gitignored vendor/: the repo has opted out of committing vendor/,
+//     so it is the user's to manage manually. git-hop must neither report
+//     its absence nor create it.
+//
+// This is the single rule for "may git-hop touch vendor/ here". It gates
+// both the worktree-create install path (Install) and the doctor
+// audit/repair path (Audit, Fix), which must never diverge: a divergence
+// is what let doctor flag "missing vendor" in repos that gitignore it and
+// let doctor --fix materialise the directory.
+func IsGoVendorActive(fs afero.Fs, worktreePath string) bool {
 	vendorPath := filepath.Join(worktreePath, "vendor")
 	info, err := fs.Stat(vendorPath)
 	if err != nil || !info.IsDir() {
 		return false
 	}
 	return !isVendorGitIgnored(fs, worktreePath)
+}
+
+// ShouldRunModVendor reports whether `go mod vendor` should run for the Go
+// module at worktreePath. Alias of IsGoVendorActive, kept as the
+// intention-revealing name at the install call site.
+func ShouldRunModVendor(fs afero.Fs, worktreePath string) bool {
+	return IsGoVendorActive(fs, worktreePath)
 }
 
 // ErrBinaryNotFound is returned by Install when the package manager binary is not found in PATH.

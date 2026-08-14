@@ -342,10 +342,31 @@ git hop doctor
 ```
 
 It detects:
-- **Local folders** instead of symlinks (user ran `rm -rf node_modules && npm install`)
-- **Broken symlinks** pointing to missing dependencies
-- **Stale symlinks** pointing to old lockfile versions
-- **Missing dependencies** that should exist
+- **Local folders** instead of symlinks (user ran `rm -rf node_modules && npm install`) — error
+- **Broken symlinks** pointing to missing dependencies — error
+- **Missing dependencies** that should exist — error
+- **Stale symlinks** pointing to old lockfile versions — warning
+
+Stale symlinks are reported as warnings, not errors: the dependencies are
+present and usable, they just predate the current lockfile, and the next
+install refreshes them. A worktree that has only stale symlinks does not
+make `doctor` report the installation as unhealthy.
+
+### Go `vendor/`
+
+Go's `vendor/` is not a regenerable cache — when a project uses it, it is
+committed to git and materialised by `git checkout`. `doctor` therefore
+inspects `vendor/` only when *vendor mode is active*: `vendor/` already
+exists in the worktree **and** is not listed in `.gitignore`.
+
+A repository that gitignores `vendor/`, or simply has no `vendor/`, has
+opted out of vendoring. `doctor` reports nothing for it, and `doctor --fix`
+never creates the directory. This is the same rule the worktree-create path
+applies, so the two cannot disagree.
+
+Note this applies to the Go package manager only. Other managers that also
+install into `vendor/` (composer, bundler) treat it as a regenerable cache
+and are audited normally.
 
 Example output:
 ```
@@ -355,7 +376,7 @@ Dependencies Status:
   ⚠ venv.jkl012 orphaned (no branches use it) - run 'git hop env gc' to clean
   ✗ feature-y: broken symlink node_modules -> (missing abc999)
   ⚠ feature-z: has local node_modules (720MB) instead of symlink
-  ⚠ main: stale symlink vendor -> vendor.old123 (lockfile now abc456)
+  warn: main: stale symlink node_modules -> node_modules.old123 (lockfile changed to abc456); refreshed by the next install
 
 Recommendations:
   - Run 'git hop doctor --fix' to restore shared deps
@@ -386,12 +407,15 @@ This automatically repairs:
    - Creates symlink to new hash
    - Old version becomes orphaned (cleaned by GC later)
 
+`--fix` never touches Go `vendor/` unless vendor mode is active (see above),
+so it cannot create the directory in a repository that gitignores it.
+
 Example output:
 ```
 Dependency Issues:
   ⚠ feature-x: local node_modules (720MB) instead of symlink
-  ⚠ feature-y: broken symlink → deps/node_modules.xyz999 (missing)
-  ⚠ main: stale symlink → deps/vendor.old123 (lockfile changed to abc456)
+  ✗ feature-y: broken symlink → deps/node_modules.xyz999 (missing)
+  warn: main: stale symlink node_modules → node_modules.old123 (lockfile changed to abc456); refreshed by the next install
 
 Fix these issues? [y/N]: y
   ✓ feature-x: trashed local folder, created symlink → deps/node_modules.abc123

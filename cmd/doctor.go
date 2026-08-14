@@ -253,7 +253,14 @@ Use --fix to automatically repair issues.`,
 						output.Error("Failed to audit dependencies: %v", err)
 						issuesFound = true
 					} else if len(issues) > 0 {
-						issuesFound = true
+						// Only error-severity issues make the installation
+						// unhealthy. Stale symlinks are warnings: the deps
+						// still work and the next install refreshes them, so
+						// they must not on their own drive the "issues found"
+						// verdict — while staying visible in the report.
+						if hasErrorSeverity(issues) {
+							issuesFound = true
+						}
 						output.Info("\nDependency Issues:")
 
 						var totalReclaimableSize int64
@@ -266,7 +273,7 @@ Use --fix to automatically repair issues.`,
 							case services.IssueBrokenSymlink:
 								output.Error("  ✗ %s: broken symlink %s → %s (missing)", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget))
 							case services.IssueStaleSymlink:
-								output.Error("  ⚠ %s: stale symlink %s → %s (lockfile changed to %s)", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
+								output.Warn("  %s: stale symlink %s → %s (lockfile changed to %s); refreshed by the next install", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
 							case services.IssueMissingDeps:
 								output.Error("  ✗ %s: missing %s", issue.Branch, issue.PM.DepsDir)
 							}
@@ -443,6 +450,19 @@ Use --fix to automatically repair issues.`,
 func init() {
 	cli.RootCmd.AddCommand(doctorCmd)
 	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Automatically fix issues")
+}
+
+// hasErrorSeverity reports whether any issue is severe enough to make the
+// installation unhealthy. Warning-severity issues (stale symlinks) are
+// still printed but do not flip doctor's verdict, because they describe a
+// benign, self-healing state rather than something needing repair.
+func hasErrorSeverity(issues []services.Issue) bool {
+	for _, issue := range issues {
+		if issue.Type.Severity() == services.SeverityError {
+			return true
+		}
+	}
+	return false
 }
 
 // getDirSize calculates the total size of a directory
