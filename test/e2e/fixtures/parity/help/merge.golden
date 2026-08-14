@@ -7,8 +7,9 @@ Usage:
   git-hop merge [source-branch] <into-branch> [flags]
 
 Flags:
-  -h, --help    help for merge
-      --no-ff   Create a merge commit even when fast-forward is possible
+      --delete-remote   Also delete the source branch on origin; without it merge stays local and never contacts the network (default via hop.merge.deleteRemote)
+  -h, --help            help for merge
+      --no-ff           Create a merge commit even when fast-forward is possible
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)

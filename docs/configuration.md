@@ -231,6 +231,7 @@ hub for that repository.
 |-----|------|---------|-------------|
 | `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of `.hop/backups/repair-*` directories before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
 | `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
+| `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 
 ### `hop.remote.timeout`
 
@@ -247,8 +248,34 @@ git config --global hop.remote.timeout 30
 git config --global hop.remote.timeout 0
 ```
 
-Note that `git hop remove` does not contact the remote at all unless
-you pass `--delete-remote`; removal is a local operation by default.
+Note that neither `git hop remove` nor `git hop merge` contacts the
+remote at all unless you ask for it with `--delete-remote` (or, for
+merge, `hop.merge.deleteRemote`); both are local operations by default.
+
+### `hop.merge.deleteRemote`
+
+A merge happens either locally or on the remote — everything after it
+is syncing. Once you have merged a branch that was pushed, deleting it
+on `origin` finishes the job. Git treats remote deletion as a separate
+destructive act, so `git hop merge` keeps it opt-in: pass
+`--delete-remote` per invocation, or set this key to make it the
+default.
+
+```bash
+# Always delete the merged source branch on origin
+git config --global hop.merge.deleteRemote true
+```
+
+The flag wins over the config key in both directions, so a repo
+configured to delete by default can still skip it for one merge:
+
+```bash
+git hop merge feature-x main --delete-remote=false
+```
+
+With the key unset and no flag, merge never contacts the network. When
+remote deletion does run, the probe and the delete push are bounded by
+[`hop.remote.timeout`](#hopremotetimeout).
 
 ### `hop.repair.backupRetention`
 

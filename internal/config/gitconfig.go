@@ -18,17 +18,18 @@ type GitConfig struct {
 
 // Known hop.* config keys with their defaults.
 const (
-	KeyBareRepo                  = "hop.bareRepo"
-	KeyGitDomain                 = "hop.gitDomain"
-	KeyAutoEnvStart              = "hop.autoEnvStart"
-	KeyConventionWarning         = "hop.conventionWarning"
-	KeyWorktreeLocation          = "hop.worktreeLocation"
-	KeyAddDefaultStartPoint      = "hop.add.defaultStartPoint"
-	KeyShellIntegrationStatus    = "hop.shellIntegration.status"
-	KeyShellIntegrationShell     = "hop.shellIntegration.shell"
-	KeyBackupEnabled             = "hop.backup.enabled"
-	KeyBackupMaxBackups          = "hop.backup.maxBackups"
-	KeyHooksInstallMode          = "hop.hooks.installMode"
+	KeyBareRepo               = "hop.bareRepo"
+	KeyGitDomain              = "hop.gitDomain"
+	KeyAutoEnvStart           = "hop.autoEnvStart"
+	KeyConventionWarning      = "hop.conventionWarning"
+	KeyWorktreeLocation       = "hop.worktreeLocation"
+	KeyAddDefaultStartPoint   = "hop.add.defaultStartPoint"
+	KeyMergeDeleteRemote      = "hop.merge.deleteRemote"
+	KeyShellIntegrationStatus = "hop.shellIntegration.status"
+	KeyShellIntegrationShell  = "hop.shellIntegration.shell"
+	KeyBackupEnabled          = "hop.backup.enabled"
+	KeyBackupMaxBackups       = "hop.backup.maxBackups"
+	KeyHooksInstallMode       = "hop.hooks.installMode"
 )
 
 // Defaults for keys that have them.

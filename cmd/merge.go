@@ -29,6 +29,12 @@ If only one argument is given, the current branch is used as the source.`,
 	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
 		noFF, _ := cmd.Flags().GetBool("no-ff")
+		deleteRemoteFlag, _ := cmd.Flags().GetBool("delete-remote")
+		deleteRemote := resolveMergeDeleteRemote(
+			deleteRemoteFlag,
+			cmd.Flags().Changed("delete-remote"),
+			config.NewGitConfig(),
+		)
 
 		fs := afero.NewOsFs()
 		g := git.New()
@@ -144,15 +150,8 @@ If only one argument is given, the current branch is used as the source.`,
 			output.Fatal("Failed to remove branch from hub config: %v", err)
 		}
 
-		// Delete local and remote source branch
-		if err := g.DeleteLocalBranch(basePath, sourceBranch); err != nil {
-			output.Warn("Failed to delete local branch '%s': %v", sourceBranch, err)
-		}
-		if g.HasRemoteBranch(basePath, sourceBranch) {
-			if err := g.DeleteRemoteBranch(basePath, sourceBranch); err != nil {
-				output.Warn("Failed to delete remote branch '%s': %v", sourceBranch, err)
-			}
-		}
+		// Delete the source branch locally, and on origin when asked.
+		deleteMergedSourceBranch(g, basePath, sourceBranch, deleteRemote)
 
 		// Prune stale hopspace data
 		dataHome := hop.GetGitHopDataHome()
@@ -197,8 +196,63 @@ If only one argument is given, the current branch is used as the source.`,
 	},
 }
 
+// resolveMergeDeleteRemote decides whether merge should delete the
+// source branch on origin.
+//
+// A merge happens either locally or on the remote; everything after it
+// is syncing. So once a merged branch has been pushed, deleting it on
+// origin is the natural completion of the operation — but git treats
+// remote deletion as a separate destructive act, so hop keeps it
+// opt-in rather than implicit.
+//
+// Precedence: an explicitly-typed --delete-remote/--delete-remote=false
+// always wins, because a flag the user typed is a decision about this
+// invocation. Otherwise hop.merge.deleteRemote supplies the default,
+// letting a user who always wants the sync configure it once. With
+// neither set, merge stays local and never contacts the network.
+func resolveMergeDeleteRemote(flagValue, flagSet bool, gc *config.GitConfig) bool {
+	if flagSet {
+		return flagValue
+	}
+	if gc == nil {
+		return false
+	}
+	return gc.GetBoolOrDefault(config.KeyMergeDeleteRemote)
+}
+
+// deleteMergedSourceBranch removes the merged source branch, locally
+// and — when deleteRemote is set — on origin.
+//
+// deleteRemote gates every origin-touching call. When false, cleanup is
+// fully local: no `git ls-remote` probe, no `git push --delete`.
+// Probing origin unconditionally makes the command hang whenever origin
+// is unreachable, slow, or credential-gated, and it does so *after* the
+// local merge already succeeded — the worst moment to stall. When the
+// probe and push do run, `internal/git` bounds them with
+// hop.remote.timeout.
+//
+// Failures are warnings, not errors: the merge itself has already
+// landed, so a failed branch cleanup must not be reported as a failed
+// merge.
+func deleteMergedSourceBranch(g git.GitInterface, basePath, sourceBranch string, deleteRemote bool) {
+	if err := g.DeleteLocalBranch(basePath, sourceBranch); err != nil {
+		output.Warn("Failed to delete local branch '%s': %v", sourceBranch, err)
+	}
+
+	if !deleteRemote {
+		return
+	}
+
+	if g.HasRemoteBranch(basePath, sourceBranch) {
+		if err := g.DeleteRemoteBranch(basePath, sourceBranch); err != nil {
+			output.Warn("Failed to delete remote branch '%s': %v", sourceBranch, err)
+		}
+	}
+}
+
 func init() {
 	cli.RootCmd.AddCommand(mergeCmd)
 	mergeCmd.Flags().Bool("no-ff", false, "Create a merge commit even when fast-forward is possible")
+	mergeCmd.Flags().Bool("delete-remote", false, "Also delete the source branch on origin; without it merge stays local and never contacts the network (default via hop.merge.deleteRemote)")
 	mergeCmd.ValidArgsFunction = completeBranchNames
 }

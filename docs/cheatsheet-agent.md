@@ -51,6 +51,10 @@ Global hopspace: `$GIT_HOP_DATA_HOME`
 # Merge + cleanup
 /usr/bin/git hop merge <source> <into>        # merge, remove source, symlink current
 /usr/bin/git hop merge <source> <into> --no-ff  # force merge commit
+# Merge stays local by default: no network calls. Opt in to deleting the
+# merged source branch on origin (or set hop.merge.deleteRemote true).
+/usr/bin/git hop merge <source> <into> --delete-remote
+/usr/bin/git hop merge <source> <into> --delete-remote=false  # override the config default
 
 # Remove (safety gate — see Error Handling for blocked cases)
 # IMPORTANT: --no-prompt only skips the confirmation prompt; it does NOT

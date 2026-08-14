@@ -52,6 +52,8 @@ git hop merge <source> <into>         # merge source → into, remove source wor
                                       #   symlink "current" → into worktree
 git hop merge <into>                  # uses current branch as source
 git hop merge <source> <into> --no-ff # force merge commit (no fast-forward)
+git hop merge <source> <into> --delete-remote  # also delete source branch on origin
+                                      #   (default via: git config hop.merge.deleteRemote true)
 git hop move <old> <new>              # rename branch + worktree (aliases: rename, mv)
 ```
 
