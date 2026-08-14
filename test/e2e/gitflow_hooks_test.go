@@ -9,6 +9,7 @@ import (
 )
 
 func TestGitFlowIntegration_PreWorktreeAdd_HookExecution(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -29,7 +30,7 @@ set -e
 
 BRANCH="$GIT_HOP_BRANCH"
 
-MARKER_DIR="/tmp/git-hop-gitflow-start"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 
 # Use sanitized branch name for filename
@@ -119,7 +120,7 @@ exit 0
 		},
 	}
 
-	markerDir := "/tmp/git-hop-gitflow-start"
+	markerDir := filepath.Join(env.RootDir, "markers")
 	os.RemoveAll(markerDir)
 
 	for _, tt := range tests {
@@ -152,6 +153,7 @@ exit 0
 }
 
 func TestGitFlowIntegration_PreWorktreeRemove_HookExecution(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -172,7 +174,7 @@ set -e
 
 BRANCH="$GIT_HOP_BRANCH"
 
-MARKER_DIR="/tmp/git-hop-gitflow-markers"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 
 # Use sanitized branch name for filename
@@ -216,7 +218,7 @@ exit 0
 		t.Fatalf("Failed to make hook executable: %v", err)
 	}
 
-	markerDir := "/tmp/git-hop-gitflow-markers"
+	markerDir := filepath.Join(env.RootDir, "markers")
 	os.RemoveAll(markerDir)
 
 	tests := []struct {
@@ -275,6 +277,7 @@ exit 0
 }
 
 func TestGitFlowIntegration_WorkflowTableFromDocs(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -294,7 +297,7 @@ func TestGitFlowIntegration_WorkflowTableFromDocs(t *testing.T) {
 set -e
 
 BRANCH="$GIT_HOP_BRANCH"
-MARKER_DIR="/tmp/git-hop-workflow-test"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 
 case "$BRANCH" in
@@ -324,7 +327,7 @@ exit 0
 set -e
 
 BRANCH="$GIT_HOP_BRANCH"
-MARKER_DIR="/tmp/git-hop-workflow-test"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 
 case "$BRANCH" in
@@ -349,7 +352,7 @@ exit 0
 		t.Fatalf("Failed to make pre-remove hook executable: %v", err)
 	}
 
-	markerDir := "/tmp/git-hop-workflow-test"
+	markerDir := filepath.Join(env.RootDir, "markers")
 	os.RemoveAll(markerDir)
 
 	branch := "feature/my-feature"
@@ -389,6 +392,7 @@ exit 0
 }
 
 func TestGitFlowIntegration_BranchNameValidation(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)

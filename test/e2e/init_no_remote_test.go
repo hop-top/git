@@ -13,6 +13,7 @@ import (
 )
 
 func TestE2E_InitConvertWithoutRemote(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 	fs := afero.NewOsFs()
 
@@ -162,6 +163,7 @@ func TestE2E_InitConvertWithoutRemote(t *testing.T) {
 }
 
 func TestE2E_InitConvertBareWithoutRemote(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	// Create a local repository without a remote
@@ -195,6 +197,7 @@ func TestE2E_InitConvertBareWithoutRemote(t *testing.T) {
 }
 
 func TestE2E_RegisterAsIsWithoutRemote(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	// Create a local repository without a remote
@@ -225,6 +228,7 @@ func TestE2E_RegisterAsIsWithoutRemote(t *testing.T) {
 }
 
 func TestConversionCreatesValidHopConfig(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	// Create a local repository without a remote

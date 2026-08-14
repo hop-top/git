@@ -8,6 +8,7 @@ import (
 )
 
 func TestCommands(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	// --- Setup Repo and Hub ---

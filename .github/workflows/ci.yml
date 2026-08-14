@@ -33,12 +33,14 @@ jobs:
       - name: Lint
         run: staticcheck ./...
 
-      # Full suite is ~3min locally, dominated by test/e2e (real git subprocesses).
-      # 900s is roughly 5x that, leaving headroom for slower CI runners. Blowing
-      # through this is a signal to investigate, not to raise the number: the last
-      # regression here was a redundant `go build` per e2e test, not genuine work.
+      # Full suite is ~40s locally, dominated by test/e2e (real git subprocesses)
+      # now that those tests run with t.Parallel. 300s is ~7.5x that: it keeps
+      # the old ~5x policy and still absorbs CI runners at 2-3x local speed.
+      # Blowing through this is a signal to investigate, not to raise the number:
+      # the last regression here was a redundant `go build` per e2e test, not
+      # genuine work.
       - name: Run Tests
-        run: go test -timeout 900s -coverprofile=coverage.out ./...
+        run: go test -timeout 300s -coverprofile=coverage.out ./...
 
       - name: Upload Coverage
         uses: actions/upload-artifact@v5

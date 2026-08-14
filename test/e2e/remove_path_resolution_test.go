@@ -11,6 +11,7 @@ import (
 // relative worktree paths when running from within a worktree directory.
 // This catches the bug where filepath.Abs(relativePath) would create duplicated paths.
 func TestRemovePathResolution(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

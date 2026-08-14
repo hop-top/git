@@ -9,11 +9,11 @@ import (
 	"testing"
 
 	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
 )
 
 // TestRemoveEntireHub tests removing an entire hub including all worktrees
 func TestRemoveEntireHub(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -118,9 +118,8 @@ func TestRemoveEntireHub(t *testing.T) {
 	t.Log("✓ All worktrees removed")
 
 	// 3. Verify global state no longer contains the repository
-	fs := afero.NewOsFs()
-	globalState, err := state.LoadState(fs)
-	if err != nil {
+	globalState, err := env.LoadState(t)
+	if err != nil || globalState == nil {
 		t.Logf("No global state found after removal (may be expected): %v", err)
 	} else {
 		// The repository ID would be like github.com/git-hop-e2e-*/repo
@@ -168,6 +167,7 @@ func TestRemoveEntireHub(t *testing.T) {
 
 // TestRemoveHubWithRelativePath tests removing a hub using a relative path
 func TestRemoveHubWithRelativePath(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -211,6 +211,7 @@ func TestRemoveHubWithRelativePath(t *testing.T) {
 
 // TestRemoveHubWithAbsolutePath tests removing a hub using an absolute path
 func TestRemoveHubWithAbsolutePath(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -254,6 +255,7 @@ func TestRemoveHubWithAbsolutePath(t *testing.T) {
 
 // TestRemoveNonEmptyHub tests removing a hub that has multiple branches and worktrees
 func TestRemoveNonEmptyHub(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -331,6 +333,7 @@ func TestRemoveNonEmptyHub(t *testing.T) {
 // TestRemoveHubStatePersistence verifies that after removing a hub,
 // the global state is properly updated and persists across reloads
 func TestRemoveHubStatePersistence(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -354,12 +357,11 @@ func TestRemoveHubStatePersistence(t *testing.T) {
 	env.RunGitHop(t, env.HubPath, "add", "feature")
 
 	// Load state and verify repository exists
-	fs := afero.NewOsFs()
 	stateFile := filepath.Join(env.DataHome, "state.json")
 
 	// Read state before removal
-	stateBefore, err := state.LoadState(fs)
-	if err != nil {
+	stateBefore, err := env.LoadState(t)
+	if err != nil || stateBefore == nil {
 		t.Logf("Note: No state file before removal (may be expected): %v", err)
 	} else {
 		t.Logf("State before removal contains %d repositories", len(stateBefore.Repositories))
@@ -396,8 +398,8 @@ func TestRemoveHubStatePersistence(t *testing.T) {
 	}
 
 	// Reload state and verify again
-	stateReloaded, err := state.LoadState(fs)
-	if err != nil {
+	stateReloaded, err := env.LoadState(t)
+	if err != nil || stateReloaded == nil {
 		t.Logf("Note: Could not reload state: %v", err)
 	} else {
 		for repoID := range stateReloaded.Repositories {
@@ -414,6 +416,7 @@ func TestRemoveHubStatePersistence(t *testing.T) {
 // TestCannotRemoveHubFromInside verifies that attempting to remove a hub
 // from inside the hub directory produces appropriate behavior
 func TestRemoveHubFromInsideDirectory(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

@@ -22,6 +22,7 @@ func setupInitRepo(t *testing.T) *TestEnv {
 // TestInit_CreatesHooksDir verifies that cloning via git-hop creates
 // .git-hop/hooks/ inside the main worktree.
 func TestInit_CreatesHooksDir(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -40,6 +41,7 @@ func TestInit_CreatesHooksDir(t *testing.T) {
 // TestInit_Idempotent_AlreadyInitialized verifies that running git-hop on an
 // already-initialized hub prints "already initialized" and exits 0.
 func TestInit_Idempotent_AlreadyInitialized(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -57,6 +59,7 @@ func TestInit_Idempotent_AlreadyInitialized(t *testing.T) {
 // TestInit_Idempotent_EnsuresHooksDirExists verifies that an idempotent init
 // creates .git-hop/hooks/ if it was manually deleted.
 func TestInit_Idempotent_EnsuresHooksDirExists(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

@@ -29,6 +29,7 @@ func setupDoctorMissingEnv(t *testing.T) (*TestEnv, string) {
 // branch is merged into the default branch and its directory has been removed,
 // doctor --fix auto-deletes the state entry without prompting.
 func TestDoctor_MissingWorktree_Merged_AutoDeleted(t *testing.T) {
+	t.Parallel()
 	env, featurePath := setupDoctorMissingEnv(t)
 
 	mainPath := filepath.Join(env.HubPath, "hops", "main")
@@ -62,6 +63,7 @@ func TestDoctor_MissingWorktree_Merged_AutoDeleted(t *testing.T) {
 // TestDoctor_MissingWorktree_Present_NoAction verifies that doctor --fix does
 // not produce false positives when the worktree directory actually exists.
 func TestDoctor_MissingWorktree_Present_NoAction(t *testing.T) {
+	t.Parallel()
 	env, featurePath := setupDoctorMissingEnv(t)
 
 	// Confirm the directory is present.
@@ -80,6 +82,7 @@ func TestDoctor_MissingWorktree_Present_NoAction(t *testing.T) {
 // TestDoctor_NoFix_ReportsIssue verifies that without --fix the doctor command
 // reports a missing worktree but does not modify state.
 func TestDoctor_NoFix_ReportsIssue(t *testing.T) {
+	t.Parallel()
 	env, featurePath := setupDoctorMissingEnv(t)
 
 	// Remove the feature worktree directory.

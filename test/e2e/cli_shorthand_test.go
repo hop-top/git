@@ -1,7 +1,6 @@
 package e2e
 
 import (
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -11,18 +10,11 @@ import (
 )
 
 func TestShorthandClone_E2E(t *testing.T) {
-	// Create temp directory for test
-	tmpDir := filepath.Join("/tmp", "git-hop-shorthand-test")
-	defer os.RemoveAll(tmpDir)
-
-	if err := os.MkdirAll(tmpDir, 0755); err != nil {
-		t.Fatalf("Failed to create temp dir: %v", err)
-	}
-
-	// Change to temp directory
-	origDir, _ := os.Getwd()
-	defer os.Chdir(origDir)
-	os.Chdir(tmpDir)
+	t.Parallel()
+	// This test only exercises pure string helpers (ExpandShorthand/IsURI), so
+	// it needs neither a scratch directory nor a CWD change. The former fixed
+	// /tmp path was shared process-wide and the os.Chdir mutated global CWD --
+	// both unsafe once tests run concurrently, and neither was ever read.
 
 	tests := []struct {
 		name           string
@@ -79,6 +71,7 @@ func TestShorthandClone_E2E(t *testing.T) {
 }
 
 func TestShorthandInCloneContext(t *testing.T) {
+	t.Parallel()
 	// Test that expandShorthand works correctly in the context of clone operations
 	fs := afero.NewMemMapFs()
 

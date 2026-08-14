@@ -33,6 +33,7 @@ func setupRepairEnv(t *testing.T) (*TestEnv, string) {
 
 // TestRepair_Healthy_NoOp confirms repair is a no-op on a freshly-built hub.
 func TestRepair_Healthy_NoOp(t *testing.T) {
+	t.Parallel()
 	env, _ := setupRepairEnv(t)
 
 	stdout, _, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair", "-n")
@@ -47,6 +48,7 @@ func TestRepair_Healthy_NoOp(t *testing.T) {
 
 // TestRepair_DryRun_NoMutation confirms -n does not alter on-disk state.
 func TestRepair_DryRun_NoMutation(t *testing.T) {
+	t.Parallel()
 	env, featurePath := setupRepairEnv(t)
 
 	// Capture the worktree's .git pointer pre-run.
@@ -84,6 +86,7 @@ func TestRepair_DryRun_NoMutation(t *testing.T) {
 // TestRepair_ListBackups_Empty exits 0 with a friendly message when no
 // backups are present yet.
 func TestRepair_ListBackups_Empty(t *testing.T) {
+	t.Parallel()
 	env, _ := setupRepairEnv(t)
 
 	stdout, _, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair", "--list-backups")
@@ -97,6 +100,7 @@ func TestRepair_ListBackups_Empty(t *testing.T) {
 
 // TestRepair_Porcelain_StableFormat verifies tab-separated rows on stdout.
 func TestRepair_Porcelain_StableFormat(t *testing.T) {
+	t.Parallel()
 	env, _ := setupRepairEnv(t)
 
 	stdout, _, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair", "-n", "--porcelain")
@@ -116,6 +120,7 @@ func TestRepair_Porcelain_StableFormat(t *testing.T) {
 // TestRepair_DoctorAliasGone confirms `git hop doctor` still works but
 // `git hop repair` is a separate command (not the doctor alias).
 func TestRepair_DoctorAliasGone(t *testing.T) {
+	t.Parallel()
 	env, _ := setupRepairEnv(t)
 
 	helpOut, _, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair", "--help")

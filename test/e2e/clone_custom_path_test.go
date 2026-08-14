@@ -10,6 +10,7 @@ import (
 // TestClone_CustomPath verifies that cloning with a custom target path
 // creates the correct directory structure without nesting
 func TestClone_CustomPath(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	// 1. Create Bare Repo

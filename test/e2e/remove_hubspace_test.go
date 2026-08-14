@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"hop.top/git/internal/config"
-	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
 )
 
 // TestRemoveHubspaceCreatedByMistake tests the full lifecycle of:
@@ -17,6 +15,7 @@ import (
 // 2. Removing that hubspace completely
 // 3. Verifying all artifacts are cleaned up properly
 func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -110,9 +109,8 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 	}
 
 	// Check global state
-	fs := afero.NewOsFs()
-	globalState, err := state.LoadState(fs)
-	if err != nil {
+	globalState, err := env.LoadState(t)
+	if err != nil || globalState == nil {
 		t.Logf("No global state found (may be expected): %v", err)
 	} else {
 		repoID := "github.com/test/repo"
@@ -195,8 +193,8 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 	}
 
 	// 5. Verify global state is updated
-	globalState, err = state.LoadState(fs)
-	if err != nil {
+	globalState, err = env.LoadState(t)
+	if err != nil || globalState == nil {
 		t.Logf("No global state found after removal (may be expected): %v", err)
 	} else {
 		repoID := "github.com/test/repo"
@@ -281,6 +279,7 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 // TestRemoveFromWithinWorktree tests removing a branch when running the command
 // from within another worktree directory (not the hub root)
 func TestRemoveFromWithinWorktree(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -348,6 +347,7 @@ func TestRemoveFromWithinWorktree(t *testing.T) {
 
 // TestRemoveMultipleBranches tests removing multiple branches in sequence
 func TestRemoveMultipleBranches(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -434,6 +434,7 @@ func TestRemoveMultipleBranches(t *testing.T) {
 
 // TestRemoveWithUncommittedChanges tests removing a branch that has uncommitted work
 func TestRemoveWithUncommittedChanges(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

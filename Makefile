@@ -27,7 +27,7 @@ clean:
 	rm -f $(BINARY_NAME)
 
 # Mirrors the CI timeout. See .github/workflows/ci.yml for the rationale.
-TEST_TIMEOUT ?= 900s
+TEST_TIMEOUT ?= 300s
 
 test:
 	go test -buildvcs=false -timeout $(TEST_TIMEOUT) -v ./internal/...

@@ -54,6 +54,7 @@ func setupHubWithMissingWorktrees(t *testing.T) (*TestEnv, string, string) {
 //
 // Failing symptom: WARN with "chdir … no such file or directory"
 func TestRemove_AllWorktreesMissing_NoChdir(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -77,6 +78,7 @@ func TestRemove_AllWorktreesMissing_NoChdir(t *testing.T) {
 //
 // Failing symptom: removed branch still listed as "Missing" in status output.
 func TestRemove_BranchDisappearsFromStatus(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

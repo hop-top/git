@@ -9,6 +9,7 @@ import (
 )
 
 func TestHooks_PreWorktreeAdd_GitFlow(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -28,7 +29,7 @@ func TestHooks_PreWorktreeAdd_GitFlow(t *testing.T) {
 set -e
 
 BRANCH="$GIT_HOP_BRANCH"
-MARKER_DIR="/tmp/git-hop-pre-add-markers"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 
 # Use sanitized branch name for filename (replace / with -)
@@ -61,7 +62,7 @@ exit 0
 		{"regular-branch", false},
 	}
 
-	markerDir := "/tmp/git-hop-pre-add-markers"
+	markerDir := filepath.Join(env.RootDir, "markers")
 	os.RemoveAll(markerDir)
 
 	for _, tt := range tests {
@@ -95,6 +96,7 @@ exit 0
 }
 
 func TestHooks_PostWorktreeAdd(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -157,6 +159,7 @@ exit 0
 }
 
 func TestHooks_PreWorktreeRemove_GitFlow(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -212,6 +215,7 @@ exit 0
 }
 
 func TestHooks_PostWorktreeRemove(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -233,7 +237,7 @@ func TestHooks_PostWorktreeRemove(t *testing.T) {
 	hookContent := `#!/bin/bash
 set -e
 
-MARKER_DIR="/tmp/git-hop-test-markers"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 
 echo "post-remove-hook-executed" >> "$MARKER_DIR/post-remove-$GIT_HOP_BRANCH.marker"
@@ -249,7 +253,7 @@ exit 0
 
 	env.RunGitHop(t, env.HubPath, "remove", branch, "--no-prompt")
 
-	markerFile := filepath.Join("/tmp", "git-hop-test-markers", "post-remove-"+branch+".marker")
+	markerFile := filepath.Join(env.RootDir, "markers", "post-remove-"+branch+".marker")
 	content, err := os.ReadFile(markerFile)
 	if err != nil {
 		t.Fatalf("Post-worktree-remove hook marker not found at %s: %v", markerFile, err)
@@ -263,10 +267,11 @@ exit 0
 		t.Errorf("Post-worktree-remove marker missing branch info, got: %s", contentStr)
 	}
 
-	os.RemoveAll("/tmp/git-hop-test-markers")
+	os.RemoveAll(filepath.Join(env.RootDir, "markers"))
 }
 
 func TestHooks_PrioritySystem(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -283,7 +288,7 @@ func TestHooks_PrioritySystem(t *testing.T) {
 
 	globalHook := filepath.Join(globalHooksDir, "pre-worktree-add")
 	globalHookContent := `#!/bin/bash
-MARKER_DIR="/tmp/git-hop-hook-priority"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 echo "GLOBAL_HOOK" > "$MARKER_DIR/$GIT_HOP_BRANCH.marker"
 exit 0
@@ -293,7 +298,7 @@ exit 0
 		t.Fatalf("Failed to make global hook executable: %v", err)
 	}
 
-	markerDir := "/tmp/git-hop-hook-priority"
+	markerDir := filepath.Join(env.RootDir, "markers")
 	os.RemoveAll(markerDir)
 
 	branch1 := "test-global-hook"
@@ -317,7 +322,7 @@ exit 0
 
 	repoHook := filepath.Join(repoHooksDir, "pre-worktree-add")
 	repoHookContent := `#!/bin/bash
-MARKER_DIR="/tmp/git-hop-hook-priority"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 echo "REPO_HOOK" > "$MARKER_DIR/$GIT_HOP_BRANCH.marker"
 exit 0
@@ -344,6 +349,7 @@ exit 0
 }
 
 func TestHooks_EnvironmentVariables(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -362,7 +368,7 @@ func TestHooks_EnvironmentVariables(t *testing.T) {
 	hookContent := `#!/bin/bash
 set -e
 
-MARKER_DIR="/tmp/git-hop-env-vars"
+MARKER_DIR="$GIT_HOP_TEST_MARKER_DIR"
 mkdir -p "$MARKER_DIR"
 
 ENV_FILE="$MARKER_DIR/$GIT_HOP_BRANCH.env"
@@ -382,7 +388,7 @@ exit 0
 	branch := "test-env-vars"
 	env.RunGitHop(t, env.HubPath, "add", branch)
 
-	envFile := filepath.Join("/tmp/git-hop-env-vars", branch+".env")
+	envFile := filepath.Join(filepath.Join(env.RootDir, "markers"), branch+".env")
 
 	content, err := os.ReadFile(envFile)
 	if err != nil {
@@ -408,10 +414,11 @@ exit 0
 	}
 
 	env.RunGitHop(t, env.HubPath, "remove", branch, "--no-prompt")
-	os.RemoveAll("/tmp/git-hop-env-vars")
+	os.RemoveAll(filepath.Join(env.RootDir, "markers"))
 }
 
 func TestHooks_HookFailure_BlocksOperation(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
@@ -460,6 +467,7 @@ exit 1
 }
 
 func TestHooks_CompleteGitFlowWorkflow(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)

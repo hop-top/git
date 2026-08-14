@@ -10,6 +10,7 @@ import (
 // TestInit_NoHooks_SkipsHooksDir verifies that --no-hooks prevents creation
 // of .git-hop/hooks/ in the main worktree.
 func TestInit_NoHooks_SkipsHooksDir(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -34,6 +35,7 @@ func TestInit_NoHooks_SkipsHooksDir(t *testing.T) {
 // TestInit_DefaultsNoShellIntegration verifies that running init without
 // --enable-chdir does NOT modify any shell RC file.
 func TestInit_DefaultsNoShellIntegration(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -58,6 +60,7 @@ func TestInit_DefaultsNoShellIntegration(t *testing.T) {
 // TestInit_EnableChdir_InstallsShellWrapper verifies that --enable-chdir
 // writes the shell wrapper to the RC file.
 func TestInit_EnableChdir_InstallsShellWrapper(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

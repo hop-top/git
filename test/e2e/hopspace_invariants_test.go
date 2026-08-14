@@ -114,6 +114,7 @@ func AssertHopspaceShape(t *testing.T, hubPath, defaultBranch string) {
 //
 // Captures the contract for T-0215.
 func TestHopspaceShape_AfterClone(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
