@@ -325,11 +325,16 @@ This will:
 4. Prompt for confirmation
 5. Delete orphaned dependencies and update the registry
 
-Use `--force` to skip the confirmation prompt:
+Use `--no-prompt` (or its equivalent `--force`) to skip the confirmation
+prompt:
 
 ```bash
-git hop env gc --force
+git hop env gc --no-prompt
 ```
+
+Piping an answer also works (`echo y | git hop env gc`). If the prompt is
+reached with nothing readable on stdin, the command exits `129` with a
+`fatal:` message on stderr rather than quietly cancelling with exit `0`.
 
 ## Troubleshooting
 

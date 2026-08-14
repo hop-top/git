@@ -77,7 +77,7 @@ Global hopspace: `$GIT_HOP_DATA_HOME`
 /usr/bin/git hop env start            # start Docker / services (aliases: up)
 /usr/bin/git hop env stop             # stop services (aliases: down)
 /usr/bin/git hop env gc --dry-run     # list orphaned deps + disk to reclaim
-/usr/bin/git hop env gc --force       # delete orphaned deps, no prompt
+/usr/bin/git hop env gc --no-prompt   # delete orphaned deps, no prompt (--force equivalent)
 ```
 
 ---
@@ -127,7 +127,7 @@ cd <path from list>
 
 # GC orphaned deps after bulk branch cleanup
 /usr/bin/git hop env gc --dry-run
-/usr/bin/git hop env gc --force
+/usr/bin/git hop env gc --no-prompt
 ```
 
 ---
@@ -143,6 +143,7 @@ cd <path from list>
 | `remove` blocked: "not merged and not pushed" | add `--force --no-verify --no-prompt` |
 | `remove --no-prompt` exited 1 | `--no-prompt` is NOT a gate bypass — combine with `--force` / `--no-verify` |
 | `remove` exited 129: "cannot prompt for confirmation" | prompt hit a non-interactive stdin — add `--no-prompt` |
+| `env gc` exited 129: "cannot prompt for confirmation" | same cause — add `--no-prompt` (or `--force`) |
 | Wrong config targeted | pass `--config <path>` explicitly |
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |

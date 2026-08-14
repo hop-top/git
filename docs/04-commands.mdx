@@ -250,13 +250,21 @@ git hop env gc [flags]
 
 **Flags:**
 - `--dry-run` - Preview what will be deleted without actually deleting
-- `--force` - Skip confirmation prompt
+- `--no-prompt` - Skip the confirmation prompt (non-interactive callers)
+- `--force` - Skip confirmation prompt (equivalent to `--no-prompt`)
 
 **What it does:**
 - Scans all worktrees to identify orphaned dependencies
 - Shows dependency info including last used time and size
-- Prompts for confirmation before deletion (unless `--force`)
+- Prompts for confirmation before deletion (unless `--no-prompt` / `--force`)
 - Reports total space reclaimed
+
+**Non-interactive runs:** piping an answer works — `echo y | git hop env
+gc` proceeds, `echo n |` cancels. But if the prompt is reached with
+nothing readable on stdin, `env gc` exits `129` with a `fatal:` message
+on stderr telling you to pass `--no-prompt`. It never prints a quiet
+`Cancelled.` and exits `0`, which a batch script would misread as a
+successful collection.
 
 > **Note on `cleanup` / `clean`:** `git hop cleanup` (top-level)
 > resolves to [`git hop prune`](#git-hop-prune), while
