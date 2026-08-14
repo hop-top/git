@@ -47,6 +47,10 @@ func TestRemoveBranchWorktree_DoesNotProbeRemoteByDefault(t *testing.T) {
 	fs, hub, hubPath, _ := newRemoveTestHub(t)
 
 	mockGit := mocks.NewMockGit()
+	// The branch exists locally, so removal genuinely has something to
+	// delete. Removal skips `git branch -D` for an already-absent
+	// branch, so the local-cleanup assertion below needs it declared.
+	mockGit.LocalBranches = []string{"main", "feature"}
 	// An unreachable origin: any remote probe blocks far longer than a
 	// user would tolerate. If the removal path calls this, the test
 	// fails on the recorded call rather than hanging the suite.

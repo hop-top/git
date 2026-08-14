@@ -321,9 +321,17 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	}
 	absBasePath := resolveBasePath()
 
-	// Try git worktree remove
-	if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
-		output.Warn("Failed to remove worktree via git: %v", err)
+	// Deregister the worktree with git, but only if git still knows
+	// about it. Asking git to remove a path absent from its worktree
+	// registry fails ("is not a working tree") even though that is
+	// precisely the state we want — warning about it reported routine
+	// cleanup as a problem. See isWorktreeRegistered.
+	if isWorktreeRegistered(g, absBasePath, worktreePath) {
+		if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
+			output.Warn("Failed to remove worktree via git: %v", err)
+		}
+	} else {
+		output.Debug("worktree %s already deregistered; skipping git worktree remove", worktreePath)
 	}
 
 	// Always try to remove the directory physically as well
@@ -340,9 +348,16 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 		}
 	}
 
-	// Delete local and remote branches
-	if err := g.DeleteLocalBranch(absBasePath, branch); err != nil {
-		output.Warn("Failed to delete local branch: %v", err)
+	// Delete the local branch, but only if it still exists. `git branch
+	// -D` on an absent branch fails ("branch not found"), which is the
+	// desired end state rather than an error. A branch that exists but
+	// cannot be deleted (locked ref, permission denied) still warns.
+	if g.LocalBranchExists(absBasePath, branch) {
+		if err := g.DeleteLocalBranch(absBasePath, branch); err != nil {
+			output.Warn("Failed to delete local branch: %v", err)
+		}
+	} else {
+		output.Debug("local branch %s already absent; skipping git branch -D", branch)
 	}
 
 	// Remote deletion is opt-in. Both calls below reach the network, so
@@ -412,6 +427,48 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 
 	output.Info("Successfully removed %s", branch)
 	return nil
+}
+
+// isWorktreeRegistered reports whether git's worktree registry contains
+// an entry for worktreePath.
+//
+// This is the structural signal that separates "already gone" from "real
+// failure" when removing a worktree. `git worktree remove` fails with
+// "is not a working tree" for exactly one reason: the path is absent
+// from the registry. Every other failure mode (locked worktree, dirty
+// tree, permission denied, I/O error) happens on a path that IS
+// registered. Probing membership first therefore skips only the doomed-
+// and-benign call, leaving every genuine failure to surface normally.
+//
+// Deliberately structural rather than a match on git's stderr: message
+// wording varies across git versions and is translated under non-English
+// locales, so string inspection would silently stop working. Registry
+// membership is stable porcelain v1 output.
+//
+// A registry that cannot be read at all (git failure) is treated as
+// "registered" so the removal is still attempted and any error is
+// reported — failing toward visibility, never toward silence. An entry
+// whose directory has since been deleted is still listed (marked
+// prunable) and `git worktree remove` still succeeds on it, so no
+// special handling is needed for that case.
+func isWorktreeRegistered(g git.GitInterface, basePath, worktreePath string) bool {
+	out, err := g.WorktreeListPorcelain(basePath)
+	if err != nil {
+		return true
+	}
+
+	target, err := filepath.Abs(worktreePath)
+	if err != nil {
+		target = worktreePath
+	}
+	target = filepath.Clean(target)
+
+	for _, wt := range parseWorktreeListPorcelain(out) {
+		if filepath.Clean(wt.Path) == target {
+			return true
+		}
+	}
+	return false
 }
 
 // mergedCandidate captures one row in the candidate list built by --merged.
