@@ -53,8 +53,8 @@ func TestE2E_PortAndVolumeIsolation(t *testing.T) {
 
 	// Register cleanup early so containers are stopped even on test failure
 	t.Cleanup(func() {
-		StopDockerEnv(t, branchAPath)
-		StopDockerEnv(t, branchBPath)
+		StopDockerEnv(t, branchAPath, "branch-a")
+		StopDockerEnv(t, branchBPath, "branch-b")
 	})
 
 	checkEnv := func(path string) {
