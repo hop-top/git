@@ -8,8 +8,6 @@ import (
 	"testing"
 
 	"hop.top/git/internal/config"
-	"hop.top/git/internal/state"
-	"github.com/spf13/afero"
 )
 
 // TestRemoveHubspaceCreatedByMistake tests the full lifecycle of:
@@ -110,9 +108,8 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 	}
 
 	// Check global state
-	fs := afero.NewOsFs()
-	globalState, err := state.LoadState(fs)
-	if err != nil {
+	globalState, err := env.LoadState(t)
+	if err != nil || globalState == nil {
 		t.Logf("No global state found (may be expected): %v", err)
 	} else {
 		repoID := "github.com/test/repo"
@@ -195,8 +192,8 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 	}
 
 	// 5. Verify global state is updated
-	globalState, err = state.LoadState(fs)
-	if err != nil {
+	globalState, err = env.LoadState(t)
+	if err != nil || globalState == nil {
 		t.Logf("No global state found after removal (may be expected): %v", err)
 	} else {
 		repoID := "github.com/test/repo"

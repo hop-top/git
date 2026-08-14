@@ -2,11 +2,14 @@ package e2e
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"sync"
 	"testing"
+
+	"hop.top/git/internal/state"
 )
 
 var (
@@ -77,6 +80,36 @@ type TestEnv struct {
 	EnvVars      []string
 	BareRepoPath string
 	SeedRepoPath string
+	StateHome    string
+}
+
+// LoadState reads this test's state.json directly from the test's own
+// XDG_STATE_HOME instead of going through state.LoadState.
+//
+// state.LoadState resolves its path via hop.top/kit/go/core/xdg, which calls
+// adrg/xdg.Reload() -- that repopulates PACKAGE-GLOBAL variables from the
+// ambient process environment. Under t.Parallel() the ambient environment is
+// shared by every running test, so no amount of per-test env threading can
+// make that global resolve correctly per test. Reading the path we already
+// know keeps the assertion identical while staying parallel-safe.
+//
+// Returns (nil, nil) when no state file exists, matching the "no state yet"
+// case callers already handle.
+func (e *TestEnv) LoadState(t *testing.T) (*state.State, error) {
+	t.Helper()
+	path := filepath.Join(e.StateHome, "git-hop", "state.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var s state.State
+	if err := json.Unmarshal(data, &s); err != nil {
+		return nil, err
+	}
+	return &s, nil
 }
 
 // SetupTestEnv creates a new isolated test environment
@@ -125,21 +158,14 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 		"XDG_STATE_HOME=" + xdgStateHome,
 	}
 
-	// Mirror the same overrides into the PARENT test process. The child
-	// git-hop binary picks them up via cmd.Env above, but the test
-	// process itself also calls helpers like state.LoadState(afero.OsFs)
-	// which read os.Getenv directly. Without these, the parent reads
-	// the developer's REAL ~/.config, ~/.local/share, and macOS
-	// fallback state path — leaking pre-existing entries into the test
-	// and producing flaky pass/fail based on host state.
+	// Environment is threaded EXPLICITLY through EnvVars and applied to each
+	// exec.Command below -- never mirrored into the parent test process via
+	// t.Setenv. Process-global env is shared by every concurrently running
+	// test, so mutating it is both a cross-test leak and an outright bar to
+	// t.Parallel() (the runtime panics on t.Setenv + t.Parallel).
 	//
-	// t.Setenv auto-restores on test completion. None of the e2e tests
-	// use t.Parallel() (as of 2026-04-07), so it's safe here.
-	t.Setenv("GIT_HOP_DATA_HOME", dataHome)
-	t.Setenv("HOME", rootDir)
-	t.Setenv("XDG_CONFIG_HOME", xdgConfigHome)
-	t.Setenv("XDG_DATA_HOME", xdgDataHome)
-	t.Setenv("XDG_STATE_HOME", xdgStateHome)
+	// Parent-process assertions that used to depend on those globals now read
+	// the paths recorded on TestEnv directly -- see TestEnv.LoadState.
 
 	return &TestEnv{
 		RootDir:      rootDir,
@@ -149,6 +175,7 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 		EnvVars:      envVars,
 		BareRepoPath: bareRepoPath,
 		SeedRepoPath: seedRepoPath,
+		StateHome:    xdgStateHome,
 	}
 }
 
