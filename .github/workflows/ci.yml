@@ -24,6 +24,18 @@ jobs:
       - name: Install staticcheck
         run: go install honnef.co/go/tools/cmd/staticcheck@latest
 
+      # Cheapest check, so it runs first: a formatting-only failure should not
+      # wait behind a full build. `gofmt -l` prints offending files and exits 0
+      # either way, so the non-empty output is what we test.
+      - name: Format
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "::error::gofmt drift in the following files; run 'make fmt' and commit the result:"
+            echo "$unformatted"
+            exit 1
+          fi
+
       - name: Build
         run: go build ./...
 
