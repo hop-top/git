@@ -138,4 +138,5 @@ Available hooks:
 | `remove` blocked: "uncommitted changes or untracked files" | `--no-verify` |
 | `remove` blocked: "not merged and not pushed" | `--force --no-verify` |
 | `remove --no-prompt` exited 1 on a risky branch | Add `--force` / `--no-verify`; `--no-prompt` is **not** a gate bypass |
+| `remove` exited 129: "cannot prompt for confirmation" | Prompt could not read stdin (script / non-TTY) — add `--no-prompt` |
 | Need to see changes before committing | `git hop <cmd> --dry-run` |

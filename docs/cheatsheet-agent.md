@@ -138,10 +138,11 @@ cd <path from list>
 |-----------|----------|
 | `remove` fails: worktree still in state | `git hop doctor --fix` |
 | Orphaned dirs in state after manual delete | `git hop prune` |
-| `remove` blocked: "not merged into default" | add `--force` (loses unmerged commits) |
-| `remove` blocked: "uncommitted changes or untracked files" | add `--no-verify` |
-| `remove` blocked: "not merged and not pushed" | add `--force --no-verify` |
+| `remove` blocked: "not merged into default" | add `--force --no-prompt` (loses unmerged commits) |
+| `remove` blocked: "uncommitted changes or untracked files" | add `--no-verify --no-prompt` |
+| `remove` blocked: "not merged and not pushed" | add `--force --no-verify --no-prompt` |
 | `remove --no-prompt` exited 1 | `--no-prompt` is NOT a gate bypass — combine with `--force` / `--no-verify` |
+| `remove` exited 129: "cannot prompt for confirmation" | prompt hit a non-interactive stdin — add `--no-prompt` |
 | Wrong config targeted | pass `--config <path>` explicitly |
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |

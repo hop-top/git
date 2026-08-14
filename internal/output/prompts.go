@@ -2,28 +2,84 @@ package output
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"strings"
 )
 
-// Confirm prompts the user for yes/no confirmation
-func Confirm(prompt string) bool {
+// ErrPromptUnanswerable reports that a confirmation prompt could not be
+// put to the user at all: stdin carried no answer (the non-interactive /
+// batch case) or the current output mode cannot prompt.
+//
+// It is deliberately distinct from an answer of "no". A declined prompt
+// is a decision; an unanswerable prompt is a failed precondition, and
+// callers MUST surface it as a non-zero exit rather than reporting a
+// quiet cancellation that scripts read as success.
+var ErrPromptUnanswerable = errors.New(
+	"cannot prompt for confirmation on a non-interactive stdin; pass --no-prompt to proceed without confirmation",
+)
+
+// isPromptUnanswerable reports whether err is (or wraps)
+// ErrPromptUnanswerable.
+func isPromptUnanswerable(err error) bool {
+	return errors.Is(err, ErrPromptUnanswerable)
+}
+
+// promptIn is the reader every prompt in this package consumes. It is a
+// package var so tests can substitute a fixed script; production always
+// reads real stdin.
+var promptIn io.Reader = os.Stdin
+
+// readPromptLine reads one answer from promptIn. It returns
+// ErrPromptUnanswerable when nothing at all could be read — EOF on an
+// empty stdin, or a read failure. A partial final line without a
+// trailing newline still counts as an answer.
+func readPromptLine() (string, error) {
+	reader := bufio.NewReader(promptIn)
+	response, err := reader.ReadString('\n')
+	if err != nil && response == "" {
+		return "", ErrPromptUnanswerable
+	}
+	return response, nil
+}
+
+// ConfirmAnswer prompts the user for yes/no confirmation and reports
+// whether the prompt could be answered at all.
+//
+// Returns (true, nil) on an affirmative answer, (false, nil) on any
+// other answer, and (false, ErrPromptUnanswerable) when no answer could
+// be read. Prefer this over Confirm in destructive code paths so a
+// non-interactive run fails loudly instead of silently no-op'ing.
+func ConfirmAnswer(prompt string) (bool, error) {
 	if CurrentMode != ModeHuman {
-		// Non-interactive modes always return false
-		return false
+		// Non-human modes have no channel to prompt on.
+		return false, ErrPromptUnanswerable
 	}
 
 	fmt.Printf("%s (y/n): ", prompt)
 
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
+	response, err := readPromptLine()
 	if err != nil {
-		return false
+		// Close the dangling prompt line so the following error message
+		// starts at column zero.
+		fmt.Println()
+		return false, err
 	}
 
 	response = strings.ToLower(strings.TrimSpace(response))
-	return response == "y" || response == "yes"
+	return response == "y" || response == "yes", nil
+}
+
+// Confirm prompts the user for yes/no confirmation.
+//
+// It collapses an unanswerable prompt into false. Callers guarding a
+// destructive action should use ConfirmAnswer instead, so they can tell
+// "the user said no" apart from "nobody was there to ask".
+func Confirm(prompt string) bool {
+	ok, _ := ConfirmAnswer(prompt)
+	return ok
 }
 
 // ConfirmWithWarning prompts with a warning-styled message
@@ -46,10 +102,12 @@ func ConfirmWithWarning(title string, message string) bool {
 	return Confirm("Continue?")
 }
 
-// ConfirmDeletion prompts for confirmation of destructive actions
-func ConfirmDeletion(target string, details []CardField) bool {
+// ConfirmDeletionAnswer prompts for confirmation of a destructive
+// action and reports whether the prompt could be answered at all.
+// Same contract as ConfirmAnswer.
+func ConfirmDeletionAnswer(target string, details []CardField) (bool, error) {
 	if CurrentMode != ModeHuman {
-		return false
+		return false, ErrPromptUnanswerable
 	}
 
 	// Show warning card
@@ -61,11 +119,21 @@ func ConfirmDeletion(target string, details []CardField) bool {
 	fmt.Println(card)
 	fmt.Println()
 
-	warning := StyleWarning.Render("⚠ Warning: This action cannot be undone!")
+	warning := StyleWarning.Render("Warning: This action cannot be undone!")
 	fmt.Println(warning)
 	fmt.Println()
 
-	return Confirm("Continue?")
+	return ConfirmAnswer("Continue?")
+}
+
+// ConfirmDeletion prompts for confirmation of destructive actions.
+//
+// Collapses an unanswerable prompt into false; prefer
+// ConfirmDeletionAnswer in new code so the caller can distinguish a
+// declined prompt from one that could not be asked.
+func ConfirmDeletion(target string, details []CardField) bool {
+	ok, _ := ConfirmDeletionAnswer(target, details)
+	return ok
 }
 
 // Select prompts the user to select from a list of options
@@ -84,8 +152,7 @@ func Select(prompt string, options []string) (int, string) {
 	fmt.Println()
 	fmt.Print("Select option: ")
 
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
+	response, err := readPromptLine()
 	if err != nil {
 		return -1, ""
 	}
@@ -108,8 +175,7 @@ func Input(prompt string) string {
 
 	fmt.Printf("%s: ", prompt)
 
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
+	response, err := readPromptLine()
 	if err != nil {
 		return ""
 	}
@@ -126,8 +192,7 @@ func InputWithDefault(prompt string, defaultValue string) string {
 	defaultHint := StyleMuted.Render(fmt.Sprintf(" [%s]", defaultValue))
 	fmt.Printf("%s%s: ", prompt, defaultHint)
 
-	reader := bufio.NewReader(os.Stdin)
-	response, err := reader.ReadString('\n')
+	response, err := readPromptLine()
 	if err != nil {
 		return defaultValue
 	}

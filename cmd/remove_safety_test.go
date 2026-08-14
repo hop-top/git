@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -57,6 +58,46 @@ func TestRemoveGate(t *testing.T) {
 			}
 			if tc.wantErr && !strings.Contains(err.Error(), tc.errSubstr) {
 				t.Fatalf("error %q does not contain %q", err.Error(), tc.errSubstr)
+			}
+		})
+	}
+}
+
+// TestRemoveGateHintIsSelfSufficient pins the contract that following a
+// gate hint verbatim succeeds on the first retry. Every hint must name
+// the complete non-interactive flag set — including --no-prompt, which
+// the gate itself does not require but the confirmation prompt that
+// runs immediately afterwards does. Omitting it sent scripted callers
+// into a second guaranteed failure.
+func TestRemoveGateHintIsSelfSufficient(t *testing.T) {
+	cases := []struct {
+		name      string
+		safety    branchSafety
+		wantFlags []string
+	}{
+		{"unmerged unpushed", branchSafety{}, []string{"--force", "--no-verify", "--no-prompt"}},
+		{"unmerged pushed", branchSafety{Pushed: true, Clean: true}, []string{"--force", "--no-prompt"}},
+		{"merged dirty", branchSafety{Merged: true}, []string{"--no-verify", "--no-prompt"}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := removeGate(tc.safety, false, false)
+			if err == nil {
+				t.Fatalf("expected gate error for %+v", tc.safety)
+			}
+			for _, f := range tc.wantFlags {
+				if !strings.Contains(err.Error(), f) {
+					t.Fatalf("hint %q does not name %q", err.Error(), f)
+				}
+			}
+
+			// Re-running with exactly the flags the hint named must
+			// satisfy the gate — otherwise the hint is still a dead end.
+			force := slices.Contains(tc.wantFlags, "--force")
+			noVerify := slices.Contains(tc.wantFlags, "--no-verify")
+			if err := removeGate(tc.safety, force, noVerify); err != nil {
+				t.Fatalf("following the hint still fails the gate: %v", err)
 			}
 		})
 	}

@@ -77,13 +77,21 @@ func GetLogger() *log.Logger { return logger }
 
 // Fatal prints an error and exits with status 1.
 func Fatal(msg string, args ...interface{}) {
+	FatalCode(1, msg, args...)
+}
+
+// FatalCode prints an error with git's lowercase "fatal:" prefix on
+// stderr and exits with the given status. Use it when the porcelain
+// convention calls for a code other than 1 — 128 for a fatal git/repo
+// error, 129 for a usage error.
+func FatalCode(code int, msg string, args ...interface{}) {
 	formatted := fmt.Sprintf(msg, args...)
 	if CurrentMode == ModeJSON {
 		logger.Error(formatted)
 	} else {
 		fmt.Fprintf(os.Stderr, "fatal: %s\n", formatted)
 	}
-	os.Exit(1)
+	os.Exit(code)
 }
 
 // Error prints a non-fatal error.

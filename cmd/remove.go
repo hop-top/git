@@ -100,14 +100,12 @@ var removeCmd = &cobra.Command{
 					branchConfig := hub.Config.Branches[target]
 					worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
 
-					confirmed := output.ConfirmDeletion(target, []output.CardField{
+					confirmed, err := output.ConfirmDeletionAnswer(target, []output.CardField{
 						{Key: "Type", Value: "Branch worktree"},
 						{Key: "Path", Value: worktreePath},
 						{Key: "Hub", Value: hubPath},
 					})
-
-					if !confirmed {
-						output.Info("Cancelled.")
+					if !resolveConfirmation(confirmed, err) {
 						return
 					}
 				}
@@ -133,24 +131,20 @@ var removeCmd = &cobra.Command{
 				if err == nil {
 					branchCount := len(hub.Config.Branches)
 
-					confirmed := output.ConfirmDeletion(targetPath, []output.CardField{
+					confirmed, err := output.ConfirmDeletionAnswer(targetPath, []output.CardField{
 						{Key: "Type", Value: "Hub"},
 						{Key: "Branches", Value: fmt.Sprintf("%d", branchCount)},
 						{Key: "Repository", Value: fmt.Sprintf("%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)},
 					})
-
-					if !confirmed {
-						output.Info("Cancelled.")
+					if !resolveConfirmation(confirmed, err) {
 						return
 					}
 				} else {
 					// Fallback if we can't load hub config
-					confirmed := output.ConfirmDeletion(targetPath, []output.CardField{
+					confirmed, err := output.ConfirmDeletionAnswer(targetPath, []output.CardField{
 						{Key: "Type", Value: "Hub"},
 					})
-
-					if !confirmed {
-						output.Info("Cancelled.")
+					if !resolveConfirmation(confirmed, err) {
 						return
 					}
 				}
@@ -211,6 +205,31 @@ var removeCmd = &cobra.Command{
 		// Target not found
 		output.Fatal("Target %s not found or not supported yet", target)
 	},
+}
+
+// exitPromptUnanswerable is the exit status for a confirmation prompt
+// that could not be put to the user. It is a usage error: the invocation
+// asked for interactive confirmation in an environment that cannot
+// supply one, and the caller fixes it by passing --no-prompt.
+const exitPromptUnanswerable = 129
+
+// resolveConfirmation collapses a prompt result into a single "proceed?"
+// decision.
+//
+// An unanswerable prompt (non-interactive stdin) is fatal: it exits 129
+// with a fatal: message rather than printing a cancellation that a
+// batch script would read as a successful no-op. An explicit decline is
+// a real user decision — it reports the cancellation and returns false
+// so the caller can return normally and let deferred cleanup run.
+func resolveConfirmation(confirmed bool, err error) bool {
+	if err != nil {
+		output.FatalCode(exitPromptUnanswerable, "%s", err.Error())
+	}
+	if !confirmed {
+		output.Info("Cancelled.")
+		return false
+	}
+	return true
 }
 
 // updateCurrentToDefault updates the "current" symlink to point to the defaultBranch worktree.
@@ -480,8 +499,8 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 	}
 
 	if !noPrompt {
-		if !output.Confirm(fmt.Sprintf("Remove %d merged worktree(s)?", len(toRemove))) {
-			output.Info("Cancelled.")
+		confirmed, err := output.ConfirmAnswer(fmt.Sprintf("Remove %d merged worktree(s)?", len(toRemove)))
+		if !resolveConfirmation(confirmed, err) {
 			return
 		}
 	}
