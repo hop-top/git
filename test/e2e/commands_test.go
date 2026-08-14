@@ -149,7 +149,7 @@ func TestCommands(t *testing.T) {
 
 		// Ensure containers are cleaned up even if test fails mid-way
 		t.Cleanup(func() {
-			StopDockerEnv(t, branchPath)
+			StopDockerEnv(t, branchPath, "feature-1")
 		})
 
 		// Generate (implicit in add, but test explicit)
