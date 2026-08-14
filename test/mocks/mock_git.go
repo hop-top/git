@@ -37,6 +37,17 @@ type MockGit struct {
 	// origin deterministically, without shelling out.
 	HasRemoteBranchFunc func(dir, branch string) bool
 
+	// WorktreeRemoveErr lets tests inject a `git worktree remove`
+	// failure. WorktreeRemoveCalls records each invocation as
+	// "<basePath>:<path>" so tests can assert the call was skipped when
+	// the worktree is not registered.
+	WorktreeRemoveErr   error
+	WorktreeRemoveCalls []string
+
+	// DeleteLocalBranchErr lets tests inject a `git branch -D` failure
+	// on a branch that does exist (permission denied, locked ref).
+	DeleteLocalBranchErr error
+
 	// Repair-related call recorders + injectable errors.
 	WorktreeRepairCalls []string
 	WorktreeRepairErr   error
@@ -107,9 +118,12 @@ func (m *MockGit) CreateWorktree(hopspacePath, branch, path, base string, forceC
 	return nil
 }
 
-// WorktreeRemove mocks removing a worktree
+// WorktreeRemove mocks removing a worktree. Every call is recorded so
+// tests can assert the removal path probed the worktree registry before
+// shelling out. WorktreeRemoveErr injects a failure.
 func (m *MockGit) WorktreeRemove(hopspacePath, path string, force bool) error {
-	return nil
+	m.WorktreeRemoveCalls = append(m.WorktreeRemoveCalls, hopspacePath+":"+path)
+	return m.WorktreeRemoveErr
 }
 
 // WorktreePrune mocks pruning worktree information
@@ -218,10 +232,12 @@ func (m *MockGit) GetStatus(dir string) (*git.Status, error) {
 	}, nil
 }
 
-// DeleteLocalBranch mocks deleting a local branch
+// DeleteLocalBranch mocks deleting a local branch. DeleteLocalBranchErr
+// injects a failure so tests can distinguish "branch absent" (never
+// called) from "branch present but undeletable" (called, errors).
 func (m *MockGit) DeleteLocalBranch(dir, branch string) error {
 	m.DeletedLocalBranches = append(m.DeletedLocalBranches, branch)
-	return nil
+	return m.DeleteLocalBranchErr
 }
 
 // HasRemoteBranch mocks checking for a remote branch. Every call is
