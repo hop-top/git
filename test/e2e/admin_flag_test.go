@@ -8,6 +8,7 @@ import (
 // TestHelp_HidesAdminCommands verifies that --help does not list
 // completion, upgrade, or help in the available commands section.
 func TestHelp_HidesAdminCommands(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -33,6 +34,7 @@ func TestHelp_HidesAdminCommands(t *testing.T) {
 // TestAdminFlag_ShowsHiddenCommands verifies that --admin (no subcommand)
 // lists completion and upgrade.
 func TestAdminFlag_ShowsHiddenCommands(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -50,6 +52,7 @@ func TestAdminFlag_ShowsHiddenCommands(t *testing.T) {
 // TestAdminFlag_NotAvailableOnSubcommand verifies that passing --admin to a
 // subcommand is rejected as an unknown flag.
 func TestAdminFlag_NotAvailableOnSubcommand(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -65,6 +68,7 @@ func TestAdminFlag_NotAvailableOnSubcommand(t *testing.T) {
 // TestCompletion_StillWorksDirectly verifies that the completion command
 // still functions even though it is hidden from help.
 func TestCompletion_StillWorksDirectly(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

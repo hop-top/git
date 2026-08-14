@@ -10,6 +10,7 @@ import (
 // --- T-0087: Go vendor dir should not appear in non-vendor projects ---
 
 func TestAdd_GoProject_NoVendorWhenNotVendored(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -62,6 +63,7 @@ func TestAdd_GoProject_NoVendorWhenNotVendored(t *testing.T) {
 }
 
 func TestAdd_GoProject_VendorPreservedWhenVendored(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -102,6 +104,7 @@ func TestAdd_GoProject_VendorPreservedWhenVendored(t *testing.T) {
 // --- T-0088: pnpm/npm node_modules should not break existing worktrees ---
 
 func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -193,6 +196,7 @@ func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 }
 
 func TestAdd_PnpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -252,6 +256,7 @@ func TestAdd_PnpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 // --- T-0089: Suppress irrelevant env/ports output ---
 
 func TestAdd_NoDockerProject_NoEnvNoise(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -296,6 +301,7 @@ func TestAdd_NoDockerProject_NoEnvNoise(t *testing.T) {
 }
 
 func TestAdd_GoProject_NoDepsMessageWhenNoPM(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

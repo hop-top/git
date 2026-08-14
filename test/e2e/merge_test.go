@@ -31,6 +31,7 @@ func setupMergeEnv(t *testing.T) (*TestEnv, string) {
 }
 
 func TestMerge_TwoArg_MergesAndCleansUp(t *testing.T) {
+	t.Parallel()
 	env, featureBranch := setupMergeEnv(t)
 
 	env.RunGitHop(t, env.HubPath, "merge", featureBranch, "main")
@@ -69,6 +70,7 @@ func TestMerge_TwoArg_MergesAndCleansUp(t *testing.T) {
 }
 
 func TestMerge_OneArg_FromInsideWorktree(t *testing.T) {
+	t.Parallel()
 	env, featureBranch := setupMergeEnv(t)
 
 	// Run 1-arg from inside the feature worktree
@@ -88,6 +90,7 @@ func TestMerge_OneArg_FromInsideWorktree(t *testing.T) {
 }
 
 func TestMerge_SourceDirRemoved(t *testing.T) {
+	t.Parallel()
 	env, featureBranch := setupMergeEnv(t)
 
 	env.RunGitHop(t, env.HubPath, "merge", featureBranch, "main")
@@ -99,6 +102,7 @@ func TestMerge_SourceDirRemoved(t *testing.T) {
 }
 
 func TestMerge_IntoBranchWorktreeIntact(t *testing.T) {
+	t.Parallel()
 	env, featureBranch := setupMergeEnv(t)
 
 	env.RunGitHop(t, env.HubPath, "merge", featureBranch, "main")
@@ -110,6 +114,7 @@ func TestMerge_IntoBranchWorktreeIntact(t *testing.T) {
 }
 
 func TestMerge_HubConfigUpdated(t *testing.T) {
+	t.Parallel()
 	env, featureBranch := setupMergeEnv(t)
 
 	env.RunGitHop(t, env.HubPath, "merge", featureBranch, "main")
@@ -133,6 +138,7 @@ func TestMerge_HubConfigUpdated(t *testing.T) {
 }
 
 func TestMerge_CurrentSymlinkUpdated(t *testing.T) {
+	t.Parallel()
 	env, featureBranch := setupMergeEnv(t)
 
 	env.RunGitHop(t, env.HubPath, "merge", featureBranch, "main")
@@ -150,6 +156,7 @@ func TestMerge_CurrentSymlinkUpdated(t *testing.T) {
 }
 
 func TestMerge_SameBranch_Blocked(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMergeEnv(t)
 
 	result := runCommandExpectError(t, env, env.HubPath, env.BinPath, "merge", "main", "main")
@@ -159,6 +166,7 @@ func TestMerge_SameBranch_Blocked(t *testing.T) {
 }
 
 func TestMerge_SourceNotInHub_Blocked(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMergeEnv(t)
 
 	result := runCommandExpectError(t, env, env.HubPath, env.BinPath, "merge", "nonexistent/branch", "main")
@@ -168,6 +176,7 @@ func TestMerge_SourceNotInHub_Blocked(t *testing.T) {
 }
 
 func TestMerge_NoFF_Flag(t *testing.T) {
+	t.Parallel()
 	env, featureBranch := setupMergeEnv(t)
 
 	env.RunGitHop(t, env.HubPath, "merge", "--no-ff", featureBranch, "main")

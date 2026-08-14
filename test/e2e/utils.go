@@ -148,6 +148,11 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	xdgStateHome := filepath.Join(rootDir, ".local", "state")
 
 	envVars := []string{
+		// Scratch dir for test hook scripts to drop marker files into. Hooks
+		// used to hardcode shared /tmp paths, which two concurrent runs of the
+		// same test (e.g. -count=2) would clobber; anchoring it to this test's
+		// own RootDir makes marker writes private per test.
+		"GIT_HOP_TEST_MARKER_DIR=" + filepath.Join(rootDir, "markers"),
 		"GIT_HOP_DATA_HOME=" + dataHome,
 		"PATH=" + os.Getenv("PATH"),
 		"DOCKER_CONFIG=" + dockerConfigDir,

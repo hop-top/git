@@ -13,6 +13,7 @@ import (
 
 // TestRemoveEntireHub tests removing an entire hub including all worktrees
 func TestRemoveEntireHub(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -166,6 +167,7 @@ func TestRemoveEntireHub(t *testing.T) {
 
 // TestRemoveHubWithRelativePath tests removing a hub using a relative path
 func TestRemoveHubWithRelativePath(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -209,6 +211,7 @@ func TestRemoveHubWithRelativePath(t *testing.T) {
 
 // TestRemoveHubWithAbsolutePath tests removing a hub using an absolute path
 func TestRemoveHubWithAbsolutePath(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -252,6 +255,7 @@ func TestRemoveHubWithAbsolutePath(t *testing.T) {
 
 // TestRemoveNonEmptyHub tests removing a hub that has multiple branches and worktrees
 func TestRemoveNonEmptyHub(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -329,6 +333,7 @@ func TestRemoveNonEmptyHub(t *testing.T) {
 // TestRemoveHubStatePersistence verifies that after removing a hub,
 // the global state is properly updated and persists across reloads
 func TestRemoveHubStatePersistence(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -411,6 +416,7 @@ func TestRemoveHubStatePersistence(t *testing.T) {
 // TestCannotRemoveHubFromInside verifies that attempting to remove a hub
 // from inside the hub directory produces appropriate behavior
 func TestRemoveHubFromInsideDirectory(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

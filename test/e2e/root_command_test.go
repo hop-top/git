@@ -13,6 +13,7 @@ import (
 // subcommand should NOT create a new worktree if the branch doesn't exist.
 // It should fail with an error instead.
 func TestRootCommand_NonExistentBranch(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	// Setup: Create a bare repo with main branch
@@ -54,6 +55,7 @@ func TestRootCommand_NonExistentBranch(t *testing.T) {
 // TestRootCommand_ExistingWorktree tests that `git hop <branch>` should succeed
 // when the worktree already exists and switches to it
 func TestRootCommand_ExistingWorktree(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	// Setup: Create a bare repo with main and feature-1 branches

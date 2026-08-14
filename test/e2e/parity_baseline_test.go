@@ -122,6 +122,7 @@ func assertGolden(t *testing.T, path, actual string) {
 // TestParityHelp records --help output for every subcommand and
 // verifies stdout contains no ANSI escape codes.
 func TestParityHelp(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	subcommands := []string{
@@ -179,6 +180,7 @@ func TestParityHelp(t *testing.T) {
 // TestParityHelpStdoutCleanWithColor verifies stdout stays
 // ANSI-free even when NO_COLOR is NOT set.
 func TestParityHelpStdoutCleanWithColor(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	subcommands := []string{"", "add", "list", "status"}
@@ -202,6 +204,7 @@ func TestParityHelpStdoutCleanWithColor(t *testing.T) {
 
 // TestParityExitCodes verifies exit codes for known scenarios.
 func TestParityExitCodes(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	t.Run("root_no_args", func(t *testing.T) {
@@ -243,6 +246,7 @@ func TestParityExitCodes(t *testing.T) {
 // TestParityEnvSubcommands verifies env subcommand --help output and
 // exit codes.
 func TestParityEnvSubcommands(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	subs := []string{"gc", "generate", "start", "stop"}
@@ -265,6 +269,7 @@ func TestParityEnvSubcommands(t *testing.T) {
 
 // TestParityUpgradeSubcommands verifies upgrade subcommand help.
 func TestParityUpgradeSubcommands(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	t.Run("preamble/help", func(t *testing.T) {
@@ -307,6 +312,7 @@ func (p *parityEnv) runWithEnv(t *testing.T, extraEnv []string, args ...string) 
 // TestParityLogPrefixes verifies log output goes to stderr with
 // correct prefixes for each level.
 func TestParityLogPrefixes(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	t.Run("debug_prefix", func(t *testing.T) {
@@ -371,6 +377,7 @@ func TestParityLogPrefixes(t *testing.T) {
 // TestParityOutputFormat verifies --json stdout is ANSI-free and
 // goes to stdout.
 func TestParityOutputFormat(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	t.Run("json_stdout_clean", func(t *testing.T) {
@@ -398,6 +405,7 @@ func TestParityOutputFormat(t *testing.T) {
 // TestParityXDGResolution verifies XDG path resolution respects
 // env vars for config, data, cache, and state.
 func TestParityXDGResolution(t *testing.T) {
+	t.Parallel()
 	env := setupParityEnv(t)
 
 	t.Run("config_home", func(t *testing.T) {

@@ -10,6 +10,7 @@ import (
 )
 
 func TestE2E_PortAndVolumeIsolation(t *testing.T) {
+	t.Parallel()
 	SkipIfDockerNotAvailable(t)
 
 	// Setup

@@ -25,6 +25,7 @@ func setupMoveEnv(t *testing.T) (*TestEnv, string) {
 }
 
 func TestMove_TwoArg_RenamesWorktree(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	env.RunGitHop(t, env.HubPath, "move", "feature/old", "feature/new")
@@ -43,6 +44,7 @@ func TestMove_TwoArg_RenamesWorktree(t *testing.T) {
 }
 
 func TestMove_GitBranchRenamed(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 	env.RunGitHop(t, env.HubPath, "move", "feature/old", "feature/new")
 
@@ -59,6 +61,7 @@ func TestMove_GitBranchRenamed(t *testing.T) {
 }
 
 func TestMove_HubConfigUpdated(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 	env.RunGitHop(t, env.HubPath, "move", "feature/old", "feature/new")
 
@@ -81,6 +84,7 @@ func TestMove_HubConfigUpdated(t *testing.T) {
 }
 
 func TestMove_OneArg_FromInsideWorktree(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	// Determine what the worktree path actually is
@@ -95,6 +99,7 @@ func TestMove_OneArg_FromInsideWorktree(t *testing.T) {
 }
 
 func TestMove_DefaultBranch_Blocked(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	result := runCommandExpectError(t, env, env.HubPath, env.BinPath, "move", "main", "main-renamed")
@@ -104,6 +109,7 @@ func TestMove_DefaultBranch_Blocked(t *testing.T) {
 }
 
 func TestMove_NewNameAlreadyExists_Blocked(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 	env.RunGitHop(t, env.HubPath, "add", "feature/other")
 
@@ -114,6 +120,7 @@ func TestMove_NewNameAlreadyExists_Blocked(t *testing.T) {
 }
 
 func TestMove_UpdatesCurrentSymlink(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	// Point current symlink at the old worktree — use relative path like UpdateCurrentSymlink does
@@ -139,6 +146,7 @@ func TestMove_UpdatesCurrentSymlink(t *testing.T) {
 }
 
 func TestMove_CurrentSymlink_UnrelatedNotChanged(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 	env.RunGitHop(t, env.HubPath, "add", "feature/other")
 
@@ -159,6 +167,7 @@ func TestMove_CurrentSymlink_UnrelatedNotChanged(t *testing.T) {
 }
 
 func TestMove_PreHook_EnvVars(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	hooksDir := filepath.Join(env.HubPath, ".git-hop", "hooks")
@@ -186,6 +195,7 @@ func TestMove_PreHook_EnvVars(t *testing.T) {
 }
 
 func TestMove_PreHook_Failure_Blocks(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	hooksDir := filepath.Join(env.HubPath, ".git-hop", "hooks")
@@ -204,6 +214,7 @@ func TestMove_PreHook_Failure_Blocks(t *testing.T) {
 }
 
 func TestMove_PostHook_RunsAfterSuccess(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	hooksDir := filepath.Join(env.HubPath, ".git-hop", "hooks")
@@ -221,6 +232,7 @@ func TestMove_PostHook_RunsAfterSuccess(t *testing.T) {
 }
 
 func TestMove_PostHook_Failure_NonFatal(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	hooksDir := filepath.Join(env.HubPath, ".git-hop", "hooks")
@@ -240,6 +252,7 @@ func TestMove_PostHook_Failure_NonFatal(t *testing.T) {
 }
 
 func TestMove_OldPathGone_NewPathExists(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 	env.RunGitHop(t, env.HubPath, "move", "feature/old", "feature/new")
 
@@ -255,6 +268,7 @@ func TestMove_OldPathGone_NewPathExists(t *testing.T) {
 }
 
 func TestMove_OneArg_FailsOutsideWorktree(t *testing.T) {
+	t.Parallel()
 	env, _ := setupMoveEnv(t)
 
 	// Call from hub root — hub is a bare repo, GetCurrentBranch will fail/return empty

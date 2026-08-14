@@ -8,6 +8,7 @@ import (
 )
 
 func TestClone_OutsideRepo(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)

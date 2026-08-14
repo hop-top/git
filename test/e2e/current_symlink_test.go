@@ -10,6 +10,7 @@ import (
 )
 
 func TestCurrentSymlinkOnHop(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping E2E test in short mode")
 	}
@@ -22,9 +23,10 @@ func TestCurrentSymlinkOnHop(t *testing.T) {
 	fs := afero.NewOsFs()
 	setupBareRepoWithWorktrees(t, fs, hubPath, []string{"main", "feature-a", "feature-b"})
 
-	// Navigate to main worktree
-	mainWorktree := filepath.Join(hubPath, "hops", "main")
-	os.Chdir(mainWorktree)
+	// No os.Chdir here: every assertion below addresses worktrees by absolute
+	// path, so the process CWD was never read. Chdir mutates process-global
+	// state shared by all concurrent tests, so dropping it is what makes this
+	// test parallel-safe.
 
 	t.Run("hop to branch creates current symlink", func(t *testing.T) {
 		// Simulate hopping to feature-a

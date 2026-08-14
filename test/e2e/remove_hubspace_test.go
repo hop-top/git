@@ -15,6 +15,7 @@ import (
 // 2. Removing that hubspace completely
 // 3. Verifying all artifacts are cleaned up properly
 func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -278,6 +279,7 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 // TestRemoveFromWithinWorktree tests removing a branch when running the command
 // from within another worktree directory (not the hub root)
 func TestRemoveFromWithinWorktree(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -345,6 +347,7 @@ func TestRemoveFromWithinWorktree(t *testing.T) {
 
 // TestRemoveMultipleBranches tests removing multiple branches in sequence
 func TestRemoveMultipleBranches(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
@@ -431,6 +434,7 @@ func TestRemoveMultipleBranches(t *testing.T) {
 
 // TestRemoveWithUncommittedChanges tests removing a branch that has uncommitted work
 func TestRemoveWithUncommittedChanges(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}

@@ -10,6 +10,7 @@ import (
 // Regression: filepath.Join(hubPath, absolutePath) produced a wrong path,
 // causing all branches to show "Missing" even when worktrees existed.
 func TestStatus_LinkedWithAbsolutePath(t *testing.T) {
+	t.Parallel()
 	env := SetupTestEnv(t)
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
