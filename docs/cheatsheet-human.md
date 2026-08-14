@@ -10,7 +10,14 @@ Quick reference for daily worktree + env workflows. Scannable in 30 seconds.
 git hop init                          # convert existing repo → bare+worktree structure
 git hop init --enable-chdir           # also install shell wrapper for auto-cd
 git hop init --no-hooks               # skip creating .git-hop/hooks/ directory
+git hop init --no-prompt              # non-interactive: take the recommended (bare) layout
+git hop init --no-prompt --regular    # non-interactive: regular repo + worktrees
 ```
+
+`init` asks which structure you want (`1/2/3/q`). In a script, CI job, or
+anywhere without a terminal, pass `--no-prompt` to answer from flags
+instead; without it a run that cannot be answered exits 129 rather than
+hanging.
 
 Config: `$XDG_CONFIG_HOME/git-hop/config.json`
 

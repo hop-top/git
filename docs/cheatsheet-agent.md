@@ -18,6 +18,36 @@ Global hopspace: `$GIT_HOP_DATA_HOME`
 
 ---
 
+## Initialize a Repository (non-interactive)
+
+`git hop init` converts a standard git repo to the worktree layout. On a
+standard repo it normally prompts for a structure, so **always pass
+`--no-prompt`** from a script or agent:
+
+```bash
+/usr/bin/git hop init --no-prompt              # bare repo + worktrees (recommended)
+/usr/bin/git hop init --no-prompt --regular    # regular repo + worktrees
+/usr/bin/git hop init --no-prompt --dry-run    # preview the conversion plan
+/usr/bin/git hop init --no-prompt --hooks none # skip mirroring committed hooks
+```
+
+Without `--no-prompt` and with nothing readable on stdin, init exits
+**129** with `fatal: cannot prompt ...` rather than waiting. That is a
+missing flag, not a broken repo — re-run with `--no-prompt`.
+
+Piping a choice also works, since a pipe carries a real answer:
+
+```bash
+printf '1\n' | /usr/bin/git hop init   # 1=bare  2=regular  3=register as-is  q=quit
+```
+
+Note the menu takes `1/2/3/q`, not `y`. Piping `y` is an invalid choice.
+
+Already-initialized repos are idempotent: init reports the structure and
+exits 0 without prompting.
+
+---
+
 ## Agent Loop Contract
 
 ```
@@ -144,6 +174,8 @@ cd <path from list>
 | `remove --no-prompt` exited 1 | `--no-prompt` is NOT a gate bypass — combine with `--force` / `--no-verify` |
 | `remove` exited 129: "cannot prompt for confirmation" | prompt hit a non-interactive stdin — add `--no-prompt` |
 | `env gc` exited 129: "cannot prompt for confirmation" | same cause — add `--no-prompt` (or `--force`) |
+| `init` exited 129: "cannot prompt for confirmation" | conversion menu hit a non-interactive stdin — add `--no-prompt` |
+| `init` seems to ignore piped `y` | the menu is `1/2/3/q`, not yes/no — pipe `1`, or use `--no-prompt` |
 | Wrong config targeted | pass `--config <path>` explicitly |
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |

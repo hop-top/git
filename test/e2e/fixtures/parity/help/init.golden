@@ -1,5 +1,12 @@
 Initialize git-hop repository structure with interactive setup for worktree conversion.
 
+Converting a standard repository prompts for a structure. Scripts and
+other non-interactive callers should pass --no-prompt, which selects the
+recommended bare repo + worktrees conversion without asking; add
+--regular for a regular repo + worktrees instead. Without --no-prompt, a
+run with nothing readable on stdin fails rather than waiting for an
+answer that will never come.
+
 Committed .git-hop/hooks/ scripts are mirrored into the user's hopspace
 when init succeeds; control via --hooks (symlink|copy|prompt|none).
 See docs/hooks.md for details.
@@ -19,7 +26,8 @@ Flags:
       --hooks-overwrite   overwrite an existing hopspace hook with different content (symlink/copy modes)
       --keep-backup       Preserve backup after successful conversion
       --no-hooks          Skip automatic installation of .git-hop/hooks/ directory
-      --regular           Use regular repo instead of bare
+      --no-prompt         Skip the interactive menu and convert non-interactively (bare unless --regular)
+      --regular           Convert to a regular repo + worktrees instead of bare (with --no-prompt)
       --restore string    Restore repository from backup (manual rollback)
 
 Global Flags:

@@ -1,12 +1,10 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
@@ -28,6 +26,7 @@ var (
 	regularFlag         bool
 	restorePath         string
 	noHooksFlag         bool
+	noPromptFlag        bool
 	enableChdirFlag     bool
 	initHooksMode       string
 	initHooksOverwrite  bool
@@ -42,6 +41,13 @@ var initCmd = &cobra.Command{
 	Aliases: []string{"setup", "install"},
 	Short:   "Initialize git-hop repository structure",
 	Long: `Initialize git-hop repository structure with interactive setup for worktree conversion.
+
+Converting a standard repository prompts for a structure. Scripts and
+other non-interactive callers should pass --no-prompt, which selects the
+recommended bare repo + worktrees conversion without asking; add
+--regular for a regular repo + worktrees instead. Without --no-prompt, a
+run with nothing readable on stdin fails rather than waiting for an
+answer that will never come.
 
 Committed .git-hop/hooks/ scripts are mirrored into the user's hopspace
 when init succeeds; control via --hooks (symlink|copy|prompt|none).
@@ -124,18 +130,26 @@ Current repository: Standard git repository`)
 	fmt.Println("  q. Quit")
 	fmt.Println("")
 
-	choice := promptChoice("Choose [1/2/3/q]: ", []string{"1", "2", "3", "q"})
+	choice, err := resolveInitChoice(noPromptFlag, regularFlag)
+	if err != nil {
+		// An unanswerable prompt is a failed precondition, not a
+		// cancellation: exit non-zero naming the flag that lets a
+		// non-interactive caller convert without being asked.
+		output.FatalCode(exitPromptUnanswerable, "%s", err.Error())
+	}
 
 	switch choice {
-	case "1":
+	case choiceBareWorktree:
 		convertRepo(fs, g, repoPath, true, false, noHooksFlag, enableChdirFlag)
-	case "2":
+	case choiceRegularWorktree:
 		convertRepo(fs, g, repoPath, false, false, noHooksFlag, enableChdirFlag)
-	case "3":
+	case choiceRegisterAsIs:
 		registerAsIs(fs, g, repoPath, noHooksFlag, enableChdirFlag)
-	case "q":
+	case choiceQuit:
 		fmt.Println("Cancelled")
-		os.Exit(0)
+		// Return rather than os.Exit so the root command's deferred
+		// EventBus.Close() still runs. A user quitting is a clean exit.
+		return
 	}
 }
 
@@ -159,11 +173,11 @@ Please commit or stash changes before converting:
 
 Then run: git hop init
 
-To disable this check:
-  git hop config bareRepo false
-  # Then run: git hop init --regular
+To convert to a regular repo instead of a bare one:
+  git hop init --no-prompt --regular
 
-Or register current structure: git hop init --current`)
+To skip this check entirely (DANGEROUS - uncommitted work may be lost):
+  git hop init --force`)
 			os.Exit(1)
 		}
 	}
@@ -383,7 +397,7 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 	}
 	fmt.Println("\nNote: Some git-hop features are limited with this structure.")
 	fmt.Println("Consider converting to worktree structure for full functionality:")
-	fmt.Println("  git hop init --convert")
+	fmt.Println("  git hop init --no-prompt")
 
 	if !noHooks {
 		if err := installInitHooks(fs, repoPath, "", false); err != nil {
@@ -584,29 +598,61 @@ func handleRestore(fs afero.Fs, g git.GitInterface, backupPath string) {
 	fmt.Printf("  rm -rf %s\n", backupPath)
 }
 
-func promptChoice(prompt string, validChoices []string) string {
-	reader := bufio.NewReader(os.Stdin)
+// The conversion strategies offered by the init menu.
+const (
+	choiceBareWorktree    = "1" // bare repo + worktrees (recommended)
+	choiceRegularWorktree = "2" // regular repo + worktrees
+	choiceRegisterAsIs    = "3" // register current structure unchanged
+	choiceQuit            = "q"
+)
 
-	for {
-		fmt.Print(prompt)
-		choice, _ := reader.ReadString('\n')
-		choice = strings.TrimSpace(choice)
+// initChoices is the set of answers the conversion menu accepts.
+var initChoices = []string{choiceBareWorktree, choiceRegularWorktree, choiceRegisterAsIs, choiceQuit}
 
-		for _, valid := range validChoices {
-			if choice == valid {
-				return choice
-			}
+// resolveInitChoice decides which conversion to run.
+//
+// With --no-prompt it answers from flags alone and never touches stdin,
+// so a scripted or agent-driven init cannot block: --regular selects the
+// regular-repo conversion, otherwise the recommended bare conversion.
+// Without it the choice comes from the interactive menu.
+//
+// The returned error is always ErrPromptUnanswerable, meaning the prompt
+// could not be put to anyone — an empty stdin, an output mode with no
+// prompt channel, or input that never yields a valid choice. It is
+// deliberately distinct from the user answering "q", which is a decision
+// and stays a clean exit.
+func resolveInitChoice(noPrompt, regular bool) (string, error) {
+	if noPrompt {
+		if regular {
+			return choiceRegularWorktree, nil
 		}
-
-		fmt.Println("Invalid choice. Please try again.")
+		return choiceBareWorktree, nil
 	}
+	return promptInitChoice()
+}
+
+// promptInitChoice puts the conversion menu to the user via the shared
+// prompt helper, inheriting its bounded-retry and loud-failure contract.
+// A piped answer is still a real answer, so `printf '1\n' | git hop init`
+// keeps working; the trigger for failing is an unanswerable prompt, not
+// a non-TTY stdin.
+func promptInitChoice() (string, error) {
+	return output.ChoiceAnswer("Choose [1/2/3/q]: ", initChoices)
+}
+
+// initHintedFlags lists the init flags named by hints this command
+// prints. Tests assert each one is actually declared, so a hint can
+// never send a user to a flag that does not exist.
+func initHintedFlags() []string {
+	return []string{"regular", "no-prompt", "force", "dry-run"}
 }
 
 func init() {
 	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Skip clean repo check and backup requirements (DANGEROUS)")
 	initCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show conversion steps without executing")
 	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion")
-	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Use regular repo instead of bare")
+	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Convert to a regular repo + worktrees instead of bare (with --no-prompt)")
+	initCmd.Flags().BoolVar(&noPromptFlag, "no-prompt", false, "Skip the interactive menu and convert non-interactively (bare unless --regular)")
 	initCmd.Flags().StringVar(&restorePath, "restore", "", "Restore repository from backup (manual rollback)")
 	initCmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "Skip automatic installation of .git-hop/hooks/ directory")
 	initCmd.Flags().BoolVar(&enableChdirFlag, "enable-chdir", false, "Install shell integration for automatic directory switching after hop commands")
