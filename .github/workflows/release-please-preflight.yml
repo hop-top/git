@@ -1,0 +1,19 @@
+name: release-please-preflight
+
+on:
+  pull_request:
+    paths:
+      - '.github/release-please-config.json'
+      - '.github/.release-please-manifest.json'
+      - '.github/version.json'
+      - '.github/workflows/release-please.yml'
+      - '.github/workflows/release-please-preflight.yml'
+      - 'Makefile'
+  workflow_dispatch: {}
+
+jobs:
+  preflight:
+    permissions:
+      contents: read
+      pull-requests: write
+    uses: hop-top/.github/.github/workflows/release-please-preflight.yml@v0
