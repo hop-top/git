@@ -23,6 +23,7 @@ func TestGenerateWrapperFunction(t *testing.T) {
 				"HOP_WRAPPER_ACTIVE=1",
 				"command git hop",
 				"cd \"$current\"",
+				shell.CurrentPathCommand,
 			},
 		},
 		{
@@ -34,6 +35,7 @@ func TestGenerateWrapperFunction(t *testing.T) {
 				"HOP_WRAPPER_ACTIVE=1",
 				"command git hop",
 				"cd \"$current\"",
+				shell.CurrentPathCommand,
 			},
 		},
 		{
@@ -45,6 +47,7 @@ func TestGenerateWrapperFunction(t *testing.T) {
 				"env HOP_WRAPPER_ACTIVE=1",
 				"command git hop",
 				"cd \"$current\"",
+				shell.CurrentPathCommand,
 			},
 		},
 		{
@@ -93,12 +96,12 @@ func TestGenerateWrapperFunctionLogic(t *testing.T) {
 
 	// Check for command detection logic
 	requiredLogic := []string{
-		"should_cd",                     // Variable for tracking cd decision
-		"add|init|clone",                // Commands that trigger cd
-		"list|status|doctor",            // Commands that don't trigger cd
-		"git rev-parse --show-toplevel", // Hub root detection
-		"exit_code",                     // Exit code preservation
-		"-eq 93",                        // Handled-navigation directive
+		"should_cd",                      // Variable for tracking cd decision
+		"add|init|clone",                 // Commands that trigger cd
+		"list|status|doctor",             // Commands that don't trigger cd
+		"command git hop __current-path", // Hub's current worktree, from the binary
+		"exit_code",                      // Exit code preservation
+		"-eq 93",                         // Handled-navigation directive
 	}
 
 	for _, logic := range requiredLogic {

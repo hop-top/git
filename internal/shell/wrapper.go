@@ -13,7 +13,12 @@ import (
 // outdated wrapper and it gets rewritten. Bump it whenever the emitted
 // shell changes behaviour, otherwise every existing installation keeps
 // the old code forever while reporting itself correctly configured.
-const wrapperVersion = 3
+const wrapperVersion = 4
+
+// CurrentPathCommand is the hidden subcommand the wrapper asks for its cd
+// target. Hidden for the same reason NotifyChdirCommand is: it exists for
+// the installed integration to call, never for a user to type.
+const CurrentPathCommand = "__current-path"
 
 // GenerateWrapperFunction generates a shell function wrapper for git-hop
 // that enables automatic directory switching after successful commands
@@ -40,6 +45,7 @@ func GenerateWrapperFunction(shellType string) string {
 // to approximate one on PROMPT_COMMAND. Hence the shellType parameter.
 func generateBashZshWrapper(shellType string) string {
 	return fmt.Sprintf(`
+%s
 %s
 git-hop() {
     local should_cd=false
@@ -70,6 +76,14 @@ git-hop() {
     HOP_WRAPPER_ACTIVE=1 command git hop "$@"
     local exit_code=$?
 
+    # The binary may have changed which worktrees exist (add, remove,
+    # move, clone) and rewritten the roots cache. Re-slurp it so this
+    # session's chdir handler sees the new set. Unconditional on purpose:
+    # deciding whether this particular invocation mutated anything costs
+    # more shell than just reading the file, and this runs at the rate the
+    # user types "git hop", not at the rate their prompt draws.
+    %s
+
     # A post-worktree-switch hook exiting %d means it already moved the
     # user (a tmux window switch, say). The command SUCCEEDED, so report 0
     # to the user's shell -- but do not cd on top of the hook, or this
@@ -78,21 +92,26 @@ git-hop() {
         return 0
     fi
 
-    # Only cd if successful and eligible
+    # Only cd if successful and eligible.
+    #
+    # The destination comes from the binary, not from path arithmetic here.
+    # This block used to resolve it as "$(git rev-parse
+    # --show-toplevel)/../current", falling back to ".../current", and both
+    # candidates miss in the layout git-hop actually creates: inside a
+    # worktree the toplevel IS the worktree, and the hub sits however many
+    # levels above it the branch name nests -- one for "main", three for
+    # "a/b/c" -- so no fixed number of ".." is right. Run from the bare hub
+    # the toplevel does not exist at all, rev-parse exits 128, and the cd was
+    # skipped without a word. The binary walks up for hop.json, which is the
+    # answer at every depth and from the hub itself, and prints nothing when
+    # there is no hub above the caller -- so an unrelated repository yields
+    # an empty string and no cd.
     if [[ $exit_code -eq 0 ]] && [[ "$should_cd" = true ]]; then
-        local hub_root
-        hub_root=$(git rev-parse --show-toplevel 2>/dev/null)
+        local current
+        current=$(command git hop %s 2>/dev/null)
 
-        if [[ -n "$hub_root" ]]; then
-            # Try to find hub root (might be parent if we're in worktree)
-            local current="$hub_root/../current"
-            if [[ ! -e "$current" ]]; then
-                current="$hub_root/current"
-            fi
-
-            if [[ -d "$current" ]]; then
-                cd "$current" || true
-            fi
+        if [[ -n "$current" ]] && [[ -d "$current" ]]; then
+            cd "$current" || true
         fi
     fi
 
@@ -114,7 +133,9 @@ _git_hop() {
 complete -o default -F _git_hop git-hop
 %s
 %s
-`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+`, versionedBeginMarker(), rootsReloadFor(shellType), reloadFunc,
+		hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+		CurrentPathCommand,
 		chdirHandlerFor(shellType), wrapperEndMarker)
 }
 
@@ -125,6 +146,7 @@ complete -o default -F _git_hop git-hop
 // propagates untouched. Only the glob and conditional syntax differ.
 func generateFishWrapper() string {
 	return fmt.Sprintf(`
+%s
 %s
 function git-hop
     set -l should_cd false
@@ -151,6 +173,12 @@ function git-hop
     env HOP_WRAPPER_ACTIVE=1 command git hop $argv
     set -l exit_code $status
 
+    # The binary may have changed which worktrees exist and rewritten the
+    # roots cache. Re-slurp it so this session's chdir handler sees the new
+    # set. See the bash/zsh block for why this lives here and not on the
+    # prompt path.
+    %s
+
     # A post-worktree-switch hook exiting %d means it already moved the
     # user (a tmux window switch, say). The command SUCCEEDED, so report 0
     # to the user's shell -- but do not cd on top of the hook, or this
@@ -159,19 +187,14 @@ function git-hop
         return 0
     end
 
-    # Only cd if successful and eligible
+    # Only cd if successful and eligible. The destination comes from the
+    # binary rather than from ".." arithmetic here -- see the bash/zsh block
+    # for why every path-relative candidate misses the real layout.
     if test $exit_code -eq 0; and test "$should_cd" = true
-        set -l hub_root (git rev-parse --show-toplevel 2>/dev/null)
+        set -l current (command git hop %s 2>/dev/null)
 
-        if test -n "$hub_root"
-            set -l current "$hub_root/../current"
-            if not test -e "$current"
-                set current "$hub_root/current"
-            end
-
-            if test -d "$current"
-                cd "$current" 2>/dev/null; or true
-            end
+        if test -n "$current"; and test -d "$current"
+            cd "$current" 2>/dev/null; or true
         end
     end
 
@@ -182,6 +205,8 @@ end
 complete -c git-hop -f -a '(command git-hop __complete (commandline -cop) 2>/dev/null)'
 %s
 %s
-`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+`, versionedBeginMarker(), rootsReloadFor("fish"), reloadFunc,
+		hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+		CurrentPathCommand,
 		chdirHandlerFor("fish"), wrapperEndMarker)
 }

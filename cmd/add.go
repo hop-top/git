@@ -319,6 +319,11 @@ var addCmd = &cobra.Command{
 			output.Warn("Failed to update current symlink: %v", err)
 		}
 
+		// The worktree set just grew. Restate it for the shell integration
+		// so a plain cd into the new worktree is detected -- without this
+		// the handler stays blind to it for the rest of the session.
+		refreshRootsCache(fs, hub, hubPath)
+
 		// Emit worktree.created — triggers deps subscriber above.
 		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
 			events.WorktreeCreated, events.Source,

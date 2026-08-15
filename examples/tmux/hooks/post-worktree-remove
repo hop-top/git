@@ -13,14 +13,30 @@ hop_tmux_available || exit 0
 
 session="$(hop_tmux_session_name "${GIT_HOP_REPO_ID:-unknown}")"
 window="$(hop_tmux_window_name "${GIT_HOP_BRANCH:-detached}")"
+dir="${GIT_HOP_WORKTREE_PATH:-}"
 
 # Nothing to kill if the user already closed it by hand. Not an error.
 hop_tmux_has_window "$session" "$window" || exit 0
 
-# The '=' in the target (built by hop_tmux_window_target) is load-bearing
-# here above all else: without it tmux does a prefix match, and killing
-# "feature+a" would kill "feature+ab" instead. That is destroying a user's
-# running work in a window they did not ask to close.
-tmux kill-window -t "$(hop_tmux_window_target "$session" "$window")" >/dev/null 2>&1
+target="$(hop_tmux_window_target "$session" "$window")"
+
+# Two independent safeguards, because this is the one hook that destroys
+# something.
+#
+# First, the '=' in the target (built by hop_tmux_window_target): without
+# it tmux does a prefix match, and killing "feature+a" would kill
+# "feature+ab" instead.
+#
+# Second, the recorded worktree identity. The name is derived and could in
+# principle be attached to a window that is not ours -- renamed by hand,
+# created by another tool, left over from a worktree deleted outside
+# git-hop. Confirming the window agrees about which worktree it serves
+# turns this from "kill whatever answers to this name" into "kill the
+# window for the worktree actually being removed". A window that disagrees
+# is left alone: whatever is running in it belongs to some other worktree,
+# and there is no version of removing THIS one that justifies closing it.
+hop_tmux_identity_matches "$target" "$dir" || exit 0
+
+tmux kill-window -t "$target" >/dev/null 2>&1
 
 exit 0

@@ -2,14 +2,32 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/require"
+
+	"hop.top/git/internal/hooks"
 )
+
+// exitCodeFor maps a runNotifyChdir return to the process status the shell
+// handler will actually see.
+//
+// The cobra RunE raises the directive with os.Exit, which a unit test cannot
+// observe, so the translation is mirrored here. Asserting on the status
+// rather than on the sentinel keeps the tests pinned to the contract the
+// handler depends on instead of to an internal representation.
+func exitCodeFor(err error) int {
+	if errors.Is(err, errNavigationHandled) {
+		return hooks.ExitNavigationHandled
+	}
+	return 0
+}
 
 // notifyFixture is a hub with two registered worktrees and real hook
 // scripts on disk that append their environment to a log.
@@ -202,4 +220,93 @@ func TestNotifyChdir_PathOutsideHubIsQuietlyIgnored(t *testing.T) {
 // announcing a switch that did not happen.
 func TestNotifyChdirCommand_IsHidden(t *testing.T) {
 	require.True(t, notifyChdirCmd.Hidden, "__notify-chdir must stay hidden")
+}
+
+// installExitingHook writes a post-worktree-switch hook that records its
+// invocation and then exits with the given status, standing in for a hook
+// that navigated the user itself.
+func (fx notifyFixture) installExitingHook(t *testing.T, code int) {
+	t.Helper()
+
+	dir := filepath.Join(fx.hubPath, ".git-hop", "hooks")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	script := "#!/bin/sh\n" +
+		"printf 'ran\\n' >> \"" + fx.hookLog + "\"\n" +
+		"exit " + strconv.Itoa(code) + "\n"
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "post-worktree-switch"), []byte(script), 0o755))
+}
+
+// TestNotifyChdir_NavigationHandledPropagates is the regression test for the
+// contamination this fix exists to stop.
+//
+// The directive used to be swallowed here on the reasoning that nothing on
+// this path is waiting to cd. That reading is wrong in one direction: the
+// user's own cd already happened, and a hook that navigates leaves the
+// ORIGINATING shell sitting in the destination alongside the window the hook
+// selected. The shell handler is what can undo that, and its only channel
+// back from this process is the exit status -- so the directive has to
+// survive the trip.
+func TestNotifyChdir_NavigationHandledPropagates(t *testing.T) {
+	fx := newNotifyFixture(t)
+	fx.installExitingHook(t, hooks.ExitNavigationHandled)
+
+	err := runNotifyChdir(afero.NewOsFs(), fx.worktreeB, fx.worktreeA)
+
+	require.Len(t, fx.hookLines(t), 1, "the hook must still run")
+	require.Equal(t, hooks.ExitNavigationHandled, exitCodeFor(err),
+		"a navigating hook's directive must reach the shell handler")
+}
+
+// A hook that finishes normally reports nothing, so the user's cd stands.
+func TestNotifyChdir_PlainSuccessExitsZero(t *testing.T) {
+	fx := newNotifyFixture(t)
+	fx.installExitingHook(t, 0)
+
+	err := runNotifyChdir(afero.NewOsFs(), fx.worktreeB, fx.worktreeA)
+
+	require.Len(t, fx.hookLines(t), 1)
+	require.Equal(t, 0, exitCodeFor(err))
+}
+
+// A FAILING hook must not read as the directive either. The cd already
+// happened and cannot be undone by anyone; turning a broken hook into a
+// restore would move the user somewhere they did not ask to be, on top of
+// the failure they already have.
+func TestNotifyChdir_FailingHookDoesNotRestore(t *testing.T) {
+	fx := newNotifyFixture(t)
+	fx.installExitingHook(t, 1)
+
+	err := runNotifyChdir(afero.NewOsFs(), fx.worktreeB, fx.worktreeA)
+
+	require.Len(t, fx.hookLines(t), 1)
+	require.Equal(t, 0, exitCodeFor(err),
+		"a failing hook must leave the user's cd alone")
+}
+
+// The quiet paths -- stale cache, no hub, movement inside one worktree --
+// stay quiet AND stay at exit 0. Nothing navigated, so nothing is undone.
+func TestNotifyChdir_QuietPathsExitZero(t *testing.T) {
+	fx := newNotifyFixture(t)
+	fx.installExitingHook(t, hooks.ExitNavigationHandled)
+
+	stale := filepath.Join(fx.hubPath, "hops", "gone")
+	require.NoError(t, os.MkdirAll(stale, 0o755))
+	sub := filepath.Join(fx.worktreeA, "internal")
+	require.NoError(t, os.MkdirAll(sub, 0o755))
+	outside, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
+
+	for name, args := range map[string][2]string{
+		"stale cache entry":    {stale, ""},
+		"outside any hub":      {outside, ""},
+		"same worktree in/out": {sub, fx.worktreeA},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, 0, exitCodeFor(runNotifyChdir(afero.NewOsFs(), args[0], args[1])))
+		})
+	}
+
+	require.Empty(t, fx.hookLines(t), "none of these are switches, so no hook may run")
 }

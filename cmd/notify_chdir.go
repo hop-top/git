@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -34,9 +35,29 @@ var notifyChdirCmd = &cobra.Command{
 	Args:   cobra.ExactArgs(1),
 	Hidden: true,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		return runNotifyChdir(afero.NewOsFs(), args[0], previousDir())
+		err := runNotifyChdir(afero.NewOsFs(), args[0], previousDir())
+
+		// os.Exit rather than returning the sentinel, for the same reason
+		// the hop path does it (internal/cli/root.go): every error out of
+		// RunE collapses to exit 1 at cmd.Execute, and 1 is the one status
+		// the handler must not act on. The status IS the payload here, so
+		// it is raised where nothing can flatten it.
+		if errors.Is(err, errNavigationHandled) {
+			os.Exit(hooks.ExitNavigationHandled)
+		}
+		return err
 	},
 }
+
+// errNavigationHandled is how runNotifyChdir reports that the hook
+// navigated the user itself.
+//
+// A sentinel rather than a bare bool return because every other outcome on
+// this path is already "nil, quietly" -- a second return value would put an
+// unused word on every caller to carry a case that fires almost never.
+// Tests read it through exitCodeFor, so the assertion is on the status the
+// shell will see rather than on an internal shape.
+var errNavigationHandled = errors.New("navigation handled by hook")
 
 // previousDir reports the directory the shell was in before this chdir.
 //
@@ -111,18 +132,36 @@ func runNotifyChdir(fs afero.Fs, path string, oldPwd string) error {
 	hookEnv := hooks.SwitchEnvVars(fromBranch, fromWorktreePath, hooks.TriggerChdir)
 
 	runner := hooks.NewRunner(fs)
-	if _, err := runner.ExecuteHookWithDetector(
+	result, err := runner.ExecuteHookWithDetector(
 		"post-worktree-switch", worktreePath, repoID, branch, hookEnv,
-	); err != nil {
+	)
+	if err != nil {
 		// A failing hook must not make the user's cd look broken: the cd
-		// already succeeded and is not undoable. Report and move on.
+		// already succeeded and is not undoable. Report and move on -- and
+		// specifically do NOT report the directive below, because a hook
+		// that failed navigated nothing.
 		fmt.Fprintf(os.Stderr, "warning: hook post-worktree-switch failed: %v\n", err)
+		return nil
 	}
 
-	// The handled-navigation directive is meaningless here. It exists so a
-	// hook can tell the shell WRAPPER not to cd after `git hop <branch>`;
-	// on this path nothing is waiting to cd, because the user already
-	// moved themselves. Swallow it rather than exiting 93 into a prompt.
+	// The handled-navigation directive means the opposite thing here than it
+	// does on the hop path, and both readings need it propagated.
+	//
+	// After `git hop <branch>` the wrapper is ABOUT to cd, and 93 tells it
+	// not to. On this path nothing is waiting to cd -- the user cd'd
+	// themselves, which is exactly the problem. A hook that navigates
+	// (window-per-worktree tmux, say) selects the destination's window while
+	// the shell that ran the cd stays in the originating pane, whose $PWD is
+	// now the destination as well: two places pointing into one worktree.
+	//
+	// The shell handler is the only thing that can put that pane back, and
+	// its only channel back from this process is the exit status. So the
+	// directive is raised rather than swallowed, and the handler reads it as
+	// "undo the cd you just saw".
+	if result.NavigationHandled {
+		return errNavigationHandled
+	}
+
 	return nil
 }
 

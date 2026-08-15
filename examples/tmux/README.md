@@ -8,9 +8,9 @@ The model:
 
 ```
 repository        -> tmux session
-  main worktree   -> main window
-  feature/a       -> feature+a window
-  fix/b           -> fix+b window
+  main worktree   -> main-<hash> window
+  feature/a       -> feature+a-<hash> window
+  fix/b           -> fix+b-<hash> window
 ```
 
 One session per repository, one window per worktree. Creating a worktree
@@ -66,14 +66,18 @@ Names are computed from `GIT_HOP_REPO_ID` and `GIT_HOP_BRANCH` alone, by
 a pure function in `_hop-tmux-lib.sh`. No shared state on disk: each hook
 runs in its own process and derives the same target independently.
 
+A name is a readable **stem** plus a short **hash** of the original,
+unsanitized string:
+
 | Source | Becomes |
 |---|---|
-| `github.com/acme/widgets` | session `hop+github_com+acme+widgets` |
-| `main` | window `main` |
-| `feature/a` | window `feature+a` |
-| `fix/b` | window `fix+b` |
+| `github.com/acme/widgets` | session `hop+github_com+acme+widgets-445fca` |
+| `main` | window `main-8bfbc8` |
+| `feature/a` | window `feature+a-9805bc` |
+| `fix/b` | window `fix+b-...` |
 
-The transform is `/` and `:` → `+`, and `.` → `_`.
+The stem transform is `/` and `:` → `+`, and `.` → `_`. The suffix is six
+hex digits from `cksum` (POSIX CRC-32) over the input before any folding.
 
 ### Why those characters
 
@@ -96,10 +100,63 @@ in branch names — so the result stays readable. `feature+a` is
 recognisably `feature/a` when you are scanning a status bar for the right
 window, which is the whole point of naming windows after branches.
 
-The mapping is not strictly injective: a branch containing a literal `+`
-collides with one containing `/`. That is a deliberate trade — legibility
-matters more than bijectivity for a string a human reads, and branches
-differing only that way do not occur in practice.
+### Why the hash suffix
+
+The stem alone is **not injective**, and that is a correctness bug rather
+than a cosmetic one. `/` and a literal `+` both fold to `+`, so
+`feature/a` and `feature+a` produce an identical stem.
+
+`post-worktree-remove` kills a window **by name**. Under a colliding
+stem, `git hop remove feature/a` kills `feature+a`'s window and every
+process running in it — the dev server, the REPL, the editor with unsaved
+buffers — silently, with no error, because from tmux's side the kill did
+exactly what it was told. "Branch pairs like that are rare" is no defence
+when the failure destroys work the user never asked to close.
+
+Hashing the original string before folding makes distinct inputs produce
+distinct names, so the collision is unreachable. Six characters buys that,
+and the stem keeps the status bar scannable.
+
+`cksum` is the hash because POSIX specifies it and it is present
+everywhere. `shasum` / `sha1sum` / `md5` / `md5sum` are none of them
+universally available — the names differ between macOS and Linux, and any
+of them can be missing from a stripped `PATH`. A naming function that
+silently changed its answer depending on which tool it found would break
+the one invariant the library exists to hold: every hook, in its own
+process, deriving the identical target from the identical input with no
+shared state on disk. The arithmetic and hex formatting are shell
+builtins, so `cksum` is the only external command involved. If it is
+missing, the bare stem is emitted — degrading to the old behaviour rather
+than to names two hooks disagree about.
+
+### Worktree identity (`@hop-worktree`)
+
+The window name is a *derived* string; the worktree path is the fact.
+Even with a collision-free transform a name can end up on the wrong
+window — renamed by hand, created by another tool, left over from a
+worktree deleted outside git-hop. The operation that pays for that is
+`kill-window`.
+
+So every window these hooks create records its worktree in a tmux user
+option:
+
+```bash
+tmux set-option -w -t '=sess:=win' @hop-worktree /path/to/worktree
+```
+
+`post-worktree-remove` reads it back and refuses to kill a window whose
+recorded worktree disagrees with the one being removed. That turns "kill
+whatever answers to this name" into "kill the window for the worktree
+actually being removed".
+
+A window carrying **no** record is still killable: windows predating the
+option, and hand-made windows that happen to match, would otherwise become
+permanently unremovable, and a hook that refuses to clean up is its own
+bug. Absent means unknown and falls back to the name match. Only a
+recorded identity that actively disagrees blocks the kill.
+
+`post-worktree-move` re-stamps the option at the new name, so the safety
+check does not turn into a leak after a rename.
 
 ### The `=` prefix is load-bearing
 
@@ -112,20 +169,38 @@ close, along with whatever was running in it.
 
 ## Behaviour without tmux
 
-Every script is a silent no-op — exit 0, nothing on stderr — when either:
+Every script is a silent no-op — exit 0, nothing on stderr — when tmux is
+not installed. Installing these hooks on a machine without tmux changes
+nothing observable.
 
-- tmux is not installed, or
-- no tmux server is running.
+Note what is *not* required: `$TMUX` being set. `$TMUX` is only set for
+processes running inside a tmux pane, and a user with a session attached
+in another terminal still wants `git hop add` typed at a plain shell to
+create the window. "Am I inside tmux" is the wrong question.
 
-The second condition matters as much as the first. `tmux new-session`
-*starts* a server if none is running, so a hook that skipped the check
-would spawn a background tmux for a user who has never opened one. The
-guard is "is there a server to talk to", asked by querying it, not "am I
-inside tmux" — a user with tmux running in another terminal still wants
-`git hop add` typed at a plain shell to create the window.
+### Cold start
 
-Installing these hooks on a machine without tmux changes nothing
-observable.
+Also not required: a server already running. `tmux new-session` starts
+one, and here that is correct rather than a surprise.
+
+Copying these scripts into a hook directory is a deliberate act meaning
+"manage my worktrees as tmux windows" — there is no way to install them by
+accident, so the consent is explicit. Gating on a live server would make
+the *create* half of `hop_tmux_ensure_session` unreachable from cold: the
+first `git hop add` after a reboot would find no server, decline to start
+one, and silently produce no window, while the second — run after the user
+happened to open tmux by hand — would work. A hook whose effect depends on
+whether some unrelated terminal is open is worse than either consistent
+behaviour.
+
+The read-only hooks stay cheap regardless. `post-worktree-remove` and the
+rename path of `post-worktree-move` do their existence checks first, which
+fail against a dead server, so they exit without creating anything — a
+`git hop remove` never spawns a server just to discover there is nothing
+to kill.
+
+`post-worktree-switch` still exits **0, not 93**, whenever it did not
+actually navigate (see below).
 
 ## The navigation directive (exit 93)
 
@@ -165,19 +240,84 @@ implementations and prove nothing.
 
 ## Tests
 
+Two suites, both driving a real tmux server on a private socket
+(`tmux -L`) so neither can disturb your own sessions; both kill their
+server on exit, including on failure.
+
+### `./test.sh` — the hooks in isolation
+
 ```bash
 ./test.sh
 ```
 
-Drives the real hooks against a real tmux server on a private socket
-(`tmux -L`), so it cannot disturb your own sessions; the server is killed
-on exit. It covers session/window creation, sibling windows surviving,
-the exit-93 contract, selective removal, in-place rename with pane-PID
-survival, slash-bearing branch names, and silent no-op with tmux absent
-and with no server running.
+Invokes the hook scripts directly with a hand-built `GIT_HOP_*`
+environment. Needs only bash, the hooks, and tmux, so it runs in a couple
+of seconds — the fast feedback loop while editing a hook.
 
-The suite is mutation-tested: making the switch hook exit 0, or making the
-move hook kill-and-recreate, both turn it red.
+It covers session/window creation, sibling windows surviving, the exit-93
+contract, selective removal, in-place rename with pane-PID survival,
+slash-bearing branch names, name distinctness and stability,
+identity-checked removal, cold start against a dead server, and silent
+no-op with tmux absent.
+
+Expected names are derived through the library rather than hardcoded, so
+the suite pins the required *behaviour* — the same input reaching the same
+window — instead of today's output format. The properties of the names
+themselves are asserted directly.
+
+### `./test-binary.sh` — the hooks through the real binary
+
+```bash
+./test-binary.sh
+```
+
+Composes the layers `test.sh` stubs: a real `git hop` binary, real hook
+dispatch, these hooks installed at the hopspace level exactly as the
+install instructions above describe, and a real tmux server.
+
+`test.sh` answers "given this environment, does the hook do the right
+thing to tmux". It cannot answer whether git-hop actually *hands* the
+hooks that environment, whether hook resolution finds the files where this
+README says to put them, or whether the switch hook's exit code survives
+the trip back out through the binary's own process status. Those are the
+questions this suite exists for, and every branch name, worktree path and
+repo ID in it is whatever git-hop computes rather than something the test
+made up.
+
+It additionally needs a Go toolchain and git: it builds the binary from
+the project root, stamped with a version unique to that run, and asserts
+`git hop --version` reports the stamp — so a system-installed `git-hop`
+answering instead would fail the suite rather than silently make it
+vacuous. The build lands outside the worktree.
+
+Covered: `git hop add` creating the window in the right worktree,
+`git hop <branch>` both selecting the window and exiting 93 (and exiting 0
+when tmux is unavailable), `git hop remove` killing only its own window
+with a colliding sibling's process left running, `git hop move` preserving
+pane PID and window ID while `@hop-worktree` follows the rename, and cold
+start against a socket that has never had a server.
+
+### Mutation testing
+
+Both suites are mutation-tested. Each of these turns `test.sh` red:
+
+- making the switch hook exit 0 instead of 93
+- making the move hook kill-and-recreate instead of rename
+- restoring the colliding sanitize (drops the hash suffix) — fails the
+  distinctness assertions *and* the one proving a sibling's running
+  process survives a removal
+- restoring the `list-sessions` gate in `hop_tmux_available` — fails cold
+  start
+- dropping the `@hop-worktree` check from `post-worktree-remove` — fails
+  the mismatched-identity assertion
+
+And each of these turns `test-binary.sh` red:
+
+- restoring the colliding sanitize — the two branches collapse onto one
+  window, failing the distinctness guards *and* the assertion that the
+  removed branch's window and process are actually gone
+- restoring the `list-sessions` gate — cold start creates no server and no
+  window
 
 ## Known gaps
 
