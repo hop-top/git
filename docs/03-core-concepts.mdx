@@ -54,7 +54,6 @@ my-project/
     feature-y -> ~/.local/share/git-hop/github.com/org/my-project/feature-y
   hop.json
   .git-hop/         # repo-level hook overrides (shared across worktrees)
-  .claude/          # per-repo Claude Code settings (shared)
 ```
 
 ### Hub Configuration
@@ -77,9 +76,9 @@ belongs at the **hub root**, not inside any individual worktree under
 
 git-hop's own example is `.git-hop/hooks/` — a hook placed at the hub
 root applies to every worktree, because `FindHookFile` walks upward
-from the worktree looking for one. Editor and tool configs that are
-per-repo rather than per-branch (`.claude/`, and the equivalents for
-whatever tooling you use) follow the same pattern.
+from the worktree looking for one. Any tool that resolves its config by
+walking up from the current directory behaves the same way, so its
+per-repo state can live at the hub root too.
 
 **Rationale**: this state describes the repository as a whole, so it is
 equally relevant whether you are working on `main` or `feature-x`.
