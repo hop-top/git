@@ -62,11 +62,19 @@ type MockGit struct {
 type MockCommandRunner struct {
 	Responses map[string]string
 	Errors    map[string]error
+
+	// Calls records every Run/RunInDir invocation using the same key
+	// format as Responses/Errors ("<dir>:<cmd> <args>" for RunInDir,
+	// "<cmd> <args>" for Run). Tests that must prove a probe was NOT
+	// issued assert on this slice: a bare result check cannot tell
+	// "never asked" from "asked and got a falsy answer".
+	Calls []string
 }
 
 // Run executes a mocked command and returns configured responses or errors
 func (m *MockCommandRunner) Run(cmd string, args ...string) (string, error) {
 	key := cmd + " " + joinArgs(args)
+	m.Calls = append(m.Calls, key)
 	if m.Errors != nil && m.Errors[key] != nil {
 		return "", m.Errors[key]
 	}
@@ -79,6 +87,7 @@ func (m *MockCommandRunner) Run(cmd string, args ...string) (string, error) {
 // RunInDir executes a mocked command in a specific directory
 func (m *MockCommandRunner) RunInDir(dir string, cmd string, args ...string) (string, error) {
 	key := dir + ":" + cmd + " " + joinArgs(args)
+	m.Calls = append(m.Calls, key)
 	if m.Errors != nil && m.Errors[key] != nil {
 		return "", m.Errors[key]
 	}
@@ -86,6 +95,16 @@ func (m *MockCommandRunner) RunInDir(dir string, cmd string, args ...string) (st
 		return m.Responses[key], nil
 	}
 	return "", nil
+}
+
+// CalledWith reports whether key was recorded by Run or RunInDir.
+func (m *MockCommandRunner) CalledWith(key string) bool {
+	for _, c := range m.Calls {
+		if c == key {
+			return true
+		}
+	}
+	return false
 }
 
 // joinArgs concatenates command arguments into a single string
