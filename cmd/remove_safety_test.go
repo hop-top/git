@@ -203,3 +203,222 @@ func TestInspectBranchSafety_DefaultBranchSelf(t *testing.T) {
 		t.Fatalf("expected Merged=false for branch==default, got %+v", got)
 	}
 }
+
+// contentProbeKey builds the mock key for the content-equivalence probe
+// issued by branchContentMergedInto.
+func contentProbeKey(dir, branch, defaultBranch string) string {
+	return dir + ":git merge-tree --write-tree " + defaultBranch + " " + branch
+}
+
+// defaultTreeKey builds the mock key for the default branch's tree OID
+// lookup that the content probe compares against.
+func defaultTreeKey(dir, defaultBranch string) string {
+	return dir + ":git rev-parse " + defaultBranch + "^{tree}"
+}
+
+// TestBranchContentMergedInto pins the content-equivalence probe in
+// isolation. The probe answers "would merging <branch> into <default>
+// change <default>?" by merging the two in memory and comparing the
+// resulting tree against the default branch's current tree. Equal trees
+// mean the branch contributes nothing default does not already have —
+// which is exactly the shape a squash- or rebase-merge leaves behind.
+//
+// Every error path must resolve to false. A false positive here causes
+// `git hop remove --merged` to delete unmerged work, so uncertainty
+// (missing ref, git too old to support --write-tree, unreadable tree)
+// must never read as "merged".
+func TestBranchContentMergedInto(t *testing.T) {
+	const (
+		dir    = "/wt"
+		branch = "feature"
+		def    = "main"
+	)
+	mergeKey := contentProbeKey(dir, branch, def)
+	treeKey := defaultTreeKey(dir, def)
+
+	cases := []struct {
+		name      string
+		responses map[string]string
+		errs      map[string]error
+		want      bool
+	}{
+		{
+			name: "merged tree equals default tree: content already in default",
+			responses: map[string]string{
+				mergeKey: "aaa111",
+				treeKey:  "aaa111",
+			},
+			want: true,
+		},
+		{
+			name: "merged tree differs: branch adds content default lacks",
+			responses: map[string]string{
+				mergeKey: "bbb222",
+				treeKey:  "aaa111",
+			},
+			want: false,
+		},
+		{
+			name: "merge-tree fails (missing default ref): fail closed",
+			responses: map[string]string{
+				treeKey: "aaa111",
+			},
+			errs: map[string]error{
+				mergeKey: errors.New("not something we can merge"),
+			},
+			want: false,
+		},
+		{
+			name: "merge-tree unsupported by old git: fail closed",
+			responses: map[string]string{
+				treeKey: "aaa111",
+			},
+			errs: map[string]error{
+				mergeKey: errors.New("unknown option `write-tree'"),
+			},
+			want: false,
+		},
+		{
+			name: "default tree lookup fails: fail closed",
+			responses: map[string]string{
+				mergeKey: "aaa111",
+			},
+			errs: map[string]error{
+				treeKey: errors.New("unknown revision"),
+			},
+			want: false,
+		},
+		{
+			name: "empty merge-tree output: fail closed",
+			responses: map[string]string{
+				mergeKey: "   ",
+				treeKey:  "   ",
+			},
+			want: false,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := mocks.NewMockGit()
+			for k, v := range tc.responses {
+				m.Runner.Responses[k] = v
+			}
+			for k, e := range tc.errs {
+				m.Runner.Errors[k] = e
+			}
+
+			if got := branchContentMergedInto(m, dir, branch, def); got != tc.want {
+				t.Fatalf("branchContentMergedInto = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestInspectBranchSafety_ContentEquivalenceFallback covers the probe
+// ordering: topology (rev-list) first, content-equivalence only as a
+// fallback when topology says "ahead". The "never called" cases are
+// asserted against recorded calls, not just the resulting boolean —
+// a boolean alone cannot distinguish "skipped the probe" from "ran the
+// probe and got false".
+func TestInspectBranchSafety_ContentEquivalenceFallback(t *testing.T) {
+	const (
+		dir    = "/wt"
+		branch = "feature"
+		def    = "main"
+	)
+	mergedKey := dir + ":git rev-list --count " + branch + " --not " + def
+	verifyOriginKey := dir + ":git rev-parse --verify refs/remotes/origin/" + branch
+	mergeKey := contentProbeKey(dir, branch, def)
+	treeKey := defaultTreeKey(dir, def)
+
+	t.Run("topology merged: content probe never runs", func(t *testing.T) {
+		m := mocks.NewMockGit()
+		m.Runner.Responses[mergedKey] = "0"
+		m.Runner.Errors[verifyOriginKey] = errors.New("unknown ref")
+		// Wire the content probe to claim "merged" so that if it were
+		// consulted the assertion below would still pass — only the call
+		// record can prove it was skipped.
+		m.Runner.Responses[mergeKey] = "aaa111"
+		m.Runner.Responses[treeKey] = "aaa111"
+
+		got := inspectBranchSafety(m, dir, branch, def)
+		if !got.Merged {
+			t.Fatalf("expected Merged=true from topology, got %+v", got)
+		}
+		if m.Runner.CalledWith(mergeKey) {
+			t.Fatalf("content probe ran despite topology already proving merged; calls=%v", m.Runner.Calls)
+		}
+	})
+
+	t.Run("topology unmerged, content equivalent: merged", func(t *testing.T) {
+		m := mocks.NewMockGit()
+		m.Runner.Responses[mergedKey] = "3"
+		m.Runner.Errors[verifyOriginKey] = errors.New("unknown ref")
+		m.Runner.Responses[mergeKey] = "aaa111"
+		m.Runner.Responses[treeKey] = "aaa111"
+
+		got := inspectBranchSafety(m, dir, branch, def)
+		if !got.Merged {
+			t.Fatalf("expected Merged=true from content equivalence, got %+v", got)
+		}
+		if !m.Runner.CalledWith(mergeKey) {
+			t.Fatalf("content probe never ran; calls=%v", m.Runner.Calls)
+		}
+	})
+
+	t.Run("topology unmerged, content differs: not merged", func(t *testing.T) {
+		m := mocks.NewMockGit()
+		m.Runner.Responses[mergedKey] = "3"
+		m.Runner.Errors[verifyOriginKey] = errors.New("unknown ref")
+		m.Runner.Responses[mergeKey] = "bbb222"
+		m.Runner.Responses[treeKey] = "aaa111"
+
+		got := inspectBranchSafety(m, dir, branch, def)
+		if got.Merged {
+			t.Fatalf("expected Merged=false when branch adds content, got %+v", got)
+		}
+	})
+
+	t.Run("topology unmerged, content probe errors: fail closed", func(t *testing.T) {
+		m := mocks.NewMockGit()
+		m.Runner.Responses[mergedKey] = "3"
+		m.Runner.Errors[verifyOriginKey] = errors.New("unknown ref")
+		m.Runner.Errors[mergeKey] = errors.New("not something we can merge")
+		m.Runner.Responses[treeKey] = "aaa111"
+
+		got := inspectBranchSafety(m, dir, branch, def)
+		if got.Merged {
+			t.Fatalf("expected Merged=false when the content probe errors, got %+v", got)
+		}
+	})
+
+	t.Run("empty default branch: no merge probes at all", func(t *testing.T) {
+		m := mocks.NewMockGit()
+		m.Runner.Responses[mergeKey] = "aaa111"
+		m.Runner.Responses[treeKey] = "aaa111"
+
+		got := inspectBranchSafety(m, dir, branch, "")
+		if got.Merged {
+			t.Fatalf("expected Merged=false with no default branch, got %+v", got)
+		}
+		if m.Runner.CalledWith(mergeKey) {
+			t.Fatalf("content probe ran with an empty default branch; calls=%v", m.Runner.Calls)
+		}
+	})
+
+	t.Run("branch is the default branch: no merge probes at all", func(t *testing.T) {
+		m := mocks.NewMockGit()
+		selfMergeKey := contentProbeKey(dir, def, def)
+		m.Runner.Responses[selfMergeKey] = "aaa111"
+		m.Runner.Responses[treeKey] = "aaa111"
+
+		got := inspectBranchSafety(m, dir, def, def)
+		if got.Merged {
+			t.Fatalf("expected Merged=false for branch==default, got %+v", got)
+		}
+		if m.Runner.CalledWith(selfMergeKey) {
+			t.Fatalf("content probe ran for branch==default; calls=%v", m.Runner.Calls)
+		}
+	})
+}

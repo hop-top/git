@@ -174,6 +174,137 @@ func TestCollectMergedCandidates_MissingPathSkipped(t *testing.T) {
 	assert.Contains(t, skipped[0].Reason, "git hop prune")
 }
 
+// TestCollectMergedCandidates_SquashMerged: a branch whose commits are
+// still ahead of default in topology (rev-list count > 0) but whose
+// content default already carries must be collected. This is the
+// squash-merge shape: the PR merge replayed the branch's changes as one
+// new commit on default, so the original tip is unreachable and the
+// topology probe alone reports the branch as unmerged forever.
+func TestCollectMergedCandidates_SquashMerged(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/h"
+	hub := newHubWithBranches(t, fs, hubPath, []string{"main", "feature"}, nil)
+
+	featureDir := filepath.Join(hubPath, "hops", "feature")
+	mock := mocks.NewMockGit()
+	mock.StatusOverride = &git.Status{Branch: "feature", Clean: true}
+	// Topology says ahead — the squash commit has a different SHA.
+	stubMergedCommands(mock, featureDir, "feature", "main", false)
+	// Content says the merge would be a no-op: merging feature into main
+	// yields main's existing tree.
+	mock.Runner.Responses[featureDir+":git merge-tree --write-tree main feature"] = "sametree"
+	mock.Runner.Responses[featureDir+":git rev-parse main^{tree}"] = "sametree"
+
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+
+	require.Len(t, toRemove, 1, "squash-merged branch must be collected despite being ahead in topology")
+	assert.Equal(t, "feature", toRemove[0].Branch)
+	assert.Empty(t, skipped)
+}
+
+// TestCollectMergedCandidates_RealGit_SquashMerged is the end-to-end
+// proof against real git: squash-merge a branch into main, leave the
+// branch behind, and confirm the candidate collection still finds it.
+// The mock-based test above pins the wiring; this one pins that the
+// probe's actual git invocation behaves as assumed.
+func TestCollectMergedCandidates_RealGit_SquashMerged(t *testing.T) {
+	hubPath := t.TempDir()
+
+	gitRun(t, hubPath, "init", "-b", "main")
+	gitRun(t, hubPath, "config", "user.email", "test@example.com")
+	gitRun(t, hubPath, "config", "user.name", "Test User")
+	require.NoError(t, os.WriteFile(filepath.Join(hubPath, "README.md"), []byte("v1"), 0644))
+	gitRun(t, hubPath, "add", ".")
+	gitRun(t, hubPath, "commit", "-m", "initial")
+
+	// Feature branch with two commits.
+	gitRun(t, hubPath, "checkout", "-b", "feature")
+	require.NoError(t, os.WriteFile(filepath.Join(hubPath, "feat.txt"), []byte("a"), 0644))
+	gitRun(t, hubPath, "add", ".")
+	gitRun(t, hubPath, "commit", "-m", "feature part 1")
+	require.NoError(t, os.WriteFile(filepath.Join(hubPath, "feat.txt"), []byte("a\nb"), 0644))
+	gitRun(t, hubPath, "add", ".")
+	gitRun(t, hubPath, "commit", "-m", "feature part 2")
+
+	// Squash-merge into main: one new commit carrying the same content
+	// under a different SHA, exactly what a GitHub squash merge produces.
+	gitRun(t, hubPath, "checkout", "main")
+	gitRun(t, hubPath, "merge", "--squash", "feature")
+	gitRun(t, hubPath, "commit", "-m", "squash: feature work")
+
+	// Main moves on independently, so a naive tip-to-tip tree comparison
+	// would also report a difference.
+	require.NoError(t, os.WriteFile(filepath.Join(hubPath, "README.md"), []byte("v2"), 0644))
+	gitRun(t, hubPath, "add", ".")
+	gitRun(t, hubPath, "commit", "-m", "unrelated main work")
+
+	// Sanity: topology still reports the branch ahead.
+	ahead := gitRun(t, hubPath, "rev-list", "--count", "feature", "--not", "main")
+	require.Equal(t, "2", ahead, "squash-merged branch must still look ahead in topology")
+
+	featurePath := filepath.Join(hubPath, "hops", "feature")
+	gitRun(t, hubPath, "worktree", "add", featurePath, "feature")
+
+	fs := afero.NewOsFs()
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil {
+		hub, err = hop.CreateHub(fs, hubPath, "git@github.com:test/repo.git", "test", "repo", "main")
+		require.NoError(t, err)
+	}
+	require.NoError(t, hub.AddBranch("main", "main", "."))
+	require.NoError(t, hub.AddBranch("feature", "feature", filepath.Join("hops", "feature")))
+
+	g := git.New()
+	toRemove, skipped := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree")
+
+	require.Len(t, toRemove, 1, "squash-merged feature must be collected")
+	assert.Equal(t, "feature", toRemove[0].Branch)
+	assert.Empty(t, skipped)
+}
+
+// TestCollectMergedCandidates_RealGit_UnmergedNotCollected is the
+// safety counterpart to the squash-merge test: a branch carrying work
+// that never landed on default must never be collected, or
+// `git hop remove --merged` would delete it.
+func TestCollectMergedCandidates_RealGit_UnmergedNotCollected(t *testing.T) {
+	hubPath := t.TempDir()
+
+	gitRun(t, hubPath, "init", "-b", "main")
+	gitRun(t, hubPath, "config", "user.email", "test@example.com")
+	gitRun(t, hubPath, "config", "user.name", "Test User")
+	require.NoError(t, os.WriteFile(filepath.Join(hubPath, "README.md"), []byte("v1"), 0644))
+	gitRun(t, hubPath, "add", ".")
+	gitRun(t, hubPath, "commit", "-m", "initial")
+
+	// A branch with genuinely unshipped work.
+	gitRun(t, hubPath, "checkout", "-b", "live")
+	require.NoError(t, os.WriteFile(filepath.Join(hubPath, "live.txt"), []byte("unshipped"), 0644))
+	gitRun(t, hubPath, "add", ".")
+	gitRun(t, hubPath, "commit", "-m", "work in progress")
+
+	gitRun(t, hubPath, "checkout", "main")
+	require.NoError(t, os.WriteFile(filepath.Join(hubPath, "README.md"), []byte("v2"), 0644))
+	gitRun(t, hubPath, "add", ".")
+	gitRun(t, hubPath, "commit", "-m", "main moves on")
+
+	livePath := filepath.Join(hubPath, "hops", "live")
+	gitRun(t, hubPath, "worktree", "add", livePath, "live")
+
+	fs := afero.NewOsFs()
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil {
+		hub, err = hop.CreateHub(fs, hubPath, "git@github.com:test/repo.git", "test", "repo", "main")
+		require.NoError(t, err)
+	}
+	require.NoError(t, hub.AddBranch("main", "main", "."))
+	require.NoError(t, hub.AddBranch("live", "live", filepath.Join("hops", "live")))
+
+	g := git.New()
+	toRemove, _ := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree")
+
+	assert.Empty(t, toRemove, "a branch with unshipped work must never be a removal candidate")
+}
+
 // TestRemoveMergedFlag_Wired ensures the --merged flag exists, is a
 // bool, and defaults to false.
 func TestRemoveMergedFlag_Wired(t *testing.T) {
