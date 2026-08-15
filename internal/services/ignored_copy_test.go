@@ -67,6 +67,21 @@ func TestListIgnoredEntries_UsesTraditionalMode(t *testing.T) {
 	if !strings.Contains(joined, "--ignored=traditional") {
 		t.Errorf("expected --ignored=traditional, got %q", joined)
 	}
+	// -unormal must be passed EXPLICITLY, not merely left un-overridden.
+	// git's traditional mode collapses an ignored directory to one entry
+	// only while untracked-files is "normal"; under "all" it expands to
+	// every file inside. Both guards decide per entry, so that expansion
+	// defeats them: a large directory arrives as many individually
+	// under-threshold files, and a deps-managed node_modules arrives as
+	// node_modules/... paths that no longer match the managed name.
+	//
+	// A user with status.showUntrackedFiles=all in their git config hits
+	// exactly that, so omitting the flag is not equivalent to passing it —
+	// asserting only that "-uall" is absent would let the flag be dropped
+	// and still pass. Verified: the command-line flag overrides the config.
+	if !strings.Contains(joined, "-unormal") {
+		t.Errorf("expected explicit -unormal so status.showUntrackedFiles=all cannot expand ignored dirs per-file, got %q", joined)
+	}
 	if strings.Contains(joined, "-uall") {
 		t.Errorf("-uall forces the per-file expansion traditional avoids: %q", joined)
 	}
