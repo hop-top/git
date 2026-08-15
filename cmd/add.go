@@ -30,6 +30,14 @@ import (
 // addFromFlag holds the --from CLI flag value.
 var addFromFlag string
 
+// addCopyIgnoredFlag / addNoCopyIgnoredFlag hold the two halves of the
+// --[no-]copy-ignored pair. Each is only consulted when explicitly set;
+// with neither given, hop.add.copyIgnored decides.
+var (
+	addCopyIgnoredFlag   bool
+	addNoCopyIgnoredFlag bool
+)
+
 var addCmd = &cobra.Command{
 	Use:     "add [branch]",
 	Aliases: []string{"create", "new"},
@@ -136,6 +144,15 @@ var addCmd = &cobra.Command{
 			}
 			output.Fatal("Failed to create worktree: %v", err)
 		}
+
+		// Seed the new worktree with the ignored local state (.env files,
+		// tool config, local caches) of the worktree it was forked from.
+		// Runs before the deps subscriber so any deps-managed path is still
+		// absent here and the symlink EnsureDeps creates lands on a clean
+		// name. Never fatal — see copyIgnoredIntoWorktree.
+		copyIgnoredIntoWorktree(fs, g, hub, hopspacePath, worktreePath, startPoint,
+			globalConfig, config.NewGitConfig(),
+			copyIgnoredOverride(cmd, addCopyIgnoredFlag, addNoCopyIgnoredFlag))
 
 		// Execute post-worktree-add hook
 		if _, err := hookRunner.ExecuteHookWithDetector("post-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
@@ -444,5 +461,13 @@ func init() {
 	cli.RootCmd.AddCommand(addCmd)
 	addCmd.Flags().StringVar(&addFromFlag, "from", "",
 		"start-point for the new branch (branch name, ref, SHA, or 'initial' for the root commit)")
+	// pflag has no auto-negation, so both halves of the --[no-]copy-ignored
+	// pair are registered explicitly (same shape as --no-prompt /
+	// --no-verify elsewhere). Neither flag set leaves the decision to
+	// hop.add.copyIgnored.
+	addCmd.Flags().BoolVar(&addCopyIgnoredFlag, "copy-ignored", true,
+		"copy git-ignored files from the source worktree into the new one")
+	addCmd.Flags().BoolVar(&addNoCopyIgnoredFlag, "no-copy-ignored", false,
+		"do not copy git-ignored files into the new worktree")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames
 }
