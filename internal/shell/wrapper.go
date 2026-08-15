@@ -13,7 +13,7 @@ import (
 // outdated wrapper and it gets rewritten. Bump it whenever the emitted
 // shell changes behaviour, otherwise every existing installation keeps
 // the old code forever while reporting itself correctly configured.
-const wrapperVersion = 3
+const wrapperVersion = 4
 
 // GenerateWrapperFunction generates a shell function wrapper for git-hop
 // that enables automatic directory switching after successful commands
@@ -40,6 +40,7 @@ func GenerateWrapperFunction(shellType string) string {
 // to approximate one on PROMPT_COMMAND. Hence the shellType parameter.
 func generateBashZshWrapper(shellType string) string {
 	return fmt.Sprintf(`
+%s
 %s
 git-hop() {
     local should_cd=false
@@ -69,6 +70,14 @@ git-hop() {
     # Call the real binary with wrapper marker
     HOP_WRAPPER_ACTIVE=1 command git hop "$@"
     local exit_code=$?
+
+    # The binary may have changed which worktrees exist (add, remove,
+    # move, clone) and rewritten the roots cache. Re-slurp it so this
+    # session's chdir handler sees the new set. Unconditional on purpose:
+    # deciding whether this particular invocation mutated anything costs
+    # more shell than just reading the file, and this runs at the rate the
+    # user types "git hop", not at the rate their prompt draws.
+    %s
 
     # A post-worktree-switch hook exiting %d means it already moved the
     # user (a tmux window switch, say). The command SUCCEEDED, so report 0
@@ -114,7 +123,8 @@ _git_hop() {
 complete -o default -F _git_hop git-hop
 %s
 %s
-`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+`, versionedBeginMarker(), rootsReloadFor(shellType), reloadFunc,
+		hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
 		chdirHandlerFor(shellType), wrapperEndMarker)
 }
 
@@ -125,6 +135,7 @@ complete -o default -F _git_hop git-hop
 // propagates untouched. Only the glob and conditional syntax differ.
 func generateFishWrapper() string {
 	return fmt.Sprintf(`
+%s
 %s
 function git-hop
     set -l should_cd false
@@ -150,6 +161,12 @@ function git-hop
     # Call the real binary
     env HOP_WRAPPER_ACTIVE=1 command git hop $argv
     set -l exit_code $status
+
+    # The binary may have changed which worktrees exist and rewritten the
+    # roots cache. Re-slurp it so this session's chdir handler sees the new
+    # set. See the bash/zsh block for why this lives here and not on the
+    # prompt path.
+    %s
 
     # A post-worktree-switch hook exiting %d means it already moved the
     # user (a tmux window switch, say). The command SUCCEEDED, so report 0
@@ -182,6 +199,7 @@ end
 complete -c git-hop -f -a '(command git-hop __complete (commandline -cop) 2>/dev/null)'
 %s
 %s
-`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+`, versionedBeginMarker(), rootsReloadFor("fish"), reloadFunc,
+		hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
 		chdirHandlerFor("fish"), wrapperEndMarker)
 }

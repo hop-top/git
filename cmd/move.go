@@ -195,6 +195,11 @@ var moveCmd = &cobra.Command{
 			output.Warn("Hook post-worktree-move failed: %v", err)
 		}
 
+		// A rename retires one path and introduces another, so both halves
+		// have to reach the shell integration. MoveWorktree already rekeyed
+		// the in-memory hub, so restating it here is enough.
+		refreshRootsCache(fs, hub, hubPath)
+
 		// Emit worktree.moved event.
 		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
 			events.WorktreeMoved, events.Source,

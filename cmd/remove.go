@@ -414,6 +414,12 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 		output.Warn("Failed to update current symlink: %v", err)
 	}
 
+	// The branch is already out of hub.Config above, so restating the set
+	// here is what actually retires the removed path from the shell
+	// integration's cache. Left stale, the handler keeps announcing a
+	// worktree that no longer exists on every cd into its old location.
+	refreshRootsCache(fs, hub, hubPath)
+
 	// Emit worktree.removed event.
 	_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
 		events.WorktreeRemoved, events.Source,
