@@ -275,6 +275,32 @@ func TestValidateHookName_Move(t *testing.T) {
 	}
 }
 
+func TestValidateHookName_CloneAndSwitch(t *testing.T) {
+	tests := []struct {
+		name     string
+		hookName string
+		valid    bool
+	}{
+		{"valid pre-clone", "pre-clone", true},
+		{"valid post-clone", "post-clone", true},
+		{"valid pre-worktree-switch", "pre-worktree-switch", true},
+		{"valid post-worktree-switch", "post-worktree-switch", true},
+		{"invalid pre-worktree-checkout", "pre-worktree-checkout", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHookName(tt.hookName)
+			if tt.valid && err != nil {
+				t.Errorf("expected %q to be valid, got: %v", tt.hookName, err)
+			}
+			if !tt.valid && err == nil {
+				t.Errorf("expected %q to be invalid, got nil error", tt.hookName)
+			}
+		})
+	}
+}
+
 // Helper functions for tests
 func getTestDataHome() string {
 	return "/tmp/test-data-home"
