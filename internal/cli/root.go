@@ -15,6 +15,7 @@ import (
 	"hop.top/kit/go/runtime/bus"
 
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/detector"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -234,12 +235,45 @@ Worktree Mode:
 			}
 
 			worktreePath := branch.Path
+
+			// Capture from-state BEFORE any mutation. A missing or dangling
+			// `current` symlink is normal (first hop after a clone), so both
+			// fields stay empty and SwitchEnvVars omits them entirely.
+			fromBranch, fromWorktreePath := resolveSwitchFromState(fs, hubPath, hub)
+
+			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+			detectorMgr := detector.NewManager(fs, g)
+			detectorMgr.Register(detector.NewGitFlowNextDetector(g))
+			detectorMgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
+			branchInfo, err := detectorMgr.DetectBranch(arg, hubPath)
+			if err != nil {
+				output.Fatal("Branch type detector failed: %v", err)
+			}
+			hookEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
+			for k, v := range hooks.SwitchEnvVars(fromBranch, fromWorktreePath, hooks.TriggerHop) {
+				hookEnv[k] = v
+			}
+
+			// A non-zero pre-worktree-switch aborts before the symlink write.
+			// The symlink is the load-bearing step: os.Chdir below only moves
+			// this process, while the shell wrapper navigates by resolving
+			// `current` after the binary exits.
+			hookRunner := hooks.NewRunner(fs)
+			if err := hookRunner.ExecuteHookWithDetector("pre-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
+				output.Fatal("Hook pre-worktree-switch failed: %v", err)
+			}
+
 			if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
 				output.Warn("Failed to update current symlink: %v", err)
 			}
 
 			if err := os.Chdir(worktreePath); err != nil {
 				output.Fatal("Failed to change directory to worktree '%s': %v", worktreePath, err)
+			}
+
+			if err := hookRunner.ExecuteHookWithDetector("post-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
+				output.Warn("Hook post-worktree-switch failed: %v", err)
 			}
 
 			output.Success("Switched to worktree '%s'", arg)
@@ -271,6 +305,41 @@ Worktree Mode:
 	RootCmd.Flags().MarkHidden("admin")
 
 	_ = Root.Viper.BindPFlag("json", pf.Lookup("json"))
+}
+
+// resolveSwitchFromState reads the hub's `current` symlink and reverse-maps
+// its target to a registered branch name. GetCurrentSymlink returns a target
+// relative to the hub, so it is joined against hubPath and made absolute
+// before comparison — the same resolve-and-compare idiom the move command
+// uses.
+//
+// Returns two empty strings when `current` is absent or dangling. That is the
+// expected state on the first hop after a clone and is never an error: hook
+// env simply carries no from-state.
+func resolveSwitchFromState(fs afero.Fs, hubPath string, hub *hop.Hub) (fromBranch string, fromWorktreePath string) {
+	target, err := hop.GetCurrentSymlink(fs, hubPath)
+	if err != nil {
+		return "", ""
+	}
+
+	absTarget, err := filepath.Abs(filepath.Join(hubPath, target))
+	if err != nil {
+		return "", ""
+	}
+
+	for name, b := range hub.Config.Branches {
+		abs, err := filepath.Abs(b.Path)
+		if err != nil {
+			continue
+		}
+		if abs == absTarget {
+			return name, absTarget
+		}
+	}
+
+	// Symlink resolves outside the registered branch set (dangling or stale
+	// entry): report the path, leave the branch unknown.
+	return "", absTarget
 }
 
 func printAdminHelp(cmd *cobra.Command) {
