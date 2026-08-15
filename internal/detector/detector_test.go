@@ -356,4 +356,17 @@ func TestManager_GetDetectorEnvVars(t *testing.T) {
 			}
 		}
 	})
+
+	t.Run("empty start point omitted", func(t *testing.T) {
+		info := &BranchTypeInfo{
+			Type:   "feature",
+			Name:   "my-feature",
+			Source: "generic",
+		}
+		env := m.GetDetectorEnvVars(info)
+
+		if _, ok := env["GIT_HOP_BRANCH_START_POINT"]; ok {
+			t.Errorf("Expected GIT_HOP_BRANCH_START_POINT to be absent entirely, but key exists (value '%s')", env["GIT_HOP_BRANCH_START_POINT"])
+		}
+	})
 }
