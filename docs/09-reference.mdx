@@ -381,6 +381,24 @@ Docker-specific configuration.
 | `GIT_HOP_CACHE_DIR` | Cache directory | `$XDG_CACHE_HOME/git-hop` |
 | `GIT_HOP_LOG_LEVEL` | Log level | `info` |
 | `GIT_HOP_AUTO_ENV_START` | Auto-start behavior | `detect` |
+| `GIT_HOP_NO_CHDIR_HOOK` | When non-empty, the shell integration stops dispatching `post-worktree-switch` on a plain `cd` | unset |
+
+### Variables set for hooks
+
+git-hop exports these *into* lifecycle hooks; you do not set them yourself. See [Hooks System](https://github.com/jadb/git-hop/blob/main/docs/hooks.md).
+
+| Variable | Set for | Description |
+|----------|---------|-------------|
+| `GIT_HOP_HOOK_NAME` | all (except `pre/post-repair`) | Name of the hook being run |
+| `GIT_HOP_WORKTREE_PATH` | all (except `pre/post-repair`) | Absolute worktree path |
+| `GIT_HOP_REPO_ID` | all (except `pre/post-repair`) | `<host>/<org>/<repo>` |
+| `GIT_HOP_BRANCH` | all (except `pre/post-repair`) | Branch name; empty for `pre-clone` |
+| `GIT_HOP_OLD_BRANCH`, `GIT_HOP_NEW_BRANCH`, `GIT_HOP_OLD_PATH`, `GIT_HOP_NEW_PATH` | `pre/post-worktree-move` | Before/after branch and path |
+| `GIT_HOP_FROM_BRANCH`, `GIT_HOP_FROM_WORKTREE_PATH` | `pre/post-worktree-switch` | Worktree being left. **Absent, not empty**, when there is no previous worktree |
+| `GIT_HOP_TRIGGER` | `pre/post-worktree-switch` | `hop` or `chdir` |
+| `GIT_HOP_BRANCH_TYPE`, `GIT_HOP_BRANCH_NAME`, `GIT_HOP_BRANCH_PREFIX`, `GIT_HOP_BRANCH_PARENT`, `GIT_HOP_BRANCH_START_POINT`, `GIT_HOP_DETECTOR_SOURCE` | hooks dispatched with a detector | Branch-type detection results |
+
+`pre-repair` and `post-repair` receive **none** of the above; they run with the hub as their working directory and the ambient environment only.
 
 ### Data Directory Resolution
 
@@ -406,6 +424,7 @@ git-hop uses the following priority for determining the data directory:
 | 6 | Configuration error |
 | 7 | Service error |
 | 8 | Git error |
+| 93 | `git hop <branch>` succeeded and a `post-worktree-switch` hook reported that it handled navigation itself. The shell wrapper turns this into 0 and skips its `cd`. Not a failure |
 
 ## What's Next?
 
