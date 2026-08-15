@@ -52,8 +52,10 @@ func ShouldPromptForSetup(cfg *config.GlobalConfig, fs afero.Fs) bool {
 			rcPath = GetRcFile(shellType)
 		}
 
-		// Prompt if not actually installed (maybe user removed it)
-		return !IsWrapperInstalled(fs, rcPath)
+		// Prompt if not actually installed (maybe user removed it), or
+		// if the installed block is from an older generation -- a stale
+		// wrapper is not a working wrapper.
+		return !IsWrapperCurrent(fs, rcPath)
 	}
 
 	return false
