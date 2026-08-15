@@ -216,7 +216,8 @@ Worktree Mode:
 				Overwrite: hooksOverwrite,
 				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite),
 			}
-			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig, hookOpts); err != nil {
+			dispatch := buildHookDispatch(fs)
+			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig, hookOpts, dispatch); err != nil {
 				output.Fatal("Clone failed: %v", err)
 			}
 			return
@@ -413,6 +414,26 @@ func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(strin
 				res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
 		}
 		return nil
+	}
+}
+
+// buildHookDispatch returns the clone lifecycle-hook dispatch callbacks,
+// each closing over a hooks.Runner.
+//
+// Lives here for the same reason as buildHookMirrorRun: internal/hooks
+// already imports internal/hop, so internal/hop cannot call the hook
+// runner directly without creating an import cycle. The caller injects.
+func buildHookDispatch(fs afero.Fs) hop.HookDispatchOptions {
+	runner := hooks.NewRunner(fs)
+	dispatchTo := func(hookName string) func(string, string, string) error {
+		return func(path, repoID, branch string) error {
+			return runner.ExecuteHook(hookName, path, repoID, branch)
+		}
+	}
+	return hop.HookDispatchOptions{
+		PreClone:        dispatchTo("pre-clone"),
+		PostWorktreeAdd: dispatchTo("post-worktree-add"),
+		PostClone:       dispatchTo("post-clone"),
 	}
 }
 
