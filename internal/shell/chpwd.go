@@ -3,6 +3,8 @@ package shell
 import (
 	"fmt"
 	"strings"
+
+	"hop.top/git/internal/hooks"
 )
 
 // The chdir handler runs on EVERY shell prompt. Everything below is
@@ -159,8 +161,36 @@ __git_hop_chdir() {
 
     # Confirmed transition into a different registered worktree. Now --
     # and only now -- is a fork justified.
+    #
+    # The exit status is the one channel back from the binary (both streams
+    # are discarded), and %d on it means a hook navigated the user itself.
+    # See the restore below for why that has to be acted on.
     %s=1
     GIT_HOP_CHDIR_FROM="$__prev_root" command git hop %s "$__hit" >/dev/null 2>&1
+    local __status=$?
+
+    # The hook moved the user somewhere else -- a tmux window-per-worktree
+    # integration selecting the destination's window, say. This shell is
+    # still in the ORIGINATING pane, and the cd that triggered all of this
+    # has already pointed that pane at the destination too. Left alone, the
+    # origin's window and the destination's window both sit in the
+    # destination. Putting this shell back is what keeps one pane per
+    # worktree.
+    #
+    # Guarded on the origin still existing: a hook is free to remove the
+    # worktree it navigated away from, and cd'ing into a deleted directory
+    # would strand the user somewhere worse than the contamination.
+    #
+    # Inside the busy guard on purpose. The restore is itself a cd between
+    # two registered worktrees -- the exact transition this handler fires on
+    # -- so outside the guard it re-enters, notifies for the origin, and
+    # bounces back again. The cost lands only here, on a path that has
+    # already paid for a fork.
+    if [[ $__status -eq %d && -n "$__prev_root" && -d "$__prev_root" ]]; then
+        builtin cd "$__prev_root" 2>/dev/null || true
+        %s="$PWD"
+    fi
+
     %s=""
     return 0
 }
@@ -180,7 +210,10 @@ esac
 		rootsVar,
 		rootsVar,
 		rootsVar,
-		busyVar, NotifyChdirCommand, busyVar,
+		hooks.ExitNavigationHandled,
+		busyVar, NotifyChdirCommand,
+		hooks.ExitNavigationHandled, lastPwdVar,
+		busyVar,
 	)
 }
 
@@ -241,8 +274,29 @@ __git_hop_chdir() {
         [[ "$__prev_root" == "$__hit" ]] && return 0
     fi
 
+    # Exit status is the one channel back from the binary; %d means a hook
+    # navigated the user itself. See the restore below.
     %s=1
     GIT_HOP_CHDIR_FROM="$__prev_root" command git hop %s "$__hit" >/dev/null 2>&1
+    local __status=$?
+
+    # The hook moved the user somewhere else -- a tmux window-per-worktree
+    # integration selecting the destination's window, say. This shell is
+    # still in the ORIGINATING pane, whose $PWD the user's cd already
+    # pointed at the destination, so both windows end up in one worktree
+    # unless this pane goes back.
+    #
+    # Guarded on the origin still existing: cd'ing into a directory a hook
+    # removed would strand the user somewhere worse than the contamination.
+    #
+    # Inside the busy guard on purpose, and zsh is the shell that proves the
+    # point: chpwd fires synchronously on this cd, so unguarded the restore
+    # re-enters, notifies for the origin, and bounces back forever.
+    if [[ $__status -eq %d && -n "$__prev_root" && -d "$__prev_root" ]]; then
+        builtin cd "$__prev_root" 2>/dev/null || true
+        %s="$PWD"
+    fi
+
     %s=""
     return 0
 }
@@ -259,7 +313,10 @@ add-zsh-hook chpwd __git_hop_chdir
 		rootsVar,
 		rootsVar,
 		rootsVar,
-		busyVar, NotifyChdirCommand, busyVar,
+		hooks.ExitNavigationHandled,
+		busyVar, NotifyChdirCommand,
+		hooks.ExitNavigationHandled, lastPwdVar,
+		busyVar,
 	)
 }
 
@@ -338,8 +395,32 @@ function __git_hop_chdir --on-variable PWD
         end
     end
 
+    # Exit status is the one channel back from the binary; %d means a hook
+    # navigated the user itself. See the restore below.
     set -g %s 1
     GIT_HOP_CHDIR_FROM="$__prev_root" command git hop %s "$__hit" >/dev/null 2>&1
+    set -l __status $status
+
+    # The hook moved the user somewhere else -- a tmux window-per-worktree
+    # integration selecting the destination's window, say. This shell is
+    # still in the ORIGINATING pane, whose $PWD the user's cd already
+    # pointed at the destination, so both windows end up in one worktree
+    # unless this pane goes back.
+    #
+    # Guarded on the origin still existing: cd'ing into a directory a hook
+    # removed would strand the user somewhere worse than the contamination.
+    #
+    # Inside the busy guard on purpose -- the restore is itself a cd between
+    # registered worktrees, which is the transition this handler fires on.
+    #
+    # The cd goes through fish's builtin keyword so a user-defined cd
+    # function cannot intercept the restore, matching how the notify call
+    # above reaches the real binary through command.
+    if test $__status -eq %d; and test -n "$__prev_root"; and test -d "$__prev_root"
+        builtin cd "$__prev_root" 2>/dev/null; or true
+        set -g %s $PWD
+    end
+
     set -g %s ""
     return 0
 end
@@ -354,7 +435,10 @@ end
 		rootsVar,
 		rootsVar,
 		rootsVar,
-		busyVar, NotifyChdirCommand, busyVar,
+		hooks.ExitNavigationHandled,
+		busyVar, NotifyChdirCommand,
+		hooks.ExitNavigationHandled, lastPwdVar,
+		busyVar,
 	)
 }
 
