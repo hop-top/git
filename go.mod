@@ -1,6 +1,6 @@
 module hop.top/git
 
-go 1.26.1
+go 1.26.6
 
 require (
 	charm.land/bubbles/v2 v2.1.0
@@ -15,7 +15,7 @@ require (
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/sys v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
-	hop.top/kit v0.4.0-alpha.3
+	hop.top/kit v0.5.0-alpha.1
 	hop.top/xrr v0.1.0-alpha.3
 )
 
@@ -50,7 +50,7 @@ require (
 	github.com/invopop/jsonschema v0.13.0 // indirect
 	github.com/lucasb-eyer/go-colorful v1.4.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/mattn/go-isatty v0.0.21 // indirect
+	github.com/mattn/go-isatty v0.0.22 // indirect
 	github.com/mattn/go-runewidth v0.0.23 // indirect
 	github.com/miekg/dns v1.1.55 // indirect
 	github.com/muesli/cancelreader v0.2.2 // indirect
@@ -78,7 +78,7 @@ require (
 	golang.org/x/sync v0.22.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
 	golang.org/x/tools v0.48.0 // indirect
-	hop.top/uri v0.2.0-alpha.0 // indirect
+	hop.top/cite v0.1.0 // indirect
 	modernc.org/libc v1.72.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
