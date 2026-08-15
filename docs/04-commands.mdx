@@ -740,9 +740,20 @@ Tunables read via `git config`:
 
 ### Hooks
 
-Mutating runs fire `pre-repair` (advisory; non-zero exit aborts) and
-`post-repair` (informational). Place executables at
-`$XDG_CONFIG_HOME/git-hop/hooks/{pre,post}-repair`.
+Mutating runs fire `pre-repair` (a non-zero exit aborts before any
+mutation) and `post-repair` (informational; its exit status is ignored).
+
+Both resolve through the standard three-level search — repo, hopspace,
+then global — like every other hook. See [Hooks](./hooks) for the full
+priority order.
+
+Two details specific to repair. `GIT_HOP_WORKTREE_PATH` is the hub, not a
+worktree, since a repair run spans every branch; `GIT_HOP_BRANCH` is
+empty for the same reason. And `GIT_HOP_REPO_ID` is resolved at dispatch
+time, so `pre-repair` sees the possibly-damaged config while
+`post-repair` sees the repaired one — it is empty rather than partial
+when the hub config cannot yield an org and repo, which is exactly the
+state `pre-repair` exists to inspect.
 
 ## Command Aliases
 
