@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
-	"syscall"
 	"time"
 )
 
@@ -76,18 +75,14 @@ func runNetwork(dir string, args ...string) (string, error) {
 	// Killing only the direct child leaves that grandchild holding the
 	// output pipes, and Cmd.Run blocks on them until it exits on its
 	// own — the deadline would expire without unblocking the caller.
-	// Run the command in its own process group and signal the whole
-	// group so the transport dies with it.
-	c.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	c.Cancel = func() error {
-		if c.Process == nil {
-			return nil
-		}
-		// Negative pid targets the process group.
-		return syscall.Kill(-c.Process.Pid, syscall.SIGKILL)
-	}
+	// Group the command with its transport so cancellation reaches
+	// both. The mechanism is platform-specific; see network_unix.go and
+	// network_windows.go for what each guarantees. The returned hook
+	// must run immediately after Start.
+	afterStart := configureProcessGroup(c)
 	// Belt and braces: if a transport somehow survives the group kill,
-	// stop waiting on the inherited pipes shortly after.
+	// stop waiting on the inherited pipes shortly after. This is what
+	// bounds Wait on Windows, where the tree kill is best-effort.
 	c.WaitDelay = 2 * time.Second
 	c.Env = os.Environ()
 	// Never block on an interactive credential prompt: a prompt on a
@@ -104,7 +99,14 @@ func runNetwork(dir string, args ...string) (string, error) {
 	c.Stdout = &stdout
 	c.Stderr = &stderr
 
-	err := c.Run()
+	// Start/Wait rather than Run so the process is reachable in between:
+	// on Windows the tree kill can only be armed once a pid exists.
+	if err := c.Start(); err != nil {
+		return "", fmt.Errorf("git command failed: git %v: %s", args, err)
+	}
+	afterStart()
+
+	err := c.Wait()
 	if ctx.Err() == context.DeadlineExceeded {
 		return "", fmt.Errorf("%w after %s: git %s; retry with a reachable remote or raise 'git config %s'",
 			ErrNetworkTimeout, timeout, strings.Join(args, " "), networkTimeoutConfigKey)

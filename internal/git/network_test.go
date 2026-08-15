@@ -93,6 +93,35 @@ func TestRunNetwork_TimesOut(t *testing.T) {
 	}
 }
 
+// TestConfigureProcessGroup_SetsCancel verifies the platform hook wires
+// up both halves of cancellation on every OS: a SysProcAttr that groups
+// the command with its transport, and a Cancel func for the deadline to
+// invoke. The kill mechanism itself is platform-specific and asserted
+// only through the timeout test below; this pins the contract that
+// runNetwork depends on so a future port cannot silently drop it.
+func TestConfigureProcessGroup_SetsCancel(t *testing.T) {
+	c := exec.Command("git", "version")
+	afterStart := configureProcessGroup(c)
+	if afterStart == nil {
+		t.Fatal("post-start hook is nil; runNetwork would panic calling it")
+	}
+	// Safe to run without a started process: the deadline can fire at
+	// any point, including before Start succeeds.
+	afterStart()
+
+	if c.SysProcAttr == nil {
+		t.Error("SysProcAttr not set; command would not be grouped with its transport")
+	}
+	if c.Cancel == nil {
+		t.Fatal("Cancel not set; deadline would not signal the process")
+	}
+	// Cancel must tolerate a command that was never started rather than
+	// panicking on a nil Process — runNetwork can cancel at any point.
+	if err := c.Cancel(); err != nil {
+		t.Errorf("Cancel on unstarted command: got %v, want nil", err)
+	}
+}
+
 // TestRunNetwork_SucceedsAgainstLocalRemote verifies the bounded path
 // still returns real output on a reachable remote.
 func TestRunNetwork_SucceedsAgainstLocalRemote(t *testing.T) {
