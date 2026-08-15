@@ -236,7 +236,7 @@ Worktree Mode:
 				output.Fatal("Worktree '%s' does not exist. Use 'git hop add %s' to create it.", arg, arg)
 			}
 
-			worktreePath := branch.Path
+			worktreePath := resolveSwitchWorktreePath(branch, hubPath)
 
 			// Capture from-state BEFORE any mutation. A missing or dangling
 			// `current` symlink is normal (first hop after a clone), so both
@@ -337,11 +337,24 @@ func publishWorktreeSwitched(b bus.Bus, hub *hop.Hub, hubPath, branch, worktreeP
 	))
 }
 
+// resolveSwitchWorktreePath turns a registered branch's recorded path into the
+// absolute worktree path the switch drives everything off: the `current`
+// symlink write, os.Chdir, and GIT_HOP_WORKTREE_PATH in the switch hooks.
+//
+// hop.json normally stores a path relative to the hub ("hops/main"), so it must
+// be anchored on the hub rather than the process cwd — otherwise hopping from a
+// subdirectory computes a worktree path that does not exist. Absolute recorded
+// paths pass through untouched.
+func resolveSwitchWorktreePath(branch config.HubBranch, hubPath string) string {
+	return config.ResolveWorktreePath(branch.Path, hubPath)
+}
+
 // resolveSwitchFromState reads the hub's `current` symlink and reverse-maps
 // its target to a registered branch name. GetCurrentSymlink returns a target
 // relative to the hub, so it is joined against hubPath and made absolute
 // before comparison — the same resolve-and-compare idiom the move command
-// uses.
+// uses. Registered branch paths go through the same hub-anchored resolution,
+// keeping both sides of the comparison independent of the process cwd.
 //
 // Returns two empty strings when `current` is absent or dangling. That is the
 // expected state on the first hop after a clone and is never an error: hook
@@ -358,7 +371,7 @@ func resolveSwitchFromState(fs afero.Fs, hubPath string, hub *hop.Hub) (fromBran
 	}
 
 	for name, b := range hub.Config.Branches {
-		abs, err := filepath.Abs(b.Path)
+		abs, err := filepath.Abs(config.ResolveWorktreePath(b.Path, hubPath))
 		if err != nil {
 			continue
 		}
