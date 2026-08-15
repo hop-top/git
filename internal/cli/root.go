@@ -296,7 +296,7 @@ Worktree Mode:
 			// this process, while the shell wrapper navigates by resolving
 			// `current` after the binary exits.
 			hookRunner := hooks.NewRunner(fs)
-			if err := hookRunner.ExecuteHookWithDetector("pre-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
+			if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
 				output.Fatal("Hook pre-worktree-switch failed: %v", err)
 			}
 
@@ -308,7 +308,8 @@ Worktree Mode:
 				output.Fatal("Failed to change directory to worktree '%s': %v", worktreePath, err)
 			}
 
-			if err := hookRunner.ExecuteHookWithDetector("post-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
+			postResult, err := hookRunner.ExecuteHookWithDetector("post-worktree-switch", worktreePath, repoID, arg, hookEnv)
+			if err != nil {
 				output.Warn("Hook post-worktree-switch failed: %v", err)
 			}
 
@@ -319,6 +320,16 @@ Worktree Mode:
 
 			output.Success("Switched to worktree '%s'", arg)
 			output.Info("Path: %s", worktreePath)
+
+			// The hook navigated the user itself. The switch SUCCEEDED --
+			// symlink written, event published, success reported above --
+			// so this is not an error path. Re-raising the hook's status as
+			// git-hop's own is the only way the signal survives: the shell
+			// wrapper reads `$?` and nothing else, and it decides whether to
+			// cd only after this process is gone.
+			if postResult.NavigationHandled {
+				os.Exit(hooks.ExitNavigationHandled)
+			}
 			return
 		}
 
@@ -503,7 +514,8 @@ func buildHookDispatch(fs afero.Fs) hop.HookDispatchOptions {
 	runner := hooks.NewRunner(fs)
 	dispatchTo := func(hookName string) func(string, string, string) error {
 		return func(path, repoID, branch string) error {
-			return runner.ExecuteHook(hookName, path, repoID, branch)
+			_, err := runner.ExecuteHook(hookName, path, repoID, branch)
+			return err
 		}
 	}
 	return hop.HookDispatchOptions{

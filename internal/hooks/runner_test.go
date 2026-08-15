@@ -127,7 +127,7 @@ func TestExecuteHook_Success(t *testing.T) {
 	require.NoError(t, fs.MkdirAll(filepath.Dir(hookPath), 0755))
 	require.NoError(t, afero.WriteFile(fs, hookPath, []byte("#!/bin/bash\nexit 0"), 0755))
 
-	err := runner.ExecuteHook("pre-worktree-add", worktreePath, "github.com/test/repo", "main")
+	_, err := runner.ExecuteHook("pre-worktree-add", worktreePath, "github.com/test/repo", "main")
 
 	// Note: This test may fail in memfs since we can't actually execute the script
 	// In real implementation, we would use os.Exec which won't work with afero
@@ -411,7 +411,7 @@ func TestSwitchEnvVars_ReachHookViaDetectorEnv(t *testing.T) {
 		detectorEnv[k] = v
 	}
 
-	if err := runner.ExecuteHookWithDetector("post-worktree-add", worktreePath, "github.com/test/repo", "feature-x", detectorEnv); err != nil {
+	if _, err := runner.ExecuteHookWithDetector("post-worktree-add", worktreePath, "github.com/test/repo", "feature-x", detectorEnv); err != nil {
 		t.Fatalf("ExecuteHookWithDetector failed: %v", err)
 	}
 
