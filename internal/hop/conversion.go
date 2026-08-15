@@ -249,7 +249,7 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 // renames children individually, so untracked source content moves over and
 // tracked content is left as the worktree placed it. Files always rename
 // last-write-wins (source overwrites dest) to preserve any local modifications
-// that haven't been committed. T-0166.
+// that haven't been committed.
 func (c *Converter) moveFilesToWorktree(src, dst string) error {
 	entries, err := afero.ReadDir(c.fs, src)
 	if err != nil {

@@ -85,7 +85,7 @@ Production code constructs concrete impls; tests inject fakes. Add new dependenc
 - **Flags**: prefer git-standard names — `-n/--dry-run`, `-v/--verbose`, `-q/--quiet`, `-f/--force`, `--porcelain` (NOT `--json` for stable scripting; use `--format=<fmt>` if structured output is needed alongside porcelain), `--[no-]progress`, `--color[=<when>]`, `--`.
 - **Mutate by default**: destructive commands mutate by default with safety nets (backup, dirty-check, lock); preview is opt-in via `-n`. This matches `git gc`, `git fsck`, `git prune`, `git worktree repair`.
 - **Config**: tunables go through `git config hop.<command>.<key>`, not env-only or flag-only. Read via the existing `internal/config` package.
-- **Hooks**: mutating commands fire `pre-<cmd>` / `post-<cmd>` hooks installed under `.git/hooks/` via `internal/hooks`.
+- **Hooks**: mutating commands fire `pre-<cmd>` / `post-<cmd>` hooks via `internal/hooks`. These are git-hop's own lifecycle hooks, NOT git's — they never live in `.git/hooks/`. `FindHookFile` resolves repo (`<worktree>/.git-hop/hooks/`, plus a parent-dir walk) → hopspace (`$GIT_HOP_DATA_HOME/<host>/<org>/<repo>/hooks/`) → global (`$XDG_CONFIG_HOME/git-hop/hooks/`). `ValidHookNames` in `internal/hooks/runner.go` is the authority on which names exist; see `docs/hooks.md` for which are actually dispatched and at which levels.
 - **No emoji, no Unicode boxes** in output. Plain ASCII like git itself.
 
 ## Domain-specific gotchas
@@ -98,6 +98,6 @@ Production code constructs concrete impls; tests inject fakes. Add new dependenc
 
 ## Conventions
 
-- Commits: Conventional Commits (`feat|fix|refactor|build|ci|chore|docs|style|perf|test`). Squash-merges from PRs are common — `cmd/status.go` should detect them but currently doesn't (T-0066).
+- Commits: Conventional Commits (`feat|fix|refactor|build|ci|chore|docs|style|perf|test`). Squash-merges from PRs are common — `cmd/status.go` should detect them but currently doesn't.
 - File size budget: keep files under ~500 LOC; split when they grow.
 - Never delete or rename unexpected files/state without asking — assume another agent or in-progress work created them.

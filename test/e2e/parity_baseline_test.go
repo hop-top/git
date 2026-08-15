@@ -114,7 +114,17 @@ func assertGolden(t *testing.T, path, actual string) {
 		t.Fatalf("read golden: %v", err)
 	}
 	if string(golden) != actual {
-		t.Errorf("output differs from golden %s\n--- golden ---\n%s\n--- actual ---\n%s",
+		// UPDATE_GOLDEN must also refresh an EXISTING golden, not just
+		// create a missing one. Regenerating after an intentional
+		// help-output change is the common case; without this branch the
+		// documented escape hatch only ever worked on a first run, and
+		// the fixture had to be hand-edited.
+		if os.Getenv("UPDATE_GOLDEN") == "1" {
+			t.Logf("Golden differs; updating: %s", path)
+			updateGolden(t, path, actual)
+			return
+		}
+		t.Errorf("output differs from golden %s (set UPDATE_GOLDEN=1 to refresh)\n--- golden ---\n%s\n--- actual ---\n%s",
 			path, string(golden), actual)
 	}
 }

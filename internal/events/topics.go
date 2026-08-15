@@ -7,10 +7,11 @@ import "hop.top/kit/go/runtime/bus"
 // Topic constants follow kit's 4-segment grammar:
 // [source].[category].[object].[action] with a past-tense action.
 const (
-	WorktreeCreated bus.Topic = "git.runtime.worktree.created"
-	WorktreeRemoved bus.Topic = "git.runtime.worktree.removed"
-	WorktreeMerged  bus.Topic = "git.runtime.worktree.merged"
-	WorktreeMoved   bus.Topic = "git.runtime.worktree.moved"
+	WorktreeCreated  bus.Topic = "git.runtime.worktree.created"
+	WorktreeRemoved  bus.Topic = "git.runtime.worktree.removed"
+	WorktreeMerged   bus.Topic = "git.runtime.worktree.merged"
+	WorktreeMoved    bus.Topic = "git.runtime.worktree.moved"
+	WorktreeSwitched bus.Topic = "git.runtime.worktree.switched"
 
 	EnvStarted bus.Topic = "git.runtime.env.started"
 	EnvStopped bus.Topic = "git.runtime.env.stopped"

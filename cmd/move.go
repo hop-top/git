@@ -120,7 +120,7 @@ var moveCmd = &cobra.Command{
 
 		// Pre-worktree-move hook
 		hookRunner := hooks.NewRunner(fs)
-		if err := hookRunner.ExecuteHookWithDetector("pre-worktree-move", oldPath, repoID, oldBranch, detectorEnv); err != nil {
+		if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-move", oldPath, repoID, oldBranch, detectorEnv); err != nil {
 			output.Fatal("Hook pre-worktree-move failed: %v", err)
 		}
 
@@ -191,7 +191,7 @@ var moveCmd = &cobra.Command{
 		}
 
 		// Post-worktree-move hook
-		if err := hookRunner.ExecuteHookWithDetector("post-worktree-move", actualNewPath, repoID, newBranch, detectorEnv); err != nil {
+		if _, err := hookRunner.ExecuteHookWithDetector("post-worktree-move", actualNewPath, repoID, newBranch, detectorEnv); err != nil {
 			output.Warn("Hook post-worktree-move failed: %v", err)
 		}
 

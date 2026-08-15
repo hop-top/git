@@ -3,6 +3,8 @@ package hooks
 import (
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -125,7 +127,7 @@ func TestExecuteHook_Success(t *testing.T) {
 	require.NoError(t, fs.MkdirAll(filepath.Dir(hookPath), 0755))
 	require.NoError(t, afero.WriteFile(fs, hookPath, []byte("#!/bin/bash\nexit 0"), 0755))
 
-	err := runner.ExecuteHook("pre-worktree-add", worktreePath, "github.com/test/repo", "main")
+	_, err := runner.ExecuteHook("pre-worktree-add", worktreePath, "github.com/test/repo", "main")
 
 	// Note: This test may fail in memfs since we can't actually execute the script
 	// In real implementation, we would use os.Exec which won't work with afero
@@ -272,6 +274,173 @@ func TestValidateHookName_Move(t *testing.T) {
 	}
 	if err := ValidateHookName("post-worktree-move"); err != nil {
 		t.Errorf("expected post-worktree-move to be valid, got: %v", err)
+	}
+}
+
+func TestValidateHookName_CloneAndSwitch(t *testing.T) {
+	tests := []struct {
+		name     string
+		hookName string
+		valid    bool
+	}{
+		{"valid pre-clone", "pre-clone", true},
+		{"valid post-clone", "post-clone", true},
+		{"valid pre-worktree-switch", "pre-worktree-switch", true},
+		{"valid post-worktree-switch", "post-worktree-switch", true},
+		{"invalid pre-worktree-checkout", "pre-worktree-checkout", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := ValidateHookName(tt.hookName)
+			if tt.valid && err != nil {
+				t.Errorf("expected %q to be valid, got: %v", tt.hookName, err)
+			}
+			if !tt.valid && err == nil {
+				t.Errorf("expected %q to be invalid, got nil error", tt.hookName)
+			}
+		})
+	}
+}
+
+func TestSwitchEnvVars(t *testing.T) {
+	tests := []struct {
+		name             string
+		fromBranch       string
+		fromWorktreePath string
+		trigger          string
+		wantPresent      map[string]string
+		wantAbsent       []string
+	}{
+		{
+			name:             "all set",
+			fromBranch:       "main",
+			fromWorktreePath: "/absolute/old/path",
+			trigger:          TriggerHop,
+			wantPresent: map[string]string{
+				"GIT_HOP_FROM_BRANCH":        "main",
+				"GIT_HOP_FROM_WORKTREE_PATH": "/absolute/old/path",
+				"GIT_HOP_TRIGGER":            "hop",
+			},
+		},
+		{
+			name: "none set",
+			wantAbsent: []string{
+				"GIT_HOP_FROM_BRANCH",
+				"GIT_HOP_FROM_WORKTREE_PATH",
+				"GIT_HOP_TRIGGER",
+			},
+		},
+		{
+			name:    "trigger only, empty from-state omitted",
+			trigger: TriggerChdir,
+			wantPresent: map[string]string{
+				"GIT_HOP_TRIGGER": "chdir",
+			},
+			wantAbsent: []string{
+				"GIT_HOP_FROM_BRANCH",
+				"GIT_HOP_FROM_WORKTREE_PATH",
+			},
+		},
+		{
+			name:             "from-worktree without from-branch",
+			fromWorktreePath: "/absolute/old/path",
+			trigger:          TriggerHop,
+			wantPresent: map[string]string{
+				"GIT_HOP_FROM_WORKTREE_PATH": "/absolute/old/path",
+				"GIT_HOP_TRIGGER":            "hop",
+			},
+			wantAbsent: []string{"GIT_HOP_FROM_BRANCH"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			env := SwitchEnvVars(tt.fromBranch, tt.fromWorktreePath, tt.trigger)
+
+			for key, want := range tt.wantPresent {
+				got, ok := env[key]
+				if !ok {
+					t.Errorf("expected %s to be present, but it was absent", key)
+					continue
+				}
+				if got != want {
+					t.Errorf("expected %s=%q, got %q", key, want, got)
+				}
+			}
+
+			for _, key := range tt.wantAbsent {
+				if _, ok := env[key]; ok {
+					t.Errorf("expected %s to be absent entirely, but key exists (value %q)", key, env[key])
+				}
+			}
+
+			if len(env) != len(tt.wantPresent) {
+				t.Errorf("expected exactly %d keys, got %d: %v", len(tt.wantPresent), len(env), env)
+			}
+		})
+	}
+}
+
+// TestSwitchEnvVars_ReachHookViaDetectorEnv pins the transport: switch vars
+// merged into the detector map must arrive in the hook process, and omitted
+// keys must not be exported at all. Uses a real filesystem because the hook
+// is genuinely executed.
+func TestSwitchEnvVars_ReachHookViaDetectorEnv(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("shell hook script not portable to windows")
+	}
+
+	worktreePath := t.TempDir()
+	hookPath := filepath.Join(worktreePath, ".git-hop", "hooks", "post-worktree-add")
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0755); err != nil {
+		t.Fatalf("mkdir hooks dir: %v", err)
+	}
+
+	outPath := filepath.Join(worktreePath, "env.out")
+	script := "#!/bin/sh\nenv > " + outPath + "\n"
+	if err := os.WriteFile(hookPath, []byte(script), 0755); err != nil {
+		t.Fatalf("write hook: %v", err)
+	}
+
+	runner := NewRunner(afero.NewOsFs())
+
+	// trigger set, from-branch empty -> from-branch must not reach the hook
+	detectorEnv := map[string]string{"GIT_HOP_BRANCH_TYPE": "feature"}
+	for k, v := range SwitchEnvVars("", "/absolute/old/path", TriggerChdir) {
+		detectorEnv[k] = v
+	}
+
+	if _, err := runner.ExecuteHookWithDetector("post-worktree-add", worktreePath, "github.com/test/repo", "feature-x", detectorEnv); err != nil {
+		t.Fatalf("ExecuteHookWithDetector failed: %v", err)
+	}
+
+	raw, err := os.ReadFile(outPath)
+	if err != nil {
+		t.Fatalf("read hook env output: %v", err)
+	}
+
+	childEnv := make(map[string]string)
+	for _, line := range strings.Split(string(raw), "\n") {
+		key, value, found := strings.Cut(line, "=")
+		if found {
+			childEnv[key] = value
+		}
+	}
+
+	// Base vars still flow through unchanged.
+	if got := childEnv["GIT_HOP_BRANCH"]; got != "feature-x" {
+		t.Errorf("expected GIT_HOP_BRANCH=feature-x in hook env, got %q", got)
+	}
+
+	if got := childEnv["GIT_HOP_TRIGGER"]; got != "chdir" {
+		t.Errorf("expected GIT_HOP_TRIGGER=chdir in hook env, got %q", got)
+	}
+	if got := childEnv["GIT_HOP_FROM_WORKTREE_PATH"]; got != "/absolute/old/path" {
+		t.Errorf("expected GIT_HOP_FROM_WORKTREE_PATH in hook env, got %q", got)
+	}
+	if _, ok := childEnv["GIT_HOP_FROM_BRANCH"]; ok {
+		t.Errorf("expected GIT_HOP_FROM_BRANCH to be unset in hook env, got %q", childEnv["GIT_HOP_FROM_BRANCH"])
 	}
 }
 

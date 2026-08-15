@@ -98,9 +98,8 @@ fail-loud so a misconfigured test harness cannot silently fall back
 to live calls.
 
 This is **infrastructure only** — git-hop's current test suites do not
-record cassettes (see `git-test-determinism` track T-0017 for the
-rationale: target tests are already fast and use only local `git`,
-making the cassette overhead net-negative). The seam exists for future
+record cassettes: the target tests are already fast and use only local
+`git`, making the cassette overhead net-negative. The seam exists for future
 test classes that hit slow or expensive APIs whose responses are
 deterministic.
 

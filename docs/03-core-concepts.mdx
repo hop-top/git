@@ -53,11 +53,7 @@ my-project/
     feature-x -> ~/.local/share/git-hop/github.com/org/my-project/feature-x
     feature-y -> ~/.local/share/git-hop/github.com/org/my-project/feature-y
   hop.json
-  .tlc/             # per-repo task DB (shared across worktrees)
-  .aps/             # per-repo agent profiles (shared)
-  .uhp/             # per-repo hook config (shared)
-  .claude/          # per-repo Claude Code settings (shared)
-  .gemini/          # per-repo Gemini CLI settings (shared)
+  .git-hop/         # repo-level hook overrides (shared across worktrees)
 ```
 
 ### Hub Configuration
@@ -74,31 +70,25 @@ Each hub has a `hop.json` file for configuration:
 
 ### Per-Repo State at the Hub Root
 
-Tool state directories that should be shared across **all** worktrees
-of a repo live at the **hub root**, not inside any individual
-worktree under `hops/<branch>/`. Common examples:
+Tool state that should be shared across **all** worktrees of a repo
+belongs at the **hub root**, not inside any individual worktree under
+`hops/<branch>/`.
 
-| Directory | Tool | What it holds |
-|-----------|------|---------------|
-| `.tlc/` | tlc | Tasks, tracks, plans — same set regardless of branch viewed |
-| `.aps/` | aps | Agent profiles bound to this repo |
-| `.uhp/` | uhp | Hook registrations + handlers |
-| `.claude/` | Claude Code | Per-repo settings, agents, skills |
-| `.gemini/` | Gemini CLI | Per-repo config |
-| `.codex/` | Codex CLI | Per-repo config |
+git-hop's own example is `.git-hop/hooks/` — a hook placed at the hub
+root applies to every worktree, because `FindHookFile` walks upward
+from the worktree looking for one. Any tool that resolves its config by
+walking up from the current directory behaves the same way, so its
+per-repo state can live at the hub root too.
 
-**Rationale**: a task tracked in `.tlc/` represents work on the
-repo as a whole — the same task is equally relevant whether you're
-checked out on `main` or `feature-x`. Storing state inside a
-specific worktree would either fragment it across branches or
-require constant copying.
+**Rationale**: this state describes the repository as a whole, so it is
+equally relevant whether you are working on `main` or `feature-x`.
+Storing it inside one worktree would either fragment it across branches
+or require copying it into every new worktree.
 
-**Workflow**:
-- `cd <hub>/hops/main` to edit code
-- `tlc`, `aps`, etc. invoked from anywhere inside the hub walk
-  upward to find the hub-root state dir
-- When asking "does this repo have a tlc DB?", check
-  `<hub>/.tlc/` — never `<hub>/hops/main/.tlc/`
+**Consequence**: when looking for a repo's shared state, check the hub
+root — `<hub>/.git-hop/`, not `<hub>/hops/main/.git-hop/`. Tools that
+resolve their config by walking up from the current directory find the
+hub-root copy automatically from inside any worktree.
 
 ## Hopspaces
 

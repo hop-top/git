@@ -1,0 +1,23 @@
+#!/usr/bin/env bash
+#
+# post-worktree-add -- ensure this worktree has a window, in its own dir.
+#
+# Creates the session too if it is missing, so this hook works standalone
+# on a repo that was never cloned through git-hop.
+set -u
+
+# shellcheck source=./_hop-tmux-lib.sh
+. "$(dirname "$0")/_hop-tmux-lib.sh"
+
+hop_tmux_available || exit 0
+
+session="$(hop_tmux_session_name "${GIT_HOP_REPO_ID:-unknown}")"
+window="$(hop_tmux_window_name "${GIT_HOP_BRANCH:-detached}")"
+dir="${GIT_HOP_WORKTREE_PATH:-$PWD}"
+
+# Detached (-d): creating a worktree should not yank the user's focus to
+# the new window. They asked to create it, not to go there -- `git hop
+# <branch>` is how you go there, and that fires post-worktree-switch.
+hop_tmux_ensure_window "$session" "$window" "$dir"
+
+exit 0

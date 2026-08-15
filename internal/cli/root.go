@@ -15,10 +15,13 @@ import (
 	"hop.top/kit/go/runtime/bus"
 
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/detector"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/shell"
 )
 
 var (
@@ -73,6 +76,15 @@ func IsURI(s string) bool {
 	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@") || strings.HasSuffix(s, ".git")
 }
 
+// ExpandShorthand turns an `org/repo` clone shorthand into a full SSH URI.
+// Anything already URI-shaped, or not exactly two slash-separated segments,
+// is returned verbatim.
+//
+// This is the no-context fallback: it decides purely on the shape of the
+// string, so an `org/repo`-shaped branch name is indistinguishable from a
+// clone shorthand here. Callers that DO have context — i.e. that are inside
+// a hub and can see which worktrees actually exist — must go through
+// ResolveArg instead, which consults the hub before falling back to this.
 func ExpandShorthand(s string, gitDomain string) string {
 	if IsURI(s) {
 		return s
@@ -80,14 +92,6 @@ func ExpandShorthand(s string, gitDomain string) string {
 
 	parts := strings.Split(s, "/")
 	if len(parts) == 2 && !strings.Contains(s, " ") {
-		firstPart := parts[0]
-		commonBranchPrefixes := []string{"feat", "fix", "bug", "docs", "test", "chore", "refactor", "perf", "style", "build", "ci", "revert"}
-		for _, prefix := range commonBranchPrefixes {
-			if firstPart == prefix {
-				return s
-			}
-		}
-
 		if gitDomain == "" {
 			gitDomain = "github.com"
 		}
@@ -95,6 +99,27 @@ func ExpandShorthand(s string, gitDomain string) string {
 	}
 
 	return s
+}
+
+// ResolveArg decides whether the bare positional argument to `git hop` names
+// an existing worktree (switch mode) or a repository to clone (clone mode).
+//
+// knownBranches is the hub's registered branch set, or nil when the caller is
+// not inside a hub. A registered branch wins outright, whatever its name looks
+// like: the hub is ground truth about which worktrees exist, so `feature/login`
+// resolves to a switch when that worktree is registered and to a clone
+// shorthand when it is not. Only when the hub has nothing by that name — or
+// there is no hub at all — does the shape-based ExpandShorthand fallback run.
+//
+// This replaces an allowlist of conventional-commit-ish branch prefixes
+// (feat, fix, bug, ...) that guessed at which `a/b` strings were branch names.
+// The guess mis-routed every prefix nobody enumerated — `feature/`, `release/`,
+// `hotfix/`, personal prefixes like `jad/` — into clone mode.
+func ResolveArg(arg string, gitDomain string, knownBranches map[string]config.HubBranch) string {
+	if _, exists := knownBranches[arg]; exists {
+		return arg
+	}
+	return ExpandShorthand(arg, gitDomain)
 }
 
 func Execute() error {
@@ -185,19 +210,37 @@ Worktree Mode:
 			domain = "github.com"
 		}
 
-		expandedArg := ExpandShorthand(arg, domain)
+		// Hub lookup is hoisted above shorthand expansion so the expansion can
+		// see which worktrees actually exist. FindHub/LoadHub are pure reads
+		// (afero stat walk + JSON unmarshal), so running them before the
+		// clone branch costs nothing and mutates nothing. A missing hub is the
+		// normal out-of-hub case, not an error: hub stays nil and ResolveArg
+		// degrades to the shape-based fallback.
+		hubPath, hubErr := hop.FindHub(fs, cwd)
+		var hub *hop.Hub
+		if hubErr == nil {
+			var loadErr error
+			hub, loadErr = hop.LoadHub(fs, hubPath)
+			if loadErr != nil {
+				output.Fatal("Failed to load hub config: %v", loadErr)
+			}
+		}
+
+		var knownBranches map[string]config.HubBranch
+		if hub != nil {
+			knownBranches = hub.Config.Branches
+		}
+
+		expandedArg := ResolveArg(arg, domain, knownBranches)
 
 		if IsURI(expandedArg) {
 			branch, _ := cmd.Flags().GetString("branch")
 
-			if branch != "" {
-				hubPath, err := hop.FindHub(fs, cwd)
-				if err == nil {
-					if err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath); err != nil {
-						output.Fatal("Fork-Attach failed: %v", err)
-					}
-					return
+			if branch != "" && hubErr == nil {
+				if err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath); err != nil {
+					output.Fatal("Fork-Attach failed: %v", err)
 				}
+				return
 			}
 
 			projectPath := ""
@@ -215,25 +258,49 @@ Worktree Mode:
 				Overwrite: hooksOverwrite,
 				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite),
 			}
-			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig, hookOpts); err != nil {
+			dispatch := buildHookDispatch(fs)
+			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig, hookOpts, dispatch); err != nil {
 				output.Fatal("Clone failed: %v", err)
 			}
 			return
 		}
 
-		hubPath, err := hop.FindHub(fs, cwd)
-		if err == nil {
-			hub, loadErr := hop.LoadHub(fs, hubPath)
-			if loadErr != nil {
-				output.Fatal("Failed to load hub config: %v", loadErr)
-			}
-
+		if hubErr == nil {
 			branch, exists := hub.Config.Branches[arg]
 			if !exists {
 				output.Fatal("Worktree '%s' does not exist. Use 'git hop add %s' to create it.", arg, arg)
 			}
 
-			worktreePath := branch.Path
+			worktreePath := resolveSwitchWorktreePath(branch, hubPath)
+
+			// Capture from-state BEFORE any mutation. A missing or dangling
+			// `current` symlink is normal (first hop after a clone), so both
+			// fields stay empty and SwitchEnvVars omits them entirely.
+			fromBranch, fromWorktreePath := resolveSwitchFromState(fs, hubPath, hub)
+
+			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+			detectorMgr := detector.NewManager(fs, g)
+			detectorMgr.Register(detector.NewGitFlowNextDetector(g))
+			detectorMgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
+			branchInfo, err := detectorMgr.DetectBranch(arg, hubPath)
+			if err != nil {
+				output.Fatal("Branch type detector failed: %v", err)
+			}
+			hookEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
+			for k, v := range hooks.SwitchEnvVars(fromBranch, fromWorktreePath, hooks.TriggerHop) {
+				hookEnv[k] = v
+			}
+
+			// A non-zero pre-worktree-switch aborts before the symlink write.
+			// The symlink is the load-bearing step: os.Chdir below only moves
+			// this process, while the shell wrapper navigates by resolving
+			// `current` after the binary exits.
+			hookRunner := hooks.NewRunner(fs)
+			if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
+				output.Fatal("Hook pre-worktree-switch failed: %v", err)
+			}
+
 			if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
 				output.Warn("Failed to update current symlink: %v", err)
 			}
@@ -242,8 +309,38 @@ Worktree Mode:
 				output.Fatal("Failed to change directory to worktree '%s': %v", worktreePath, err)
 			}
 
+			postResult, err := hookRunner.ExecuteHookWithDetector("post-worktree-switch", worktreePath, repoID, arg, hookEnv)
+			if err != nil {
+				output.Warn("Hook post-worktree-switch failed: %v", err)
+			}
+
+			// Refresh the shell integration's worktree-path cache. That
+			// cache is what lets the chdir handler answer "is $PWD a
+			// worktree?" without forking on every prompt, and this is the
+			// natural place to keep it warm: the binary is already running
+			// and already holds the hub's branch set. Best-effort -- a
+			// cache write must never fail a switch.
+			if err := shell.MergeRootsCache(fs, hub, hubPath); err != nil {
+				output.Debug("failed to refresh worktree roots cache: %v", err)
+			}
+
+			// Emit worktree.switched event. Published next to, but
+			// independent of, hook dispatch: a failing post-hook only
+			// warns above, and a bus error never fails the switch.
+			publishWorktreeSwitched(EventBus, hub, hubPath, arg, worktreePath)
+
 			output.Success("Switched to worktree '%s'", arg)
 			output.Info("Path: %s", worktreePath)
+
+			// The hook navigated the user itself. The switch SUCCEEDED --
+			// symlink written, event published, success reported above --
+			// so this is not an error path. Re-raising the hook's status as
+			// git-hop's own is the only way the signal survives: the shell
+			// wrapper reads `$?` and nothing else, and it decides whether to
+			// cd only after this process is gone.
+			if postResult.NavigationHandled {
+				os.Exit(hooks.ExitNavigationHandled)
+			}
 			return
 		}
 
@@ -271,6 +368,77 @@ Worktree Mode:
 	RootCmd.Flags().MarkHidden("admin")
 
 	_ = Root.Viper.BindPFlag("json", pf.Lookup("json"))
+}
+
+// publishWorktreeSwitched emits events.WorktreeSwitched after a successful
+// branch switch, mirroring the publish shape the move/remove/merge commands
+// use. HopspacePath is a pure path computation from the hub's org/repo — no
+// hopspace load — so the switch path never pays for I/O it does not need.
+//
+// Errors are swallowed and a nil bus is tolerated: the event is an
+// observability side channel, never a gate on the switch itself.
+func publishWorktreeSwitched(b bus.Bus, hub *hop.Hub, hubPath, branch, worktreePath string) {
+	if b == nil {
+		return
+	}
+	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	_ = b.Publish(context.Background(), bus.NewEvent(
+		events.WorktreeSwitched, events.Source,
+		events.WorktreeEvent{
+			Path:         worktreePath,
+			Branch:       branch,
+			HopspacePath: hopspacePath,
+			RepoPath:     hubPath,
+		},
+	))
+}
+
+// resolveSwitchWorktreePath turns a registered branch's recorded path into the
+// absolute worktree path the switch drives everything off: the `current`
+// symlink write, os.Chdir, and GIT_HOP_WORKTREE_PATH in the switch hooks.
+//
+// hop.json normally stores a path relative to the hub ("hops/main"), so it must
+// be anchored on the hub rather than the process cwd — otherwise hopping from a
+// subdirectory computes a worktree path that does not exist. Absolute recorded
+// paths pass through untouched.
+func resolveSwitchWorktreePath(branch config.HubBranch, hubPath string) string {
+	return config.ResolveWorktreePath(branch.Path, hubPath)
+}
+
+// resolveSwitchFromState reads the hub's `current` symlink and reverse-maps
+// its target to a registered branch name. GetCurrentSymlink returns a target
+// relative to the hub, so it is joined against hubPath and made absolute
+// before comparison — the same resolve-and-compare idiom the move command
+// uses. Registered branch paths go through the same hub-anchored resolution,
+// keeping both sides of the comparison independent of the process cwd.
+//
+// Returns two empty strings when `current` is absent or dangling. That is the
+// expected state on the first hop after a clone and is never an error: hook
+// env simply carries no from-state.
+func resolveSwitchFromState(fs afero.Fs, hubPath string, hub *hop.Hub) (fromBranch string, fromWorktreePath string) {
+	target, err := hop.GetCurrentSymlink(fs, hubPath)
+	if err != nil {
+		return "", ""
+	}
+
+	absTarget, err := filepath.Abs(filepath.Join(hubPath, target))
+	if err != nil {
+		return "", ""
+	}
+
+	for name, b := range hub.Config.Branches {
+		abs, err := filepath.Abs(config.ResolveWorktreePath(b.Path, hubPath))
+		if err != nil {
+			continue
+		}
+		if abs == absTarget {
+			return name, absTarget
+		}
+	}
+
+	// Symlink resolves outside the registered branch set (dangling or stale
+	// entry): report the path, leave the branch unknown.
+	return "", absTarget
 }
 
 func printAdminHelp(cmd *cobra.Command) {
@@ -344,6 +512,27 @@ func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(strin
 				res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
 		}
 		return nil
+	}
+}
+
+// buildHookDispatch returns the clone lifecycle-hook dispatch callbacks,
+// each closing over a hooks.Runner.
+//
+// Lives here for the same reason as buildHookMirrorRun: internal/hooks
+// already imports internal/hop, so internal/hop cannot call the hook
+// runner directly without creating an import cycle. The caller injects.
+func buildHookDispatch(fs afero.Fs) hop.HookDispatchOptions {
+	runner := hooks.NewRunner(fs)
+	dispatchTo := func(hookName string) func(string, string, string) error {
+		return func(path, repoID, branch string) error {
+			_, err := runner.ExecuteHook(hookName, path, repoID, branch)
+			return err
+		}
+	}
+	return hop.HookDispatchOptions{
+		PreClone:        dispatchTo("pre-clone"),
+		PostWorktreeAdd: dispatchTo("post-worktree-add"),
+		PostClone:       dispatchTo("post-clone"),
 	}
 }
 

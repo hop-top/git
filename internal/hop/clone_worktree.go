@@ -32,7 +32,37 @@ type HookMirrorOptions struct {
 	Run func(worktreePath, repoID string) error
 }
 
-func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, useBare bool, globalConfig bool, hookOpts HookMirrorOptions) error {
+// HookDispatchOptions carries the lifecycle-hook dispatch callbacks for
+// CloneWorktree. Same rationale as HookMirrorOptions.Run: internal/hop
+// cannot import internal/hooks (the cycle already runs hooks → hop for
+// LooksLikeGitCheckout), so the caller in internal/cli constructs the
+// closures over hooks.Runner and injects them here.
+//
+// Each callback receives the path handed to the hook runner as
+// GIT_HOP_WORKTREE_PATH, the 3-part repo ID, and the branch. A nil
+// callback means "no dispatch" and is silently skipped.
+type HookDispatchOptions struct {
+	// PreClone fires before any filesystem work. A non-nil error aborts
+	// the clone. It receives the intended project root (not "" and not
+	// the caller's cwd) as its path argument: no worktree exists yet, and
+	// FindHookFile's parent walk climbs to the filesystem root, so an
+	// unanchored path would let a stray .git-hop/hooks/pre-clone in any
+	// ancestor of the user's cwd hijack the clone. Anchoring on the
+	// project root — a directory that does not yet exist — keeps the walk
+	// deterministic: it can only ever resolve at hopspace or global
+	// level, which is the intended reach for a pre-clone hook.
+	PreClone func(path, repoID, branch string) error
+	// PostWorktreeAdd fires after the initial worktree exists AND after
+	// the committed-hook mirror has run, so a repo-level hook carried by
+	// the clone itself applies to the very worktree that carried it. Its
+	// path argument is the initial worktree, never the hub root.
+	PostWorktreeAdd func(path, repoID, branch string) error
+	// PostClone fires last, after the initial worktree is fully
+	// registered. Its path argument is the initial worktree.
+	PostClone func(path, repoID, branch string) error
+}
+
+func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, useBare bool, globalConfig bool, hookOpts HookMirrorOptions, dispatch HookDispatchOptions) error {
 	projectRoot := projectPath
 
 	if projectRoot == "" {
@@ -53,6 +83,17 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 	org, repo := ParseRepoFromURL(uri)
 	if org == "" || repo == "" {
 		return fmt.Errorf("could not parse org/repo from URI: %s", uri)
+	}
+
+	// pre-clone fires before any filesystem work, so a non-zero exit
+	// aborts before the directory-exists probe and the clone itself. The
+	// branch is not known yet (resolving it requires talking to the
+	// remote), so the hook sees an empty GIT_HOP_BRANCH. Anchored on
+	// projectRoot — see HookDispatchOptions.PreClone.
+	if dispatch.PreClone != nil {
+		if err := dispatch.PreClone(projectRoot, repoIDFor(org, repo), ""); err != nil {
+			return fmt.Errorf("pre-clone hook aborted clone: %w", err)
+		}
 	}
 
 	if exists, _ := afero.DirExists(fs, projectRoot); exists {
@@ -116,7 +157,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 		st = state.NewState()
 	}
 
-	repoID := fmt.Sprintf("github.com/%s/%s", org, repo)
+	repoID := repoIDFor(org, repo)
 
 	// Add repository and initial worktree to state
 	if st.Repositories[repoID] == nil {
@@ -167,6 +208,25 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 		}
 	}
 
+	// ORDERING IS LOAD-BEARING: post-worktree-add fires AFTER the mirror
+	// above, which is what makes a committed repo-level hook apply to the
+	// very worktree that carried it. Moving this dispatch before the
+	// mirror silently drops that hook on the first worktree. The path is
+	// the initial worktree, never the hub root.
+	if dispatch.PostWorktreeAdd != nil {
+		if err := dispatch.PostWorktreeAdd(absMainWorktreePath, repoID, defaultBranch); err != nil {
+			fmt.Printf("Warning: post-worktree-add hook failed: %v\n", err)
+		}
+	}
+
+	// post-clone fires last, once the initial worktree is fully
+	// registered (state, symlink, mirror, post-worktree-add all done).
+	if dispatch.PostClone != nil {
+		if err := dispatch.PostClone(absMainWorktreePath, repoID, defaultBranch); err != nil {
+			fmt.Printf("Warning: post-clone hook failed: %v\n", err)
+		}
+	}
+
 	// Get relative path from projectRoot to mainWorktreePath for display
 	relWorktreePath, err := filepath.Rel(projectRoot, mainWorktreePath)
 	if err != nil {
@@ -193,6 +253,13 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 	return nil
 }
 
+// repoIDFor builds the 3-part repo ID ("host/org/repo") that hook
+// resolution and state keying both use. Hoisted so pre-clone (which runs
+// before the state block) and the later dispatches agree on one value.
+func repoIDFor(org, repo string) string {
+	return fmt.Sprintf("github.com/%s/%s", org, repo)
+}
+
 func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
 	fmt.Println("Creating bare repository...")
 
@@ -202,7 +269,7 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 
 	// `git clone --bare` strips the standard fetch refspec, so
 	// `refs/remotes/origin/*` is never populated and downstream calls like
-	// setUpstreamTracking fail (T-0215). Restore the refspec and re-fetch
+	// setUpstreamTracking fail. Restore the refspec and re-fetch
 	// so origin/<defaultBranch> exists locally. Real GitHub URLs sometimes
 	// configure this implicitly; local file paths (and some hosts) do not,
 	// so do it unconditionally.
@@ -242,14 +309,16 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 // cloneRegularRepo previously attempted a non-bare clone at <projectRoot>
 // plus a worktree at hops/<defaultBranch>. That layout is incoherent —
 // the root and the worktree both claimed <defaultBranch>, and the root's
-// index disagreed with the on-disk hopspace shape (T-0213, T-0214).
+// index disagreed with the on-disk hopspace shape, leaving `git status`
+// at the hub root permanently dirty.
 //
 // The hopspace contract (per design and the original CLAUDE.md note on
 // "Bare Worktree Repos") is unconditional: <projectRoot> is a bare repo
 // and source code lives only in hops/<defaultBranch>/. The
 // Defaults.BareRepo flag is therefore effectively a no-op now; kept for
 // backwards compatibility of any persisted config but does not change
-// the hopspace shape. T-0215.
+// the hopspace shape. See docs/stories/015-hopspace-shape-contract.md for
+// the invariants both clone paths must satisfy.
 func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
 	return cloneBareRepo(fs, g, uri, projectRoot, defaultBranch)
 }

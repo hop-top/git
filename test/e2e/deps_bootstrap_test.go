@@ -7,7 +7,7 @@ import (
 	"testing"
 )
 
-// --- T-0087: Go vendor dir should not appear in non-vendor projects ---
+// --- Go vendor dir should not appear in non-vendor projects ---
 
 func TestAdd_GoProject_NoVendorWhenNotVendored(t *testing.T) {
 	t.Parallel()
@@ -101,7 +101,7 @@ func TestAdd_GoProject_VendorPreservedWhenVendored(t *testing.T) {
 	}
 }
 
-// --- T-0088: pnpm/npm node_modules should not break existing worktrees ---
+// --- pnpm/npm node_modules should not break existing worktrees ---
 
 func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 	t.Parallel()
@@ -253,7 +253,7 @@ func TestAdd_PnpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 	}
 }
 
-// --- T-0089: Suppress irrelevant env/ports output ---
+// --- Suppress irrelevant env/ports output ---
 
 func TestAdd_NoDockerProject_NoEnvNoise(t *testing.T) {
 	t.Parallel()
@@ -312,8 +312,8 @@ func TestAdd_GoProject_NoDepsMessageWhenNoPM(t *testing.T) {
 	env.RunCommand(t, env.RootDir, "git", "clone", env.BareRepoPath, env.SeedRepoPath)
 
 	// Go project that doesn't vendor — go PM will be detected but
-	// should not run (no vendor/ in source). If the fix for T-0087
-	// is to skip non-vendor Go projects entirely, then no deps
+	// should not run (no vendor/ in source). If the fix for the stray
+	// vendor/ dir is to skip non-vendor Go projects entirely, then no deps
 	// message should appear. If the fix keeps Go PM but uses
 	// `go mod download`, then "Dependencies installed." is acceptable
 	// but "Setting up dependencies..." should name the PM.

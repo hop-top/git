@@ -1,0 +1,70 @@
+#!/usr/bin/env bash
+#
+# post-worktree-switch -- select the target worktree's window.
+#
+# Fires both for an explicit `git hop <branch>` (GIT_HOP_TRIGGER=hop) and
+# for a plain `cd` into a registered worktree (GIT_HOP_TRIGGER=chdir).
+#
+# THE EXIT CODE IS THE POINT OF THIS SCRIPT.
+#
+# git-hop's shell wrapper does not read our stdout; its only channel back
+# from the binary is $?. After the binary exits 0, the wrapper resolves the
+# hub's `current` symlink and cds the CALLING shell into the target
+# worktree. That is correct behaviour with no window manager in play, and
+# wrong here: we just pointed tmux at the target worktree's own window, so
+# the wrapper's cd would also drag the ORIGINATING window's shell into that
+# same worktree. Two windows in one worktree, and the window the user
+# hopped away from is silently contaminated -- its shell is now somewhere
+# it never agreed to go, which is how you `rm -rf` in the wrong tree.
+#
+# Exit 93 (hooks.ExitNavigationHandled) is how a hook says "navigation is
+# already done, do not cd". The wrapper turns 93 into a 0 for the user's
+# shell and skips the cd. tmux owns the navigation; git-hop stands down.
+#
+# 93 is honoured for post-worktree-switch ONLY -- every other hook must
+# exit 0, since nothing is about to navigate and a 93 there would just
+# convert a real failure into a silent success.
+set -u
+
+# shellcheck source=./_hop-tmux-lib.sh
+. "$(dirname "$0")/_hop-tmux-lib.sh"
+
+# No tmux -> exit 0, NOT 93. There is no window to select, so we have not
+# handled navigation and the wrapper's cd is exactly the right fallback.
+# Claiming 93 here would strand the user in their original directory.
+hop_tmux_available || exit 0
+
+session="$(hop_tmux_session_name "${GIT_HOP_REPO_ID:-unknown}")"
+window="$(hop_tmux_window_name "${GIT_HOP_BRANCH:-detached}")"
+dir="${GIT_HOP_WORKTREE_PATH:-$PWD}"
+
+# Recreate whatever the user killed by hand since last time. Resuming a
+# worktree whose window is gone must work, not error.
+hop_tmux_ensure_window "$session" "$window" "$dir" || exit 0
+
+target="$(hop_tmux_window_target "$session" "$window")"
+
+if hop_tmux_inside; then
+    # Inside tmux: move this client. If the switch is within the current
+    # session, select-window suffices; across sessions the client has to
+    # be pointed at the other session first.
+    current_session="$(tmux display-message -p '#{session_name}' 2>/dev/null)"
+    if [ "$current_session" = "$session" ]; then
+        tmux select-window -t "$target" >/dev/null 2>&1 || exit 0
+    else
+        tmux switch-client -t "$(hop_tmux_session_target "$session")" >/dev/null 2>&1 || exit 0
+        tmux select-window -t "$target" >/dev/null 2>&1 || exit 0
+    fi
+else
+    # Outside tmux (plain terminal, session attached elsewhere or
+    # detached): there is no client here to move, but we can still make
+    # the target the session's current window so attaching lands on it.
+    tmux select-window -t "$target" >/dev/null 2>&1 || exit 0
+
+    # We did NOT navigate this shell -- the user is not in tmux, so their
+    # cwd is still wherever they started. Let the wrapper cd them.
+    exit 0
+fi
+
+# Navigation handled by tmux. Tell the wrapper to keep its hands off.
+exit 93

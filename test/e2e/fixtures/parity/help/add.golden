@@ -7,8 +7,10 @@ Aliases:
   add, create, new
 
 Flags:
-      --from string   start-point for the new branch (branch name, ref, SHA, or 'initial' for the root commit)
-  -h, --help          help for add
+      --copy-ignored      copy git-ignored files from the source worktree into the new one (default true)
+      --from string       start-point for the new branch (branch name, ref, SHA, or 'initial' for the root commit)
+  -h, --help              help for add
+      --no-copy-ignored   do not copy git-ignored files into the new worktree
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)

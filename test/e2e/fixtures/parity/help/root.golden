@@ -17,18 +17,18 @@ Usage:
 MANAGEMENT
 
 Additional Commands:
-  add         Add a new worktree and environment
-  doctor      Check and repair the environment
-  env         Manage the environment lifecycle
-  help        Show help for a command group
-  init        Initialize git-hop repository structure
-  list        List all managed worktrees
-  merge       Merge a worktree branch into a receiving branch, then delete the source worktree
-  move        Rename a worktree and its branch
-  prune       Remove orphaned worktrees and hubs from state and hop.json
-  remove      Remove a hub, hopspace, or branch
-  repair      Safely repair stale worktree metadata
-  status      Show the working tree status
+  add            Add a new worktree and environment
+  doctor         Check and repair the environment
+  env            Manage the environment lifecycle
+  help           Show help for a command group
+  init           Initialize git-hop repository structure
+  list           List all managed worktrees
+  merge          Merge a worktree branch into a receiving branch, then delete the source worktree
+  move           Rename a worktree and its branch
+  prune          Remove orphaned worktrees and hubs from state and hop.json
+  remove         Remove a hub, hopspace, or branch
+  repair         Safely repair stale worktree metadata
+  status         Show the working tree status
 
 Flags:
       --branch string       branch name for fork-attach mode

@@ -98,11 +98,24 @@ func TestGenerateWrapperFunctionLogic(t *testing.T) {
 		"list|status|doctor",            // Commands that don't trigger cd
 		"git rev-parse --show-toplevel", // Hub root detection
 		"exit_code",                     // Exit code preservation
+		"-eq 93",                        // Handled-navigation directive
 	}
 
 	for _, logic := range requiredLogic {
 		if !strings.Contains(result, logic) {
 			t.Errorf("Wrapper function missing required logic: %q", logic)
+		}
+	}
+}
+
+// TestGenerateWrapperFunctionDirective asserts every generated variant
+// carries the handled-navigation check. Presence only -- the behavioural
+// contract is exercised against real interpreters in wrapper_exec_test.go.
+func TestGenerateWrapperFunctionDirective(t *testing.T) {
+	for _, shellType := range []string{"bash", "zsh", "fish"} {
+		src := shell.GenerateWrapperFunction(shellType)
+		if !strings.Contains(src, "93") {
+			t.Errorf("%s wrapper missing the navigation directive check", shellType)
 		}
 	}
 }

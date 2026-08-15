@@ -9,7 +9,7 @@ import (
 )
 
 // Environment variables read by SessionFromEnv. The convention follows
-// the XRR_CASSETTE_DIR proposal in hop-top/xrr T-0039: a parent test
+// xrr's cross-process env contract: a parent test
 // process exports these before exec'ing the git-hop binary, the binary
 // builds a session from them at startup, and all internal git/docker
 // invocations flow through that session.
