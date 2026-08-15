@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+#
+# post-worktree-move -- rename the window IN PLACE.
+#
+# Renaming a branch must not cost the user their running processes. The
+# window very likely holds a dev server, a REPL, an editor with unsaved
+# buffers, a long test run. `rename-window` keeps the pane, its PID, its
+# scrollback and its child processes exactly as they were; kill-and-
+# recreate would produce a window with the right NAME and none of the
+# user's work in it. Same visible result in a listing, total loss in
+# practice -- which is why the test suite asserts on the pane PID rather
+# than on the window name.
+set -u
+
+# shellcheck source=./_hop-tmux-lib.sh
+. "$(dirname "$0")/_hop-tmux-lib.sh"
+
+hop_tmux_available || exit 0
+
+session="$(hop_tmux_session_name "${GIT_HOP_REPO_ID:-unknown}")"
+old_window="$(hop_tmux_window_name "${GIT_HOP_OLD_BRANCH:-}")"
+new_window="$(hop_tmux_window_name "${GIT_HOP_NEW_BRANCH:-${GIT_HOP_BRANCH:-}}")"
+new_dir="${GIT_HOP_NEW_PATH:-${GIT_HOP_WORKTREE_PATH:-$PWD}}"
+
+[ -n "$new_window" ] || exit 0
+
+if hop_tmux_has_window "$session" "$old_window"; then
+    # In place. No kill, no new-window.
+    tmux rename-window -t "$(hop_tmux_window_target "$session" "$old_window")" \
+        "$new_window" >/dev/null 2>&1
+else
+    # The old window is gone (killed by hand, or the move happened while
+    # tmux was not running). Nothing to preserve, so creating the new one
+    # is the right recovery -- this branch destroys nothing.
+    hop_tmux_ensure_window "$session" "$new_window" "$new_dir"
+fi
+
+exit 0

@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# post-clone -- ensure the repository's tmux session exists.
+#
+# One session per repository. This hook only guarantees the container;
+# post-worktree-add fills in the windows. git-hop fires post-worktree-add
+# for the clone's initial worktree too, so a clone ends up with both the
+# session and its first window without this hook having to know the branch.
+set -u
+
+# shellcheck source=./_hop-tmux-lib.sh
+. "$(dirname "$0")/_hop-tmux-lib.sh"
+
+# Silent no-op without tmux. Exit 0 -- a hook that fails aborts the
+# git-hop operation, and not running tmux is not an error.
+hop_tmux_available || exit 0
+
+session="$(hop_tmux_session_name "${GIT_HOP_REPO_ID:-unknown}")"
+dir="${GIT_HOP_WORKTREE_PATH:-$PWD}"
+
+hop_tmux_ensure_session "$session" "$dir"
+
+# Always succeed. A tmux problem must not fail the clone the user asked
+# for; the worst case is they get a repo without a session, which the next
+# add or switch will create anyway.
+exit 0
