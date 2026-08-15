@@ -115,7 +115,7 @@ var addCmd = &cobra.Command{
 		// Execute pre-worktree-add hook with detector env vars
 		hookRunner := hooks.NewRunner(fs)
 		detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
-		if err := hookRunner.ExecuteHookWithDetector("pre-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
+		if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
 			output.Fatal("Hook pre-worktree-add failed: %v", err)
 		}
 
@@ -138,7 +138,7 @@ var addCmd = &cobra.Command{
 		}
 
 		// Execute post-worktree-add hook
-		if err := hookRunner.ExecuteHookWithDetector("post-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
+		if _, err := hookRunner.ExecuteHookWithDetector("post-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
 			output.Warn("Hook post-worktree-add failed: %v", err)
 		}
 
