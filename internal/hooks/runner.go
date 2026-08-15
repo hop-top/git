@@ -37,6 +37,12 @@ var ValidHookNames = []string{
 	"post-env-stop",
 	"pre-repair",
 	"post-repair",
+	"pre-clone",
+	"post-clone",
+	// "switch" rather than "checkout": git checkout changes refs or files
+	// within a single working tree, whereas these select an existing worktree.
+	"pre-worktree-switch",
+	"post-worktree-switch",
 }
 
 // ValidateHookName validates that a hook name is valid
