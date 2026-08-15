@@ -176,6 +176,16 @@ func TestInstallUninstall_RoundTripIsClean(t *testing.T) {
 				"_git_hop",
 				"HOP_WRAPPER_ACTIVE",
 				"end git-hop shell integration",
+				// The chdir handler lives inside the same block, so it has
+				// to come out with it. A stranded __git_hop_chdir left on
+				// PROMPT_COMMAND or add-zsh-hook would keep running -- and
+				// keep referring to a function no longer defined -- after
+				// the user uninstalled the integration.
+				"__git_hop_chdir",
+				"__git_hop_roots",
+				"add-zsh-hook chpwd",
+				"--on-variable PWD",
+				"__notify-chdir",
 			} {
 				if strings.Contains(got, fossil) {
 					t.Errorf("uninstall left %q behind:\n%s", fossil, got)

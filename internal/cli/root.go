@@ -21,6 +21,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/shell"
 )
 
 var (
@@ -311,6 +312,16 @@ Worktree Mode:
 			postResult, err := hookRunner.ExecuteHookWithDetector("post-worktree-switch", worktreePath, repoID, arg, hookEnv)
 			if err != nil {
 				output.Warn("Hook post-worktree-switch failed: %v", err)
+			}
+
+			// Refresh the shell integration's worktree-path cache. That
+			// cache is what lets the chdir handler answer "is $PWD a
+			// worktree?" without forking on every prompt, and this is the
+			// natural place to keep it warm: the binary is already running
+			// and already holds the hub's branch set. Best-effort -- a
+			// cache write must never fail a switch.
+			if err := shell.MergeRootsCache(fs, hub, hubPath); err != nil {
+				output.Debug("failed to refresh worktree roots cache: %v", err)
 			}
 
 			// Emit worktree.switched event. Published next to, but
