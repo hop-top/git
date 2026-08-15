@@ -26,8 +26,16 @@ new_dir="${GIT_HOP_NEW_PATH:-${GIT_HOP_WORKTREE_PATH:-$PWD}}"
 
 if hop_tmux_has_window "$session" "$old_window"; then
     # In place. No kill, no new-window.
-    tmux rename-window -t "$(hop_tmux_window_target "$session" "$old_window")" \
-        "$new_window" >/dev/null 2>&1
+    if tmux rename-window -t "$(hop_tmux_window_target "$session" "$old_window")" \
+        "$new_window" >/dev/null 2>&1; then
+        # Re-stamp the identity at the NEW name. The window now serves a
+        # different branch and possibly a different path, and a record left
+        # pointing at the old worktree would make the eventual
+        # post-worktree-remove decline to kill it -- the safety check
+        # turning into a leak.
+        hop_tmux_set_identity \
+            "$(hop_tmux_window_target "$session" "$new_window")" "$new_dir"
+    fi
 else
     # The old window is gone (killed by hand, or the move happened while
     # tmux was not running). Nothing to preserve, so creating the new one
