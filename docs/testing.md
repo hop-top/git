@@ -1,6 +1,6 @@
 # Testing
 
-git-hop's tests fall into three tiers, each with a different cost,
+git-hop's tests fall into four tiers, each with a different cost,
 purpose, and CI lane.
 
 ## Tiers
@@ -43,7 +43,98 @@ process (via `t.Setenv`) and the child binary (via `cmd.Env`). This
 isolation is mandatory: tests that read global state via the parent
 process MUST see the same per-test paths the child binary writes to.
 
-### 3. Docker e2e
+### 3. Scripted e2e (`.txtar`)
+
+Live in `test/script/testdata/*.txtar` and run the real CLI against real
+git repositories, driven by
+[`rogpeppe/go-internal/testscript`](https://pkg.go.dev/github.com/rogpeppe/go-internal/testscript).
+
+- Use real local `git`, no docker, no network.
+- Run by default with `go test ./...` (no build tags).
+- ~1 second per script; whole suite under 10s.
+- Required for PR merge.
+
+Prefer this tier over tier 2 for any new end-to-end case. A script says
+in a dozen readable lines what a Go e2e test needs a hundred lines of
+process plumbing to say, and it reads like the session a user would type.
+Reach for tier 2 only when the assertion genuinely needs Go — parsing
+JSON state, comparing structs, or driving concurrency.
+
+```sh
+go test ./test/script/                                     # all scripts
+go test ./test/script/ -run 'TestScripts/add_branch_slash' # one script
+go test -v ./test/script/                                  # show each command as it runs
+```
+
+The subtest name is the filename without its extension, so
+`testdata/repair_base_inference.txtar` runs as
+`TestScripts/repair_base_inference`.
+
+#### How the binary gets wired in
+
+`TestMain` registers the production entry point as an in-script command
+via `testscript.Main`, so scripts invoke `git-hop ...` directly. There is
+no `go build` step and no binary artifact to go stale: the command runs
+this package's own build of `cmd.Execute`, in a separate process so it is
+free to call `os.Exit`. `testdata/harness_binary.txtar` guards that
+wiring.
+
+`Setup` (in `test/script/script_test.go`) redirects `HOME`, the `XDG_*`
+dirs, `GIT_HOP_DATA_HOME`, and the git global config under each script's
+own `$WORK`. Without it a script would allocate ports and write worktrees
+into your real hopspace.
+
+#### Debugging a failing script
+
+On failure testscript prints the commands from the most recent `#` comment
+onward, plus the captured output. Two flags help:
+
+```sh
+go test -v ./test/script/ -run 'TestScripts/status_merged_vs_behind'
+```
+
+`-v` echoes every command and its output, not just the failing phase. To
+keep the work directory for inspection, pass `-testwork`; the test logs
+the `$WORK` path it kept.
+
+#### Updating expected output
+
+Assertions written as `stdout`/`stderr` regexes are edited by hand. For
+scripts that compare against a file with `cmp`, the expected content can
+be regenerated:
+
+```sh
+UPDATE_SCRIPTS=1 go test ./test/script/
+```
+
+That rewrites the `cmp` targets inside the `.txtar` files to match actual
+output. **Read the resulting diff before committing it** — the flag makes
+whatever the code currently does the new expectation, so it will happily
+enshrine a regression.
+
+#### Adding a case
+
+1. Create `test/script/testdata/<name>.txtar`. Name it after the behavior,
+   not the command (`repair_legacy_refspec`, not `repair3`).
+2. Build the git history the case needs with plain `exec git ...`, then
+   drive the CLI with `exec git-hop ...`. `RequireExplicitExec` is on, so
+   every invocation needs the `exec` prefix.
+3. Assert with `stdout`/`stderr` regexes, `exists`/`! exists`, and `!` for
+   commands that must fail. Open each phase with a `#` comment saying what
+   it pins — that comment is what testscript shows on failure.
+4. Prove the script can fail. Break the production behavior it covers,
+   confirm the script goes red, then restore. A script that passes against
+   the bug is decoration.
+
+Two portability notes. `$WORK` expands to a path containing regex
+metacharacters, so match paths with a loose pattern (`.*/hub/hops/x`)
+rather than embedding `$WORK` in a regex; single quotes suppress expansion
+entirely. And if a script ranks anything by commit time, pin
+`GIT_AUTHOR_DATE`/`GIT_COMMITTER_DATE` — git timestamps have one-second
+resolution, and back-to-back commits otherwise land in the same second and
+make the outcome a race against the clock.
+
+### 4. Docker e2e
 
 Live in `test/e2e/docker/*.go` and `test/e2e/e2e_test.go`. They boot
 real `docker compose` stacks, allocate real ports, persist real
@@ -75,9 +166,14 @@ correct trade-off: PR CI stays fast, regressions surface nightly.
 | `ci.yml` Build Matrix (linux/mac/win) | push, pull_request | none | yes |
 | `dockere2e.yml` Docker E2E | nightly cron, workflow_dispatch, PR label `needs:docker-tests` | `dockere2e` | no |
 
-The default PR run executes everything in tiers 1 and 2. The
+The default PR run executes everything in tiers 1, 2, and 3. The
 `dockere2e.yml` workflow exists so docker regressions get caught
 without slowing every PR down.
+
+`test/script` needs no dedicated CI step. The package contains only
+`_test.go` files, which `go list ./...` omits but `go test ./...` still
+builds and runs — so the existing `Run Tests` step already covers it, and
+a separate step would only run the scripts twice.
 
 ## xrr-aware test runtime
 
@@ -127,12 +223,17 @@ deterministic.
 
 ## Adding a new test
 
-1. Decide the tier first (unit, e2e local-git, docker e2e). Most new
-   tests belong in tier 1 — only escalate if you genuinely need a
+1. Decide the tier first (unit, Go e2e, scripted e2e, docker e2e). Most
+   new tests belong in tier 1 — only escalate if you genuinely need a
    spawned binary or a real docker daemon.
-2. For tier 2: import `hop.top/git/test/e2e` and use `SetupTestEnv`.
-3. For tier 3: place the file under `test/e2e/docker/`, start the
+2. When you do need an end-to-end case, default to tier 3 (a `.txtar`
+   script). Drop to tier 2 only when the assertion needs Go: parsing
+   state files into structs, comparing values, or driving concurrency.
+3. For tier 2: import `hop.top/git/test/e2e` and use `SetupTestEnv`.
+4. For tier 3: add a file under `test/script/testdata/` — see "Adding a
+   case" above.
+5. For tier 4: place the file under `test/e2e/docker/`, start the
    file with `//go:build dockere2e`, and use the helpers in
    `test/e2e/docker/docker_helpers.go`.
-4. Run locally before pushing. For tier 3 tests, ensure docker is up
+6. Run locally before pushing. For tier 4 tests, ensure docker is up
    and you have at least 2GB free RAM for compose stacks.

@@ -1,0 +1,110 @@
+# `git hop repair --base` back-fills the per-branch comparison base for hub
+# entries that never recorded one, inferring it from real git history.
+#
+# The inference is opt-in and heuristic, so the script pins three things:
+#   - plain `repair` never touches base (opt-in really is opt-in)
+#   - `--base` prefers the branch's own tracking config over the fallback
+#   - the recorded value is persisted and actually changes what status compares
+#     against, which is the only reason the field exists
+#
+# History used: main -> release -> hotfix. hotfix branches off release, so
+# its true base is release, NOT the hub default branch. A run that simply
+# wrote the default branch everywhere would satisfy "base is set" but fail
+# the status assertion at the end.
+
+# Commit timestamps are pinned. The fallback arm of the inference ranks
+# candidates by merge-base commit time at one-second resolution, so commits
+# created back-to-back can land in the same second and make "is this a tie?"
+# a race against the wall clock. Fixed dates keep the ordering the script
+# asserts on a property of the history rather than of the machine.
+env GIT_AUTHOR_DATE='2026-01-01T00:00:00Z'
+env GIT_COMMITTER_DATE='2026-01-01T00:00:00Z'
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+
+env GIT_AUTHOR_DATE='2026-01-02T00:00:00Z'
+env GIT_COMMITTER_DATE='2026-01-02T00:00:00Z'
+exec git checkout -b release
+# Real content, not an empty commit. Status labels a branch merged when
+# merging it into its base would add nothing, and a branch whose commits
+# are all empty satisfies that trivially -- it would read as merged here
+# and the base-selection assertions below would prove nothing.
+cp $WORK/release.txt release.txt
+exec git add release.txt
+exec git commit -m 'release work'
+exec git push origin release
+
+env GIT_AUTHOR_DATE='2026-01-03T00:00:00Z'
+env GIT_COMMITTER_DATE='2026-01-03T00:00:00Z'
+exec git checkout -b hotfix release
+cp $WORK/hotfix.txt hotfix.txt
+exec git add hotfix.txt
+exec git commit -m 'hotfix work'
+exec git push origin hotfix
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add release
+exec git-hop add hotfix
+
+# Fresh entries carry no base at all.
+exec cat hop.json
+! stdout '"base"'
+
+# Status therefore falls back to the hub default branch for every entry.
+exec git-hop status
+stdout 'hotfix\s+main\s+Linked'
+
+# --- plain repair leaves base alone ---
+exec git-hop repair -n
+stdout 'noop\s+.*/hub/hops/hotfix'
+! stdout 'record-base'
+
+# --- --base infers from tracking config when it names a known branch ---
+# Real pushes/pulls set branch.<n>.merge; do the same directly so the script
+# does not depend on which remote operation happened to run first.
+cd $WORK/hub/hops/hotfix
+exec git config branch.hotfix.merge refs/heads/release
+cd $WORK/hub
+
+exec git-hop repair -n --base
+stdout 'record-base\s+.*/hub/hops/hotfix — branch\.hotfix\.merge=refs/heads/release'
+
+# release has no tracking config, so it falls back to the second signal:
+# the branch whose merge-base with it is most recent. That is hotfix
+# (they share the release-work commit) rather than main (whose merge-base
+# is the older initial commit).
+stdout 'record-base\s+.*/hub/hops/release — most-recent merge-base with hotfix'
+
+# Dry run must not persist anything.
+exec cat hop.json
+! stdout '"base"'
+
+# --- apply, and confirm the value lands in hop.json ---
+exec git-hop repair --base
+stdout 'record-base\s+.*/hub/hops/hotfix'
+exec cat hop.json
+stdout '"base": "release"'
+
+# --- the recorded base is what status compares against ---
+# hotfix is 1 commit ahead of release but 2 ahead of main; the Base column
+# naming release, plus the "1 ahead" count, together prove the recorded
+# value is being used rather than the default-branch fallback.
+exec git-hop status
+stdout 'hotfix\s+release\s+Linked\s+1 ahead'
+
+# release picked up its own inferred base too, and its label is computed
+# against that base rather than the hub default: relative to hotfix it is
+# 1 behind, whereas against main it was 1 ahead. The flip is the proof
+# that the recorded value is in play.
+stdout 'release\s+hotfix\s+Linked\s+behind \(1\)'
+
+-- release.txt --
+release line
+-- hotfix.txt --
+hotfix line
