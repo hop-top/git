@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
@@ -169,10 +169,9 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 		return nil
 	}
 
-	// 6. pre-repair hook (best-effort: skip if hooks package can't be wired
-	// from a non-worktree cwd; the existing hook runner is bound to git
-	// repos, so a missing-hook is silent here).
-	if abort := firePreRepairHook(hubPath); abort != nil {
+	// 6. pre-repair hook. Blocking: a non-zero exit aborts before any
+	// mutation, so nothing has been backed up or applied yet.
+	if abort := firePreRepairHook(fs, hubPath); abort != nil {
 		return opErr("pre-repair hook aborted: " + abort.Error())
 	}
 
@@ -215,7 +214,7 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 	}
 
 	// 10. post-repair hook (advisory, ignore exit).
-	_ = firePostRepairHook(hubPath)
+	_ = firePostRepairHook(fs, hubPath)
 
 	if backupID != "" {
 		fmt.Fprintf(os.Stderr, "hint: backup written to .hop/backups/%s\n", backupID)
@@ -302,30 +301,87 @@ func introducedNewIssue(orig, post *hop.Plan) bool {
 	return false
 }
 
-// firePreRepairHook invokes the pre-repair hook if installed at
-// $XDG_CONFIG_HOME/git-hop/hooks/pre-repair. Returns non-nil error to
-// abort. Runs synchronously; output flows to caller's stderr.
-func firePreRepairHook(hubPath string) error {
-	return runRepairHook("pre-repair", hubPath)
+// firePreRepairHook invokes the pre-repair hook. Returns non-nil error
+// to abort the repair before any mutation. Runs synchronously.
+func firePreRepairHook(fs afero.Fs, hubPath string) error {
+	return runRepairHook(fs, "pre-repair", hubPath)
 }
 
 // firePostRepairHook fires the advisory post-repair hook. Errors are
 // swallowed by the caller; we still return them for symmetry.
-func firePostRepairHook(hubPath string) error {
-	return runRepairHook("post-repair", hubPath)
+func firePostRepairHook(fs afero.Fs, hubPath string) error {
+	return runRepairHook(fs, "post-repair", hubPath)
 }
 
-func runRepairHook(name, hubPath string) error {
-	hookPath := filepath.Join(hop.GetHooksDir(), name)
-	info, err := os.Stat(hookPath)
-	if err != nil || info.IsDir() {
-		return nil
+// runRepairHook dispatches a repair hook through the shared hooks.Runner,
+// so repair resolves hooks exactly like every other command: repo-level
+// (.git-hop/hooks/, searched up to the hub), then hopspace-level, then
+// global. It also inherits the runner's name validation and its
+// executable-bit check.
+//
+// Working directory: DELIBERATELY not set. Repair hooks inherit git-hop's
+// cwd exactly like every other hook. An earlier hand-rolled dispatch ran
+// them with cwd pinned to the hub; that was the only such exception in
+// the tree and it has been aligned away on purpose — do not restore it
+// thinking it was an oversight. A hook that wants the hub cds there
+// itself via GIT_HOP_WORKTREE_PATH, the idiom every hook example uses.
+//
+// Hook environment. The runner always exports all four standard vars,
+// empty ones included, so repair follows the export-empty convention
+// rather than the omit-when-empty convention hooks.SwitchEnvVars uses for
+// its optional extras. That distinction is load-bearing here: a hook
+// author can tell "field known to be unresolvable" (variable is set and
+// empty, `${GIT_HOP_REPO_ID+set}` is non-empty) from "field absent"
+// (variable unset entirely, which for these four never happens).
+//
+//   - GIT_HOP_HOOK_NAME     — set by the runner.
+//   - GIT_HOP_WORKTREE_PATH — the hub path. Repair operates on the hub,
+//     not on one worktree; the hub is the directory the hook cares about
+//     and the anchor for the repo-level hook search.
+//   - GIT_HOP_BRANCH        — empty. A repair run spans every registered
+//     branch, so no single branch is the subject. Empty is the honest
+//     answer; naming an arbitrary branch would be worse.
+//   - GIT_HOP_REPO_ID       — "github.com/<org>/<repo>" when resolvable,
+//     otherwise empty. See repairHookRepoID.
+//
+// The repo ID is resolved at dispatch time rather than passed in, which
+// makes the pre/post asymmetry fall out naturally: pre-repair reads the
+// possibly-damaged hub config, post-repair reads the repaired one.
+func runRepairHook(fs afero.Fs, name, hubPath string) error {
+	_, err := hooks.NewRunner(fs).ExecuteHook(name, hubPath, repairHookRepoID(fs, hubPath), "")
+	return err
+}
+
+// repairHookRepoID builds the 3-part repo identifier hooks.Runner needs
+// for hopspace-level hook lookup, reading the hub config as it stands at
+// the moment of the call.
+//
+// Returns "" when the hub config is missing, unreadable, or lacks org or
+// repo. A partial ID is worse than none: the runner splits on "/" and
+// needs at least three segments, so "github.com//" would fail hopspace
+// lookup anyway while looking like a real value to a hook. Empty is the
+// truthful signal that the field could not be determined.
+//
+// The consequence differs by hook, and the difference is the point:
+//
+//   - pre-repair runs before the fix, when hop.json may be exactly as
+//     broken as the reason repair was invoked. An empty repo ID here is
+//     expected. Hopspace-level lookup silently falls through to global,
+//     while repo-level and global hooks still resolve normally. Dispatch
+//     is never skipped and never fails on account of a missing field.
+//   - post-repair runs after a successful repair, so hop.json is valid by
+//     construction and the full 3-part ID resolves, making hopspace-level
+//     post-repair hooks work.
+func repairHookRepoID(fs afero.Fs, hubPath string) string {
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil {
+		return ""
 	}
-	c := exec.Command(hookPath)
-	c.Dir = hubPath
-	c.Stdout = os.Stderr
-	c.Stderr = os.Stderr
-	return c.Run()
+	org, repo := hub.Config.Repo.Org, hub.Config.Repo.Repo
+	if org == "" || repo == "" {
+		return ""
+	}
+	return fmt.Sprintf("github.com/%s/%s", org, repo)
 }
 
 // fatal returns an error that the cobra layer surfaces with exit 128.
