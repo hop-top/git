@@ -253,7 +253,9 @@ Status values:
 |-------|---------|
 | `default` | This is the hub's default branch |
 | `synced` | Same tip as default — no commits ahead or behind |
-| `merged (N behind)` | Branch tip is reachable from default; default has moved on by N commits |
+| `merged` | Branch content is already in default (squash or rebase merge) and default has not moved on |
+| `merged (N behind)` | Branch tip is reachable from default, or its content is already in default (squash and rebase merges); default has moved on by N commits |
+| `behind (N)` | Default has moved on by N commits and the branch has none of its own |
 | `N ahead` | Branch has N commits not yet on default |
 | `diverged (N ahead, M behind)` | Branch and default have both moved |
 | `unknown` | Couldn't compute (e.g. default branch ref missing locally) |
