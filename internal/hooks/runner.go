@@ -201,6 +201,40 @@ func (r *Runner) GetHookEnv(hookName string, worktreePath string, repoID string,
 	}
 }
 
+// Trigger values for GIT_HOP_TRIGGER, identifying what initiated a
+// worktree switch.
+const (
+	// TriggerHop marks a switch driven by an explicit hop command.
+	TriggerHop = "hop"
+	// TriggerChdir marks a switch driven by shell directory change.
+	TriggerChdir = "chdir"
+)
+
+// SwitchEnvVars builds the extra hook environment describing where a
+// worktree switch came from and what triggered it. The result is meant to
+// be merged into the map passed to ExecuteHookWithDetector, matching how
+// per-command extras already reach hooks.
+//
+// Empty fields are omitted rather than exported as empty strings, so a
+// hook can distinguish "no previous worktree" (fresh shell, post-clone)
+// from "previous worktree was the empty string". Callers merge with the
+// detector map; unset keys never reach the child process.
+func SwitchEnvVars(fromBranch string, fromWorktreePath string, trigger string) map[string]string {
+	envVars := make(map[string]string)
+
+	if fromBranch != "" {
+		envVars["GIT_HOP_FROM_BRANCH"] = fromBranch
+	}
+	if fromWorktreePath != "" {
+		envVars["GIT_HOP_FROM_WORKTREE_PATH"] = fromWorktreePath
+	}
+	if trigger != "" {
+		envVars["GIT_HOP_TRIGGER"] = trigger
+	}
+
+	return envVars
+}
+
 // InstallHooks installs git-hop hooks in a worktree, hub, or worktree
 // child. Creates .git-hop/hooks directory for repo-level hook overrides.
 //
