@@ -13,9 +13,9 @@ import (
 	"hop.top/git/internal/hop"
 )
 
-// TestAddBranchesFromDefaultBranchTip is the regression test for T-0218: a new
-// worktree created via WorktreeManager should branch from the tip of the
-// repo's default branch, not from the initial root commit.
+// TestAddBranchesFromDefaultBranchTip is the regression test for a new
+// worktree created via WorktreeManager branching from the initial root commit
+// instead of the tip of the repo's default branch.
 func TestAddBranchesFromDefaultBranchTip(t *testing.T) {
 	tempDir := t.TempDir()
 
@@ -81,7 +81,7 @@ func TestAddBranchesFromDefaultBranchTip(t *testing.T) {
 			got, mainTip, rootCommit)
 	}
 	if got == rootCommit {
-		t.Error("new worktree HEAD points at the root commit — the T-0218 bug")
+		t.Error("new worktree HEAD points at the root commit — the original bug")
 	}
 }
 

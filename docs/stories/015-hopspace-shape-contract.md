@@ -36,7 +36,7 @@ to the conversion path (`git hop init`).
 ## Why this story exists
 
 Two prior commits attempted to make the regular-clone path "work" by
-producing a non-bare hopspace with detached HEAD (T-0213, T-0214). Both
+producing a non-bare hopspace with detached HEAD. Both
 shipped because tests asserted *symptoms* (specific files exist, specific
 branches not checked out) rather than the *contract* the system must
 satisfy.
@@ -70,9 +70,9 @@ every test that produces a hopspace.
 
 ## Reverts / supersedes
 
-- T-0213 (commit `4a6c30e`) — wrong-shape attempt: detached non-bare clone
+- Commit `4a6c30e` — wrong-shape attempt: detached non-bare clone
   at root + worktree at hops/main.
-- T-0214 (commit `fc1f15e`) — partial follow-up to T-0213; same wrong shape.
+- Commit `fc1f15e` — partial follow-up to `4a6c30e`; same wrong shape.
 
 Both are superseded by this story's commit, which restores the bare-only
 contract.

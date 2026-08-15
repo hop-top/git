@@ -112,7 +112,8 @@ func AssertHopspaceShape(t *testing.T, hubPath, defaultBranch string) {
 // produced by `git hop <repo>`. This is the single regression guard for
 // hopspace shape — covers what TestClone_OutsideRepo only partially asserts.
 //
-// Captures the contract for T-0215.
+// Captures the hopspace shape contract documented in
+// docs/stories/015-hopspace-shape-contract.md.
 func TestHopspaceShape_AfterClone(t *testing.T) {
 	t.Parallel()
 	env := SetupTestEnv(t)
