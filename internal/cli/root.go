@@ -262,6 +262,14 @@ Worktree Mode:
 			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig, hookOpts, dispatch); err != nil {
 				output.Fatal("Clone failed: %v", err)
 			}
+
+			// A clone produces the user's very first worktree, and until it
+			// reaches the roots cache the shell integration has nothing to
+			// match $PWD against -- which is what made the whole chdir
+			// feature read as inert on a fresh install. The refresh lives
+			// here rather than inside CloneWorktree because internal/shell
+			// imports internal/hop; the reverse import would cycle.
+			refreshRootsCacheAt(fs, cloneHubPath(expandedArg, projectPath))
 			return
 		}
 
@@ -368,6 +376,53 @@ Worktree Mode:
 	RootCmd.Flags().MarkHidden("admin")
 
 	_ = Root.Viper.BindPFlag("json", pf.Lookup("json"))
+}
+
+// cloneHubPath reproduces the project root CloneWorktree derived, so the
+// caller can find the hub the clone just wrote without CloneWorktree having
+// to report it.
+//
+// Duplicating the derivation is deliberate. The alternative -- widening
+// CloneWorktree's signature to return the path -- changes a function the
+// clone tests, the init path, and the e2e suite all pin, to serve a
+// best-effort cache refresh. The rule being mirrored is one line long and
+// stated in one place (repo name = last URI segment minus ".git", rooted at
+// cwd unless the user named a path), and a drift here degrades to a cache
+// that is not refreshed, never to a bad clone.
+func cloneHubPath(uri, projectPath string) string {
+	root := projectPath
+	if root == "" {
+		parts := strings.Split(uri, "/")
+		name := strings.TrimSuffix(parts[len(parts)-1], ".git")
+		cwd, _ := os.Getwd()
+		root = filepath.Join(cwd, name)
+	}
+	abs, err := filepath.Abs(root)
+	if err != nil {
+		return root
+	}
+	return abs
+}
+
+// refreshRootsCacheAt restates the worktree set of the hub at hubPath in
+// the shell integration's roots cache.
+//
+// The hub-by-path form exists for callers that have just written a hub to
+// disk rather than holding one in memory -- clone being the case that
+// matters. Everything about it is best-effort: a hub that cannot be found
+// or loaded means there is nothing to restate, which on this path is
+// indistinguishable from a clone that did not produce one, and either way
+// the operation it trails has already succeeded and must not be failed by a
+// cache write.
+func refreshRootsCacheAt(fs afero.Fs, hubPath string) {
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil {
+		output.Debug("failed to load hub for worktree roots cache: %v", err)
+		return
+	}
+	if err := shell.RebuildRootsCache(fs, hub, hubPath); err != nil {
+		output.Debug("failed to refresh worktree roots cache: %v", err)
+	}
 }
 
 // publishWorktreeSwitched emits events.WorktreeSwitched after a successful
