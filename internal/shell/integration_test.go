@@ -3,6 +3,7 @@ package shell_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -160,26 +161,17 @@ func TestInstallIntegration(t *testing.T) {
 			t.Error("Second installation changed status")
 		}
 
-		// Verify wrapper is not duplicated
+		// Verify wrapper is not duplicated.
+		//
+		// Counts the BEGIN marker specifically: the block is delimited by
+		// a begin and an end marker, so the bare phrase "git-hop shell
+		// integration" legitimately occurs twice within one block.
 		rcPath := filepath.Join(tmpDir, ".bashrc")
 		content, _ := afero.ReadFile(fs, rcPath)
-		firstIdx := -1
-		secondIdx := -1
-		marker := "git-hop shell integration"
+		beginMarker := "# git-hop shell integration (installed by git-hop)"
 
-		for i := 0; i < len(content)-len(marker); i++ {
-			if string(content[i:i+len(marker)]) == marker {
-				if firstIdx == -1 {
-					firstIdx = i
-				} else if secondIdx == -1 {
-					secondIdx = i
-					break
-				}
-			}
-		}
-
-		if secondIdx != -1 {
-			t.Error("Wrapper was installed twice (not idempotent)")
+		if n := strings.Count(string(content), beginMarker); n != 1 {
+			t.Errorf("found %d wrapper blocks, want exactly 1 (not idempotent)", n)
 		}
 	})
 }
