@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+#
+# post-worktree-remove -- kill the window belonging to this worktree.
+#
+# Only that window. The session and every sibling window survive: removing
+# one worktree says nothing about the others.
+set -u
+
+# shellcheck source=./_hop-tmux-lib.sh
+. "$(dirname "$0")/_hop-tmux-lib.sh"
+
+hop_tmux_available || exit 0
+
+session="$(hop_tmux_session_name "${GIT_HOP_REPO_ID:-unknown}")"
+window="$(hop_tmux_window_name "${GIT_HOP_BRANCH:-detached}")"
+
+# Nothing to kill if the user already closed it by hand. Not an error.
+hop_tmux_has_window "$session" "$window" || exit 0
+
+# The '=' in the target (built by hop_tmux_window_target) is load-bearing
+# here above all else: without it tmux does a prefix match, and killing
+# "feature+a" would kill "feature+ab" instead. That is destroying a user's
+# running work in a window they did not ask to close.
+tmux kill-window -t "$(hop_tmux_window_target "$session" "$window")" >/dev/null 2>&1
+
+exit 0
