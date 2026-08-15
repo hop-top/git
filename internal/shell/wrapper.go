@@ -13,14 +13,14 @@ import (
 // outdated wrapper and it gets rewritten. Bump it whenever the emitted
 // shell changes behaviour, otherwise every existing installation keeps
 // the old code forever while reporting itself correctly configured.
-const wrapperVersion = 2
+const wrapperVersion = 3
 
 // GenerateWrapperFunction generates a shell function wrapper for git-hop
 // that enables automatic directory switching after successful commands
 func GenerateWrapperFunction(shellType string) string {
 	switch shellType {
 	case "bash", "zsh":
-		return generateBashZshWrapper()
+		return generateBashZshWrapper(shellType)
 	case "fish":
 		return generateFishWrapper()
 	default:
@@ -34,7 +34,11 @@ func GenerateWrapperFunction(shellType string) string {
 // uninstall path can excise it by exact bounds instead of guessing where
 // the function ends -- brace-matching stopped at the wrapper function and
 // orphaned the completion block that follows it.
-func generateBashZshWrapper() string {
+//
+// The wrapper function itself is identical for bash and zsh, but the chdir
+// handler appended to it is not: zsh has a real chpwd hook while bash has
+// to approximate one on PROMPT_COMMAND. Hence the shellType parameter.
+func generateBashZshWrapper(shellType string) string {
 	return fmt.Sprintf(`
 %s
 git-hop() {
@@ -109,7 +113,9 @@ _git_hop() {
 }
 complete -o default -F _git_hop git-hop
 %s
-`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled, wrapperEndMarker)
+%s
+`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+		chdirHandlerFor(shellType), wrapperEndMarker)
 }
 
 // generateFishWrapper emits the fish integration block.
@@ -175,5 +181,7 @@ end
 # git-hop tab completion
 complete -c git-hop -f -a '(command git-hop __complete (commandline -cop) 2>/dev/null)'
 %s
-`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled, wrapperEndMarker)
+%s
+`, versionedBeginMarker(), hooks.ExitNavigationHandled, hooks.ExitNavigationHandled,
+		chdirHandlerFor("fish"), wrapperEndMarker)
 }
