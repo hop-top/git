@@ -75,6 +75,15 @@ func IsURI(s string) bool {
 	return strings.Contains(s, "://") || strings.HasPrefix(s, "git@") || strings.HasSuffix(s, ".git")
 }
 
+// ExpandShorthand turns an `org/repo` clone shorthand into a full SSH URI.
+// Anything already URI-shaped, or not exactly two slash-separated segments,
+// is returned verbatim.
+//
+// This is the no-context fallback: it decides purely on the shape of the
+// string, so an `org/repo`-shaped branch name is indistinguishable from a
+// clone shorthand here. Callers that DO have context — i.e. that are inside
+// a hub and can see which worktrees actually exist — must go through
+// ResolveArg instead, which consults the hub before falling back to this.
 func ExpandShorthand(s string, gitDomain string) string {
 	if IsURI(s) {
 		return s
@@ -82,14 +91,6 @@ func ExpandShorthand(s string, gitDomain string) string {
 
 	parts := strings.Split(s, "/")
 	if len(parts) == 2 && !strings.Contains(s, " ") {
-		firstPart := parts[0]
-		commonBranchPrefixes := []string{"feat", "fix", "bug", "docs", "test", "chore", "refactor", "perf", "style", "build", "ci", "revert"}
-		for _, prefix := range commonBranchPrefixes {
-			if firstPart == prefix {
-				return s
-			}
-		}
-
 		if gitDomain == "" {
 			gitDomain = "github.com"
 		}
@@ -97,6 +98,27 @@ func ExpandShorthand(s string, gitDomain string) string {
 	}
 
 	return s
+}
+
+// ResolveArg decides whether the bare positional argument to `git hop` names
+// an existing worktree (switch mode) or a repository to clone (clone mode).
+//
+// knownBranches is the hub's registered branch set, or nil when the caller is
+// not inside a hub. A registered branch wins outright, whatever its name looks
+// like: the hub is ground truth about which worktrees exist, so `feature/login`
+// resolves to a switch when that worktree is registered and to a clone
+// shorthand when it is not. Only when the hub has nothing by that name — or
+// there is no hub at all — does the shape-based ExpandShorthand fallback run.
+//
+// This replaces an allowlist of conventional-commit-ish branch prefixes
+// (feat, fix, bug, ...) that guessed at which `a/b` strings were branch names.
+// The guess mis-routed every prefix nobody enumerated — `feature/`, `release/`,
+// `hotfix/`, personal prefixes like `jad/` — into clone mode.
+func ResolveArg(arg string, gitDomain string, knownBranches map[string]config.HubBranch) string {
+	if _, exists := knownBranches[arg]; exists {
+		return arg
+	}
+	return ExpandShorthand(arg, gitDomain)
 }
 
 func Execute() error {
@@ -187,19 +209,37 @@ Worktree Mode:
 			domain = "github.com"
 		}
 
-		expandedArg := ExpandShorthand(arg, domain)
+		// Hub lookup is hoisted above shorthand expansion so the expansion can
+		// see which worktrees actually exist. FindHub/LoadHub are pure reads
+		// (afero stat walk + JSON unmarshal), so running them before the
+		// clone branch costs nothing and mutates nothing. A missing hub is the
+		// normal out-of-hub case, not an error: hub stays nil and ResolveArg
+		// degrades to the shape-based fallback.
+		hubPath, hubErr := hop.FindHub(fs, cwd)
+		var hub *hop.Hub
+		if hubErr == nil {
+			var loadErr error
+			hub, loadErr = hop.LoadHub(fs, hubPath)
+			if loadErr != nil {
+				output.Fatal("Failed to load hub config: %v", loadErr)
+			}
+		}
+
+		var knownBranches map[string]config.HubBranch
+		if hub != nil {
+			knownBranches = hub.Config.Branches
+		}
+
+		expandedArg := ResolveArg(arg, domain, knownBranches)
 
 		if IsURI(expandedArg) {
 			branch, _ := cmd.Flags().GetString("branch")
 
-			if branch != "" {
-				hubPath, err := hop.FindHub(fs, cwd)
-				if err == nil {
-					if err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath); err != nil {
-						output.Fatal("Fork-Attach failed: %v", err)
-					}
-					return
+			if branch != "" && hubErr == nil {
+				if err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath); err != nil {
+					output.Fatal("Fork-Attach failed: %v", err)
 				}
+				return
 			}
 
 			projectPath := ""
@@ -224,13 +264,7 @@ Worktree Mode:
 			return
 		}
 
-		hubPath, err := hop.FindHub(fs, cwd)
-		if err == nil {
-			hub, loadErr := hop.LoadHub(fs, hubPath)
-			if loadErr != nil {
-				output.Fatal("Failed to load hub config: %v", loadErr)
-			}
-
+		if hubErr == nil {
 			branch, exists := hub.Config.Branches[arg]
 			if !exists {
 				output.Fatal("Worktree '%s' does not exist. Use 'git hop add %s' to create it.", arg, arg)
