@@ -77,6 +77,10 @@ func TestGetBranchSyncStatus(t *testing.T) {
 		// Diff shortstat probes for line counts in the dirty suffix.
 		unstagedKey = dir + ":git diff --shortstat"
 		stagedKey   = dir + ":git diff --cached --shortstat"
+		// Content-equivalence probe used to catch squash/rebase merges
+		// when the branch is ahead in topology.
+		mergeTreeKey = dir + ":git merge-tree --write-tree " + def + " " + branch
+		defTreeKey   = dir + ":git rev-parse " + def + "^{tree}"
 	)
 
 	dirtyTracked := &git.Status{
@@ -112,22 +116,26 @@ func TestGetBranchSyncStatus(t *testing.T) {
 		// probe — the formatter must fall back to count-only.
 		unstagedShortstat string
 		stagedShortstat   string
-		want              string
+		// contentMerged makes the in-memory merge of branch into default
+		// produce default's existing tree, i.e. the branch adds nothing —
+		// the fingerprint of a squash- or rebase-merge.
+		contentMerged bool
+		want          string
 	}{
 		// Existing position cases — no dirty suffix.
-		{"default branch itself", "main", "main", "", nil, nil, false, false, "", "", "default"},
-		{"empty default falls back", "feature", "", "", nil, nil, false, false, "", "", "default"},
-		{"synced — same head", branch, def, "0\t0", nil, nil, false, false, "", "", "synced"},
-		{"ahead only", branch, def, "5\t0", nil, nil, false, false, "", "", "5 ahead"},
-		{"diverged", branch, def, "2\t4", nil, nil, false, false, "", "", "diverged (2 ahead, 4 behind)"},
-		{"git error → unknown", branch, def, "", errors.New("boom"), nil, false, false, "", "", "unknown"},
-		{"malformed output → unknown", branch, def, "garbage", nil, nil, false, false, "", "", "unknown"},
+		{"default branch itself", "main", "main", "", nil, nil, false, false, "", "", false, "default"},
+		{"empty default falls back", "feature", "", "", nil, nil, false, false, "", "", false, "default"},
+		{"synced — same head", branch, def, "0\t0", nil, nil, false, false, "", "", false, "synced"},
+		{"ahead only", branch, def, "5\t0", nil, nil, false, false, "", "", false, "5 ahead"},
+		{"diverged", branch, def, "2\t4", nil, nil, false, false, "", "", false, "diverged (2 ahead, 4 behind)"},
+		{"git error → unknown", branch, def, "", errors.New("boom"), nil, false, false, "", "", false, "unknown"},
+		{"malformed output → unknown", branch, def, "garbage", nil, nil, false, false, "", "", false, "unknown"},
 
 		// merged-vs-behind gate (ahead==0, behind>0).
-		{"merged — remote deleted after tracking", branch, def, "0\t3", nil, nil, true, true, "", "", "merged (3 behind)"},
-		{"behind — unborn (no remote, no upstream)", branch, def, "0\t3", nil, nil, true, false, "", "", "behind (3)"},
-		{"behind — origin still present", branch, def, "0\t3", nil, nil, false, true, "", "", "behind (3)"},
-		{"behind — ref gone but upstream config missing", branch, def, "0\t3", nil, nil, true, false, "", "", "behind (3)"},
+		{"merged — remote deleted after tracking", branch, def, "0\t3", nil, nil, true, true, "", "", false, "merged (3 behind)"},
+		{"behind — unborn (no remote, no upstream)", branch, def, "0\t3", nil, nil, true, false, "", "", false, "behind (3)"},
+		{"behind — origin still present", branch, def, "0\t3", nil, nil, false, true, "", "", false, "behind (3)"},
+		{"behind — ref gone but upstream config missing", branch, def, "0\t3", nil, nil, true, false, "", "", false, "behind (3)"},
 
 		// Dirty detail — counts + line deltas from --shortstat.
 		// Tracked-only with stats present.
@@ -135,6 +143,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"dirty: 1 tracked, +42/-7 unstaged",
 			branch, def, "0\t0", nil, dirtyTracked, false, false,
 			" 1 file changed, 42 insertions(+), 7 deletions(-)", "",
+			false,
 			"synced, dirty (1 tracked +42/-7)",
 		},
 		// Tracked across both staged and unstaged — sums.
@@ -143,6 +152,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			branch, def, "0\t0", nil, dirtyTracked, false, false,
 			" 1 file changed, 10 insertions(+), 2 deletions(-)",
 			" 1 file changed, 32 insertions(+), 5 deletions(-)",
+			false,
 			"synced, dirty (1 tracked +42/-7)",
 		},
 		// Untracked-only — no line stats segment.
@@ -150,6 +160,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"dirty: untracked only",
 			branch, def, "0\t0", nil, dirtyUntrackedOnly, false, false,
 			"", "",
+			false,
 			"synced, dirty (2 untracked)",
 		},
 		// Mixed tracked + unmerged + untracked, with stats.
@@ -157,6 +168,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"dirty: mixed segments",
 			branch, def, "0\t3", nil, dirtyMixed, false, false,
 			" 1 file changed, 8 insertions(+), 1 deletion(-)", "",
+			false,
 			"behind (3), dirty (1 tracked +8/-1, 1 unmerged, 1 untracked)",
 		},
 		// Stats probe fails (e.g. dubious-ownership) → tracked count only.
@@ -164,6 +176,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"dirty: tracked count only when shortstat fails",
 			branch, def, "0\t0", nil, dirtyTracked, false, false,
 			"", "", // both empty → no line deltas
+			false,
 			"synced, dirty (1 tracked)",
 		},
 		// Pure adds (no deletions in shortstat).
@@ -171,6 +184,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"dirty: tracked with insertions only",
 			branch, def, "0\t0", nil, dirtyTracked, false, false,
 			" 1 file changed, 5 insertions(+)", "",
+			false,
 			"synced, dirty (1 tracked +5/-0)",
 		},
 		// Pure deletes.
@@ -178,6 +192,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"dirty: tracked with deletions only",
 			branch, def, "0\t0", nil, dirtyTracked, false, false,
 			" 1 file changed, 3 deletions(-)", "",
+			false,
 			"synced, dirty (1 tracked +0/-3)",
 		},
 		// The originally reported bug, fully formatted.
@@ -185,6 +200,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"behind + dirty (the reported bug)",
 			branch, def, "0\t3", nil, dirtyTracked, false, false,
 			" 1 file changed, 12 insertions(+), 3 deletions(-)", "",
+			false,
 			"behind (3), dirty (1 tracked +12/-3)",
 		},
 		// Merged + dirty with deltas — confirms suffix composes with merge label.
@@ -192,6 +208,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"merged + dirty with deltas",
 			branch, def, "0\t3", nil, dirtyTracked, true, true,
 			" 1 file changed, 12 insertions(+), 3 deletions(-)", "",
+			false,
 			"merged (3 behind), dirty (1 tracked +12/-3)",
 		},
 		// Ahead + dirty.
@@ -199,6 +216,7 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"ahead + dirty",
 			branch, def, "5\t0", nil, dirtyTracked, false, false,
 			" 1 file changed, 2 insertions(+), 0 deletions(-)", "",
+			false,
 			"5 ahead, dirty (1 tracked +2/-0)",
 		},
 		// Diverged + dirty.
@@ -206,7 +224,58 @@ func TestGetBranchSyncStatus(t *testing.T) {
 			"diverged + dirty",
 			branch, def, "2\t4", nil, dirtyMixed, false, false,
 			" 1 file changed, 8 insertions(+), 1 deletion(-)", "",
+			false,
 			"diverged (2 ahead, 4 behind), dirty (1 tracked +8/-1, 1 unmerged, 1 untracked)",
+		},
+
+		// Squash/rebase merges. Topology reports the branch ahead because
+		// the shipped commits were rewritten onto default under new SHAs,
+		// so only a content comparison can see that the work landed.
+		{
+			"squash-merged: ahead in topology but content already in default",
+			branch, def, "2\t3", nil, nil, false, false,
+			"", "",
+			true,
+			"merged (3 behind)",
+		},
+		{
+			"squash-merged with nothing behind",
+			branch, def, "2\t0", nil, nil, false, false,
+			"", "",
+			true,
+			"merged",
+		},
+		{
+			"squash-merged while diverged",
+			branch, def, "2\t4", nil, nil, false, false,
+			"", "",
+			true,
+			"merged (4 behind)",
+		},
+		// The false-positive regression guard. A branch with real,
+		// unshipped commits must never be labelled merged — mislabelling
+		// here is what lets `git hop remove --merged` delete live work.
+		{
+			"ahead with genuine content: never claims merged",
+			branch, def, "2\t3", nil, nil, false, false,
+			"", "",
+			false,
+			"diverged (2 ahead, 3 behind)",
+		},
+		{
+			"ahead-only with genuine content stays ahead",
+			branch, def, "5\t0", nil, nil, false, false,
+			"", "",
+			false,
+			"5 ahead",
+		},
+		// Content-merged branches keep the dirty suffix.
+		{
+			"squash-merged + dirty",
+			branch, def, "2\t3", nil, dirtyTracked, false, false,
+			" 1 file changed, 12 insertions(+), 3 deletions(-)", "",
+			true,
+			"merged (3 behind), dirty (1 tracked +12/-3)",
 		},
 	}
 
@@ -217,6 +286,15 @@ func TestGetBranchSyncStatus(t *testing.T) {
 				m.Runner.Errors[revKey] = tc.err
 			} else {
 				m.Runner.Responses[revKey] = tc.response
+			}
+			// Content-equivalence probe. contentMerged=true makes the
+			// in-memory merge produce default's existing tree (branch adds
+			// nothing); false makes it produce a different tree.
+			m.Runner.Responses[defTreeKey] = "maintree"
+			if tc.contentMerged {
+				m.Runner.Responses[mergeTreeKey] = "maintree"
+			} else {
+				m.Runner.Responses[mergeTreeKey] = "branchtree"
 			}
 			if tc.originRefGone {
 				m.Runner.Errors[refKey] = errors.New("ref not found")
