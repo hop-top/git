@@ -31,7 +31,6 @@ type chdirFixture struct {
 	unrelated string // NOT registered
 	binDir    string
 	forkLog   string
-	cachePath string
 }
 
 // newChdirFixture lays out the directories and writes the roots cache the
