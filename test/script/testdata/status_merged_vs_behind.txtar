@@ -1,0 +1,91 @@
+# `git hop status` distinguishes "merged" from "behind" using two signals,
+# and needs BOTH: zero commits ahead of the default branch, AND the local
+# fingerprint of a deleted remote (no refs/remotes/origin/<branch>, but a
+# branch.<name>.merge entry proving the branch once tracked one).
+#
+# The script walks the same branch through three states so the labels can
+# only pass by actually reacting to the repository:
+#
+#   1. merged into main by merge commit, remote still present -> behind (N)
+#   2. same commit graph, remote deleted and pruned            -> merged (N behind)
+#   3. squash-merged branch, remote still present              -> merged (N behind)
+#
+# State 1 vs 2 is the load-bearing pair: the commit graph is IDENTICAL
+# across them. Only the remote-tracking ref changes. A status implementation
+# that looked at reachability alone would label both the same and fail here.
+#
+# State 3 arrives at the same verdict by the other route. Its commit is
+# still unreachable from main and rev-list still counts it ahead, so
+# topology says diverged; the content probe says merging it would add
+# nothing. Both routes are exercised here precisely because they are
+# independent -- neither one alone labels all three states correctly.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+
+# topic: one commit, merged into main with a merge commit, then main moves on.
+exec git checkout -b topic
+exec git commit --allow-empty -m 'topic work'
+exec git push origin topic
+exec git checkout main
+exec git merge --no-ff topic -m 'merge topic'
+exec git commit --allow-empty -m 'later main work'
+exec git push origin main
+
+# squashed: one commit, replayed onto main as a fresh single commit.
+exec git checkout -b squashed main
+exec git commit --allow-empty -m 'squashed work'
+exec git push origin squashed
+exec git checkout main
+exec git commit --allow-empty -m 'squash of squashed work'
+exec git push origin main
+
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add topic
+exec git-hop add squashed
+
+# Establish tracking, as a real push/pull would. Without branch.<n>.merge
+# the "remote is gone" signal is unreadable and status must not claim merged.
+cd $WORK/hub/hops/topic
+exec git branch --set-upstream-to=origin/topic topic
+cd $WORK/hub
+
+# --- state 1: merged by merge commit, remote alive -> behind, not merged ---
+# Zero commits ahead of main, so reachability alone would say "merged".
+# Status must not, because origin/topic still exists.
+exec git-hop status
+stdout 'topic\s+main\s+Linked\s+behind \(3\)'
+! stdout 'topic\s+main\s+Linked\s+merged'
+
+# --- state 3: squash-merge, remote alive -> merged on content ---
+# The squashed commit on main has a different SHA from the branch's own
+# commit, so rev-list sees one commit each way and topology alone would
+# say diverged. The content probe overrides that: merging the branch into
+# main would add nothing, so the work has demonstrably shipped.
+stdout 'squashed\s+main\s+Linked\s+merged \(1 behind\)'
+! stdout 'squashed\s+main\s+Linked\s+diverged'
+
+# --- state 2: delete the remote branch and prune -> merged ---
+# The commit graph is untouched; only refs/remotes/origin/topic goes away.
+exec git push $WORK/repo.git --delete topic
+cd $WORK/hub/hops/topic
+exec git fetch --prune origin
+! exec git rev-parse --verify refs/remotes/origin/topic
+cd $WORK/hub
+
+exec git-hop status
+stdout 'topic\s+main\s+Linked\s+merged \(3 behind\)'
+! stdout 'topic\s+main\s+Linked\s+behind'
+
+# The squashed branch is unaffected: deleting topic's remote says nothing
+# about it, and its own label was never remote-derived. This pins that the
+# merged verdict is per-branch, not a hub-wide flip triggered by the fetch
+# above -- topic reaches "merged" through the remote-deletion fingerprint
+# while squashed reaches it through content, and neither path moves the
+# other.
+stdout 'squashed\s+main\s+Linked\s+merged \(1 behind\)'

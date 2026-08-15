@@ -1,0 +1,78 @@
+# `git hop repair` restores the origin fetch refspec that older hubs are
+# missing.
+#
+# Background: `git clone --bare` drops remote.origin.fetch. Hubs cloned
+# before the post-clone restore landed have an origin URL but no refspec, so
+# `git fetch origin` updates nothing under refs/remotes/origin/ and every
+# ahead/behind or upstream-tracking operation silently misreads.
+#
+# The script recreates that legacy shape by unsetting the key on a healthy
+# hub, then pins the whole recovery: detection, the pathspec carve-out, the
+# apply, and — most importantly — that fetching works again afterwards.
+# Asserting only that the config key came back would pass against a repair
+# that wrote a syntactically valid but useless refspec.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b feature
+exec git commit --allow-empty -m 'feature work'
+exec git push origin feature
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature
+
+# A current hub has the refspec, and repair has nothing to say about it.
+exec git config --get remote.origin.fetch
+stdout '\+refs/heads/\*:refs/remotes/origin/\*'
+exec git-hop repair -n
+! stdout 'restore-fetch-refspec'
+
+# --- degrade the hub to the legacy shape ---
+exec git config --unset-all remote.origin.fetch
+! exec git config --get remote.origin.fetch
+
+# --- detection ---
+exec git-hop repair -n
+stdout 'restore-fetch-refspec\s+.*/hub — missing fetch refspec on origin'
+
+# Porcelain carries the replacement value in its own column, so scripts do
+# not have to parse the prose reason.
+exec git-hop repair -n --porcelain
+stdout 'restore-fetch-refspec\s+\s\+refs/heads/\*:refs/remotes/origin/\*'
+
+# Dry run does not mutate.
+! exec git config --get remote.origin.fetch
+
+# --- pathspec carve-out ---
+# The defect is hub-wide. With an explicit pathspec the user is targeting
+# specific worktrees, so repair warns instead of quietly editing hub config.
+exec git-hop repair -n hops/feature
+! stdout 'restore-fetch-refspec'
+stderr 'missing remote.origin.fetch refspec'
+stderr 're-run .git hop repair. without a pathspec'
+! exec git config --get remote.origin.fetch
+
+# --- apply ---
+exec git-hop repair
+stdout 'restore-fetch-refspec'
+exec git config --get remote.origin.fetch
+stdout '^\+refs/heads/\*:refs/remotes/origin/\*$'
+
+# The restored hub is functionally repaired, not just cosmetically: a new
+# upstream branch now shows up under refs/remotes/origin after a fetch.
+cd $WORK/seed
+exec git checkout -b arrived-later
+exec git commit --allow-empty -m 'later branch'
+exec git push origin arrived-later
+cd $WORK/hub
+exec git fetch origin
+exec git rev-parse --verify refs/remotes/origin/arrived-later
+
+# And a second repair is a clean no-op.
+exec git-hop repair -n
+! stdout 'restore-fetch-refspec'
