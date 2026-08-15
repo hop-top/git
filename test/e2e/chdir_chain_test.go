@@ -320,20 +320,22 @@ func promptTick(shellType string) string {
 	return ""
 }
 
-// TestChdirChain_WrapperHopPathReportsSuccess composes the generated
-// wrapper with the real binary on the hop path.
+// TestChdirChain_WrapperHopPathMovesTheShell composes the generated wrapper
+// with the real binary on the hop path, and asserts the thing the wrapper
+// exists to do: the user's shell ends up in the branch they hopped to.
 //
-// What it can assert is what the wrapper OBSERVES, which is the whole
-// channel the wrapper has: `command git hop <branch>` runs the compiled
-// binary through the shim, the switch really lands (the hub's `current`
-// symlink moves), and the wrapper reports success to the caller's shell.
+// It used to assert only what the wrapper OBSERVED -- that the switch landed
+// and the status was 0 -- and said so explicitly, because the shell could
+// not move. The cd resolved its target as `$(git rev-parse
+// --show-toplevel)/../current` with `.../current` as a fallback, and in the
+// real `hub/hops/<branch>` layout the toplevel is the worktree, so both
+// candidates pointed below the hub and neither existed. Now that the target
+// comes from the binary, the destination is assertable and asserted.
 //
-// It deliberately does NOT assert that the shell moved. The wrapper's cd
-// resolves the hub as `$(git rev-parse --show-toplevel)/../current` or
-// `.../current`, and in the real `hub/hops/<branch>` layout neither of
-// those is the hub -- see TestChdirChain_WrapperCdTargetIsNotFoundInHopsLayout,
-// which pins that gap rather than papering over it here.
-func TestChdirChain_WrapperHopPathReportsSuccess(t *testing.T) {
+// Everything the wrapper reached before is still checked here: the `current`
+// symlink really moved, through the real binary, which is what makes the
+// landing a switch rather than a bare cd.
+func TestChdirChain_WrapperHopPathMovesTheShell(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping E2E test in short mode")
@@ -351,7 +353,7 @@ func TestChdirChain_WrapperHopPathReportsSuccess(t *testing.T) {
 			body := "git-hop feature-a\n" +
 				statusEcho(sh.shellType, "WRAPPER_STATUS")
 
-			_, out := ce.runProbe(t, bin, sh.shellType, integration,
+			pwd, out := ce.runProbe(t, bin, sh.shellType, integration,
 				body, ce.MainTree)
 
 			if !strings.Contains(out, "WRAPPER_STATUS=0") {
@@ -368,54 +370,79 @@ func TestChdirChain_WrapperHopPathReportsSuccess(t *testing.T) {
 				t.Errorf("%s: current = %q, want %q -- the wrapper never reached the real binary",
 					sh.shellType, target, want)
 			}
+
+			// And the shell must have followed it. Starting in main and
+			// ending in main is the exact shape of the old failure, so the
+			// destination being a DIFFERENT worktree from the origin is what
+			// makes this assertion mean anything.
+			wantPwd := filepath.Join(ce.HubPath, "hops", "feature-a")
+			if resolved, err := filepath.EvalSymlinks(wantPwd); err == nil {
+				wantPwd = resolved
+			}
+			if pwd != wantPwd {
+				t.Errorf("%s: shell ended at %q, want the branch it hopped to %q; output:\n%s",
+					sh.shellType, pwd, wantPwd, out)
+			}
 		})
 	}
 }
 
-// TestChdirChain_WrapperCdTargetIsNotFoundInHopsLayout pins a gap in the
-// wrapper's cd, kept explicit so nobody reads the test above as proof the
-// shell moves.
+// TestChdirChain_WrapperCdTargetResolvesInHopsLayout is the composed
+// regression for the resolution itself, at the depths that broke it.
 //
-// The wrapper resolves its cd target relative to `git rev-parse
-// --show-toplevel`. Run from inside a worktree that is `hub/hops/<branch>`,
-// the toplevel IS the worktree, so its two candidates are
-// `hub/hops/current` and `hub/hops/<branch>/current`. The symlink git-hop
-// actually maintains is `hub/current`, one level above both. Neither
-// candidate exists, so the wrapper falls through without cd'ing.
+// It replaces a test that pinned the gap from the outside by asserting the
+// two candidate paths did NOT exist. That test was correct about the old
+// wrapper and is meaningless against the new one, which never forms those
+// paths; what is worth pinning now is the property they were standing in
+// for -- that the shell lands in the hub's `current` worktree from anywhere
+// inside the hub.
 //
-// This is asserted from the outside -- the two candidate paths, and the one
-// real one -- rather than by reading the generated source, so a fix that
-// makes the wrapper find the hub will turn this red and say why.
-func TestChdirChain_WrapperCdTargetIsNotFoundInHopsLayout(t *testing.T) {
+// Two starting points, because the old code failed differently at each. From
+// inside a worktree, `rev-parse --show-toplevel` answered with the worktree
+// and the `..` count needed to reach the hub varied with how deep the branch
+// name nested. From the bare hub there was no toplevel at all: rev-parse
+// exited 128, the hub path came back empty, and the cd was skipped in
+// silence. A nested branch name is used throughout so a fix that merely
+// counted `..` correctly for single-segment branches cannot pass.
+func TestChdirChain_WrapperCdTargetResolvesInHopsLayout(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping E2E test in short mode")
 	}
 
-	ce := setupChainEnv(t)
-	ce.RunGitHop(t, ce.HubPath, "add", "feature-a")
-	ce.RunGitHop(t, ce.HubPath, "feature-a")
+	for _, sh := range chainShells {
+		t.Run(sh.shellType, func(t *testing.T) {
+			t.Parallel()
+			bin := lookChainShell(t, sh.bin)
 
-	if _, err := os.Lstat(filepath.Join(ce.HubPath, "current")); err != nil {
-		t.Fatalf("hub has no current symlink at all: %v", err)
-	}
+			ce := setupChainEnv(t)
+			ce.RunGitHop(t, ce.HubPath, "add", "feat/deep/name")
+			integration := ce.integrationBlock(t, sh.shellType)
 
-	toplevel := strings.TrimSpace(ce.RunCommand(t, ce.MainTree, "git", "rev-parse", "--show-toplevel"))
-	if resolved, err := filepath.EvalSymlinks(toplevel); err == nil {
-		toplevel = resolved
-	}
-	if toplevel != ce.MainTree {
-		t.Fatalf("toplevel from inside a worktree = %q, want the worktree %q", toplevel, ce.MainTree)
-	}
+			deep := filepath.Join(ce.HubPath, "hops", "feat", "deep", "name")
+			if resolved, err := filepath.EvalSymlinks(deep); err == nil {
+				deep = resolved
+			}
 
-	for _, candidate := range []string{
-		filepath.Join(toplevel, "..", "current"),
-		filepath.Join(toplevel, "current"),
-	} {
-		if _, err := os.Lstat(candidate); err == nil {
-			t.Errorf("wrapper cd candidate %q exists; the hops-layout gap this pins may be fixed -- reassess this test",
-				candidate)
-		}
+			for _, start := range []struct {
+				name string
+				dir  string
+			}{
+				{"inside a worktree", ce.MainTree},
+				{"the bare hub", ce.HubPath},
+			} {
+				t.Run(start.name, func(t *testing.T) {
+					body := "git-hop feat/deep/name\n"
+					pwd, out := ce.runProbe(t, bin, sh.shellType, integration,
+						body, start.dir)
+
+					if pwd != deep {
+						t.Errorf("%s: started in %s, shell ended at %q, want %q; output:\n%s",
+							sh.shellType, start.name, pwd, deep, out)
+					}
+				})
+			}
+		})
 	}
 }
 
