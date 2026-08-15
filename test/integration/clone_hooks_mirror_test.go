@@ -17,9 +17,9 @@ import (
 // TestMirrorCommittedHooks_Symlink_RealFs exercises the symlink install
 // path against a real on-disk worktree containing a committed
 // .git-hop/hooks/post-worktree-add. This is the integration counterpart to
-// the unit table tests in internal/hooks/install_test.go and the regression
-// fixture for T-0217: a fresh hopspace must end up with a working pointer
-// to the committed hook so post-worktree-add fires for the first worktree.
+// the unit table tests in internal/hooks/install_test.go. Regression: a fresh
+// hopspace must end up with a working pointer to the committed hook so
+// post-worktree-add fires for the first worktree.
 func TestMirrorCommittedHooks_Symlink_RealFs(t *testing.T) {
 	tempDir := t.TempDir()
 	dataHome := filepath.Join(tempDir, "data")

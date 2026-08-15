@@ -98,6 +98,6 @@ Production code constructs concrete impls; tests inject fakes. Add new dependenc
 
 ## Conventions
 
-- Commits: Conventional Commits (`feat|fix|refactor|build|ci|chore|docs|style|perf|test`). Squash-merges from PRs are common — `cmd/status.go` should detect them but currently doesn't (T-0066).
+- Commits: Conventional Commits (`feat|fix|refactor|build|ci|chore|docs|style|perf|test`). Squash-merges from PRs are common — `cmd/status.go` should detect them but currently doesn't.
 - File size budget: keep files under ~500 LOC; split when they grow.
 - Never delete or rename unexpected files/state without asking — assume another agent or in-progress work created them.

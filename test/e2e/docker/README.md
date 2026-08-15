@@ -20,8 +20,7 @@ Default `go test ./...` skips this directory entirely — it does not even
 compile the files. The build-tag gate is the right approach here because
 the tests assert on real OS-allocated state (port numbers, container IDs,
 volume directory contents, real HTTP responses) which cannot be
-deterministically replayed via xrr cassettes. See
-`hop-top/git` track `git-test-determinism` T-0015 for the analysis.
+deterministically replayed via xrr cassettes.
 
 ## Overview
 

@@ -162,7 +162,7 @@ func (b *BackupManager) Exists() bool {
 // copyDir recursively copies src into dst, preserving permission bits on every
 // directory and file. Mode preservation is critical for the restore-on-failure
 // path: dropping exec bits silently corrupts .sh scripts and any other
-// executable-flagged file in the user's tree (T-0166 bug 2).
+// executable-flagged file in the user's tree.
 func (b *BackupManager) copyDir(src, dst string) error {
 	srcInfo, err := b.fs.Stat(src)
 	if err != nil {
@@ -202,7 +202,8 @@ func (b *BackupManager) copyDir(src, dst string) error {
 
 // copyFile copies src to dst, preserving the source's permission bits.
 // WriteFile honours mode only when creating; an explicit Chmod after write
-// keeps exec bits intact even on overwrite (T-0166).
+// keeps exec bits intact even on overwrite — restoring a backup over an
+// existing tree silently dropped the exec bit on every .sh script.
 func (b *BackupManager) copyFile(src, dst string) error {
 	info, err := b.fs.Stat(src)
 	if err != nil {

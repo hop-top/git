@@ -64,8 +64,8 @@ func TestPruneOrphanedWorktrees(t *testing.T) {
 }
 
 // TestRunPrune_DryRun verifies that --dry-run reports what would be pruned
-// but leaves the on-disk state.json untouched. Regression for T-0175 where
-// runPrune ignored the persistent --dry-run flag and always saved state.
+// but leaves the on-disk state.json untouched. Regression: runPrune ignored
+// the persistent --dry-run flag and always saved state.
 func TestRunPrune_DryRun(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	require.NoError(t, fs.MkdirAll("/path/to/existing", 0o755))
@@ -108,7 +108,8 @@ func TestRunPrune_DryRun(t *testing.T) {
 }
 
 // TestRunPrune_Apply confirms that without --dry-run the orphaned entry is
-// removed from state.json (the path runPrune actually exercised before T-0175).
+// removed from state.json (the path runPrune took unconditionally back when
+// it ignored --dry-run).
 func TestRunPrune_Apply(t *testing.T) {
 	fs := afero.NewMemMapFs()
 	require.NoError(t, fs.MkdirAll("/path/to/existing", 0o755))

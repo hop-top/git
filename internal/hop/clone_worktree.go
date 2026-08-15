@@ -269,7 +269,7 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 
 	// `git clone --bare` strips the standard fetch refspec, so
 	// `refs/remotes/origin/*` is never populated and downstream calls like
-	// setUpstreamTracking fail (T-0215). Restore the refspec and re-fetch
+	// setUpstreamTracking fail. Restore the refspec and re-fetch
 	// so origin/<defaultBranch> exists locally. Real GitHub URLs sometimes
 	// configure this implicitly; local file paths (and some hosts) do not,
 	// so do it unconditionally.
@@ -309,14 +309,16 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 // cloneRegularRepo previously attempted a non-bare clone at <projectRoot>
 // plus a worktree at hops/<defaultBranch>. That layout is incoherent —
 // the root and the worktree both claimed <defaultBranch>, and the root's
-// index disagreed with the on-disk hopspace shape (T-0213, T-0214).
+// index disagreed with the on-disk hopspace shape, leaving `git status`
+// at the hub root permanently dirty.
 //
 // The hopspace contract (per design and the original CLAUDE.md note on
 // "Bare Worktree Repos") is unconditional: <projectRoot> is a bare repo
 // and source code lives only in hops/<defaultBranch>/. The
 // Defaults.BareRepo flag is therefore effectively a no-op now; kept for
 // backwards compatibility of any persisted config but does not change
-// the hopspace shape. T-0215.
+// the hopspace shape. See docs/stories/015-hopspace-shape-contract.md for
+// the invariants both clone paths must satisfy.
 func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
 	return cloneBareRepo(fs, g, uri, projectRoot, defaultBranch)
 }

@@ -1,6 +1,6 @@
 package hop_test
 
-// T-0166 regressions: two bugs surfaced when converting a repo with
+// Regressions: two bugs surfaced when converting a repo with
 // pre-existing subdirs (like .github/) and exec-bit-tagged scripts.
 //
 // 1. moveFilesToWorktree collides on subdir names that `git worktree add`
@@ -21,7 +21,7 @@ import (
 )
 
 // initRepoWithDotGithub builds a real git repo with .github/workflows/ci.yml
-// and an executable script — the canonical T-0166 repro shape.
+// and an executable script — the canonical repro shape for both bugs above.
 func initRepoWithDotGithub(t *testing.T) string {
 	t.Helper()
 
