@@ -9,46 +9,63 @@ git-hop offers advanced features for power users and complex workflows.
 
 ## Custom Hooks
 
-Create custom Git hooks to automate workflows.
+Create custom lifecycle hooks to automate workflows. These are git-hop's own hooks, not git's — they never live in `.git/hooks/`, and hook names like `pre-commit` mean nothing here. See [Hooks System](https://github.com/jadb/git-hop/blob/main/docs/hooks.md) for the exhaustive list of valid names.
 
 ### Hook Locations
 
 git-hop looks for hooks in these locations (in priority order):
 
-1. `.git-hop/hooks/` in your worktree
-2. `.git-hop/hooks/` in your hopspace
-3. `$GIT_HOP_CONFIG_HOME/hooks/`
+1. `<worktree>/.git-hop/hooks/<name>` — plus a walk up parent directories
+2. `$GIT_HOP_DATA_HOME/<host>/<org>/<repo>/hooks/<name>` — the hopspace
+3. `$GIT_HOP_CONFIG_HOME/hooks/<name>` — global
 
-### Example: Pre-Commit Checks
+First found wins; a missing hook is a silent no-op. Hooks must be executable.
+
+### Example: Validate Branch Names
 
 ```bash
-# .git-hop/hooks/pre-commit
+# .git-hop/hooks/pre-worktree-add
 #!/bin/bash
 
-# Run linter
-make lint || exit 1
-
-# Run tests
-make test || exit 1
-
-echo "✓ Pre-commit checks passed"
+if [[ ! "$GIT_HOP_BRANCH" =~ ^(feature|bugfix|hotfix|release)/ ]]; then
+    echo "Branch must start with feature/, bugfix/, hotfix/, or release/"
+    exit 1
+fi
 ```
 
-### Example: Post-Environment Start
+A non-zero exit from a `pre-` hook aborts the operation.
+
+### Example: Bootstrap a New Worktree
 
 ```bash
-# .git-hop/hooks/post-env-start
+# .git-hop/hooks/post-worktree-add
 #!/bin/bash
+
+cd "$GIT_HOP_WORKTREE_PATH"
 
 # Install dependencies
 npm install
 
 # Run migrations
 make db-migrate
-
-# Start background services
-npm run dev &
 ```
+
+### Example: React to a Worktree Switch
+
+Fires for `git hop <branch>` and for a plain `cd` into a registered worktree — tell them apart with `GIT_HOP_TRIGGER`:
+
+```bash
+# .git-hop/hooks/post-worktree-switch
+#!/bin/bash
+
+if [ -n "${GIT_HOP_FROM_BRANCH+set}" ]; then
+    echo "$GIT_HOP_FROM_BRANCH -> $GIT_HOP_BRANCH (via $GIT_HOP_TRIGGER)"
+fi
+```
+
+The from-state variables are **absent, not empty**, when there was no previous worktree.
+
+> **Environment services**: hooks around `git hop env start` / `env stop` are a *different* mechanism — shell command strings declared in `hop.json` under `settings.environment.hooks`, not files. A file named `post-env-start` will never fire. See [Hooks System](https://github.com/jadb/git-hop/blob/main/docs/hooks.md).
 
 ## Port Manual Allocation
 

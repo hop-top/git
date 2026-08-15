@@ -304,29 +304,32 @@ cd /path/to/repo
 git hop init
 ```
 
-## Integration with Git Hooks
+## Lifecycle Hooks
 
-git-hop installs lightweight Git hook wrappers that integrate with your workflow:
+git-hop runs your own executable scripts at points in the worktree lifecycle. These are git-hop's hooks, not git's — they never live in `.git/hooks/`.
 
 ### Available Hooks
 
-- `pre-worktree-add` - Before creating a worktree
-- `post-worktree-add` - After creating a worktree
-- `pre-env-start` - Before starting environment
-- `post-env-start` - After starting environment
-- `pre-env-stop` - Before stopping environment
-- `post-env-stop` - After stopping environment
+- `pre-worktree-add` / `post-worktree-add` - Around `git hop add`
+- `pre-worktree-remove` / `post-worktree-remove` - Around `git hop remove`
+- `pre-worktree-move` / `post-worktree-move` - Around `git hop move`
+- `pre-worktree-switch` / `post-worktree-switch` - Around `git hop <branch>`; the `post-` hook also fires on a plain `cd` into a registered worktree
+- `pre-clone` / `post-clone` - Around `git hop clone`
+- `pre-repair` / `post-repair` - Around `git hop repair` (global-level only; resolved by a separate code path)
+
+`pre-env-start`, `post-env-start`, `pre-env-stop`, and `post-env-stop` are accepted as names but are **never dispatched**. Environment services use a separate, config-declared hook mechanism instead.
 
 ### Hook Resolution Order
 
-1. Repo-level hop hook override (if exists)
-2. Hopspace-level hook (if exists)
-3. Global hook (if exists)
-4. Built-in default behavior
+1. Repo-level hook — `<worktree>/.git-hop/hooks/<name>` (the runner also walks parent directories)
+2. Hopspace-level hook — `$GIT_HOP_DATA_HOME/<host>/<org>/<repo>/hooks/<name>`
+3. Global hook — `$GIT_HOP_CONFIG_HOME/hooks/<name>`
 
-Place hooks in `$GIT_HOP_CONFIG_HOME/hooks/` or hopspace-specific directories to customize behavior.
+First found wins. A missing hook is a silent no-op.
 
-See [Hooks System](docs/hooks.md) for detailed examples.
+`git hop clone` and `git hop init` mirror committed `.git-hop/hooks/` into your hopspace (`--hooks=symlink|copy|prompt|none`) so team-shared hooks fire from the very first worktree.
+
+See [Hooks System](docs/hooks.md) for the exhaustive table, environment variables, the navigation-handled directive, and [`examples/tmux/`](examples/tmux/) for a complete worked integration.
 
 ## Advanced: How It Works
 

@@ -71,7 +71,7 @@ Steps:
 | `GIT_HOP_NEW_BRANCH` | new branch name |
 | `GIT_HOP_OLD_PATH` | old worktree path |
 | `GIT_HOP_NEW_PATH` | new worktree path |
-| Standard vars | `GIT_HOP_REPO_ID`, `GIT_HOP_HUB_PATH` |
+| Standard vars | `GIT_HOP_HOOK_NAME`, `GIT_HOP_WORKTREE_PATH`, `GIT_HOP_REPO_ID`, `GIT_HOP_BRANCH` |
 
 ## Example Use Cases
 
