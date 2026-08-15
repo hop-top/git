@@ -240,15 +240,23 @@ implementations and prove nothing.
 
 ## Tests
 
+Two suites, both driving a real tmux server on a private socket
+(`tmux -L`) so neither can disturb your own sessions; both kill their
+server on exit, including on failure.
+
+### `./test.sh` — the hooks in isolation
+
 ```bash
 ./test.sh
 ```
 
-Drives the real hooks against a real tmux server on a private socket
-(`tmux -L`), so it cannot disturb your own sessions; the server is killed
-on exit. It covers session/window creation, sibling windows surviving,
-the exit-93 contract, selective removal, in-place rename with pane-PID
-survival, slash-bearing branch names, name distinctness and stability,
+Invokes the hook scripts directly with a hand-built `GIT_HOP_*`
+environment. Needs only bash, the hooks, and tmux, so it runs in a couple
+of seconds — the fast feedback loop while editing a hook.
+
+It covers session/window creation, sibling windows surviving, the exit-93
+contract, selective removal, in-place rename with pane-PID survival,
+slash-bearing branch names, name distinctness and stability,
 identity-checked removal, cold start against a dead server, and silent
 no-op with tmux absent.
 
@@ -257,7 +265,41 @@ the suite pins the required *behaviour* — the same input reaching the same
 window — instead of today's output format. The properties of the names
 themselves are asserted directly.
 
-The suite is mutation-tested. Each of these turns it red:
+### `./test-binary.sh` — the hooks through the real binary
+
+```bash
+./test-binary.sh
+```
+
+Composes the layers `test.sh` stubs: a real `git hop` binary, real hook
+dispatch, these hooks installed at the hopspace level exactly as the
+install instructions above describe, and a real tmux server.
+
+`test.sh` answers "given this environment, does the hook do the right
+thing to tmux". It cannot answer whether git-hop actually *hands* the
+hooks that environment, whether hook resolution finds the files where this
+README says to put them, or whether the switch hook's exit code survives
+the trip back out through the binary's own process status. Those are the
+questions this suite exists for, and every branch name, worktree path and
+repo ID in it is whatever git-hop computes rather than something the test
+made up.
+
+It additionally needs a Go toolchain and git: it builds the binary from
+the project root, stamped with a version unique to that run, and asserts
+`git hop --version` reports the stamp — so a system-installed `git-hop`
+answering instead would fail the suite rather than silently make it
+vacuous. The build lands outside the worktree.
+
+Covered: `git hop add` creating the window in the right worktree,
+`git hop <branch>` both selecting the window and exiting 93 (and exiting 0
+when tmux is unavailable), `git hop remove` killing only its own window
+with a colliding sibling's process left running, `git hop move` preserving
+pane PID and window ID while `@hop-worktree` follows the rename, and cold
+start against a socket that has never had a server.
+
+### Mutation testing
+
+Both suites are mutation-tested. Each of these turns `test.sh` red:
 
 - making the switch hook exit 0 instead of 93
 - making the move hook kill-and-recreate instead of rename
@@ -268,6 +310,14 @@ The suite is mutation-tested. Each of these turns it red:
   start
 - dropping the `@hop-worktree` check from `post-worktree-remove` — fails
   the mismatched-identity assertion
+
+And each of these turns `test-binary.sh` red:
+
+- restoring the colliding sanitize — the two branches collapse onto one
+  window, failing the distinctness guards *and* the assertion that the
+  removed branch's window and process are actually gone
+- restoring the `list-sessions` gate — cold start creates no server and no
+  window
 
 ## Known gaps
 
