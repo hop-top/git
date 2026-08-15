@@ -1,0 +1,21 @@
+# The in-script `git-hop` command must be this package's build of the
+# production entry point, not some binary that happens to be on $PATH.
+#
+# Two proofs, because either alone is weak:
+#   1. --version reports the string TestMain injects via cmd.SetVersion.
+#      An installed git-hop would report its own release version instead.
+#   2. The command tree is the real one: a subcommand that only exists in
+#      cmd/ is present, and an unknown subcommand exits non-zero.
+
+exec git-hop --version
+stdout 'test'
+! stderr 'command not found'
+
+# Real command tree, not a stub.
+exec git-hop --help
+stdout 'repair'
+stdout 'status'
+
+# Unknown subcommands are a usage error, so the exit status is meaningful
+# and the script can distinguish "ran and rejected" from "never ran".
+! exec git-hop definitely-not-a-subcommand

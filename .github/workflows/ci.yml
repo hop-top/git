@@ -45,12 +45,17 @@ jobs:
       - name: Lint
         run: staticcheck ./...
 
-      # Full suite is ~40s locally, dominated by test/e2e (real git subprocesses)
-      # now that those tests run with t.Parallel. 300s is ~7.5x that: it keeps
+      # Full suite is ~50s locally, dominated by test/e2e (real git subprocesses)
+      # now that those tests run with t.Parallel. 300s is ~6x that: it keeps
       # the old ~5x policy and still absorbs CI runners at 2-3x local speed.
       # Blowing through this is a signal to investigate, not to raise the number:
       # the last regression here was a redundant `go build` per e2e test, not
       # genuine work.
+      #
+      # This covers the .txtar suite in test/script too. That package holds only
+      # _test.go files, so `go list ./...` omits it while `go test ./...` still
+      # builds and runs it — no separate step is needed, and adding one would
+      # run those scripts twice.
       - name: Run Tests
         run: go test -timeout 300s -coverprofile=coverage.out ./...
 

@@ -1,0 +1,52 @@
+# `git hop add` creates a worktree under hops/ and registers it.
+#
+# Ported from the Add / List / CommandsFromWorktree cases in the Go e2e
+# suite. The Go versions asserted on substrings of captured output; the
+# script asserts the same things plus the on-disk tree, which the Go
+# versions only checked with a bare os.Stat.
+
+# --- upstream repo with two branches ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b feature-1
+exec git push origin feature-1
+exec git checkout -b feature-2
+exec git push origin feature-2
+cd $WORK
+
+# --- clone into a hub; main is materialised eagerly ---
+exec git-hop $WORK/repo.git hub
+exists $WORK/hub/hops/main
+
+# --- add reports success and creates the directory ---
+cd $WORK/hub
+exec git-hop add feature-1
+stdout 'Created hopspace for ''feature-1'''
+exists $WORK/hub/hops/feature-1
+exists $WORK/hub/hops/feature-1/.git
+
+# The added worktree really is on the branch it claims, not a detached
+# HEAD or a copy of main. os.Stat in the Go test could not tell these apart.
+cd $WORK/hub/hops/feature-1
+exec git rev-parse --abbrev-ref HEAD
+stdout '^feature-1$'
+cd $WORK/hub
+
+# --- list shows both the added branch and main ---
+exec git-hop list --no-color
+stdout 'feature-1'
+stdout 'main'
+
+# --- commands resolve the hub from inside a worktree, not just from the hub ---
+exec git-hop add feature-2
+cd $WORK/hub/hops/feature-2
+exec git-hop list --no-color
+stdout 'feature-2'
+stdout 'main'
+exec git-hop status
+stdout 'Hub:'
+# Proving hub resolution works means proving the failure mode is absent.
+! stdout 'Not in'

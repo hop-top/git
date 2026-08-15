@@ -51,40 +51,11 @@ func TestCommands(t *testing.T) {
 		}
 	})
 
-	// --- Test: git hop add with slash in branch name ---
-	t.Run("AddBranchWithSlash", func(t *testing.T) {
-		// Add feat/slash-branch
-		out := env.RunGitHop(t, env.HubPath, "add", "feat/slash-branch")
-		if !strings.Contains(out, "feat/slash-branch") {
-			t.Errorf("Expected success message for feat/slash-branch, got: %s", out)
-		}
-
-		// Verify worktree directory exists at correct path: hops/feat/slash-branch
-		expectedPath := filepath.Join(env.HubPath, "hops", "feat", "slash-branch")
-		if _, err := os.Stat(expectedPath); err != nil {
-			t.Errorf("Worktree not created at expected path %s: %v", expectedPath, err)
-		}
-
-		// Verify NO orphaned directory at hops/slash-branch
-		orphanedPath := filepath.Join(env.HubPath, "hops", "slash-branch")
-		if _, err := os.Stat(orphanedPath); err == nil {
-			t.Errorf("Orphaned worktree directory found at %s (should not exist)", orphanedPath)
-		}
-
-		// Verify hops/ only has expected subdirectories
-		hopsDir := filepath.Join(env.HubPath, "hops")
-		entries, err := os.ReadDir(hopsDir)
-		if err != nil {
-			t.Fatalf("Failed to read hops directory: %v", err)
-		}
-
-		expectedDirs := map[string]bool{"main": true, "feature-1": true, "feat": true}
-		for _, entry := range entries {
-			if entry.IsDir() && !expectedDirs[entry.Name()] {
-				t.Errorf("Unexpected directory in hops/: %s", entry.Name())
-			}
-		}
-	})
+	// The slash-in-branch-name case now lives in
+	// test/script/testdata/add_branch_slash.txtar, which asserts the same
+	// four things (success message, nested path, absent flat orphan, exact
+	// hops/ contents) plus that the nested worktree is checked out on the
+	// slashed branch.
 
 	// --- Test: git hop list ---
 	t.Run("List", func(t *testing.T) {

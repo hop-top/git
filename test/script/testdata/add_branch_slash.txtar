@@ -1,0 +1,46 @@
+# A branch name containing a slash nests on disk: `feat/slash-branch`
+# lands at hops/feat/slash-branch, and nothing is left at hops/slash-branch.
+#
+# The orphan case is the whole point of this script. An earlier defect
+# created BOTH the nested path and a flat sibling, so asserting only that
+# the nested directory exists would have passed against the bug.
+#
+# Ported from the AddBranchWithSlash case in the Go e2e suite.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b feature-1
+exec git push origin feature-1
+exec git checkout -b feat/slash-branch
+exec git push origin feat/slash-branch
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature-1
+exec git-hop add feat/slash-branch
+stdout 'feat/slash-branch'
+
+# Nested at the full branch path.
+exists $WORK/hub/hops/feat/slash-branch
+exists $WORK/hub/hops/feat/slash-branch/.git
+
+# No flat orphan alongside it.
+! exists $WORK/hub/hops/slash-branch
+
+# And hops/ holds exactly the three expected entries — the Go test walked
+# the directory for unexpected names; `ls` plus an exact-match grep says
+# the same thing and also catches a missing entry.
+exec ls $WORK/hub/hops
+stdout '^feat$'
+stdout '^feature-1$'
+stdout '^main$'
+stdout -count=3 '^\w[\w/-]*$'
+
+# The nested worktree is checked out on the slashed branch.
+cd $WORK/hub/hops/feat/slash-branch
+exec git rev-parse --abbrev-ref HEAD
+stdout '^feat/slash-branch$'
