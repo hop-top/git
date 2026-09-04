@@ -156,6 +156,11 @@ git hop list  # See feature-new-ui in the list
 pwd           # Should show .../feature-new-ui
 ```
 
+The new worktree also receives the git-ignored local files (`.env`, tool
+config) from the worktree it forked from. Pass `--no-copy-ignored` to skip
+that, or put `#-hop-#` on a comment line above a `.gitignore` pattern to
+keep that path out for good. See [Configuration](docs/configuration.md#hopaddcopyignored).
+
 ### Switch Between Branches
 
 ```bash
