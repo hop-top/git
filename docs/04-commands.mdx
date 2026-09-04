@@ -50,6 +50,81 @@ Ports: 10100-10102
 Services: api, db
 ```
 
+## git hop add
+
+Inside a hub: create a worktree (and branch, if needed) for a branch.
+Aliases: `create`, `new`.
+
+### Usage
+
+```bash
+git hop add &lt;branch&gt; [flags]
+```
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--from <ref>` | Start-point for a new branch: branch name, ref, SHA, or `initial` for the root commit. Defaults to the tip of the repo's default branch (or `hop.add.defaultStartPoint`). |
+| `--copy-ignored` / `--no-copy-ignored` | Copy the git-ignored local files from the fork-source worktree into the new one. Default follows `hop.add.copyIgnored` (`true`). |
+| `--dry-run` | Preview the worktree path and environment without writing anything. |
+
+### Examples
+
+```bash
+git hop add feature-x
+```
+
+```bash tab="From a Tag"
+git hop add hotfix-1 --from v2.3.0
+```
+
+```bash tab="Clean Worktree"
+git hop add feature-x --no-copy-ignored
+```
+
+### What Happens
+
+1. Validates current directory is a hub
+2. Creates the branch from the start-point if it does not exist
+3. Creates the worktree at `hops/&lt;branch&gt;`
+4. Copies git-ignored local files from the fork-source worktree (see below)
+5. Links shared dependencies and generates deterministic ports and volumes
+6. Auto-starts environment (if configured)
+7. Points the `current` symlink at the new worktree
+
+### Ignored Files
+
+A fresh checkout has none of the ignored local state you depend on —
+`.env`, editor and tool settings, small caches. `git hop add` copies
+those from the worktree it forks from, never overwriting, skipping
+dependency directories, and skipping any entry over
+`hop.add.copyIgnoredMaxSize` (default `10m`). Every skip is reported.
+
+Some ignored paths belong to one worktree only. Put `#-hop-#` on a
+comment line directly above the pattern and everything that pattern
+ignores stays behind:
+
+```gitignore
+# task-tracker state, one per checkout
+#-hop-#
+.tlc/
+```
+
+The marker works in any ignore file git consults (root or nested
+`.gitignore`, `.git/info/exclude`, the global excludes file). It must be
+on its own comment line: git reads a mid-line `#` as part of the pattern.
+Details in [Configuration](configuration.md#hopaddcopyignored).
+
+### Output
+
+```
+Created hopspace for 'feature-x'
+Copied 4 ignored entries from /path/to/hub/hops/main
+Setting up dependencies...
+Worktree: ./hops/feature-x
+```
+
 ## git hop `&lt;branch&gt;`
 
 Inside a hub: create a worktree for a branch.

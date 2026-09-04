@@ -17,12 +17,54 @@ type fakeIgnoredGit struct {
 	err     error
 	lastDir string
 	lastCmd []string
+
+	rules           map[string]fakeIgnoreRule
+	checkIgnoreErr  error
+	checkIgnoreArgs []string
 }
 
 func (f *fakeIgnoredGit) RunInDir(dir string, cmd string, args ...string) (string, error) {
+	if len(args) > 0 && args[0] == "check-ignore" {
+		return f.checkIgnore(args), f.checkIgnoreErr
+	}
 	f.lastDir = dir
 	f.lastCmd = append([]string{cmd}, args...)
 	return f.out, f.err
+}
+
+// checkIgnore answers `git check-ignore -v --non-matching -- <paths>`.
+// Paths present in f.rules are reported as matched by that rule; every
+// other path is reported as non-matching (empty source/line/pattern), which
+// is what git prints for a collapsed directory whose own name matches no
+// pattern. Tests that do not set rules therefore exercise the pre-marker
+// behaviour unchanged.
+func (f *fakeIgnoredGit) checkIgnore(args []string) string {
+	f.checkIgnoreArgs = args
+	var paths []string
+	for i, a := range args {
+		if a == "--" {
+			paths = args[i+1:]
+			break
+		}
+	}
+	var b strings.Builder
+	for _, p := range paths {
+		r, ok := f.rules[p]
+		if !ok {
+			fmt.Fprintf(&b, "::\t%s\n", p)
+			continue
+		}
+		fmt.Fprintf(&b, "%s:%d:%s\t%s\n", r.source, r.line, r.pattern, p)
+	}
+	return b.String()
+}
+
+// fakeIgnoreRule is one `check-ignore -v` record: which ignore file, which
+// line of it, and the pattern text at that line.
+type fakeIgnoreRule struct {
+	source  string
+	line    int
+	pattern string
 }
 
 func TestListIgnoredEntries_ParsesOnlyIgnoredLines(t *testing.T) {

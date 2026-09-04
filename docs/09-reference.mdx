@@ -47,6 +47,27 @@ git hop &lt;uri&gt; [flags]
 | 2 | Invalid URI |
 | 3 | Hub already exists |
 
+### git hop add
+
+Create a worktree (and branch, if needed). Aliases: `create`, `new`.
+
+**Synopsis:**
+```bash
+git hop add &lt;branch&gt; [flags]
+```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--from <ref>` | Start-point for a new branch (branch, ref, SHA, or `initial`) |
+| `--copy-ignored` | Copy git-ignored local files from the fork-source worktree (default) |
+| `--no-copy-ignored` | Skip that copy for this worktree |
+
+**Related git config:** `hop.add.copyIgnored`, `hop.add.copyIgnoredMaxSize`
+— see [Configuration](configuration.md#hopaddcopyignored). A `#-hop-#`
+comment line directly above a `.gitignore` pattern excludes that pattern's
+entries from the copy.
+
 ### git hop `&lt;branch&gt;`
 
 Create a worktree for a branch.

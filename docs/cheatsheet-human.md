@@ -37,6 +37,7 @@ git hop github.com/org/repo ./dest    # shorthand with domain flag optional
 ```bash
 git hop add <branch>                  # create worktree + env (aliases: create, new)
 git hop add <branch> --dry-run        # preview without applying
+git hop add <branch> --no-copy-ignored # skip copying .env/tool config from the source worktree
 git hop remove <branch>               # delete worktree + env (aliases: rm, delete, del)
 git hop remove <branch> --no-prompt   # skip confirmation prompt only — does NOT bypass safety gate
 git hop remove <branch> --force       # allow unmerged branch removal (real guardrail bypass)
