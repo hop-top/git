@@ -63,7 +63,8 @@ func resolveCopySource(fs afero.Fs, hub *hop.Hub, startPoint string) string {
 
 // copyIgnoredIntoWorktree seeds dstWorktree with the git-ignored local
 // state present in the fork source, subject to the size ceiling, the
-// deps-managed skip list, and the no-overwrite rule.
+// deps-managed skip list, the #-hop-# marker opt-out, and the no-overwrite
+// rule.
 //
 // Every failure path here is non-fatal by design. A worktree that exists
 // without some of its ignored files is far better than a failed create, so
@@ -123,6 +124,8 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 			output.Debug("skipped %s (managed by the dependency layer)", s.Path)
 		case services.SkipExists:
 			output.Debug("skipped %s (already present in the new worktree)", s.Path)
+		case services.SkipMarked:
+			output.Debug("skipped %s (ignore rule marked %s)", s.Path, services.IgnoredCopyMarker)
 		}
 	}
 

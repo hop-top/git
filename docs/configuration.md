@@ -232,6 +232,8 @@ hub for that repository.
 | `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of `.hop/backups/repair-*` directories before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
 | `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
+| `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
+| `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
 
 ### `hop.remote.timeout`
 
@@ -251,6 +253,52 @@ git config --global hop.remote.timeout 0
 Note that neither `git hop remove` nor `git hop merge` contacts the
 remote at all unless you ask for it with `--delete-remote` (or, for
 merge, `hop.merge.deleteRemote`); both are local operations by default.
+
+### `hop.add.copyIgnored`
+
+A new worktree starts as a clean checkout, so the ignored local state you
+rely on — `.env`, editor and tool settings, small caches — is missing
+until you copy it by hand. `git hop add` does that copy for you: it asks
+git which entries in the fork-source worktree are ignored and copies them
+into the new one, never overwriting anything, skipping directories the
+dependency layer owns, and skipping anything over
+`hop.add.copyIgnoredMaxSize`.
+
+```bash
+# Opt out for one worktree, or for good
+git hop add feature-x --no-copy-ignored
+git config --global hop.add.copyIgnored false
+
+# Allow larger entries
+git config hop.add.copyIgnoredMaxSize 50m
+```
+
+#### Keeping an ignored path out of the copy: `#-hop-#`
+
+Some ignored paths belong to one worktree only — a local task database,
+a per-checkout scratch directory. Put `#-hop-#` on a comment line
+directly above the pattern and `git hop add` leaves everything that
+pattern ignores behind:
+
+```gitignore
+# task-tracker state, one per checkout
+#-hop-#
+.tlc/
+
+#-hop-# scratch space, never worth copying
+tmp/
+```
+
+The marker applies to the comment block immediately above a pattern; a
+blank line or another pattern ends the block. It works in every file git
+reads ignore rules from — the root `.gitignore`, nested `.gitignore`
+files, `.git/info/exclude`, and the global excludes file — because
+`git hop add` asks `git check-ignore` which rule decided each entry and
+checks that rule's file.
+
+The marker cannot share the pattern's own line. Git only treats `#` as a
+comment at the start of a line, so `.tlc/ #-hop-#` would become a pattern
+matching a path literally named `.tlc/ #-hop-#` and stop ignoring `.tlc/`.
 
 ### `hop.merge.deleteRemote`
 
