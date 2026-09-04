@@ -64,6 +64,9 @@ const (
 	// SkipExists marks a path already present in the destination. The
 	// destination is never overwritten.
 	SkipExists SkipReason = "exists"
+	// SkipMarked marks a path whose ignore rule carries IgnoredCopyMarker
+	// on the comment line above it — the user opted it out of copying.
+	SkipMarked SkipReason = "marked"
 )
 
 // IgnoredSkip is a single skipped entry plus the reason and, for size
@@ -182,8 +185,8 @@ func ListIgnoredEntries(g StatusRunner, worktreePath string) ([]string, error) {
 }
 
 // CopyIgnored copies the ignored-but-present entries of srcWorktree into
-// dstWorktree, honouring the size ceiling, the deps-managed skip list, and
-// a strict no-overwrite rule.
+// dstWorktree, honouring the size ceiling, the deps-managed skip list, the
+// IgnoredCopyMarker opt-out, and a strict no-overwrite rule.
 //
 // It never returns an error for a per-entry failure: those land in
 // Warnings and the run continues. A non-nil error means the entry list
@@ -202,7 +205,14 @@ func CopyIgnored(fs afero.Fs, g StatusRunner, srcWorktree, dstWorktree string, o
 		return res, err
 	}
 
+	marked, warnings := markedIgnoredEntries(fs, g, srcWorktree, entries)
+	res.Warnings = append(res.Warnings, warnings...)
+
 	for _, rel := range entries {
+		if marked[rel] {
+			res.Skipped = append(res.Skipped, IgnoredSkip{Path: rel, Reason: SkipMarked})
+			continue
+		}
 		if opts.DepsManaged[filepath.ToSlash(rel)] {
 			res.Skipped = append(res.Skipped, IgnoredSkip{Path: rel, Reason: SkipDepsManaged})
 			continue

@@ -42,7 +42,28 @@ var addCmd = &cobra.Command{
 	Use:     "add [branch]",
 	Aliases: []string{"create", "new"},
 	Short:   "Add a new worktree and environment",
-	Args:    cobra.ExactArgs(1),
+	Long: `Add a new worktree and environment for a branch.
+
+Creates the branch (if missing) from the start-point, checks it out under
+hops/<branch>, sets up shared dependencies, and starts the environment if
+configured.
+
+The new worktree is also seeded with the git-ignored local files (.env,
+tool config, small caches) present in the worktree it forks from. Nothing
+is overwritten, dependency directories are left to the deps layer, and
+entries over hop.add.copyIgnoredMaxSize (default 10m) are skipped and
+reported. Disable with --no-copy-ignored or 'git config hop.add.copyIgnored
+false'.
+
+To keep one ignored path out of that copy, put #-hop-# on a comment line
+directly above its pattern in any ignore file:
+
+    #-hop-#
+    .tlc/
+
+The marker must be on its own comment line: git reads a mid-line '#' as
+part of the pattern.`,
+	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		branch := args[0]
 		fs := afero.NewOsFs()
