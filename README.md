@@ -1,15 +1,8 @@
 # git-hop
 
-> [!WARNING]
-> **🚧 Do Not Use — History Will Be Rewritten 🚧**
->
-> This repo is undergoing major restructuring as we selectively
-> open-source internal tools built at
-> [Idea Crafters LLC](https://ideacrafters.com). Git history **will be
-> force-pushed and rewritten** multiple times. Do not fork, clone, or
-> depend on this repo in any capacity until we tag a stable release.
-
 Work on multiple branches in parallel without manual port setup, directory management, or lost context. Each branch gets its own isolated environment with deterministic ports and volumes.
+
+> **Status:** Active development. Usable today, with some rough edges as features evolve.
 
 **Perfect for:**
 - Multi-branch development workflows
