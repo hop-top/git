@@ -486,8 +486,9 @@ command. With it, the `ls-remote` probe and the delete push run under
 [`hop.remote.timeout`](./configuration.md#hopremotetimeout) and fail
 with a stated cause rather than hanging.
 
-Repair backups (`.hop/backups/repair-*`) for the removed worktree are
-**not** auto-deleted. Run `git hop prune` to clean those up once the
+Repair backups (the `repair-*` snapshots described under
+[`git hop repair`](#where-repair-keeps-its-state)) for the removed
+worktree are **not** auto-deleted. Run `git hop prune` to clean those up once the
 retention window has passed; see
 [`hop.repair.backupRetention`](./configuration.md#hoprepairbackupretention).
 
@@ -586,17 +587,28 @@ data:
   whose worktree directory is gone. These are the rows
   [`git hop status`](#git-hop-status) renders as `State: Missing`;
   pruning them is what clears the row from the table.
-- **Repair backups older than retention** — `.hop/backups/repair-*`
+- **Repair backups older than retention** — `repair-*` snapshot
   directories created by `git hop repair`, older than
-  `hop.repair.backupRetention` (default `720h` = 30 days). See
+  `hop.repair.backupRetention` (default `720h` = 30 days), in the hub's
+  repair state dir and in any legacy `<hub>/.hop/backups/`. See
   [git config Settings](./configuration.md#git-config-settings) for
   how to tune retention.
 
 Rewriting `hop.json` goes through the same backup mechanism
 `git hop repair` uses: the pre-prune file is snapshotted to
-`.hop/backups/repair-<timestamp>Z` before any row is dropped, so a
-prune can be rolled back with
+`$XDG_STATE_HOME/git-hop/repair/<hub>/backups/repair-<timestamp>Z`
+before any row is dropped, so a prune can be rolled back with
 [`git hop repair --undo`](#git-hop-repair).
+
+Prune also retires the `<hub>/.hop/` directory that releases before the
+relocation created for the lock and backups. For every hub in scope it
+moves surviving `.hop/backups/repair-*` snapshots to the state dir (they
+keep their id, so `--undo <id>` still works), removes a `.hop/repair.lock`
+no process holds, and removes `.hop/backups/` and then `.hop/` itself
+when — and only when — they are empty. A `.hop/` holding anything else
+(another tool's files) is left exactly as it is. Each step is reported on
+stderr as a `hint:` line; under `--dry-run` the hints say what would
+happen and nothing moves.
 
 `prune` does **not** remove merged branches that still exist on disk —
 for that, use [`git hop remove --merged`](#git-hop-remove). It also
@@ -697,8 +709,8 @@ git hop doctor --fix --dry-run
 Every planned repair is printed with a `[dry-run] Would ...` prefix. No
 directories are created, no worktrees recreated, no dependencies touched,
 and neither `state.json` nor the hub's `hop.json` is rewritten — not even
-the `.hop/backups/` snapshot that a real `--fix` takes first, since
-writing a backup is itself a change.
+the backup snapshot that a real `--fix` takes first, since writing a
+backup is itself a change.
 
 `--dry-run` on its own (without `--fix`) changes nothing either way: a
 doctor run that is not repairing never mutates.
@@ -777,14 +789,42 @@ git hop repair -n --porcelain
 | `--progress` / `--no-progress` | Force progress on/off (default: auto) |
 | `--color=<when>` | `always`, `auto`, `never` |
 
+### Where repair keeps its state
+
+Repair writes nothing into the hub except the fixes themselves. Its lock
+and its backups live in a per-hub directory under the XDG state home:
+
+```
+$XDG_STATE_HOME/git-hop/repair/<hub-basename>-<hash>/
+    repair.lock                  held while a run is in progress, removed on exit
+    backups/repair-<UTC-ts>Z/    one snapshot per mutating run
+        manifest.json            hub path, actions, sha256 of every file below
+        hop.json
+        .git_worktrees/
+        pointers/
+```
+
+`$XDG_STATE_HOME` defaults to `~/.local/state`. The directory is keyed by
+the hub's path (its basename plus a short hash), not by repository,
+because repair exists to fix a damaged `hop.json` — the file the
+repository identity would have to be read from. `--list-backups` and
+`--undo` resolve the same directory from the hub you run them in.
+
+Releases before this layout wrote `<hub>/.hop/repair.lock` and
+`<hub>/.hop/backups/`. Those snapshots are still read: `--list-backups`
+shows them and `--undo <id>` restores them. Nothing is written there any
+more, and [`git hop prune`](#git-hop-prune) moves the survivors out and
+removes the leftover `.hop/` once it is empty.
+
 ### Pipeline
 
-1. Acquire `.hop/repair.lock` (refuses concurrent runs)
+1. Acquire `repair.lock` in the repair state dir (refuses concurrent runs;
+   the file is removed again when the run ends, success or failure)
 2. Plan: classify each worktree against on-disk + git registry + hop.json
 3. Dirty-check (refuses unless `--force-dirty`)
 4. Print plan; exit if `-n`
 5. Fire `pre-repair` hook
-6. Snapshot to `.hop/backups/repair-<UTC-timestamp>/`
+6. Snapshot to `<state-dir>/backups/repair-<UTC-timestamp>/`
 7. Apply each action; verify post-state predicate
 8. Re-plan; auto-restore from backup if new issues appeared
 9. Fire `post-repair` hook
@@ -812,7 +852,7 @@ One tab-separated record per worktree:
 
 Tunables read via `git config`:
 
-- `hop.repair.backupRetention` — max age of `.hop/backups/repair-*` before
+- `hop.repair.backupRetention` — max age of `repair-*` snapshots before
   `git hop prune` removes them. Go duration syntax (`720h` = 30d default).
 
 ### Hooks
