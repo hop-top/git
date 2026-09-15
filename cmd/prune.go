@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -39,9 +38,15 @@ hub's hop.json, removing:
 Every line naming a pruned entry is prefixed with the repository it
 belongs to, so a --all sweep shows exactly which repositories it touched.
 
-hop.json is backed up to .hop/backups/repair-<timestamp>Z before any
-entry is dropped, so a prune can be undone with 'git hop repair --undo'.
+hop.json is backed up to the per-hub repair state dir
+($XDG_STATE_HOME/git-hop/repair/<hub>/backups/repair-<timestamp>Z) before
+any entry is dropped, so a prune can be undone with 'git hop repair --undo'.
 Removals from the state file are not recoverable from the CLI.
+
+Hubs still carrying the .hop/ directory an earlier release created for
+its lock and backups are tidied on the way: surviving snapshots move to
+the state dir, a stale lock file is removed, and .hop/ itself is removed
+only once it is completely empty.
 
 Use the global --dry-run flag to preview what would be pruned without
 making changes.
@@ -120,7 +125,7 @@ func runPrune(cmd *cobra.Command, args []string) {
 // all of them.
 //
 // prune deletes state, and state deletion is not undoable from the CLI
-// (the hop.json half snapshots to .hop/backups, the state.json half does
+// (the hop.json half snapshots to the repair state dir, the state.json half does
 // not). A repo-local invocation must therefore not reach a sibling
 // repository: running prune inside repo A used to drop repo B's
 // registration, which surfaced only later as "repository not found".
@@ -206,48 +211,6 @@ func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) 
 	c.worktrees, c.hubs = runPruneFS(fs, st, dryRun)
 	c.repairBackups = pruneRepairBackups(fs, g, st, dryRun)
 	return c
-}
-
-// pruneRepairBackups removes repair backup directories older than the
-// configured retention. Returns the count removed (or that would be
-// removed when dryRun is true).
-//
-// Retention is read from `git config --get hop.repair.backupRetention`
-// from any in-scope hub; falls back to 30 days when unconfigured. The
-// value uses Go duration syntax (e.g. "720h" for 30 days, "168h" for 7).
-func pruneRepairBackups(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) int {
-	retention := repairBackupRetention(g, st)
-	cutoff := time.Now().Add(-retention)
-	prefix := "Pruning"
-	if dryRun {
-		prefix = "[dry-run] Would prune"
-	}
-	pruned := 0
-	for _, repoID := range scopeRepoIDs(st) {
-		repo := st.Repositories[repoID]
-		for _, hub := range repo.Hubs {
-			backupsDir := filepath.Join(hub.Path, ".hop", "backups")
-			entries, err := afero.ReadDir(fs, backupsDir)
-			if err != nil {
-				continue
-			}
-			for _, entry := range entries {
-				if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "repair-") {
-					continue
-				}
-				path := filepath.Join(backupsDir, entry.Name())
-				if entry.ModTime().After(cutoff) {
-					continue
-				}
-				output.Info("%s repair backup: %s (%s)", prefix, repoID, path)
-				if !dryRun {
-					_ = fs.RemoveAll(path)
-				}
-				pruned++
-			}
-		}
-	}
-	return pruned
 }
 
 // repairBackupRetention reads hop.repair.backupRetention from the first
