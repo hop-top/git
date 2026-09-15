@@ -52,9 +52,9 @@ Checks:
 
 Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows
-'git hop status' reports as Missing), backing hop.json up to
-.hop/backups/repair-<timestamp>Z first so the change can be undone with
-'git hop repair --undo'.
+'git hop status' reports as Missing), backing hop.json up to the per-hub
+repair state dir ($XDG_STATE_HOME/git-hop/repair/<hub>/backups/) first so
+the change can be undone with 'git hop repair --undo'.
 
 Combine --fix with --dry-run to preview every repair without applying any
 of it: no directories created, no worktrees recreated, no dependencies
