@@ -76,10 +76,111 @@ func TestRepair_DryRun_NoMutation(t *testing.T) {
 		t.Errorf("dry-run mutated pointer; pre=%q post=%q", pre, post)
 	}
 
-	// No backup directory created.
-	backupsDir := filepath.Join(env.HubPath, ".hop", "backups")
-	if entries, _ := os.ReadDir(backupsDir); len(entries) > 0 {
-		t.Errorf("dry-run created backups, expected none: %v", entries)
+	// No backup directory and no .hop/ footprint of any kind.
+	if _, err := os.Stat(filepath.Join(env.HubPath, ".hop")); !os.IsNotExist(err) {
+		t.Errorf("dry-run must not create <hub>/.hop, stat err=%v", err)
+	}
+	if backups := stateBackups(t, env); len(backups) > 0 {
+		t.Errorf("dry-run created backups, expected none: %v", backups)
+	}
+}
+
+// stateBackups lists repair backup manifests under this test's own
+// XDG_STATE_HOME, where repair now keeps them.
+func stateBackups(t *testing.T, env *TestEnv) []string {
+	t.Helper()
+	pattern := filepath.Join(env.StateHome, "git-hop", "repair", "*", "backups", "repair-*", "manifest.json")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("glob %s: %v", pattern, err)
+	}
+	return matches
+}
+
+// stateLocks lists repair lock files under this test's XDG_STATE_HOME.
+func stateLocks(t *testing.T, env *TestEnv) []string {
+	t.Helper()
+	matches, _ := filepath.Glob(filepath.Join(env.StateHome, "git-hop", "repair", "*", "repair.lock"))
+	return matches
+}
+
+// TestRepair_Mutating_LeavesNoDotHopOrLock is the regression for a
+// successful repair creating <hub>/.hop/ (lock + backups) in a hub that
+// never had one. Backups belong in the state dir; the lock must be gone
+// once the run completes.
+func TestRepair_Mutating_LeavesNoDotHopOrLock(t *testing.T) {
+	t.Parallel()
+	env, featurePath := setupRepairEnv(t)
+	if _, err := os.Stat(filepath.Join(env.HubPath, ".hop")); !os.IsNotExist(err) {
+		t.Fatalf("fixture hub must start without .hop, stat err=%v", err)
+	}
+
+	// Remove the worktree by hand so git's registry and hop.json go stale.
+	if err := os.RemoveAll(featurePath); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, code := env.RunCommandWithExit(t, filepath.Join(env.HubPath, "hops", "main"), env.BinPath, "repair")
+	if code != 0 {
+		t.Fatalf("repair exit=%d\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+
+	if _, err := os.Stat(filepath.Join(env.HubPath, ".hop")); !os.IsNotExist(err) {
+		t.Errorf("repair must not create <hub>/.hop, stat err=%v", err)
+	}
+	if locks := stateLocks(t, env); len(locks) > 0 {
+		t.Errorf("lock file must not survive a completed run: %v", locks)
+	}
+	backups := stateBackups(t, env)
+	if len(backups) != 1 {
+		t.Fatalf("expected exactly one backup under %s, got %v", env.StateHome, backups)
+	}
+	if !strings.Contains(stderr, filepath.Dir(backups[0])) {
+		t.Errorf("hint must name the real backup path %s; stderr:\n%s", filepath.Dir(backups[0]), stderr)
+	}
+
+	listOut, _, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair", "--list-backups")
+	if code != 0 || !strings.Contains(listOut, "repair-") {
+		t.Errorf("--list-backups should show the relocated backup; exit=%d out=%s", code, listOut)
+	}
+	undoOut, undoErr, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair", "--undo")
+	if code != 0 {
+		t.Errorf("--undo should restore the relocated backup; exit=%d out=%s err=%s", code, undoOut, undoErr)
+	}
+}
+
+// TestRepair_HookAbort_ReleasesLock: a handled failure (exit 1) must
+// release and remove the lock like a success does, or every later run
+// is refused as "another repair is in progress" / leaves a stale file.
+func TestRepair_HookAbort_ReleasesLock(t *testing.T) {
+	t.Parallel()
+	env, featurePath := setupRepairEnv(t)
+	if err := os.RemoveAll(featurePath); err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(env.HubPath, ".git-hop", "hooks", "pre-repair")
+	if err := os.MkdirAll(filepath.Dir(hook), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\nexit 1\n"), 0755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, stderr, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair")
+	if code != 1 {
+		t.Fatalf("expected exit 1 from hook abort, got %d; stderr=%s", code, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(env.HubPath, ".hop")); !os.IsNotExist(err) {
+		t.Errorf("aborted repair must not leave <hub>/.hop, stat err=%v", err)
+	}
+	if locks := stateLocks(t, env); len(locks) > 0 {
+		t.Errorf("lock file must not survive a handled failure: %v", locks)
+	}
+
+	// Lock is free again: a second run gets past acquisition.
+	_, stderr, _ = env.RunCommandWithExit(t, env.HubPath, env.BinPath, "repair")
+	if strings.Contains(stderr, "another repair is in progress") {
+		t.Errorf("lock still held after aborted run: %s", stderr)
 	}
 }
 

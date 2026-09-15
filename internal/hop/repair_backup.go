@@ -18,7 +18,7 @@ import (
 const repairBackupVersion = 1
 
 // repairBackupPrefix is the dir-name prefix used for every repair backup
-// inside <hub>/.hop/backups/. List/GC code filters by this prefix.
+// under a backup root. List/GC code filters by this prefix.
 const repairBackupPrefix = "repair-"
 
 // repairBackupTimeFormat is the UTC stamp embedded in backup directory
@@ -41,8 +41,11 @@ type RepairManifest struct {
 
 // RepairBackup creates per-repair snapshots and exposes them for undo.
 //
-// Backup root: <hub>/.hop/backups/. Each snapshot lives in a sibling
-// directory `repair-<UTC-timestamp>/` containing:
+// Snapshots are written to RepairBackupRoot(hub) — outside the hub, in
+// the per-hub state dir — and read from every root RepairBackupRoots
+// returns, so snapshots an earlier release left in <hub>/.hop/backups/
+// remain listable and restorable. Each snapshot lives in a directory
+// `repair-<UTC-timestamp>/` containing:
 //
 //	.git_worktrees/          copy of <hub>/.git/worktrees (full subtree)
 //	hop.json                 copy of <hub>/hop.json
@@ -51,11 +54,19 @@ type RepairManifest struct {
 type RepairBackup struct {
 	fs      afero.Fs
 	hubPath string
+	// roots holds every directory that may contain snapshots for this
+	// hub, write location first.
+	roots []string
 }
 
 // NewRepairBackup constructs a RepairBackup for the given hub.
 func NewRepairBackup(fs afero.Fs, hubPath string) *RepairBackup {
-	return &RepairBackup{fs: fs, hubPath: hubPath}
+	return &RepairBackup{fs: fs, hubPath: hubPath, roots: RepairBackupRoots(hubPath)}
+}
+
+// writeRoot is the directory new snapshots go to.
+func (b *RepairBackup) writeRoot() string {
+	return b.roots[0]
 }
 
 // Snapshot creates a new backup directory based on plan and returns the
@@ -65,7 +76,7 @@ func NewRepairBackup(fs afero.Fs, hubPath string) *RepairBackup {
 // also be captured; Snapshot derives this from plan.Actions itself.
 func (b *RepairBackup) Snapshot(plan *Plan) (*RepairManifest, error) {
 	id := repairBackupPrefix + time.Now().UTC().Format(repairBackupTimeFormat)
-	dir := filepath.Join(b.hubPath, ".hop", "backups", id)
+	dir := filepath.Join(b.writeRoot(), id)
 	if err := b.fs.MkdirAll(dir, 0755); err != nil {
 		return nil, fmt.Errorf("mkdir backup: %w", err)
 	}
@@ -131,31 +142,39 @@ func (b *RepairBackup) Snapshot(plan *Plan) (*RepairManifest, error) {
 	return manifest, nil
 }
 
-// List returns all backups for this hub, newest first. Empty slice when
-// no backups exist (not an error).
+// List returns all backups for this hub across every root, newest
+// first. An id present in more than one root is reported once, from the
+// first root that has it. Empty slice when no backups exist (not an
+// error).
 func (b *RepairBackup) List() ([]RepairManifest, error) {
-	root := filepath.Join(b.hubPath, ".hop", "backups")
-	exists, err := afero.DirExists(b.fs, root)
-	if err != nil {
-		return nil, err
-	}
-	if !exists {
-		return nil, nil
-	}
-	entries, err := afero.ReadDir(b.fs, root)
-	if err != nil {
-		return nil, err
-	}
+	seen := map[string]struct{}{}
 	var out []RepairManifest
-	for _, e := range entries {
-		if !e.IsDir() || !strings.HasPrefix(e.Name(), repairBackupPrefix) {
-			continue
-		}
-		m, err := readManifest(b.fs, filepath.Join(root, e.Name()))
+	for _, root := range b.roots {
+		exists, err := afero.DirExists(b.fs, root)
 		if err != nil {
+			return nil, err
+		}
+		if !exists {
 			continue
 		}
-		out = append(out, *m)
+		entries, err := afero.ReadDir(b.fs, root)
+		if err != nil {
+			return nil, err
+		}
+		for _, e := range entries {
+			if !e.IsDir() || !strings.HasPrefix(e.Name(), repairBackupPrefix) {
+				continue
+			}
+			if _, dup := seen[e.Name()]; dup {
+				continue
+			}
+			m, err := readManifest(b.fs, filepath.Join(root, e.Name()))
+			if err != nil {
+				continue
+			}
+			seen[e.Name()] = struct{}{}
+			out = append(out, *m)
+		}
 	}
 	sort.Slice(out, func(i, j int) bool {
 		return out[i].Timestamp.After(out[j].Timestamp)
@@ -163,9 +182,17 @@ func (b *RepairBackup) List() ([]RepairManifest, error) {
 	return out, nil
 }
 
-// Path returns the absolute path of the backup directory for id.
+// Path returns the absolute path of the backup directory for id: the
+// first root that holds it, or where a new snapshot with that id would
+// be written when none does.
 func (b *RepairBackup) Path(id string) string {
-	return filepath.Join(b.hubPath, ".hop", "backups", id)
+	for _, root := range b.roots {
+		dir := filepath.Join(root, id)
+		if exists, _ := afero.DirExists(b.fs, dir); exists {
+			return dir
+		}
+	}
+	return filepath.Join(b.writeRoot(), id)
 }
 
 // Latest returns the most recent backup, or (nil, nil) when none exist.

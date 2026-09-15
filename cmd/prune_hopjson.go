@@ -23,8 +23,8 @@ import (
 // Mechanism is repair's, not a second implementation: the same
 // ActionUpdateHopJSON kind the planner emits for a hop.json entry
 // pointing at a missing path, applied through hop.Applier, with
-// hop.RepairBackup taking the pre-mutation snapshot into
-// <hub>/.hop/backups/repair-<ts>Z. A prune that removes rows is
+// hop.RepairBackup taking the pre-mutation snapshot into the per-hub
+// repair state dir (hop.RepairBackupRoot). A prune that removes rows is
 // therefore undoable via `git hop repair --undo <id>` exactly like a
 // repair.
 //
