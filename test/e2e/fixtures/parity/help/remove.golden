@@ -22,6 +22,7 @@ Global Flags:
       --json            output in JSON format
       --no-color        Disable ANSI color
       --no-hints        Suppress next-step hints after command output
+      --offline         Disable network access. Highest-precedence override: flips off per-command network opt-ins (peer discovery, sync, GitHub, push). Enforced beneath net/http and any client routed through netpolicy.GuardDial; loopback and diagnostics stay exempt.
       --porcelain       machine-readable output
   -q, --quiet           Suppress non-essential output
   -V, --verbose count   Increase log verbosity (-V=debug, -VV=trace)
