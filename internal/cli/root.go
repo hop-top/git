@@ -64,7 +64,11 @@ var EventBus bus.Bus
 func SetVersion(v, c, d string) {
 	version = v
 	if Root != nil {
-		ver := fmt.Sprintf("%s (commit: %s, built: %s)", v, c, d)
+		// kit's version template prints "v<version>"; strip a leading "v"
+		// here (git-hop's build injects one via `git describe`) so the
+		// rendered string reads "v1.2.3", not "vv1.2.3". Mirrors the
+		// same normalization kit's own cli.New does for Config.Version.
+		ver := fmt.Sprintf("%s (commit: %s, built: %s)", strings.TrimPrefix(v, "v"), c, d)
 		Root.Config.Version = ver
 		if RootCmd != nil {
 			RootCmd.Version = ver
