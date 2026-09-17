@@ -229,7 +229,7 @@ hub for that repository.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of `.hop/backups/repair-*` directories before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
+| `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of repair backup snapshots (`repair-*` directories under `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/`, or a legacy `<hub>/.hop/backups/`) before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
 | `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
@@ -327,9 +327,11 @@ remote deletion does run, the probe and the delete push are bounded by
 
 ### `hop.repair.backupRetention`
 
-`git hop repair` snapshots state into `.hop/backups/repair-<UTC-timestamp>/`
-before mutating, so `git hop repair --undo` can restore it. Those
-backups accumulate. `git hop prune` cleans up any backup directory
+`git hop repair` snapshots state into
+`$XDG_STATE_HOME/git-hop/repair/<hub-basename>-<hash>/backups/repair-<UTC-timestamp>/`
+(default `~/.local/state/git-hop/...`; never inside the hub) before
+mutating, so `git hop repair --undo` can restore it. Those backups
+accumulate. `git hop prune` cleans up any backup directory
 older than `hop.repair.backupRetention`.
 
 ```bash

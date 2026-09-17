@@ -20,7 +20,7 @@ Additional Commands:
   add            Add a new worktree and environment
   doctor         Check and repair the environment
   env            Manage the environment lifecycle
-  help           Show help for a command group
+  help           Show help for a command or command group
   init           Initialize git-hop repository structure
   list           List all managed worktrees
   merge          Merge a worktree branch into a receiving branch, then delete the source worktree
@@ -46,6 +46,7 @@ Flags:
       --json                output in JSON format
       --no-color            Disable ANSI color
       --no-hints            Suppress next-step hints after command output
+      --offline             Disable network access. Highest-precedence override: flips off per-command network opt-ins (peer discovery, sync, GitHub, push). Enforced beneath net/http and any client routed through netpolicy.GuardDial; loopback and diagnostics stay exempt.
       --porcelain           machine-readable output
   -q, --quiet               Suppress non-essential output
   -V, --verbose count       Increase log verbosity (-V=debug, -VV=trace)

@@ -3,7 +3,6 @@ package cmd
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -122,14 +121,41 @@ func repairUndo(fs afero.Fs, idArg string) error {
 	return nil
 }
 
+// repairOutcome is how the locked section of a repair reports back. It
+// is mapped to an exit only AFTER the lock has been released: fatal and
+// opErr call os.Exit, which skips deferred calls, so returning them from
+// inside the locked section would leave the lock file behind on every
+// handled failure (dirty worktrees, hook abort, apply error).
+type repairOutcome struct {
+	code int
+	msg  string
+}
+
+func okOutcome() repairOutcome              { return repairOutcome{code: exitOK} }
+func fatalOutcome(msg string) repairOutcome { return repairOutcome{code: exitFatal, msg: msg} }
+func opOutcome(msg string) repairOutcome    { return repairOutcome{code: exitOp, msg: msg} }
+
+// exit converts the outcome into the process exit the porcelain contract
+// promises. Only ever called with the lock released.
+func (o repairOutcome) exit() error {
+	switch o.code {
+	case exitOK:
+		return nil
+	case exitFatal:
+		return fatal(o.msg)
+	default:
+		return opErr(o.msg)
+	}
+}
+
 func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []string) error {
 	hubPath, err := resolveHubPath(fs)
 	if err != nil {
 		return fatal(err.Error())
 	}
 
-	// 1. Acquire lock.
-	lock := hop.NewFileLock(filepath.Join(hubPath, ".hop", "repair.lock"))
+	// 1. Acquire lock. Lives in the per-hub state dir, never in the hub.
+	lock := hop.NewFileLock(hop.RepairLockPath(hubPath))
 	ok, err := lock.TryAcquire()
 	if err != nil {
 		return fatal("acquire lock: " + err.Error())
@@ -137,12 +163,21 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 	if !ok {
 		return fatal("another repair is in progress")
 	}
-	defer lock.Release()
 
+	outcome := repairLocked(cmd, fs, g, hubPath, pathspec)
+	if err := lock.Release(); err != nil {
+		fmt.Fprintf(os.Stderr, "warning: release lock: %v\n", err)
+	}
+	return outcome.exit()
+}
+
+// repairLocked is the body of a repair run, executed while the lock is
+// held. It must not exit the process; see repairOutcome.
+func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath string, pathspec []string) repairOutcome {
 	// 2. Detect / build plan.
 	plan, err := hop.NewPlanner(fs, g).WithBaseInference(repairBaseFlag).Build(hubPath, pathspec)
 	if err != nil {
-		return fatal("plan: " + err.Error())
+		return fatalOutcome("plan: " + err.Error())
 	}
 
 	// 3. Dirty-check.
@@ -151,7 +186,7 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 			for _, p := range dirty {
 				fmt.Fprintf(os.Stderr, "error: %s has uncommitted changes\n", p)
 			}
-			return opErr("dirty worktrees; use --force-dirty to override")
+			return opOutcome("dirty worktrees; use --force-dirty to override")
 		}
 	}
 
@@ -162,29 +197,30 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 	// 5. Dry-run shortcut.
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
 	if dryRun {
-		return nil
+		return okOutcome()
 	}
 
 	if !plan.HasMutations() {
-		return nil
+		return okOutcome()
 	}
 
 	// 6. pre-repair hook. Blocking: a non-zero exit aborts before any
 	// mutation, so nothing has been backed up or applied yet.
 	if abort := firePreRepairHook(fs, hubPath); abort != nil {
-		return opErr("pre-repair hook aborted: " + abort.Error())
+		return opOutcome("pre-repair hook aborted: " + abort.Error())
 	}
 
 	// 7. Backup.
-	var backupID string
+	var backupID, backupDir string
 	forceFlag, _ := cmd.Flags().GetBool("force")
 	if !(repairNoBackup && forceFlag) {
 		b := hop.NewRepairBackup(fs, hubPath)
 		manifest, err := b.Snapshot(plan)
 		if err != nil {
-			return fatal("backup: " + err.Error())
+			return fatalOutcome("backup: " + err.Error())
 		}
 		backupID = manifest.ID
+		backupDir = b.Path(backupID)
 	}
 
 	// 8. Apply.
@@ -192,9 +228,9 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 	mutations, err := applier.Apply(plan)
 	if err != nil {
 		if backupID != "" {
-			fmt.Fprintf(os.Stderr, "error: apply failed; backup at .hop/backups/%s\n", backupID)
+			fmt.Fprintf(os.Stderr, "error: apply failed; backup at %s\n", backupDir)
 		}
-		return opErr(err.Error())
+		return opOutcome(err.Error())
 	}
 
 	// 9. Verify globally — re-run planner; if doctor-equivalent diff has
@@ -206,10 +242,10 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 			if backupID != "" {
 				if _, rerr := hop.NewRepairBackup(fs, hubPath).Restore(backupID); rerr == nil {
 					fmt.Fprintf(os.Stderr, "error: repair introduced new issues, restored from backup %s\n", backupID)
-					return opErr("repair introduced new issues, restored")
+					return opOutcome("repair introduced new issues, restored")
 				}
 			}
-			return opErr("repair introduced new issues; manual recovery required")
+			return opOutcome("repair introduced new issues; manual recovery required")
 		}
 	}
 
@@ -217,12 +253,12 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 	_ = firePostRepairHook(fs, hubPath)
 
 	if backupID != "" {
-		fmt.Fprintf(os.Stderr, "hint: backup written to .hop/backups/%s\n", backupID)
+		fmt.Fprintf(os.Stderr, "hint: backup written to %s\n", backupDir)
 	}
 	if mutations > 0 {
 		output.Success("Repaired %d worktree(s)", mutations)
 	}
-	return nil
+	return okOutcome()
 }
 
 // resolveHubPath finds the nearest hub from cwd. Returns an error

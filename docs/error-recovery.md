@@ -142,8 +142,9 @@ This will automatically fix issues that can be safely resolved:
 **Safety:** The doctor command will never remove directories with uncommitted changes. You'll need to manually resolve those cases.
 
 Before rewriting `hop.json`, doctor snapshots it to
-`.hop/backups/repair-<timestamp>Z`, so the change can be reverted with
-`git hop repair --undo <id>`. Only the hub you run doctor from is touched;
+`$XDG_STATE_HOME/git-hop/repair/<hub>/backups/repair-<timestamp>Z` (outside
+the hub; see [Where repair keeps its state](./04-commands.mdx#where-repair-keeps-its-state)),
+so the change can be reverted with `git hop repair --undo <id>`. Only the hub you run doctor from is touched;
 use `git hop prune` to sweep every hub registered in state.
 
 ## Error Types Reference
