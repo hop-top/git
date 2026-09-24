@@ -35,16 +35,16 @@ stderr '^error: unknown shorthand flag: ''Z'' in -Z$'
 # --- bad flag value ---
 exec sh -c 'git-hop prune --dry-run=maybe; echo "exit=$?"'
 stdout 'exit=129'
-stderr '^error: invalid argument "maybe" for "--dry-run" flag'
+stderr '^error: invalid argument "maybe" for "(-n, )?--dry-run" flag'
 
 # --- wrong positional count: too few, too many, out of range ---
 exec sh -c 'git-hop add; echo "exit=$?"'
 stdout 'exit=129'
-stderr '^error: accepts 1 arg\(s\), received 0$'
+stderr '^error: requires a branch name, or --task <id> to derive one$'
 
 exec sh -c 'git-hop add a b; echo "exit=$?"'
 stdout 'exit=129'
-stderr '^error: accepts 1 arg\(s\), received 2$'
+stderr '^error: accepts at most 1 arg\(s\), received 2$'
 
 exec sh -c 'git-hop remove a b; echo "exit=$?"'
 stdout 'exit=129'
