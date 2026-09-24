@@ -22,7 +22,7 @@ func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) {
 		refuseDryRun(fmt.Sprintf("move '%s'", p.oldBranch), err)
 	}
 
-	if _, err := p.prepare(fs); err != nil {
+	if _, err := p.prepare(fs, g); err != nil {
 		refuse(err)
 	}
 	if _, err := p.hookEnv(fs, g); err != nil {
@@ -32,8 +32,8 @@ func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) {
 	runner := hooks.NewRunner(fs)
 	cli.PreviewHook(runner, "pre-worktree-move", p.oldPath, p.repoID)
 
-	if g.LocalBranchExists(p.hubPath, p.newBranch) {
-		output.Info("[dry-run] Would keep existing local branch '%s'", p.newBranch)
+	if g.LocalBranchExists(p.oldPath, p.newBranch) {
+		output.Info("[dry-run] Would keep local branch '%s', already checked out in the worktree", p.newBranch)
 	} else {
 		output.Info("[dry-run] Would rename branch '%s' to '%s'", p.oldBranch, p.newBranch)
 	}

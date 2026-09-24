@@ -1,6 +1,7 @@
 package hop_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -97,6 +98,7 @@ func TestMoveWorktree_BranchAlreadyRenamed(t *testing.T) {
 	mockGit := mocks.NewMockGit()
 	// Simulate: git already has newBranch (old was renamed externally by git hop add)
 	mockGit.LocalBranches = []string{newBranch}
+	mockGit.CurrentBranches = map[string]string{oldPath: newBranch}
 
 	wm := hop.NewWorktreeManager(fs, mockGit)
 	_, _, err := wm.MoveWorktree(hopspace, hub, oldBranch, newBranch, "{hubPath}/hops/{branch}", "org", "repo")
@@ -112,6 +114,37 @@ func TestMoveWorktree_BranchAlreadyRenamed(t *testing.T) {
 	// WorktreeMove must still have been called
 	if len(mockGit.MovedWorktrees) < 2 || mockGit.MovedWorktrees[0] != oldPath {
 		t.Errorf("expected WorktreeMove(%s, ...) to be called", oldPath)
+	}
+}
+
+// A local branch that already holds newBranch's name but is not what the
+// worktree has checked out is someone else's branch: adopting it would
+// relabel hop.json while the worktree stays on oldBranch, and git branch -m
+// would refuse the rename anyway. The move must refuse before touching git.
+func TestMoveWorktree_RefusesUnrelatedExistingBranch(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hub"
+	oldPath := "/hub/hops/feat/x"
+	fs.MkdirAll(oldPath, 0755)
+	fs.MkdirAll(hubPath+"/hops/main", 0755)
+
+	hopspace := setupMoveTestHopspace(fs, hubPath, "feat/x", oldPath)
+	hub := setupMoveTestHub(fs, hubPath, "main", "feat/x", oldPath)
+
+	mockGit := mocks.NewMockGit()
+	mockGit.LocalBranches = []string{"feat/x", "feat/y"}
+	mockGit.CurrentBranches = map[string]string{oldPath: "feat/x"}
+
+	wm := hop.NewWorktreeManager(fs, mockGit)
+	_, _, err := wm.MoveWorktree(hopspace, hub, "feat/x", "feat/y", "{hubPath}/hops/{branch}", "org", "repo")
+	if err == nil || !strings.Contains(err.Error(), "feat/y") || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("MoveWorktree error = %v, want refusal naming existing branch feat/y", err)
+	}
+	if len(mockGit.RenamedBranches) > 0 || len(mockGit.MovedWorktrees) > 0 {
+		t.Errorf("git mutated on refused move: renamed=%v moved=%v", mockGit.RenamedBranches, mockGit.MovedWorktrees)
+	}
+	if _, ok := hub.Config.Branches["feat/x"]; !ok {
+		t.Error("hub entry feat/x rekeyed on refused move")
 	}
 }
 

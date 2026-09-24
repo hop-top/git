@@ -1,6 +1,6 @@
 # `git hop move` settles every refusal it can check up front before it runs
-# anything with side effects: a move onto a registered branch fails without
-# firing pre-worktree-move. And a rename is not a git-flow start: in a
+# anything with side effects: a move onto a registered branch, or onto an
+# unrelated local branch, fails without firing pre-worktree-move. And a rename is not a git-flow start: in a
 # git-flow repo the branch type is still detected for the hook environment,
 # but `git flow <type> start` is never run for a branch that already exists.
 # --dry-run previews the same thing.
@@ -28,6 +28,19 @@ exec chmod +x $WORK/.config/git-hop/hooks/pre-worktree-move
 stderr 'branch ''feat/taken'' already exists'
 ! exists $WORK/pre-hook-ran
 exists $WORK/hub/hops/feat/x
+
+# --- an unregistered local branch with the target name is not adopted: ---
+# --- the worktree would stay on feat/x under a feat/other label ---
+exec git -C $WORK/hub/hops/main branch feat/other
+! exec git-hop move feat/x feat/other --dry-run
+stderr 'branch ''feat/other'' already exists'
+! exec git-hop move feat/x feat/other
+stderr 'branch ''feat/other'' already exists'
+! exists $WORK/pre-hook-ran
+exists $WORK/hub/hops/feat/x
+! exists $WORK/hub/hops/feat/other
+grep '"feat/x"' hop.json
+! grep '"feat/other"' hop.json
 
 # --- git-flow repo; a stand-in git-flow logs every invocation ---
 mkdir $WORK/bin

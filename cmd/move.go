@@ -116,7 +116,7 @@ var moveCmd = &cobra.Command{
 			return
 		}
 
-		hopspace, err := plan.prepare(fs)
+		hopspace, err := plan.prepare(fs, g)
 		if err != nil {
 			output.Fatal("Cannot move '%s': %v", oldBranch, err)
 		}
@@ -223,8 +223,8 @@ type movePlan struct {
 
 // prepare settles every refusal the move can check before its first side
 // effect, and returns the hopspace the move will update.
-func (p movePlan) prepare(fs afero.Fs) (*hop.Hopspace, error) {
-	if err := hop.CheckMove(p.hub, p.oldBranch, p.newBranch); err != nil {
+func (p movePlan) prepare(fs afero.Fs, g git.GitInterface) (*hop.Hopspace, error) {
+	if err := hop.CheckMove(p.hub, g, p.oldBranch, p.newBranch); err != nil {
 		return nil, err
 	}
 	hopspace, err := hop.LoadHopspace(fs, p.hubPath)
