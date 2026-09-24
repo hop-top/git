@@ -281,8 +281,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 		fmt.Printf("    (repo root is %s branch working tree)\n", currentBranchName)
 	} else {
 		fmt.Printf("Project structure:\n")
-		fmt.Printf("  %s/\n", repoPath)
-		fmt.Printf("    .git/              (bare repository)\n")
+		fmt.Printf("  %s/  (bare repository)\n", repoPath)
 		fmt.Printf("    hop.json\n")
 		fmt.Printf("    hops/\n")
 		fmt.Printf("      %s/              (worktree for %s branch)\n", currentBranchName, currentBranchName)

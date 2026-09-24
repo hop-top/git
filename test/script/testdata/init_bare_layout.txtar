@@ -1,0 +1,23 @@
+# `git hop init` on a regular repo converts it to a bare hub and prints the
+# resulting layout. The hub root is itself the bare repository -- there is
+# no .git/ directory -- so the printed tree must mark the root as bare
+# instead of drawing a .git/ entry that does not exist.
+
+# --- a regular repo with one commit ---
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+
+# --- convert to the bare layout non-interactively ---
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+stdout '^  .*/proj/  \(bare repository\)$'
+stdout '^      main/ +\(worktree for main branch\)$'
+! stdout '\.git/'
+
+# --- the printed layout is the real one ---
+! exists $WORK/proj/.git
+exists $WORK/proj/hop.json
+exists $WORK/proj/hops/main
+exec git -C $WORK/proj rev-parse --is-bare-repository
+stdout '^true$'
