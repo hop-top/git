@@ -299,6 +299,16 @@ A `Missing` row means `hop.json` still lists a branch whose worktree
 directory is gone. Run [`git hop prune`](#git-hop-prune) to drop those
 rows.
 
+### Outside a hub
+
+When no `hop.json` is found above the current directory, `status` looks
+for a git-hop hub that is only missing its `hop.json`, and if it finds
+one, says so and suggests `git hop init` there. A directory counts when
+git reports it as a bare repository (`git rev-parse
+--is-bare-repository`, so `core.bare` may be spelled any way git accepts,
+set through an include, or kept in `config.worktree`) and `git worktree
+list` shows at least one of its worktrees under `hops/`.
+
 ## git hop env
 
 Control environment services.

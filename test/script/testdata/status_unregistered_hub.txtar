@@ -1,0 +1,88 @@
+# `git hop status` outside any registered hub checks whether it sits in a
+# bare git-hop hub that is only missing hop.json, and says how to register
+# it. Whether the repository is bare is git's answer, not a text match on
+# the config file: every spelling git accepts, a core.bare set through an
+# include, and one kept in config.worktree (extensions.worktreeConfig) all
+# count. A repository git does not call bare, or one without a worktree
+# registered under hops/, does not.
+
+# --- a seed repository to clone the hubs from ---
+exec git init $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+
+# --- core.bare exactly as git clone --bare writes it ---
+exec git clone -q --bare $WORK/seed $WORK/plain
+exec git -C $WORK/plain worktree add -q hops/main main
+cd $WORK/plain
+exec git-hop status
+stderr 'Detected a bare-worktree repository at .*/plain, but it is missing hop.json'
+cd $WORK/plain/hops/main
+exec git-hop status
+stderr 'Detected a bare-worktree repository at .*/plain, but it is missing hop.json'
+
+# --- other spellings git reads as true ---
+exec git clone -q --bare $WORK/seed $WORK/yes
+exec git -C $WORK/yes config core.bare yes
+exec git -C $WORK/yes worktree add -q hops/main main
+cd $WORK/yes/hops/main
+exec git-hop status
+stderr 'Detected a bare-worktree repository at .*/yes, but'
+
+exec git clone -q --bare $WORK/seed $WORK/nospace
+exec git -C $WORK/nospace worktree add -q hops/main main
+exec git -C $WORK/nospace config --unset core.bare
+exec git -C $WORK/nospace config --file config core.bare 1
+cd $WORK/nospace
+exec git-hop status
+stderr 'Detected a bare-worktree repository at .*/nospace, but'
+
+# --- core.bare set only through an include ---
+exec git clone -q --bare $WORK/seed $WORK/incl
+exec git -C $WORK/incl worktree add -q hops/main main
+exec git -C $WORK/incl config --unset core.bare
+exec git -C $WORK/incl config include.path $WORK/bare.gitconfig
+! grep '^\s*bare' $WORK/incl/config
+cd $WORK/incl
+exec git-hop status
+stderr 'Detected a bare-worktree repository at .*/incl, but'
+
+# --- core.bare in the main worktree's config.worktree ---
+exec git clone -q --bare $WORK/seed $WORK/wtcfg
+exec git -C $WORK/wtcfg worktree add -q hops/main main
+exec git -C $WORK/wtcfg config extensions.worktreeConfig true
+exec git -C $WORK/wtcfg config --unset core.bare
+exec git -C $WORK/wtcfg config --file config.worktree core.bare true
+exec git -C $WORK/wtcfg/hops/main rev-parse --is-bare-repository
+stdout '^false$'
+cd $WORK/wtcfg/hops/main
+exec git-hop status
+stderr 'Detected a bare-worktree repository at .*/wtcfg, but'
+
+# --- not bare, as far as git is concerned: a regular repo with a stray hops/ ---
+exec git init $WORK/regular
+cd $WORK/regular
+exec git commit --allow-empty -m 'initial'
+mkdir $WORK/regular/hops/junk
+exec git-hop status
+! stderr 'missing hop.json'
+
+# --- bare by shape, but core.bare=false ---
+exec git clone -q --bare $WORK/seed $WORK/notbare
+exec git -C $WORK/notbare config core.bare false
+mkdir $WORK/notbare/hops/junk
+cd $WORK/notbare
+exec git-hop status
+! stderr 'missing hop.json'
+
+# --- bare, hops/ not empty, but no worktree registered under it ---
+exec git clone -q --bare $WORK/seed $WORK/stray
+exec git -C $WORK/stray worktree add -q $WORK/elsewhere main
+mkdir $WORK/stray/hops/junk
+cd $WORK/stray
+exec git-hop status
+! stderr 'missing hop.json'
+
+-- bare.gitconfig --
+[core]
+	bare = true
