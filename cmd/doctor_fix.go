@@ -146,8 +146,9 @@ func (k keptWorktrees) has(path string) bool {
 }
 
 // fixMissingWorktrees handles worktrees whose paths no longer exist on disk.
-// For each missing worktree it checks whether the branch was merged; if so it
-// removes the state entry automatically. Otherwise it asks the user to either
+// For each missing worktree it checks whether the branch was merged into
+// the default branch (mergedIntoDefault, the hub check's rule: never the
+// default branch itself); if so it removes the state entry automatically. Otherwise it asks the user to either
 // provide a new location, delete the entry, or keep it as-is.
 // A worktree git has locked is kept without asking: git will not prune
 // it, since its directory may only be unavailable (a drive that is not
@@ -185,7 +186,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts 
 				kept.add(wt.Path)
 				continue
 			}
-			merged := gitDir != "" && isBranchMerged(g, gitDir, branch, repo.DefaultBranch)
+			merged := gitDir != "" && mergedIntoDefault(g, gitDir, branch, repo.DefaultBranch)
 
 			if dryRun {
 				if merged {
@@ -277,14 +278,9 @@ func findGitDirForRepo(fs afero.Fs, repoID, hubPath string) string {
 	return ""
 }
 
-// isBranchMerged reports whether branch has been merged into defaultBranch
-// (or into HEAD when defaultBranch is empty). It uses `git branch --merged`.
-func isBranchMerged(g git.GitInterface, dir, branch, defaultBranch string) bool {
-	base := defaultBranch
-	if base == "" {
-		base = "HEAD"
-	}
-
+// isBranchMerged reports whether `git branch --merged base`, run in dir,
+// lists branch. Callers go through mergedIntoDefault.
+func isBranchMerged(g git.GitInterface, dir, branch, base string) bool {
 	out, err := g.RunInDir(dir, "git", "branch", "--merged", base)
 	if err != nil {
 		return false
