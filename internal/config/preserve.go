@@ -89,6 +89,40 @@ func mergeMap(elem reflect.Type, cur, prev json.RawMessage) json.RawMessage {
 	return encodeObject(curObj)
 }
 
+// renameBranchKeys returns prev with each branches member named by a key
+// of renames rekeyed to its value, so a renamed entry merges with its own
+// previous members. A rename whose target key is already on disk is left
+// alone: that entry is the one the new key names.
+func renameBranchKeys(prev json.RawMessage, renames map[string]string) json.RawMessage {
+	if len(renames) == 0 {
+		return prev
+	}
+	top, ok := decodeObject(prev)
+	if !ok {
+		return prev
+	}
+	for i, m := range top {
+		if m.key != "branches" {
+			continue
+		}
+		branches, ok := decodeObject(m.val)
+		if !ok {
+			return prev
+		}
+		present := make(map[string]bool, len(branches))
+		for _, b := range branches {
+			present[b.key] = true
+		}
+		for j, b := range branches {
+			if to, ok := renames[b.key]; ok && !present[to] {
+				branches[j].key = to
+			}
+		}
+		top[i].val = encodeObject(branches)
+	}
+	return encodeObject(top)
+}
+
 // jsonFields maps the JSON member names encoding/json uses for t's fields
 // to their types, flattening embedded structs.
 func jsonFields(t reflect.Type) map[string]reflect.Type {

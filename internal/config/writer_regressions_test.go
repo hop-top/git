@@ -211,3 +211,38 @@ func TestWriteHubConfig_NoExistingFile(t *testing.T) {
 		t.Error("config not written")
 	}
 }
+
+// A rename carries the old entry's unmodeled members to the new key, but
+// never onto an entry already stored under the new key.
+func TestWriteHubConfig_RenamedBranchCarriesUnmodeled(t *testing.T) {
+	fs := seedHopJSON(t, `{
+  "repo": {"defaultBranch": "main"},
+  "branches": {
+    "a": {"path": "hops/a", "hopspaceBranch": "a", "ticket": "A-1"},
+    "b": {"path": "hops/b", "hopspaceBranch": "b", "ticket": "B-1"},
+    "c": {"path": "hops/c", "hopspaceBranch": "c", "ticket": "C-1"}
+  }
+}`)
+	cfg, err := NewLoader(fs).LoadHubConfig("/hub")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg.Branches["z"] = cfg.Branches["a"]
+	delete(cfg.Branches, "a")
+	delete(cfg.Branches, "c")
+	if err := NewWriter(fs).WriteHubConfig("/hub", cfg, RenamedBranch("a", "z"), RenamedBranch("c", "b")); err != nil {
+		t.Fatal(err)
+	}
+
+	got := readHopJSON(t, fs)
+	branches := obj(t, got, "branches")
+	if _, ok := branches["a"]; ok {
+		t.Error("old key a still present")
+	}
+	if obj(t, got, "branches", "z")["ticket"] != "A-1" {
+		t.Errorf("branches.z.ticket = %v, want A-1", obj(t, got, "branches", "z")["ticket"])
+	}
+	if obj(t, got, "branches", "b")["ticket"] != "B-1" {
+		t.Errorf("branches.b.ticket = %v, want B-1 (target already on disk wins)", obj(t, got, "branches", "b")["ticket"])
+	}
+}

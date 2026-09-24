@@ -100,11 +100,14 @@ func (h *Hopspace) RenameBranch(oldBranch, newBranch, newPath string) error {
 	entry.Path = newPath
 	delete(h.Config.Branches, oldBranch)
 	h.Config.Branches[newBranch] = entry
-	return h.Save()
+	return h.save(config.RenamedBranch(oldBranch, newBranch))
 }
 
 // Save persists the hopspace config
 func (h *Hopspace) Save() error {
-	writer := config.NewWriter(h.fs)
-	return writer.WriteHopspaceConfig(h.Path, h.Config)
+	return h.save()
+}
+
+func (h *Hopspace) save(opts ...config.WriteOption) error {
+	return config.NewWriter(h.fs).WriteHopspaceConfig(h.Path, h.Config, opts...)
 }
