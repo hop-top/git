@@ -945,7 +945,8 @@ to a JSONL file.
 
 `hopspace_path` is the same for every worktree event of a hub: the hub
 itself for a default clone (so it equals `repo_path`), or
-`$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`.
+`$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
+(marked `repo.mode: "global"` in its `hop.json`).
 
 One line per event:
 

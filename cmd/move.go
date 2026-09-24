@@ -169,7 +169,7 @@ var moveCmd = &cobra.Command{
 		}
 
 		// Rekey ports/volumes configs
-		hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 		loader := config.NewLoader(fs)
 		writer := config.NewWriter(fs)
 		if portsCfg, err := loader.LoadPortsConfig(hopspacePath); err == nil {
@@ -227,7 +227,7 @@ func (p movePlan) prepare(fs afero.Fs, g git.GitInterface) (*hop.Hopspace, error
 	if err := hop.CheckMove(p.hub, g, p.oldBranch, p.newBranch); err != nil {
 		return nil, err
 	}
-	hopspacePath := hop.ResolveHopspacePath(fs, p.hubPath, p.hub.Config.Repo.Org, p.hub.Config.Repo.Repo)
+	hopspacePath := hop.ResolveHopspacePath(p.hubPath, p.hub.Config.Repo)
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load hopspace: %v", err)

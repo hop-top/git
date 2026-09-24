@@ -108,7 +108,7 @@ and no hook runs.`,
 			output.Fatal("Failed to load hub: %v", err)
 		}
 
-		hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 		hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 		if err != nil {
 			output.Fatal("Failed to load hopspace at %s: %v", hopspacePath, err)
@@ -261,7 +261,7 @@ and no hook runs.`,
 
 			// Add the hub to state
 			mode := state.HubModeLocal
-			if hopspacePath != hubPath {
+			if hub.Config.Repo.Mode == config.RepoModeGlobal {
 				mode = state.HubModeGlobal
 			}
 			st.AddHub(repoID, &state.HubState{

@@ -330,6 +330,7 @@ func createProjectConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch
 			"defaultBranch": defaultBranch,
 			"structure":     "bare-worktree",
 			"isBare":        true,
+			"mode":          config.RepoModeGlobal,
 		},
 		"branches": map[string]any{
 			defaultBranch: map[string]any{

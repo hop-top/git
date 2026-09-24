@@ -447,9 +447,17 @@ Each repository has its own hopspace configuration that tracks branches and meta
 
 ### Location
 
-`$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`
+Where the hopspace lives depends on how the hub was cloned:
 
-Example: `~/.local/share/git-hop/github.com/myorg/myrepo/hop.json`
+- **Default clone**: the hub's own `<hub-path>/hop.json` holds both the
+  hub and the hopspace fields. Nothing is written under
+  `$GIT_HOP_DATA_HOME`.
+- **`clone --global`**: `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`, and
+  the hub's `hop.json` carries `"repo": {"mode": "global"}`.
+
+Only that marker decides. A `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`
+next to a hub without the marker is a stale copy: git-hop never reads
+it, and `git hop doctor` reports it as a warning (check `hopspace`).
 
 ### Schema
 
@@ -541,6 +549,7 @@ Example: `~/projects/myrepo/hop.json`
 | `settings.compareBranch` | string | Default branch for comparisons |
 | `settings.envPatterns` | array | Glob patterns for environment files |
 | `migrated` | boolean | Whether this hub has been migrated to the registry system |
+| `repo.mode` | string | `global` when cloned with `--global`: the hopspace lives in `$GIT_HOP_DATA_HOME/<org>/<repo>`. Omitted by default, when the hub is its own hopspace |
 
 ## State Tracking
 

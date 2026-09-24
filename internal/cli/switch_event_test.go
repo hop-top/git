@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/spf13/afero"
 	"hop.top/kit/go/runtime/bus"
 
 	"hop.top/git/internal/config"
@@ -18,28 +17,22 @@ import (
 // TestPublishWorktreeSwitched pins the payload emitted after a successful
 // branch switch. HopspacePath is the hopspace the hub resolves to, the
 // same value created/moved/removed report: the hub itself by default, the
-// data-home hopspace for a --global hub. It must never be empty.
+// data-home hopspace for a hub marked global. It must never be empty.
 func TestPublishWorktreeSwitched(t *testing.T) {
 	dataHome := t.TempDir()
 	t.Setenv("GIT_HOP_DATA_HOME", dataHome)
 	global := filepath.Join(dataHome, "ideacrafterslabs", "git")
 
 	for _, tc := range []struct {
-		name          string
-		globalHopJSON bool
-		wantHopspace  string
+		name         string
+		mode         string
+		wantHopspace string
 	}{
-		{"default hub is its own hopspace", false, "/hubs/git"},
-		{"global hub names the data-home hopspace", true, global},
+		{"default hub is its own hopspace", "", "/hubs/git"},
+		{"hub marked global names the data-home hopspace", config.RepoModeGlobal, global},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			fs := afero.NewMemMapFs()
-			if tc.globalHopJSON {
-				if err := afero.WriteFile(fs, filepath.Join(global, "hop.json"), []byte("{}"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-			}
-			got := publishAndCollect(t, fs)
+			got := publishAndCollect(t, tc.mode)
 
 			if len(got) != 1 {
 				t.Fatalf("expected exactly 1 event on %s, got %d", events.WorktreeSwitched, len(got))
@@ -74,7 +67,7 @@ func TestPublishWorktreeSwitched(t *testing.T) {
 	}
 }
 
-func publishAndCollect(t *testing.T, fs afero.Fs) []bus.Event {
+func publishAndCollect(t *testing.T, mode string) []bus.Event {
 	t.Helper()
 	b := bus.New()
 	defer func() { _ = b.Close(context.Background()) }()
@@ -97,10 +90,11 @@ func publishAndCollect(t *testing.T, fs afero.Fs) []bus.Event {
 				Org:           "ideacrafterslabs",
 				Repo:          "git",
 				DefaultBranch: "main",
+				Mode:          mode,
 			},
 		},
 	}
-	publishWorktreeSwitched(b, fs, hub, "/hubs/git", "feat/switch", "/hubs/git/hops/feat/switch")
+	publishWorktreeSwitched(b, hub, "/hubs/git", "feat/switch", "/hubs/git/hops/feat/switch")
 
 	mu.Lock()
 	defer mu.Unlock()
@@ -115,5 +109,5 @@ func TestPublishWorktreeSwitched_NilBusIsNoop(t *testing.T) {
 			Repo: config.RepoConfig{Org: "o", Repo: "r"},
 		},
 	}
-	publishWorktreeSwitched(nil, afero.NewMemMapFs(), hub, "/hub", "b", "/hub/b")
+	publishWorktreeSwitched(nil, hub, "/hub", "b", "/hub/b")
 }

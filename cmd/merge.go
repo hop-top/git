@@ -167,7 +167,7 @@ If only one argument is given, the current branch is used as the source.`,
 		deleteMergedSourceBranch(g, basePath, sourceBranch, deleteRemote)
 
 		// Prune stale hopspace data
-		hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 		if hopspace, err := hop.LoadHopspace(fs, hopspacePath); err == nil {
 			hopspace.UnregisterBranch(sourceBranch)
 			cleanup := hop.NewCleanupManager(fs, g)

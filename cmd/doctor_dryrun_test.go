@@ -114,12 +114,16 @@ func TestDoctorPaths_DataHomeIsTheToolDirectory(t *testing.T) {
 	assert.False(t, exists, "--fix must not nest git-hop inside the data home")
 }
 
-// doctorHub builds a hub whose hop.json lists branches but where only
-// `present` exist on disk, plus a matching hopspace. cwd for runDoctor is
-// the hub path itself.
+// doctorHub builds a hub marked global whose hop.json lists branches but
+// where only `present` exist on disk, plus its data-home hopspace. cwd for
+// runDoctor is the hub path itself.
 func doctorHub(t *testing.T, fs afero.Fs, hubPath string, branches, present []string) string {
 	t.Helper()
 	writePruneHub(t, fs, hubPath, branches, present)
+	hub, err := hop.LoadHub(fs, hubPath)
+	require.NoError(t, err)
+	hub.Config.Repo.Mode = config.RepoModeGlobal
+	require.NoError(t, hub.Save())
 
 	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), "test", "repo")
 	hopspace, err := hop.InitHopspace(fs, hopspacePath,

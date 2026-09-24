@@ -407,7 +407,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	}
 
 	// Load Hopspace to unregister
-	hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err == nil {
 		// Unregister from hopspace (silent if branch doesn't exist)

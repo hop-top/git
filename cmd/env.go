@@ -87,7 +87,7 @@ func runEnvCommand(action string) {
 			hubConfig = hub.Config
 			org = hub.Config.Repo.Org
 			repo = hub.Config.Repo.Repo
-			repoPath = hop.ResolveHopspacePath(fs, hubPath, org, repo)
+			repoPath = hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 			// Get branch name from git
 			branch, _ = g.GetCurrentBranch(root)
 		}
@@ -189,7 +189,7 @@ var envGenerateCmd = &cobra.Command{
 		repo := hub.Config.Repo.Repo
 
 		// Load hopspace for ports/volumes config
-		hopspacePath := hop.ResolveHopspacePath(fs, hubPath, org, repo)
+		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 		if _, err := hop.LoadHopspace(fs, hopspacePath); err != nil {
 			output.Fatal("Failed to load hopspace at %s: %v", hopspacePath, err)
 		}

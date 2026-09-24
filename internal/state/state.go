@@ -8,6 +8,8 @@ import (
 
 	"github.com/spf13/afero"
 	"hop.top/kit/go/core/xdg"
+
+	"hop.top/git/internal/config"
 )
 
 // State represents the git-hop state tracking repositories and their locations
@@ -38,10 +40,11 @@ type WorktreeState struct {
 	LastAccessed time.Time `json:"lastAccessed"`
 }
 
-// Hub modes: where a hub keeps its hopspace.
+// Hub modes: where a hub keeps its hopspace. HubModeGlobal is the value
+// of the hub's repo.mode marker (config.RepoModeGlobal).
 const (
-	HubModeLocal  = "local"  // in the hub's own hop.json (the default)
-	HubModeGlobal = "global" // in $GIT_HOP_DATA_HOME/<org>/<repo> (clone --global)
+	HubModeLocal  = "local"               // in the hub's own hop.json (the default)
+	HubModeGlobal = config.RepoModeGlobal // in $GIT_HOP_DATA_HOME/<org>/<repo> (clone --global)
 )
 
 // HubState represents a hub location for a repository

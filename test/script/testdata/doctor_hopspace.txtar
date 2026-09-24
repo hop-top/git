@@ -2,7 +2,9 @@
 #
 # A default clone keeps its hopspace in the hub: hop.json carries both the
 # hub and hopspace fields and nothing is written under $GIT_HOP_DATA_HOME.
-# A --global clone keeps it in $GIT_HOP_DATA_HOME/<org>/<repo>.
+# A --global clone marks the hub (repo.mode = "global") and keeps the
+# hopspace in $GIT_HOP_DATA_HOME/<org>/<repo>; only such a hub can be
+# missing its hopspace, and --fix recreates it.
 #
 # The regression this pins: doctor only ever looked in the data home, so a
 # freshly cloned default hub reported "hopspace does not exist" and "failed
@@ -55,3 +57,13 @@ exec git-hop doctor --json
 ! stdout 'failed to load hopspace'
 ! stdout '"check": "hub"'
 ! stdout '"check": "worktrees"'
+
+# --- a global hub whose data-home hopspace is gone: an issue --fix repairs ---
+rm $WORK/data/org/repo/hop.json
+exec git-hop doctor --json
+stdout '"message": "hopspace does not exist"'
+exec git-hop doctor --fix
+exists $WORK/data/org/repo/hop.json
+decode json $WORK/data/org/repo/hop.json branches.main.exists true
+exec git-hop doctor --json
+! stdout 'hopspace does not exist'
