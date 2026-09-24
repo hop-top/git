@@ -27,7 +27,9 @@ func TestGitDirWarning(t *testing.T) {
 		{"BISECT_START", "in progress and is abandoned"},
 		{"rebase-merge", "in progress and is abandoned"},
 		{"MERGE_HEAD", "in progress and is abandoned"},
-		{"config.worktree", "per-worktree config"},
+		// carried when extensions.worktreeConfig is on; the warning for
+		// an ignored file comes from carryOverWorktreeConfig
+		{"config.worktree", ""},
 		{"some-tool", ".git/some-tool: not carried over"},
 	} {
 		got := gitDirWarning(tc.name)

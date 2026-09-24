@@ -1,0 +1,115 @@
+# A repository that uses per-worktree config (extensions.worktreeConfig,
+# which `git sparse-checkout` turns on) keeps it through a bare
+# conversion. The hub gets the extension, with core.bare moved from its
+# shared config into its own config.worktree as git requires: left in the
+# shared config, core.bare=true would apply to every linked worktree. The
+# repository's config.worktree becomes the default worktree's own, so its
+# sparse checkout and custom keys are exactly as before. Other worktrees
+# start without them.
+
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit -q -m 'initial' --allow-empty
+mkdir a b
+cp $WORK/a.txt a/x
+cp $WORK/b.txt b/y
+exec git add a b
+exec git commit -q -m 'files'
+exec git sparse-checkout set --cone a
+exec git config --worktree hop.test.key v1
+exec git sparse-checkout list
+cp stdout $WORK/sparse-before
+! exists $WORK/proj/b
+
+# --- the plan names the per-worktree keys ---
+exec git-hop init --no-prompt --no-hooks --dry-run
+stdout '^         extensions\.worktreeconfig$'
+! stdout 'extensions\.worktreeconfig: '
+stdout 'Carry over 3 per-worktree config key\(s\) into hops/main:'
+stdout '^         hop\.test\.key$'
+stdout '^         core\.sparsecheckoutcone$'
+
+# --- the conversion ---
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+! stderr 'config\.worktree'
+
+# --- the hub: extension on, core.bare only in its own config.worktree ---
+cd $WORK/proj
+exec git rev-parse --is-bare-repository
+stdout '^true$'
+exec git config --file config --type=bool extensions.worktreeConfig
+stdout '^true$'
+! exec git config --file config core.bare
+exec git config --file config.worktree --get-all core.bare
+stdout -count=1 '^true$'
+! exec git config --file config.worktree hop.test.key
+
+# --- the default worktree: its per-worktree config and sparse checkout ---
+cd $WORK/proj/hops/main
+exec git rev-parse --is-bare-repository
+stdout '^false$'
+exec git config --worktree --get hop.test.key
+stdout '^v1$'
+exec git sparse-checkout list
+cmp stdout $WORK/sparse-before
+exists a/x
+! exists b
+exec git status --porcelain
+! stdout .
+
+# --- a new worktree inherits none of it, and works ---
+cd $WORK/proj
+exec git-hop add feat
+exists $WORK/proj/hops/feat/b/y
+cd $WORK/proj/hops/feat
+! exec git config --worktree --get hop.test.key
+! exec git config core.sparseCheckout
+exec git rev-parse --is-bare-repository
+stdout '^false$'
+cp $WORK/b.txt new.txt
+exec git add new.txt
+exec git commit -q -m 'on feat'
+exec git status --porcelain
+! stdout .
+
+# --- hub commands work on this hub ---
+cd $WORK/proj
+exec git-hop status
+stdout 'Hub:'
+stdout 'main'
+stdout 'feat'
+exec git-hop list --no-color
+stdout 'main'
+stdout 'feat'
+exec git-hop doctor --json
+decode json stdout '#' 0
+
+# --- and so does unregistered-hub detection ---
+mv $WORK/proj/hop.json $WORK/hop.json.aside
+cd $WORK/proj/hops/main
+exec git-hop status
+stderr 'Detected a bare-worktree repository at .*/proj, but it is missing hop.json'
+mv $WORK/hop.json.aside $WORK/proj/hop.json
+
+# --- without the extension, a config.worktree git ignored is not carried ---
+exec git init $WORK/off
+cd $WORK/off
+exec git commit -q -m 'initial' --allow-empty
+cp $WORK/stray.worktree $WORK/off/.git/config.worktree
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+stderr 'warning: \.git/config\.worktree: not carried over: extensions\.worktreeConfig is off'
+exec git config --file config --get-all core.bare
+stdout -count=1 '^true$'
+! exists $WORK/off/config.worktree
+! exec git config extensions.worktreeConfig
+! exec git -C hops/main config hop.stray.key
+
+-- a.txt --
+a
+-- b.txt --
+b
+-- stray.worktree --
+[hop "stray"]
+	key = ignored

@@ -236,6 +236,11 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 			return err
 		}
 		result.Warnings = append(result.Warnings, gitDirWarnings...)
+		wtConfigWarnings, err := c.carryOverWorktreeConfig(localConfig, repoPath, bareRepoPath, defaultPath, worktreeGitDir)
+		if err != nil {
+			return err
+		}
+		result.Warnings = append(result.Warnings, wtConfigWarnings...)
 
 		if err := c.swapDirectories(parentDir, projectName, bareRepoPath); err != nil {
 			return fmt.Errorf("failed to swap directories: %w", err)
