@@ -26,7 +26,7 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.6"
+const resultSchemaVersion = "1.7"
 
 // addResult is the result of `git hop add`.
 type addResult struct {
@@ -49,8 +49,8 @@ type addResult struct {
 type statusRecord struct {
 	Branch     string          `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch name"`
 	Base       string          `json:"base" yaml:"base" table:"base" jsonschema:"description=Branch the sync status is computed against"`
-	State      string          `json:"state" yaml:"state" table:"state" jsonschema:"description=Linked when the worktree directory exists; Missing otherwise"`
-	Status     string          `json:"status" yaml:"status" table:"status" jsonschema:"description=Sync label relative to base (default/synced/N ahead/behind (N)/merged/diverged; optional dirty suffix); - when missing"`
+	State      string          `json:"state" yaml:"state" table:"state" jsonschema:"enum=Linked,enum=Occupied,enum=Missing,description=Linked: the worktree directory is at its path; Occupied: something that is not a directory is (a file or a symlink to one or a dangling symlink); Missing: nothing is"`
+	Status     string          `json:"status" yaml:"status" table:"status" jsonschema:"description=Sync label relative to base (default/synced/N ahead/behind (N)/merged/diverged; optional dirty suffix); - when the state is not Linked"`
 	Path       string          `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the worktree"`
 	Repository string          `json:"repository,omitempty" yaml:"repository,omitempty" jsonschema:"description=Repository id (host/org/repo); status --all only"`
 	Hub        string          `json:"hub,omitempty" yaml:"hub,omitempty" jsonschema:"description=Absolute path of the hub the worktree belongs to; absent when state does not know it (status --all)"`
