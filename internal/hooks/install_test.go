@@ -1,7 +1,6 @@
 package hooks
 
 import (
-	"bytes"
 	"io"
 	"os"
 	"path/filepath"
@@ -61,7 +60,6 @@ func TestMirror_ModeNone(t *testing.T) {
 		WorktreePath: wt,
 		RepoID:       testRepoID,
 		Mode:         ModeNone,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -87,7 +85,6 @@ func TestMirror_ModeCopy_InstallsAndPreservesContent(t *testing.T) {
 		WorktreePath: wt,
 		RepoID:       testRepoID,
 		Mode:         ModeCopy,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -124,7 +121,6 @@ func TestMirror_ModeSymlink_OsFs(t *testing.T) {
 		WorktreePath: wt,
 		RepoID:       testRepoID,
 		Mode:         ModeSymlink,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -156,7 +152,6 @@ func TestMirror_PromptYesInstalls(t *testing.T) {
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("y\n"),
 		Stdout:       io.Discard,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -190,7 +185,6 @@ func TestMirror_PromptYesInstalls_OsFs(t *testing.T) {
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("y\n"),
 		Stdout:       io.Discard,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -216,7 +210,6 @@ func TestMirror_PromptNoSkips(t *testing.T) {
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("n\n"),
 		Stdout:       io.Discard,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -244,7 +237,6 @@ func TestMirror_PromptAllInstallsRemaining(t *testing.T) {
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("a\n"), // first answer = all-yes
 		Stdout:       io.Discard,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -272,7 +264,6 @@ func TestMirror_PromptSkipAllSkipsRemaining(t *testing.T) {
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("s\n"),
 		Stdout:       io.Discard,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -289,12 +280,14 @@ func TestMirror_NonExecutableWarns(t *testing.T) {
 	wt := "/wt"
 	writeHook(t, fs, wt, "post-worktree-add", "#!/bin/sh\n", 0644) // not exec
 
-	var stderr bytes.Buffer
-	res, err := MirrorCommittedHooks(fs, MirrorOpts{
-		WorktreePath: wt,
-		RepoID:       testRepoID,
-		Mode:         ModeCopy,
-		Stderr:       &stderr,
+	var res Result
+	var err error
+	stderr := captureOSStderr(t, func() {
+		res, err = MirrorCommittedHooks(fs, MirrorOpts{
+			WorktreePath: wt,
+			RepoID:       testRepoID,
+			Mode:         ModeCopy,
+		})
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -302,8 +295,8 @@ func TestMirror_NonExecutableWarns(t *testing.T) {
 	if res.Warned != 1 || res.Installed != 0 {
 		t.Fatalf("expected Warned=1 Installed=0, got %+v", res)
 	}
-	if !strings.Contains(stderr.String(), "not executable") {
-		t.Fatalf("stderr should mention not executable: %q", stderr.String())
+	if !strings.Contains(stderr, "not executable") {
+		t.Fatalf("stderr should mention not executable: %q", stderr)
 	}
 }
 
@@ -328,7 +321,6 @@ func TestMirror_AlreadyPresentIdenticalIsSilentNoOp(t *testing.T) {
 		WorktreePath: wt,
 		RepoID:       testRepoID,
 		Mode:         ModeCopy,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -354,7 +346,6 @@ func TestMirror_DifferentContentNoOverwriteWarns(t *testing.T) {
 		RepoID:       testRepoID,
 		Mode:         ModeCopy,
 		Overwrite:    false,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -385,7 +376,6 @@ func TestMirror_DifferentContentOverwriteReplaces(t *testing.T) {
 		RepoID:       testRepoID,
 		Mode:         ModeCopy,
 		Overwrite:    true,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -411,7 +401,6 @@ func TestMirror_NonHookFilenameSkippedSilently(t *testing.T) {
 		WorktreePath: wt,
 		RepoID:       testRepoID,
 		Mode:         ModeCopy,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -434,7 +423,6 @@ func TestMirror_EmptyDirIsZeroNoError(t *testing.T) {
 		WorktreePath: wt,
 		RepoID:       testRepoID,
 		Mode:         ModeCopy,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -453,7 +441,6 @@ func TestMirror_MissingDirIsZeroNoError(t *testing.T) {
 		WorktreePath: "/wt-does-not-exist",
 		RepoID:       testRepoID,
 		Mode:         ModeCopy,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -470,13 +457,15 @@ func TestMirror_PromptDegradesNonInteractive(t *testing.T) {
 	wt := "/wt"
 	writeHook(t, fs, wt, "post-worktree-add", "#!/bin/sh\n", 0755)
 
-	var stderr bytes.Buffer
-	res, err := MirrorCommittedHooks(fs, MirrorOpts{
-		WorktreePath: wt,
-		RepoID:       testRepoID,
-		Mode:         ModePrompt,
-		// Stdin nil and Interactive false → degrade
-		Stderr: &stderr,
+	var res Result
+	var err error
+	stderr := captureOSStderr(t, func() {
+		res, err = MirrorCommittedHooks(fs, MirrorOpts{
+			WorktreePath: wt,
+			RepoID:       testRepoID,
+			Mode:         ModePrompt,
+			// Stdin nil and Interactive false → degrade
+		})
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -484,8 +473,8 @@ func TestMirror_PromptDegradesNonInteractive(t *testing.T) {
 	if res.Installed != 0 {
 		t.Fatalf("expected zero installs in non-interactive prompt; got %+v", res)
 	}
-	if !strings.Contains(stderr.String(), "non-interactive") {
-		t.Fatalf("stderr should mention non-interactive degrade; got: %q", stderr.String())
+	if !strings.Contains(stderr, "non-interactive") {
+		t.Fatalf("stderr should mention non-interactive degrade; got: %q", stderr)
 	}
 }
 

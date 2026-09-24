@@ -560,7 +560,6 @@ func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath str
 		Mode:         resolved,
 		Overwrite:    overwrite,
 		Stdout:       os.Stdout,
-		Stderr:       os.Stderr,
 	}
 	if resolved == hooks.ModePrompt && isStdinTTYInit() {
 		mopts.Stdin = os.Stdin

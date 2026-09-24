@@ -50,7 +50,6 @@ func TestMirrorCommittedHooks_Symlink_RealFs(t *testing.T) {
 		RepoID:       "github.com/testorg/testrepo",
 		Mode:         hooks.ModeSymlink,
 		Stdout:       io.Discard,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("MirrorCommittedHooks: %v", err)
@@ -104,7 +103,6 @@ func TestMirrorCommittedHooks_NonInteractivePromptDegrades(t *testing.T) {
 		RepoID:       "github.com/testorg/testrepo",
 		Mode:         hooks.ModePrompt,
 		Stdout:       io.Discard,
-		Stderr:       io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
