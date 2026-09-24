@@ -51,17 +51,15 @@ var remoteConfigSections = []string{"remote.", "branch."}
 // carryOverRemotes makes the bare clone at bareRepo fetch from and push
 // to exactly what srcRepo did. `git clone --bare <srcRepo>` points the
 // clone's origin at srcRepo itself, a folder the conversion is about to
-// replace, and drops every other remote and all upstream settings. This
-// swaps that origin for srcRepo's own remote and branch config, then
-// copies srcRepo's remote-tracking refs so upstreams resolve without a
-// fetch.
+// replace (and, after the swap, the hub itself), and drops every other
+// remote and all upstream settings. This drops that origin, restores
+// srcRepo's own remote and branch config, then copies srcRepo's
+// remote-tracking refs so upstreams resolve without a fetch. A source
+// with no remotes leaves the hub with none.
 func (c *Converter) carryOverRemotes(srcRepo, bareRepo string) error {
 	entries, err := c.localConfigEntries(srcRepo, remoteConfigSections)
 	if err != nil {
 		return fmt.Errorf("failed to read remotes of %s: %w", srcRepo, err)
-	}
-	if !hasRemote(entries) {
-		return nil
 	}
 
 	if _, err := c.git.Run("git", "-C", bareRepo, "config", "--remove-section", "remote.origin"); err != nil {
@@ -73,6 +71,9 @@ func (c *Converter) carryOverRemotes(srcRepo, bareRepo string) error {
 		}
 	}
 
+	if !hasRemote(entries) {
+		return nil
+	}
 	return c.copyRemoteTrackingRefs(srcRepo, bareRepo)
 }
 

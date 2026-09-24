@@ -19,8 +19,12 @@ chmod 755 $WORK/proj/.git-hop/hooks/pre-repair
 cp $WORK/pre-repair-worktree $WORK/proj/hops/main/.git-hop/hooks/pre-repair
 chmod 755 $WORK/proj/hops/main/.git-hop/hooks/pre-repair
 
-# the converted hub's origin lacks a fetch refspec, which gives repair
-# something to fix, so pre-repair runs
+# pre-repair runs only when repair has something to fix. A converted hub
+# is healthy, so hand it the hub-wide defect repair knows: an origin with
+# no fetch refspec, as clones predating the refspec restore were left.
+exec git init --bare $WORK/remote.git
+exec git -C $WORK/proj config remote.origin.url $WORK/remote.git
+! exec git -C $WORK/proj config remote.origin.fetch
 exec git-hop repair
 stdout 'restore-fetch-refspec'
 exists $WORK/fired-hub

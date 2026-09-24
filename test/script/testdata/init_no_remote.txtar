@@ -1,0 +1,36 @@
+# A repository with no remote stays remote-less through a bare
+# conversion: `git clone --bare` from the local folder would leave an
+# origin pointing at the hub itself, which is not a remote at all. The
+# commands that consult origin then treat the hub as local-only.
+
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+
+# --- no origin, no remote config at all, like the original ---
+exec git remote
+! stdout .
+! exec git config --get-regexp '^remote\.'
+
+# --- repair has nothing hub-wide to fix ---
+exec git-hop repair -n
+! stdout 'restore-fetch-refspec'
+! stderr 'refspec'
+
+# --- add does not try to fetch a remote that does not exist ---
+exec git-hop add feature
+! stderr 'fetch'
+exists $WORK/proj/hops/feature
+exec git -C $WORK/proj/hops/feature rev-parse --abbrev-ref HEAD
+stdout '^feature$'
+
+# --- status and doctor run clean against a local-only hub ---
+exec git-hop status
+! stderr 'origin'
+# (doctor's path checks want an installed data and config home)
+mkdir $WORK/data $WORK/.config/git-hop
+exec git-hop doctor
+! stdout 'refspec'
+! stderr 'origin'
