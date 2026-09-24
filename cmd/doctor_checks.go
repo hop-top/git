@@ -166,9 +166,7 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		return
 	}
 
-	worktrees := hub.WorktreePaths()
-
-	issues, err := depsManager.Audit(worktrees)
+	issues, err := depsManager.Audit(auditableWorktrees(fs, hub))
 	if err != nil {
 		output.Error("Failed to audit dependencies: %v", err)
 		r.issue(doctorCheckDependencies, hopspacePath, "failed to audit dependencies: %v", err)
@@ -225,6 +223,26 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 	}
 
 	reportOrphanedDeps(fs, depsManager, hopspacePath, "\n  ", r)
+}
+
+// auditableWorktrees returns the worktree paths of hub, by branch, whose
+// directory is there (worktreeAt). A missing one has no dependencies to
+// audit. Neither has a path something else occupies, and looking for
+// package-manager files below a file fails with ENOTDIR, which would
+// abort the audit of every other worktree; it is skipped with a note,
+// the hub check having reported it.
+func auditableWorktrees(fs afero.Fs, hub *hop.Hub) map[string]string {
+	paths := hub.WorktreePaths()
+	for _, name := range sortedBranchNames(hub) {
+		switch worktreeAt(fs, paths[name]) {
+		case worktreePresent:
+			continue
+		case worktreeOccupied:
+			output.Info("Skipping %s: worktree path is not a directory: %s", name, paths[name])
+		}
+		delete(paths, name)
+	}
+	return paths
 }
 
 // fixDependencies applies (or, under --dry-run, previews) the dependency
