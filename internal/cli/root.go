@@ -167,6 +167,7 @@ func init() {
 					output.FatalCode(exitUsage, "%s", err)
 				}
 				initConfig()
+				attachEventSinks(cmd)
 				if cmd.Name() != "upgrade" {
 					upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
 				}

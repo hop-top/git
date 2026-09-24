@@ -234,6 +234,8 @@ hub for that repository.
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
+| `hop.events.sink` | `jsonl` \| `none` | `none` | Append every lifecycle event (worktree created/removed/merged/moved/switched, env started/stopped, ...) to a JSONL file, so external tools can react without file hooks. See [`hop.events.sink`](#hopeventssink). |
+| `hop.events.path` | path | `$XDG_STATE_HOME/git-hop/events.jsonl` | File `hop.events.sink=jsonl` appends to. `~/` is expanded the way git expands path values. |
 
 ### `hop.remote.timeout`
 
@@ -350,6 +352,49 @@ recorded in state and reads `hop.repair.backupRetention` from the
 first hub that has it set, falling back to the 720h default if none
 do. There is no separate per-repo override mechanism beyond setting
 the value inside that repo's hub.
+
+### `hop.events.sink`
+
+git-hop publishes a lifecycle event after each successful mutation
+(topics and payloads: [Lifecycle events](hooks.md#lifecycle-events)).
+By default they stay in-process. Set `hop.events.sink` to `jsonl` to
+append each one, as a single JSON line, to `hop.events.path`:
+
+```bash
+git config --global hop.events.sink jsonl
+git config --global hop.events.path ~/.local/state/git-hop/events.jsonl  # optional; this is the default
+
+# Turn it off again
+git config --global hop.events.sink none
+```
+
+Use an absolute or `~/` path; a relative one resolves against whatever
+directory the command happens to run in.
+
+Guarantees:
+
+- **Never fails the command.** An unwritable path, a missing directory
+  that cannot be created, or an unknown `hop.events.sink` value leaves
+  the command's output and exit status untouched. The problem is
+  reported on stderr only with `--verbose` (`-V`).
+- **Never stalls the command.** Each write is abandoned after 250ms
+  (relevant only for a path on a hung network mount).
+- **Nothing under `--dry-run`.** A preview publishes no events and no
+  sink is attached.
+- **Durable per event.** Each line is on disk when the command moves on,
+  even when git-hop exits early afterwards. Parallel git-hop processes
+  can share one file: each line is appended with a single write.
+
+The file is append-only and never rotated by git-hop; rotate it with
+`logrotate` or similar if it grows.
+
+**Environment override.** git-hop's event bus also honors kit's
+`KIT_BUS_SINK=jsonl` + `KIT_BUS_SINK_PATH=<file>`. When `KIT_BUS_SINK`
+is set, it wins and `hop.events.*` is ignored, so events are never
+written twice. Two differences from the git config sink: kit creates the
+file on every invocation (even ones that publish nothing), and it
+buffers lines until the process exits normally, so an event published
+right before an early exit can be lost.
 
 ## Hopspace Configuration
 

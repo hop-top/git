@@ -862,6 +862,39 @@ Global and hopspace hooks are stored locally and never committed to version cont
 - Use environment variables for secrets, not hardcoded values
 - Consider using dedicated secret management tools
 
+## Lifecycle events
+
+File hooks run a script *around* an operation and can abort it. Alongside
+them, git-hop publishes a lifecycle **event** after each successful
+mutation. Events cannot veto anything; they exist so other tools can
+observe worktree lifecycle without installing hook scripts. Set
+[`hop.events.sink`](configuration.md#hopeventssink) to have them appended
+to a JSONL file.
+
+| Topic | Published by | Payload keys |
+|---|---|---|
+| `git.runtime.worktree.created` | `git hop add` | `path`, `branch`, `hopspace_path`, `repo_path` |
+| `git.runtime.worktree.removed` | `git hop remove` | `path`, `branch`, `hopspace_path`, `repo_path` |
+| `git.runtime.worktree.merged` | `git hop merge` (the source worktree, which merge also removes) | `path`, `branch`, `hopspace_path`, `repo_path` |
+| `git.runtime.worktree.moved` | `git hop move` (new path and branch) | `path`, `branch`, `hopspace_path`, `repo_path` |
+| `git.runtime.worktree.switched` | `git hop <branch>` | `path`, `branch`, `hopspace_path`, `repo_path` |
+| `git.runtime.env.started` / `git.runtime.env.stopped` | `git hop env start` / `stop` | `action`, `root`, `branch` |
+| `git.runtime.hopspace.initialized` | `git hop init` | `path`, `org`, `repo` |
+| `git.runtime.deps.installed` | `git hop add`, after dependency install | `worktree_path`, `branch` |
+
+One line per event:
+
+```json
+{"topic":"git.runtime.worktree.created","source":"git-hop","timestamp":"2026-09-24T00:05:23.412862-04:00","payload":{"path":"/src/widgets/hops/feat/login","branch":"feat/login","hopspace_path":"/home/me/.local/share/git-hop/github.com/acme/widgets","repo_path":"/src/widgets"}}
+```
+
+Topics follow the `[source].[category].[object].[action]` grammar of the
+hop.top kit event bus. A consumer that maps them onto its own vocabulary
+(for example a hook dispatcher's `WorktreeCreate` / `WorktreeRemove`)
+should treat `merged` as a removal too, since `git hop merge` deletes the
+source worktree without publishing a separate `removed`. Nothing is
+published under `--dry-run`, and a failing sink never fails the command.
+
 ## Known limitations
 
 - **`git hop add --dry-run` still creates the worktree.** `cmd/add.go` does not read the flag at all — the worktree, port allocation, and both `worktree-add` hooks run as if `--dry-run` were not passed. Treat the flag as a no-op on `add`.

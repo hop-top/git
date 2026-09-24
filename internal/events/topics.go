@@ -24,30 +24,34 @@ const (
 // Source identifies the emitter in Event.Source.
 const Source = "git-hop"
 
+// Payload structs carry snake_case JSON tags: kit's bus contract requires
+// lowercase wire keys, and sinks and cross-process consumers see only the
+// JSON form.
+
 // WorktreeEvent is the payload for worktree lifecycle events.
 type WorktreeEvent struct {
-	Path         string // Worktree directory path.
-	Branch       string // Branch name.
-	HopspacePath string // Hopspace root path.
-	RepoPath     string // Hub/bare-repo path.
+	Path         string `json:"path"`          // Worktree directory path.
+	Branch       string `json:"branch"`        // Branch name.
+	HopspacePath string `json:"hopspace_path"` // Hopspace root path.
+	RepoPath     string `json:"repo_path"`     // Hub/bare-repo path.
 }
 
 // EnvEvent is the payload for environment lifecycle events.
 type EnvEvent struct {
-	Action string // "start" or "stop".
-	Root   string // Git root of the worktree.
-	Branch string // Branch name.
+	Action string `json:"action"` // "start" or "stop".
+	Root   string `json:"root"`   // Git root of the worktree.
+	Branch string `json:"branch"` // Branch name.
 }
 
 // HopspaceEvent is the payload for hopspace initialization.
 type HopspaceEvent struct {
-	Path string // Path where hopspace was initialized.
-	Org  string
-	Repo string
+	Path string `json:"path"` // Path where hopspace was initialized.
+	Org  string `json:"org"`
+	Repo string `json:"repo"`
 }
 
 // DepsEvent is the payload emitted after dependency installation.
 type DepsEvent struct {
-	WorktreePath string
-	Branch       string
+	WorktreePath string `json:"worktree_path"`
+	Branch       string `json:"branch"`
 }

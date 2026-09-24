@@ -1,0 +1,84 @@
+# Lifecycle events reach a JSONL file when `hop.events.sink` is configured.
+#
+# Covers: nothing is written unless a sink is configured; add / switch /
+# remove each append one line with the expected topic and snake_case
+# payload keys; --dry-run writes nothing (git config and kit env sinks
+# alike); an unwritable sink path never fails the command and only
+# surfaces a warning under --verbose; the kit env sink takes precedence
+# over git config instead of duplicating every line.
+
+# --- upstream repo + hub ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# --- no sink configured: nothing written anywhere ---
+exec git-hop add feat/none
+exec git-hop remove feat/none --no-prompt
+! exists $WORK/.local/state/git-hop/events.jsonl
+! exists $WORK/events.jsonl
+
+# --- configured sink: add, switch and remove each append a line ---
+exec git config --global hop.events.sink jsonl
+exec git config --global hop.events.path $WORK/events.jsonl
+exec git-hop add feat/a
+exec git-hop feat/a
+exec git-hop remove feat/a --no-prompt
+exists $WORK/events.jsonl
+grep -count=1 '"topic":"git.runtime.worktree.created","source":"git-hop"' $WORK/events.jsonl
+grep -count=1 '"topic":"git.runtime.worktree.switched"' $WORK/events.jsonl
+grep -count=1 '"topic":"git.runtime.worktree.removed"' $WORK/events.jsonl
+grep -count=3 '"payload":\{"path":"[^"]*hops/feat/a","branch":"feat/a","hopspace_path":"[^"]+","repo_path":"[^"]*hub"\}' $WORK/events.jsonl
+grep -count=3 '"timestamp":"' $WORK/events.jsonl
+
+# --- --dry-run: previews publish nothing ---
+exec git-hop add feat/b
+cp $WORK/events.jsonl $WORK/events.before
+exec git-hop add feat/dry --dry-run
+exec git-hop remove feat/b --dry-run --no-prompt
+exec git-hop feat/b --dry-run
+exec git-hop move feat/b feat/c --dry-run
+cmp $WORK/events.jsonl $WORK/events.before
+! exists $WORK/hub/hops/feat/dry
+
+# --- kit env sink is honored too, and --dry-run silences it as well ---
+env KIT_BUS_SINK=jsonl
+env KIT_BUS_SINK_PATH=$WORK/kit.jsonl
+exec git-hop remove feat/b --dry-run --no-prompt
+# kit opens (creates) the env sink file at bus construction; it stays empty.
+! grep . $WORK/kit.jsonl
+exec git-hop remove feat/b --no-prompt
+grep -count=1 '"topic":"git.runtime.worktree.removed"' $WORK/kit.jsonl
+# env wins over git config: the event is not duplicated into hop.events.path
+cmp $WORK/events.jsonl $WORK/events.before
+env KIT_BUS_SINK=
+env KIT_BUS_SINK_PATH=
+
+# --- unwritable sink path: command still succeeds, silent unless verbose ---
+exec git config --global hop.events.path $WORK/blocker/events.jsonl
+exec git-hop add feat/d
+stdout 'Created hopspace for ''feat/d'''
+! stderr 'events'
+exists $WORK/hub/hops/feat/d
+exec git-hop remove feat/d --no-prompt -V
+stderr '(?i)warn.*event sink .*blocker'
+! exists $WORK/hub/hops/feat/d
+
+# --- sink without a path defaults to $XDG_STATE_HOME/git-hop/events.jsonl ---
+exec git config --global --unset hop.events.path
+exec git-hop add feat/e
+grep -count=1 '"topic":"git.runtime.worktree.created"' $WORK/.local/state/git-hop/events.jsonl
+
+# --- sink set back to none: nothing more written ---
+exec git config --global hop.events.sink none
+cp $WORK/.local/state/git-hop/events.jsonl $WORK/default.before
+exec git-hop remove feat/e --no-prompt
+cmp $WORK/.local/state/git-hop/events.jsonl $WORK/default.before
+
+-- blocker --
+a regular file, so nothing can be created beneath it
