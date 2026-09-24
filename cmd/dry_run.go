@@ -61,9 +61,9 @@ func previewBranchDeletion(branch string, local, remote bool) {
 }
 
 // previewDetector reports the git-flow action a real run would take for
-// branch ("start" on add/move, "finish" on remove). Detection only reads
-// git config; the generic detector's actions are no-ops, so git-flow is
-// the one detector with an effect worth naming.
+// branch; action is the git-flow verb (e.g. "finish" on remove). Detection
+// only reads git config; the generic detector's actions are no-ops, so
+// git-flow is the one detector with an effect worth naming.
 func previewDetector(fs afero.Fs, g git.GitInterface, branch, hubPath, action string) error {
 	gitflow := detector.NewGitFlowNextDetector(g)
 	mgr := detector.NewManager(fs, g)

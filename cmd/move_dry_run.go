@@ -13,33 +13,19 @@ import (
 	"hop.top/git/internal/output"
 )
 
-// movePlan is everything `git hop move` has decided before its first write.
-type movePlan struct {
-	hub                  *hop.Hub
-	hubPath, repoID      string
-	oldBranch, newBranch string
-	oldPath, newPath     string
-}
-
 // previewMove reports what `git hop move` would do for p without doing any
-// of it: no detector action, hook, branch rename, worktree move, hop.json,
-// hopspace, state, ports, volumes or symlink write. A move the real run
-// would reject fails here too.
+// of it: no hook, branch rename, worktree move, hop.json, hopspace, state,
+// ports, volumes or symlink write. A move the real run would reject fails
+// here too, checked in the same order.
 func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) {
 	refuse := func(err error) {
 		refuseDryRun(fmt.Sprintf("move '%s'", p.oldBranch), err)
 	}
 
-	if _, exists := p.hub.Config.Branches[p.newBranch]; exists {
-		refuse(fmt.Errorf("branch '%s' already exists", p.newBranch))
+	if _, err := p.prepare(fs); err != nil {
+		refuse(err)
 	}
-	if _, err := hop.LoadHopspace(fs, p.hubPath); err != nil {
-		hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), p.hub.Config.Repo.Org, p.hub.Config.Repo.Repo)
-		if _, err := hop.LoadHopspace(fs, hopspacePath); err != nil {
-			refuse(fmt.Errorf("failed to load hopspace: %v", err))
-		}
-	}
-	if err := previewDetector(fs, g, p.oldBranch, p.hubPath, "start"); err != nil {
+	if _, err := p.hookEnv(fs, g); err != nil {
 		refuse(fmt.Errorf("detector failed: %v", err))
 	}
 

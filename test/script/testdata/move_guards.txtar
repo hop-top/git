@@ -1,0 +1,58 @@
+# `git hop move` settles every refusal it can check up front before it runs
+# anything with side effects: a move onto a registered branch fails without
+# firing pre-worktree-move. And a rename is not a git-flow start: in a
+# git-flow repo the branch type is still detected for the hook environment,
+# but `git flow <type> start` is never run for a branch that already exists.
+# --dry-run previews the same thing.
+
+# --- upstream repo ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/x
+exec git-hop add feat/taken
+
+# --- global pre hook that records it ran, and the detected branch type ---
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/pre-hook $WORK/.config/git-hop/hooks/pre-worktree-move
+exec chmod +x $WORK/.config/git-hop/hooks/pre-worktree-move
+
+# --- a refused move fires no hook ---
+! exec git-hop move feat/x feat/taken
+stderr 'branch ''feat/taken'' already exists'
+! exists $WORK/pre-hook-ran
+exists $WORK/hub/hops/feat/x
+
+# --- git-flow repo; a stand-in git-flow logs every invocation ---
+mkdir $WORK/bin
+cp $WORK/git-flow $WORK/bin/git-flow
+exec chmod +x $WORK/bin/git-flow
+env PATH=$WORK/bin${:}$PATH
+exec git config gitflow.initialized true
+exec git config gitflow.branch.feature.type topic
+exec git config gitflow.branch.feature.prefix feat/
+exec git config gitflow.branch.feature.parent main
+
+exec git-hop move feat/x feat/y --dry-run
+! stdout 'git flow'
+stdout '\[dry-run\] Would run hook pre-worktree-move'
+
+exec git-hop move feat/x feat/y
+stdout 'Moved ''feat/x'' '
+! exists $WORK/git-flow-ran
+exists $WORK/pre-hook-ran
+grep '^feature$' $WORK/pre-hook-ran
+exists $WORK/hub/hops/feat/y
+
+-- pre-hook --
+#!/bin/sh
+echo "$GIT_HOP_BRANCH_TYPE" >> "$HOME/pre-hook-ran"
+-- git-flow --
+#!/bin/sh
+echo "$@" >> "$HOME/git-flow-ran"

@@ -100,37 +100,30 @@ var moveCmd = &cobra.Command{
 		newPath := filepath.Clean(hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx))
 
 		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		plan := movePlan{
+			hub:       hub,
+			hubPath:   hubPath,
+			repoID:    repoID,
+			oldBranch: oldBranch,
+			newBranch: newBranch,
+			oldPath:   oldPath,
+			newPath:   newPath,
+		}
 
 		// Everything below writes or runs hooks; the preview stops here.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-			previewMove(fs, g, movePlan{
-				hub:       hub,
-				hubPath:   hubPath,
-				repoID:    repoID,
-				oldBranch: oldBranch,
-				newBranch: newBranch,
-				oldPath:   oldPath,
-				newPath:   newPath,
-			})
+			previewMove(fs, g, plan)
 			return
 		}
 
-		// Detector (for hook env vars)
-		detectorMgr := detector.NewManager(fs, g)
-		detectorMgr.Register(detector.NewGitFlowNextDetector(g))
-		detectorMgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
-		detectorCtx := context.Background()
-		branchInfo, err := detectorMgr.ExecutePreAdd(detectorCtx, oldBranch, hubPath, oldPath)
+		hopspace, err := plan.prepare(fs)
+		if err != nil {
+			output.Fatal("Cannot move '%s': %v", oldBranch, err)
+		}
+		detectorEnv, err := plan.hookEnv(fs, g)
 		if err != nil {
 			output.Fatal("Detector failed: %v", err)
 		}
-		detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
-
-		// Add move-specific env vars
-		detectorEnv["GIT_HOP_OLD_BRANCH"] = oldBranch
-		detectorEnv["GIT_HOP_NEW_BRANCH"] = newBranch
-		detectorEnv["GIT_HOP_OLD_PATH"] = oldPath
-		detectorEnv["GIT_HOP_NEW_PATH"] = newPath
 
 		// Pre-worktree-move hook
 		hookRunner := hooks.NewRunner(fs)
@@ -139,16 +132,6 @@ var moveCmd = &cobra.Command{
 		}
 
 		output.Info("Moving '%s' → '%s'...", oldBranch, newBranch)
-
-		// Load hopspace — try local first, then global
-		hopspace, err := hop.LoadHopspace(fs, hubPath)
-		if err != nil {
-			hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-			hopspace, err = hop.LoadHopspace(fs, hopspacePath)
-			if err != nil {
-				output.Fatal("Failed to load hopspace: %v", err)
-			}
-		}
 
 		// Execute move
 		wm := hop.NewWorktreeManager(fs, g)
@@ -228,6 +211,52 @@ var moveCmd = &cobra.Command{
 		output.Info("Moved '%s' → '%s'", oldBranch, newBranch)
 		output.Info("Worktree: %s", actualNewPath)
 	},
+}
+
+// movePlan is everything `git hop move` has decided before its first write.
+type movePlan struct {
+	hub                  *hop.Hub
+	hubPath, repoID      string
+	oldBranch, newBranch string
+	oldPath, newPath     string
+}
+
+// prepare settles every refusal the move can check before its first side
+// effect, and returns the hopspace the move will update.
+func (p movePlan) prepare(fs afero.Fs) (*hop.Hopspace, error) {
+	if err := hop.CheckMove(p.hub, p.oldBranch, p.newBranch); err != nil {
+		return nil, err
+	}
+	hopspace, err := hop.LoadHopspace(fs, p.hubPath)
+	if err == nil {
+		return hopspace, nil
+	}
+	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), p.hub.Config.Repo.Org, p.hub.Config.Repo.Repo)
+	hopspace, err = hop.LoadHopspace(fs, hopspacePath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load hopspace: %v", err)
+	}
+	return hopspace, nil
+}
+
+// hookEnv is the environment the move hooks receive: the old branch's
+// detected type plus the move's own variables. Detection only reads git
+// config, and no detector action runs: renaming a branch is not starting
+// one, so git-flow's start (the detector's add action) does not apply.
+func (p movePlan) hookEnv(fs afero.Fs, g git.GitInterface) (map[string]string, error) {
+	mgr := detector.NewManager(fs, g)
+	mgr.Register(detector.NewGitFlowNextDetector(g))
+	mgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
+	info, err := mgr.DetectBranch(p.oldBranch, p.hubPath)
+	if err != nil {
+		return nil, err
+	}
+	env := mgr.GetDetectorEnvVars(info)
+	env["GIT_HOP_OLD_BRANCH"] = p.oldBranch
+	env["GIT_HOP_NEW_BRANCH"] = p.newBranch
+	env["GIT_HOP_OLD_PATH"] = p.oldPath
+	env["GIT_HOP_NEW_PATH"] = p.newPath
+	return env, nil
 }
 
 func init() {
