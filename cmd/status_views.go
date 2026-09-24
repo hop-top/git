@@ -32,7 +32,7 @@ func targetStatusRecords(fs afero.Fs, g git.GitInterface, d *docker.Docker, hubP
 
 	r := hubBranchStatusRecord(fs, g, hub, target)
 
-	hopspacePath := hop.ResolveHopspacePath(fs, hub.Path, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	hopspacePath := hop.ResolveHopspacePath(hub.Path, hub.Config.Repo)
 	if portsCfg, _ := config.NewLoader(fs).LoadPortsConfig(hopspacePath); portsCfg != nil {
 		if bp, ok := portsCfg.Branches[branch.HopspaceBranch]; ok && len(bp.Ports) > 0 {
 			r.Ports = bp.Ports

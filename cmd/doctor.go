@@ -90,6 +90,7 @@ const (
 	doctorCheckDependencies = "dependencies"
 	doctorCheckWorktrees    = "worktrees"
 	doctorCheckState        = "state"
+	doctorCheckHopspace     = "hopspace" // stale data-home hopspace copies
 )
 
 // Kinds of doctor record; see doctorRecord.Kind.
@@ -232,8 +233,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 		return
 	}
 
-	hopspacePath := hop.ResolveHopspacePath(fs, hubPath,
-		hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err != nil {

@@ -489,7 +489,7 @@ func showTargetStatus(fs afero.Fs, d *docker.Docker, hubPath, target string) {
 	output.Info("Worktree: %s", branch.Path)
 
 	// Load ports
-	hopspacePath := hop.ResolveHopspacePath(fs, hub.Path, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	hopspacePath := hop.ResolveHopspacePath(hub.Path, hub.Config.Repo)
 
 	portsLoader := config.NewLoader(fs)
 	portsCfg, _ := portsLoader.LoadPortsConfig(hopspacePath)

@@ -18,7 +18,14 @@ type RepoConfig struct {
 	Org           string `json:"org"`
 	Repo          string `json:"repo"`
 	DefaultBranch string `json:"defaultBranch"`
+	// Mode says where the hub keeps its hopspace. RepoModeGlobal (set by
+	// clone --global) means $GIT_HOP_DATA_HOME/<org>/<repo>; empty means
+	// the hub's own hop.json, the default.
+	Mode string `json:"mode,omitempty"`
 }
+
+// RepoModeGlobal marks a hub whose hopspace lives in the data home.
+const RepoModeGlobal = "global"
 
 type HubBranch struct {
 	Path           string  `json:"path"`

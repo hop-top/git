@@ -37,14 +37,29 @@ func GetHopspacePath(dataHome, org, repo string) string {
 }
 
 // ResolveHopspacePath returns the hopspace a hub uses: the data-home
-// hopspace when it holds a hop.json (hubs cloned with --global), else the
-// hub itself, whose hop.json carries the hopspace fields (the default).
-func ResolveHopspacePath(fs afero.Fs, hubPath, org, repo string) string {
-	global := GetHopspacePath(GetGitHopDataHome(), org, repo)
-	if exists, _ := afero.Exists(fs, filepath.Join(global, "hop.json")); exists {
-		return global
+// hopspace when the hub is marked global (repo.mode, written by clone
+// --global), else the hub itself, whose hop.json carries the hopspace
+// fields. Only the marker decides; a data-home hop.json next to an
+// unmarked hub is a stale copy (see StaleHopspaceCopy).
+func ResolveHopspacePath(hubPath string, repo config.RepoConfig) string {
+	if repo.Mode == config.RepoModeGlobal {
+		return GetHopspacePath(GetGitHopDataHome(), repo.Org, repo.Repo)
 	}
 	return hubPath
+}
+
+// StaleHopspaceCopy returns the data-home hop.json path left beside an
+// unmarked hub, or "" when there is none or the hub is marked global.
+// Such a copy is never read; it is reported so it can be cleaned up.
+func StaleHopspaceCopy(fs afero.Fs, repo config.RepoConfig) string {
+	if repo.Mode == config.RepoModeGlobal {
+		return ""
+	}
+	path := GetHopspacePath(GetGitHopDataHome(), repo.Org, repo.Repo)
+	if exists, _ := afero.Exists(fs, filepath.Join(path, "hop.json")); exists {
+		return path
+	}
+	return ""
 }
 
 // InitHopspace initializes a new hopspace

@@ -1,6 +1,6 @@
-# A hub cloned with --global keeps its hopspace in
-# $GIT_HOP_DATA_HOME/<org>/<repo>, and add, move and remove keep that
-# hopspace current.
+# A hub cloned with --global is marked (repo.mode = "global" in its
+# hop.json) and keeps its hopspace in $GIT_HOP_DATA_HOME/<org>/<repo>; add,
+# move and remove keep that hopspace current.
 #
 # The regression this pins: add and move tried the hub's own hop.json as
 # the hopspace first. Any hub has one, so they always wrote there and the
@@ -16,6 +16,7 @@ cd $WORK
 
 exec git-hop --global $WORK/org/repo.git hub
 exists $WORK/data/org/repo/hop.json
+decode json $WORK/hub/hop.json repo.mode global
 cd $WORK/hub
 
 # --- add registers the branch in the data-home hopspace ---

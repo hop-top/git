@@ -710,6 +710,8 @@ git hop doctor --fix --dry-run
 - Hub configuration and symlinks
 - Hopspace consistency: the hub itself for a default clone, or
   `$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
+  (marked `repo.mode: "global"` in its `hop.json`); a data-home copy next
+  to an unmarked hub is reported as a warning and left alone
 - Orphaned worktrees
 - Dependency health (symlinks, shared storage, orphaned deps)
 
@@ -753,6 +755,7 @@ git hop doctor --fix
 
 The `--fix` flag will:
 - Create missing directories
+- Recreate a `--global` hub's missing hopspace
 - Register branches from hub to hopspace
 - Sync hub-hopspace configurations
 

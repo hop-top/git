@@ -1,0 +1,63 @@
+# A default hub is its own hopspace even when an older data-home copy
+# ($GIT_HOP_DATA_HOME/<org>/<repo>/hop.json) is still lying around.
+#
+# Only a hub marked by clone --global (repo.mode = "global") uses the data
+# home. Real machines carry stale copies from earlier doctor --fix runs,
+# listing a handful of branches against the dozens in the hub's own
+# hop.json; acting on them would make add, status, remove and doctor --fix
+# work against the wrong branch list. doctor reports such a copy as a
+# warning (check "hopspace") and leaves it alone.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/repo.git hub
+! grep '"mode"' $WORK/hub/hop.json
+mkdir $WORK/data/org/repo
+cp $WORK/stale.json $WORK/data/org/repo/hop.json
+cd $WORK/hub
+
+# --- add registers in the hub, not the stale copy ---
+exec git-hop add feat/x
+decode json $WORK/hub/hop.json branches.feat/x.exists true
+! decode json $WORK/data/org/repo/hop.json branches.feat/x
+cmp $WORK/data/org/repo/hop.json $WORK/stale.json
+
+# --- status reads the hub's branch list ---
+exec git-hop status --json
+stdout 'feat/x'
+! stdout 'old/stale'
+
+# --- doctor: a warning about the copy, no issue; --fix leaves it alone ---
+exec git-hop doctor --json
+stdout '"kind": "warning"'
+stdout '"check": "hopspace"'
+stdout 'stale hopspace copy at .*/data/org/repo is ignored \(hub is local\); remove it if unused'
+! stdout '"kind": "issue"'
+exec git-hop doctor --fix
+cmp $WORK/data/org/repo/hop.json $WORK/stale.json
+! decode json $WORK/hub/hop.json branches.old/stale
+
+# --- remove unregisters from the hub, the copy stays untouched ---
+exec git-hop remove feat/x --no-prompt
+! decode json $WORK/hub/hop.json branches.feat/x
+cmp $WORK/data/org/repo/hop.json $WORK/stale.json
+
+-- stale.json --
+{
+  "repo": {
+    "uri": "file:///elsewhere/org/repo.git",
+    "org": "org",
+    "repo": "repo",
+    "defaultBranch": "main"
+  },
+  "branches": {
+    "main": {"exists": true, "path": "/elsewhere/hub/hops/main", "lastSync": "2026-02-01T00:00:00Z"},
+    "old/stale": {"exists": true, "path": "/elsewhere/hub/hops/old/stale", "lastSync": "2026-02-01T00:00:00Z"}
+  },
+  "forks": {}
+}
