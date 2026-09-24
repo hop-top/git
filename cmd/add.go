@@ -73,8 +73,9 @@ Before resolving the start-point, add runs 'git fetch origin' so a new
 branch does not start from a stale origin/<branch>. By default it does so
 only when the start-point is an origin ref: the default branch or an
 explicit origin/<branch>. 'git config hop.add.fetch true|false' makes that
-a standing choice; --fetch / --no-fetch decide for one run. A failed fetch
-warns and carries on from the refs already present.
+a standing choice; --fetch / --no-fetch decide for one run. When the
+fetch was asked for (--fetch, hop.add.fetch true) a failure is fatal; the
+automatic one only warns and carries on from the refs already present.
 
 With --dry-run, add reports the fetch, branch, start-point, worktree path
 and hooks it would run, then stops: nothing is fetched, created or written
@@ -152,7 +153,7 @@ and no hook runs.`,
 		wm := hop.NewWorktreeManager(fs, g)
 		wm.EnforceStartPoint = addFromFlag != ""
 
-		fetch := shouldFetchOrigin(g, config.NewGitConfig(),
+		fetch := decideFetch(g, config.NewGitConfig(),
 			negatableFlag(cmd, "fetch", addFetchFlag, addNoFetchFlag),
 			hubPath, startPoint, hub.Config.Repo.DefaultBranch)
 
@@ -162,7 +163,7 @@ and no hook runs.`,
 				cwd:           cwd,
 				hubPath:       hubPath,
 				hopspace:      hopspace,
-				fetch:         fetch,
+				fetch:         fetch != fetchSkip,
 				repoID:        repoID,
 				branch:        branch,
 				worktreePath:  worktreePath,
@@ -174,8 +175,8 @@ and no hook runs.`,
 
 		output.Info("Adding branch %s...", branch)
 
-		if fetch {
-			fetchOrigin(g, hubPath)
+		if fetch != fetchSkip {
+			fetchOrigin(g, hubPath, fetch)
 		}
 
 		// Create detector manager and register detectors

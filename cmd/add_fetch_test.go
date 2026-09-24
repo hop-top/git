@@ -28,7 +28,7 @@ func (r *refGit) GetConfig(_, key string) (string, error) {
 	return "", errors.New("unset")
 }
 
-func TestShouldFetchOrigin(t *testing.T) {
+func TestDecideFetch(t *testing.T) {
 	on, off := true, false
 	tests := []struct {
 		name       string
@@ -37,22 +37,24 @@ func TestShouldFetchOrigin(t *testing.T) {
 		cfg        map[string]string
 		override   *bool
 		startPoint string
-		want       bool
+		want       fetchMode
 	}{
-		{name: "default branch via origin", originURL: "u", startPoint: "", want: true},
-		{name: "default-branch sentinel", originURL: "u", startPoint: "default-branch", want: true},
-		{name: "explicit origin/x", originURL: "u", startPoint: "origin/x", want: true},
-		{name: "refs/remotes/origin/x", originURL: "u", startPoint: "refs/remotes/origin/x", want: true},
-		{name: "local branch", originURL: "u", startPoint: "main", want: false},
-		{name: "local branch shadowing origin/x", originURL: "u", localRefs: []string{"refs/heads/origin/x"}, startPoint: "origin/x", want: false},
-		{name: "other remote", originURL: "u", startPoint: "upstream/main", want: false},
-		{name: "root commit", originURL: "u", startPoint: "initial", want: false},
-		{name: "no origin remote", startPoint: "", want: false},
-		{name: "config true beats local start-point", originURL: "u", cfg: map[string]string{"hop.add.fetch": "true"}, startPoint: "main", want: true},
-		{name: "config false beats origin ref", originURL: "u", cfg: map[string]string{"hop.add.fetch": "false"}, startPoint: "origin/x", want: false},
-		{name: "--fetch beats config false", originURL: "u", cfg: map[string]string{"hop.add.fetch": "false"}, override: &on, startPoint: "main", want: true},
-		{name: "--no-fetch beats config true", originURL: "u", cfg: map[string]string{"hop.add.fetch": "true"}, override: &off, startPoint: "", want: false},
-		{name: "invalid config falls back to auto", originURL: "u", cfg: map[string]string{"hop.add.fetch": "maybe"}, startPoint: "", want: true},
+		{name: "default branch via origin", originURL: "u", startPoint: "", want: fetchAuto},
+		{name: "default-branch sentinel", originURL: "u", startPoint: "default-branch", want: fetchAuto},
+		{name: "explicit origin/x", originURL: "u", startPoint: "origin/x", want: fetchAuto},
+		{name: "refs/remotes/origin/x", originURL: "u", startPoint: "refs/remotes/origin/x", want: fetchAuto},
+		{name: "local branch", originURL: "u", startPoint: "main", want: fetchSkip},
+		{name: "local branch shadowing origin/x", originURL: "u", localRefs: []string{"refs/heads/origin/x"}, startPoint: "origin/x", want: fetchSkip},
+		{name: "other remote", originURL: "u", startPoint: "upstream/main", want: fetchSkip},
+		{name: "root commit", originURL: "u", startPoint: "initial", want: fetchSkip},
+		{name: "no origin remote", startPoint: "", want: fetchSkip},
+		{name: "config true beats local start-point", originURL: "u", cfg: map[string]string{"hop.add.fetch": "true"}, startPoint: "main", want: fetchRequired},
+		{name: "config false beats origin ref", originURL: "u", cfg: map[string]string{"hop.add.fetch": "false"}, startPoint: "origin/x", want: fetchSkip},
+		{name: "--fetch beats config false", originURL: "u", cfg: map[string]string{"hop.add.fetch": "false"}, override: &on, startPoint: "main", want: fetchRequired},
+		{name: "--fetch on an origin ref is required, not auto", originURL: "u", override: &on, startPoint: "origin/x", want: fetchRequired},
+		{name: "config true on the default branch is required", originURL: "u", cfg: map[string]string{"hop.add.fetch": "true"}, startPoint: "", want: fetchRequired},
+		{name: "--no-fetch beats config true", originURL: "u", cfg: map[string]string{"hop.add.fetch": "true"}, override: &off, startPoint: "", want: fetchSkip},
+		{name: "invalid config falls back to auto", originURL: "u", cfg: map[string]string{"hop.add.fetch": "maybe"}, startPoint: "", want: fetchAuto},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -60,9 +62,9 @@ func TestShouldFetchOrigin(t *testing.T) {
 			for _, r := range tt.localRefs {
 				g.refs[r] = true
 			}
-			got := shouldFetchOrigin(g, stubGitConfig(tt.cfg), tt.override, "/hub", tt.startPoint, "main")
+			got := decideFetch(g, stubGitConfig(tt.cfg), tt.override, "/hub", tt.startPoint, "main")
 			if got != tt.want {
-				t.Errorf("shouldFetchOrigin(%q) = %v, want %v", tt.startPoint, got, tt.want)
+				t.Errorf("decideFetch(%q) = %v, want %v", tt.startPoint, got, tt.want)
 			}
 		})
 	}
