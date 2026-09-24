@@ -57,9 +57,7 @@ silently cancelling.`,
 			output.Fatal("Failed to load hub config: %v", err)
 		}
 
-		// Get hopspace path
-		dataHome := hop.GetGitHopDataHome()
-		hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 		// Load global config
 		globalLoader := config.NewGlobalLoader()

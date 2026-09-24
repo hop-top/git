@@ -108,24 +108,10 @@ and no hook runs.`,
 			output.Fatal("Failed to load hub: %v", err)
 		}
 
-		// Load Hopspace - try local first, then global
-		var hopspace *hop.Hopspace
-		var hopspacePath string
-
-		// Try local hopspace first (in hub directory)
-		localHopspacePath := hubPath
-		hopspace, err = hop.LoadHopspace(fs, localHopspacePath)
+		hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 		if err != nil {
-			// Try global hopspace (in data directory)
-			dataHome := hop.GetGitHopDataHome()
-			globalHopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-			hopspace, err = hop.LoadHopspace(fs, globalHopspacePath)
-			if err != nil {
-				output.Fatal("Failed to load hopspace locally at %s or globally at %s", localHopspacePath, globalHopspacePath)
-			}
-			hopspacePath = globalHopspacePath
-		} else {
-			hopspacePath = localHopspacePath
+			output.Fatal("Failed to load hopspace at %s: %v", hopspacePath, err)
 		}
 
 		// Load global config for worktree location

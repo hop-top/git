@@ -139,9 +139,9 @@ cd $WORK/hub
 exec git-hop env gc --dry-run --json
 decode json stdout '#' 0
 
-mkdir $WORK/data/org/repo/deps/node_modules.abc123
-cp $WORK/deps-file $WORK/data/org/repo/deps/node_modules.abc123/f
-cp $WORK/registry.json $WORK/data/org/repo/deps/.registry.json
+mkdir $WORK/hub/deps/node_modules.abc123
+cp $WORK/deps-file $WORK/hub/deps/node_modules.abc123/f
+cp $WORK/registry.json $WORK/hub/deps/.registry.json
 
 exec git-hop env gc --dry-run --json
 decode json stdout '#' 1
@@ -151,7 +151,7 @@ decode json stdout 0.size 6
 decode json stdout 0.last_used 2026-09-01T00:00:00Z
 decode json stdout 0.path '~/deps/node_modules.abc123$'
 ! stdout 'Scanning'
-exists $WORK/data/org/repo/deps/node_modules.abc123/f
+exists $WORK/hub/deps/node_modules.abc123/f
 
 exec git-hop env gc --dry-run --porcelain
 stdout '^would-delete\tnode_modules.abc123\t6\t2026-09-01T00:00:00Z\t\S+/deps/node_modules.abc123$'
@@ -159,7 +159,7 @@ stdout '^would-delete\tnode_modules.abc123\t6\t2026-09-01T00:00:00Z\t\S+/deps/no
 exec git-hop env gc --no-prompt --format yaml
 decode yaml stdout 0.action deleted
 decode yaml stdout 0.key node_modules.abc123
-! exists $WORK/data/org/repo/deps/node_modules.abc123
+! exists $WORK/hub/deps/node_modules.abc123
 
 -- deps-file --
 hello

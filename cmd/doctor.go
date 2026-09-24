@@ -232,7 +232,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 		return
 	}
 
-	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(),
+	hopspacePath := hop.ResolveHopspacePath(fs, hubPath,
 		hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)

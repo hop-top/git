@@ -20,14 +20,15 @@ exec git-hop add feat/x
 grep '"path": "/' $WORK/hub/hop.json
 
 # --- one deps dir the worktree links to, one nothing links to ---
-mkdir $WORK/data/org/repo/deps/node_modules.live
-mkdir $WORK/data/org/repo/deps/node_modules.orphan
-cp $WORK/deps-file $WORK/data/org/repo/deps/node_modules.live/f
-cp $WORK/deps-file $WORK/data/org/repo/deps/node_modules.orphan/f
-cp $WORK/registry.json $WORK/data/org/repo/deps/.registry.json
+# A default hub is its own hopspace, so its deps store is <hub>/deps.
+mkdir $WORK/hub/deps/node_modules.live
+mkdir $WORK/hub/deps/node_modules.orphan
+cp $WORK/deps-file $WORK/hub/deps/node_modules.live/f
+cp $WORK/deps-file $WORK/hub/deps/node_modules.orphan/f
+cp $WORK/registry.json $WORK/hub/deps/.registry.json
 cp $WORK/package.json $WORK/hub/hops/feat/x/package.json
 cp $WORK/package.json $WORK/hub/hops/feat/x/package-lock.json
-symlink $WORK/hub/hops/feat/x/node_modules -> $WORK/data/org/repo/deps/node_modules.live
+symlink $WORK/hub/hops/feat/x/node_modules -> $WORK/hub/deps/node_modules.live
 
 # --- preview names only the orphan ---
 exec git-hop env gc --dry-run --json
@@ -39,8 +40,8 @@ exec git-hop env gc --no-prompt --json
 decode json stdout '#' 1
 decode json stdout 0.action deleted
 decode json stdout 0.key node_modules.orphan
-! exists $WORK/data/org/repo/deps/node_modules.orphan
-exists $WORK/data/org/repo/deps/node_modules.live/f
+! exists $WORK/hub/deps/node_modules.orphan
+exists $WORK/hub/deps/node_modules.live/f
 exists $WORK/hub/hops/feat/x/node_modules/f
 
 -- deps-file --

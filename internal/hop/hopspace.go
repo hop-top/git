@@ -29,9 +29,22 @@ func LoadHopspace(fs afero.Fs, path string) (*Hopspace, error) {
 	}, nil
 }
 
-// GetHopspacePath calculates the hopspace path based on data home and repo identity
+// GetHopspacePath returns the data-home location for a repo's hopspace.
+// It is where a --global clone creates the hopspace; to find the hopspace
+// an existing hub uses, call ResolveHopspacePath.
 func GetHopspacePath(dataHome, org, repo string) string {
 	return filepath.Join(dataHome, org, repo)
+}
+
+// ResolveHopspacePath returns the hopspace a hub uses: the data-home
+// hopspace when it holds a hop.json (hubs cloned with --global), else the
+// hub itself, whose hop.json carries the hopspace fields (the default).
+func ResolveHopspacePath(fs afero.Fs, hubPath, org, repo string) string {
+	global := GetHopspacePath(GetGitHopDataHome(), org, repo)
+	if exists, _ := afero.Exists(fs, filepath.Join(global, "hop.json")); exists {
+		return global
+	}
+	return hubPath
 }
 
 // InitHopspace initializes a new hopspace

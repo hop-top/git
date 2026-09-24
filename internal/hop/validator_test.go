@@ -143,6 +143,45 @@ func TestDetectOrphanedDirectories(t *testing.T) {
 			expectedDirs:  []string{"orphaned"},
 			expectedError: false,
 		},
+		{
+			// hops/feat holds the feat/x worktree; it is not itself an
+			// orphan, and removing it would delete a live worktree.
+			name: "slash-branch worktree parent is not an orphan",
+			setupFS: func(fs afero.Fs, hopspacePath string) {
+				hopsDir := filepath.Join(hopspacePath, "hops")
+				require.NoError(t, fs.MkdirAll(filepath.Join(hopsDir, "main"), 0755))
+				require.NoError(t, fs.MkdirAll(filepath.Join(hopsDir, "feat", "x"), 0755))
+				require.NoError(t, fs.MkdirAll(filepath.Join(hopsDir, "fix", "y"), 0755))
+			},
+			setupConfig: func() *config.HopspaceConfig {
+				return &config.HopspaceConfig{
+					Branches: map[string]config.HopspaceBranch{
+						"main":   {Path: "/tmp/hopspace/hops/main", Exists: true},
+						"feat/x": {Path: "/tmp/hopspace/hops/feat/x", Exists: true},
+						"fix/y":  {Path: "hops/fix/y", Exists: true},
+					},
+				}
+			},
+			expectedDirs:  []string{},
+			expectedError: false,
+		},
+		{
+			name: "stale directory beside a slash-branch worktree",
+			setupFS: func(fs afero.Fs, hopspacePath string) {
+				hopsDir := filepath.Join(hopspacePath, "hops")
+				require.NoError(t, fs.MkdirAll(filepath.Join(hopsDir, "feat", "x"), 0755))
+				require.NoError(t, fs.MkdirAll(filepath.Join(hopsDir, "feat", "gone"), 0755))
+			},
+			setupConfig: func() *config.HopspaceConfig {
+				return &config.HopspaceConfig{
+					Branches: map[string]config.HopspaceBranch{
+						"feat/x": {Path: "/tmp/hopspace/hops/feat/x", Exists: true},
+					},
+				}
+			},
+			expectedDirs:  []string{filepath.Join("feat", "gone")},
+			expectedError: false,
+		},
 	}
 
 	for _, tt := range tests {
