@@ -414,8 +414,13 @@ were rewritten on the way in.
 |--------------|----------------|
 | Merged into default, clean | (none — silent pass) |
 | Merged into default, dirty (uncommitted or untracked) | `--no-verify` |
-| Not merged, but pushed to `origin/<branch>` | `--force` |
+| Not merged, pushed to `origin/<branch>`, clean | `--force` |
+| Not merged, pushed to `origin/<branch>`, dirty (uncommitted or untracked) | `--force --no-verify` |
 | Not merged and not pushed | `--force --no-verify` |
+
+The dirty check applies whether or not the branch is merged. Pushing
+protects a branch's commits, not the uncommitted or untracked files in
+its worktree, so `--force` alone never discards them.
 
 When the gate is not satisfied, `remove` exits with status 1 and
 prints which flag(s) to add. The gate cannot be bypassed any other
@@ -432,13 +437,13 @@ These three flags do **different** things. They are not interchangeable.
 
 | Flag | Purpose | Bypasses gate? |
 |------|---------|----------------|
-| `--force` | Allow removing a branch that is **not merged** into the default branch | Yes — for the unmerged case |
-| `--no-verify` | Allow removing a worktree with **uncommitted/untracked files** or **unpushed commits** | Yes — for the dirty/unpushed case only; **never** for the unmerged case |
+| `--force` | Allow removing a branch that is **not merged** into the default branch | Yes — for the unmerged case only; **never** for a dirty worktree |
+| `--no-verify` | Allow removing a worktree with **uncommitted/untracked files** (merged or not) or **unpushed commits** | Yes — for the dirty/unpushed case only; **never** for the unmerged case |
 | `--no-prompt` | Skip the post-gate "Really delete?" confirmation. Useful in scripts | **No** — never bypasses the gate |
 
 `--force` and `--no-verify` are independent: neither implies the
 other. An unmerged branch is refused with `--no-verify` alone, and a
-dirty worktree on a merged branch is refused with `--force` alone.
+dirty worktree is refused with `--force` alone, merged or not.
 Despite the name, `--no-verify` does not skip the
 `pre-worktree-remove` / `post-worktree-remove` hooks; they always run.
 

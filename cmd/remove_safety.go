@@ -131,44 +131,56 @@ func branchContentMergedInto(g git.GitInterface, dir, branch, defaultBranch stri
 //	merged | pushed | dirty | requires
 //	-------|--------|-------|----------------------
 //	  no   |   no   |  any  | --force --no-verify
-//	  no   |  yes   |  any  | --force
+//	  no   |  yes   | dirty | --force --no-verify
+//	  no   |  yes   | clean | --force
 //	 yes   |  any   | dirty | --no-verify
 //	 yes   |  any   | clean | (silent pass)
 //
-// Every hint also names --no-prompt. Satisfying the gate is necessary
-// but not sufficient for a scripted removal: any branch that trips the
-// gate also trips the confirmation prompt that runs straight after, so
-// a hint listing only the gate flags is a dead end on a
-// non-interactive stdin. The hint names the complete flag set that
-// makes the retry succeed in one shot.
+// The two flags answer independent checks. --force covers the
+// not-merged check. --no-verify covers uncommitted or untracked files
+// (regardless of merge state) and unpushed commits (only relevant when
+// unmerged: a merged branch's commits already live on default). Being
+// pushed protects the branch's commits, never its worktree files, so a
+// dirty worktree always needs --no-verify.
+//
+// The hint names the complete flag set for the branch's state, not just
+// the flags still missing, plus --no-prompt. Satisfying the gate is
+// necessary but not sufficient for a scripted removal: any branch that
+// trips the gate also trips the confirmation prompt that runs straight
+// after, so a hint listing only the gate flags is a dead end on a
+// non-interactive stdin. The hint is the full retry that succeeds in
+// one shot.
 func removeGate(s branchSafety, force, noVerify bool) error {
 	dirty := !s.Clean
+	needForce := !s.Merged
+	needNoVerify := dirty || (!s.Merged && !s.Pushed)
 
+	if (!needForce || force) && (!needNoVerify || noVerify) {
+		return nil
+	}
+
+	var reasons []string
 	switch {
 	case !s.Merged && !s.Pushed:
-		if !force || !noVerify {
-			return fmt.Errorf(
-				"branch is not merged into default and not pushed to origin; " +
-					"pass --force --no-verify to remove it anyway " +
-					"(add --no-prompt when running non-interactively)",
-			)
-		}
+		reasons = append(reasons, "branch is not merged into default and not pushed to origin")
 	case !s.Merged:
-		if !force {
-			return fmt.Errorf(
-				"branch is not merged into default; " +
-					"pass --force to remove it anyway " +
-					"(add --no-prompt when running non-interactively)",
-			)
-		}
-	case dirty:
-		if !noVerify {
-			return fmt.Errorf(
-				"worktree has uncommitted changes or untracked files; " +
-					"pass --no-verify to remove it anyway " +
-					"(add --no-prompt when running non-interactively)",
-			)
-		}
+		reasons = append(reasons, "branch is not merged into default")
 	}
-	return nil
+	if dirty {
+		reasons = append(reasons, "worktree has uncommitted changes or untracked files")
+	}
+
+	var flags []string
+	if needForce {
+		flags = append(flags, "--force")
+	}
+	if needNoVerify {
+		flags = append(flags, "--no-verify")
+	}
+
+	return fmt.Errorf(
+		"%s; pass %s to remove it anyway "+
+			"(add --no-prompt when running non-interactively)",
+		strings.Join(reasons, ", and "), strings.Join(flags, " "),
+	)
 }

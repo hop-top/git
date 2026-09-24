@@ -40,8 +40,8 @@ git hop add <branch> --dry-run        # preview without applying
 git hop add <branch> --no-copy-ignored # skip copying .env/tool config from the source worktree
 git hop remove <branch>               # delete worktree + env (aliases: rm, delete, del)
 git hop remove <branch> --no-prompt   # skip confirmation prompt only — does NOT bypass safety gate
-git hop remove <branch> --force       # allow unmerged branch removal (real guardrail bypass)
-git hop remove <branch> --no-verify   # allow dirty worktree / unpushed commits (real guardrail bypass)
+git hop remove <branch> --force       # allow unmerged branch removal (real guardrail bypass; not for dirty worktrees)
+git hop remove <branch> --no-verify   # allow dirty worktree / unpushed commits, merged or not (real guardrail bypass)
 git hop remove --merged               # remove every branch merged into default (skips default + current)
 git hop remove --merged --no-prompt   # same, scripted
 git hop list                          # show all worktrees (aliases: ls, all)
@@ -149,6 +149,7 @@ Available hooks:
 | `remove` blocked: "not merged into default" | `--force` (only if you really want to lose those commits) |
 | `remove` blocked: "uncommitted changes or untracked files" | `--no-verify` |
 | `remove` blocked: "not merged and not pushed" | `--force --no-verify` |
+| `remove` blocked: "not merged into default, and worktree has uncommitted changes" | `--force --no-verify` (`--force` alone never discards uncommitted files) |
 | `remove --no-prompt` exited 1 on a risky branch | Add `--force` / `--no-verify`; `--no-prompt` is **not** a gate bypass |
 | `env gc` exited 129: "cannot prompt for confirmation" | Same cause — add `--no-prompt`. |
 | `remove` exited 129: "cannot prompt for confirmation" | Prompt could not read stdin (script / non-TTY) — add `--no-prompt` |

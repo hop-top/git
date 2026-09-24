@@ -1,15 +1,22 @@
 # `git hop remove` has two gate-bypass flags that cover DIFFERENT checks:
 #
 #   --force      the not-merged check
-#   --no-verify  uncommitted/untracked files and unpushed commits
+#   --no-verify  uncommitted/untracked files and unpushed commits,
+#                whether or not the branch is merged
 #
 # Neither implies the other. The help text used to call --no-verify a
 # "(gate bypass)" with no qualifier, so users passed it to remove an
 # unmerged branch and were refused. This script pins the contract end to
 # end: what --help promises, and what each flag actually unlocks.
 #
+# Being on origin protects a branch's commits, not the uncommitted or
+# untracked files in its worktree. --force alone used to remove an
+# unmerged, pushed branch with a dirty worktree, silently discarding
+# those files; the dirty check now applies regardless of merge state.
+#
 #   branch         merged | pushed | worktree | needs
 #   feat/pushed      no   |  yes   |  clean   | --force
+#   feat/wip         no   |  yes   |  dirty   | --force --no-verify
 #   feat/local       no   |  no    |  clean   | --force --no-verify
 #   feat/merged      yes  |  yes   |  dirty   | --no-verify
 
@@ -30,6 +37,14 @@ exec git add pushed.txt
 exec git commit -m 'pushed work'
 exec git push origin feat/pushed
 
+# feat/wip: on origin, never merged; the worktree will hold untracked
+# work later.
+exec git checkout -b feat/wip main
+cp $WORK/wip.txt wip.txt
+exec git add wip.txt
+exec git commit -m 'wip work'
+exec git push origin feat/wip
+
 # feat/merged: on origin, merged into main by merge commit.
 exec git checkout -b feat/merged main
 cp $WORK/merged.txt merged.txt
@@ -44,6 +59,7 @@ cd $WORK
 exec git-hop $WORK/repo.git hub
 cd $WORK/hub
 exec git-hop add feat/pushed
+exec git-hop add feat/wip
 exec git-hop add feat/merged
 exec git-hop add feat/local
 
@@ -57,10 +73,14 @@ cd $WORK/hub
 # feat/merged: shipped, but the worktree holds an untracked file.
 cp $WORK/scratch.txt $WORK/hub/hops/feat/merged/scratch.txt
 
+# feat/wip: on origin, but the worktree holds an untracked file.
+cp $WORK/scratch.txt $WORK/hub/hops/feat/wip/scratch.txt
+
 # --- help states the scope of each flag, not a blanket "gate bypass" ---
 exec git-hop remove --help
 ! stdout '\(gate bypass\)'
-stdout 'not merged, pushed to origin +--force$'
+stdout 'not merged, pushed to origin, clean +--force$'
+stdout 'not merged, pushed, uncommitted or untracked +--force --no-verify$'
 stdout 'not merged, not pushed +--force --no-verify$'
 stdout 'merged, uncommitted or untracked files +--no-verify$'
 stdout '--no-verify .*does NOT bypass the not-merged check'
@@ -72,7 +92,17 @@ exists $WORK/hub/hops/feat/pushed
 exec git-hop remove feat/pushed --force --no-prompt
 ! exists $WORK/hub/hops/feat/pushed
 
-# --- --force does not unlock a dirty worktree ---
+# --- --force does not unlock a dirty worktree on an unmerged, pushed branch ---
+! exec git-hop remove feat/wip --force --no-prompt
+stderr 'uncommitted changes or untracked files; pass --force --no-verify'
+exists $WORK/hub/hops/feat/wip/scratch.txt
+! exec git-hop remove feat/wip --no-verify --no-prompt
+stderr 'not merged into default.*; pass --force --no-verify'
+exists $WORK/hub/hops/feat/wip/scratch.txt
+exec git-hop remove feat/wip --force --no-verify --no-prompt
+! exists $WORK/hub/hops/feat/wip
+
+# --- --force does not unlock a dirty worktree on a merged branch ---
 ! exec git-hop remove feat/merged --force --no-prompt
 stderr 'uncommitted changes or untracked files; pass --no-verify'
 exists $WORK/hub/hops/feat/merged/scratch.txt
@@ -90,6 +120,8 @@ exec git-hop remove feat/local --force --no-verify --no-prompt
 
 -- pushed.txt --
 pushed
+-- wip.txt --
+wip
 -- merged.txt --
 merged
 -- local.txt --
