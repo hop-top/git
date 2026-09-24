@@ -218,7 +218,9 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				}
 			}
 
-			// Clean up hopspace data
+			// Clean up data-home storage for the repo. A default hub's
+			// hopspace is the hub directory removed above; a --global
+			// hub's lives here.
 			dataHome := hop.GetGitHopDataHome()
 			hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 			if exists, _ := afero.DirExists(fs, hopspacePath); exists {
@@ -405,8 +407,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	}
 
 	// Load Hopspace to unregister
-	dataHome := hop.GetGitHopDataHome()
-	hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err == nil {
 		// Unregister from hopspace (silent if branch doesn't exist)

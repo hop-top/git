@@ -708,7 +708,8 @@ git hop doctor --fix --dry-run
 
 - Path configuration (data, config, cache directories)
 - Hub configuration and symlinks
-- Hopspace existence and consistency
+- Hopspace consistency: the hub itself for a default clone, or
+  `$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
 - Orphaned worktrees
 - Dependency health (symlinks, shared storage, orphaned deps)
 
@@ -724,8 +725,7 @@ Cache home:  /home/user/.cache
 
 === Checking Hub ===
 Hub found at: /projects/my-repo
-Expected hopspace: /home/user/.local/share/git-hop/org/repo
-✓ Hopspace exists
+Hopspace: /projects/my-repo
 
 === Checking Dependencies ===
 Dependencies Status:
@@ -753,7 +753,6 @@ git hop doctor --fix
 
 The `--fix` flag will:
 - Create missing directories
-- Initialize missing hopspaces
 - Register branches from hub to hopspace
 - Sync hub-hopspace configurations
 

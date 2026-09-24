@@ -30,59 +30,13 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 		return hubPath
 	}
 
-	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(),
+	hopspacePath := hop.ResolveHopspacePath(fs, hubPath,
 		hub.Config.Repo.Org, hub.Config.Repo.Repo)
-	output.Info("Expected hopspace: %s", hopspacePath)
-
-	if exists, _ := afero.Exists(fs, filepath.Join(hopspacePath, "hop.json")); !exists {
-		r.issue(doctorCheckHub, hopspacePath, "hopspace does not exist")
-		createMissingHopspace(fs, hub, hubPath, hopspacePath, opts, r)
-	} else {
-		output.Info("Hopspace exists")
-		reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
-	}
+	output.Info("Hopspace: %s", hopspacePath)
+	reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
 
 	checkBranchWorktrees(fs, g, hub, hopspacePath, opts, r)
 	return hubPath
-}
-
-// createMissingHopspace initializes an absent hopspace and registers the
-// hub's branches into it.
-func createMissingHopspace(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath string, opts doctorOpts, r *doctorReport) {
-	if !opts.fix {
-		output.Error("Hopspace does not exist at %s", hopspacePath)
-		return
-	}
-	if !opts.mutating() {
-		output.Info("[dry-run] Would create hopspace at %s (registering %d branch(es))",
-			hopspacePath, len(hub.Config.Branches))
-		r.repaired(opts, doctorCheckHub, hopspacePath, "create hopspace and register %d branch(es)", len(hub.Config.Branches))
-		return
-	}
-
-	output.Info("Creating missing hopspace...")
-	defaultBranch := hub.Config.Repo.DefaultBranch
-	if defaultBranch == "" {
-		defaultBranch = "main"
-	}
-
-	hopspace, err := hop.InitHopspace(fs, hopspacePath, hub.Config.Repo.URI,
-		hub.Config.Repo.Org, hub.Config.Repo.Repo, defaultBranch)
-	if err != nil {
-		output.Error("Failed to initialize hopspace: %v", err)
-		r.failed(doctorCheckHub, hopspacePath, "create hopspace: %v", err)
-		return
-	}
-
-	for _, branchName := range sortedBranchNames(hub) {
-		branchWorktreePath := config.ResolveWorktreePath(hub.Config.Branches[branchName].Path, hubPath)
-		if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
-			output.Error("Failed to register branch %s: %v", branchName, err)
-			r.failed(doctorCheckHub, branchName, "register branch in hopspace: %v", err)
-		}
-	}
-	output.Info("Created hopspace")
-	r.repaired(opts, doctorCheckHub, hopspacePath, "create hopspace and register %d branch(es)", len(hub.Config.Branches))
 }
 
 // reconcileHopspaceBranches registers hub branches missing from the
@@ -198,7 +152,7 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		return
 	}
 
-	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(),
+	hopspacePath := hop.ResolveHopspacePath(fs, hubPath,
 		hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 	globalLoader := config.NewGlobalLoader()

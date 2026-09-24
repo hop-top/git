@@ -2,6 +2,7 @@ package hop
 
 import (
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/git"
@@ -37,11 +38,17 @@ func NewStateValidator(fs afero.Fs, g git.GitInterface) *StateValidator {
 	}
 }
 
-// DetectOrphanedDirectories finds directories in hops/ that are not registered in config
+// DetectOrphanedDirectories finds directories under hops/ that hold no
+// registered worktree. Results are paths relative to hops/.
+//
+// A branch with a slash (feat/x) lives at hops/feat/x, so hops/feat is a
+// parent of a worktree, not an orphan: the walk descends into such parents
+// and reports only what lies beside the registered worktrees. A top-level
+// entry named like any registered path's base name is still kept, as it
+// always was, for configs that record paths outside hops/.
 func (v *StateValidator) DetectOrphanedDirectories(hopspace *Hopspace) ([]string, error) {
 	hopsDir := filepath.Join(hopspace.Path, "hops")
 
-	// Check if hops directory exists
 	exists, err := afero.DirExists(v.fs, hopsDir)
 	if err != nil {
 		return nil, err
@@ -50,36 +57,74 @@ func (v *StateValidator) DetectOrphanedDirectories(hopspace *Hopspace) ([]string
 		return []string{}, nil
 	}
 
-	// Read all entries in hops directory
-	entries, err := afero.ReadDir(v.fs, hopsDir)
-	if err != nil {
-		return nil, err
-	}
-
-	// Build a set of registered paths for quick lookup
-	registeredPaths := make(map[string]bool)
+	registered := make(map[string]bool)
+	parents := make(map[string]bool)
+	baseNames := make(map[string]bool)
 	for _, branch := range hopspace.Config.Branches {
-		// Extract just the directory name from the path
-		// (handles both relative paths like "feature-1" and absolute paths like "/tmp/hopspace/hops/feature-1")
-		dirName := filepath.Base(branch.Path)
-		registeredPaths[dirName] = true
-	}
-
-	// Find orphaned directories
-	var orphaned []string
-	for _, entry := range entries {
-		// Skip files, only check directories
-		if !entry.IsDir() {
+		baseNames[filepath.Base(branch.Path)] = true
+		rel, ok := relToHops(hopsDir, branch.Path)
+		if !ok {
 			continue
 		}
-
-		// Check if this directory is registered
-		if !registeredPaths[entry.Name()] {
-			orphaned = append(orphaned, entry.Name())
+		registered[rel] = true
+		for dir := filepath.Dir(rel); dir != "."; dir = filepath.Dir(dir) {
+			parents[dir] = true
 		}
 	}
 
+	orphaned := []string{}
+	var walk func(rel string) error
+	walk = func(rel string) error {
+		entries, err := afero.ReadDir(v.fs, filepath.Join(hopsDir, rel))
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() {
+				continue
+			}
+			child := filepath.Join(rel, entry.Name())
+			switch {
+			case registered[child]:
+			case parents[child]:
+				if err := walk(child); err != nil {
+					return err
+				}
+			case rel == "" && baseNames[entry.Name()]:
+			default:
+				orphaned = append(orphaned, child)
+			}
+		}
+		return nil
+	}
+	if err := walk(""); err != nil {
+		return nil, err
+	}
 	return orphaned, nil
+}
+
+// relToHops maps a recorded worktree path to its path under hopsDir.
+// Absolute paths must lie inside hopsDir; relative ones are taken as
+// relative to hopsDir, with a leading "hops/" (hub-relative) stripped.
+func relToHops(hopsDir, path string) (string, bool) {
+	if path == "" {
+		return "", false
+	}
+	if filepath.IsAbs(path) {
+		rel, err := filepath.Rel(hopsDir, path)
+		if err != nil || rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+			return "", false
+		}
+		return rel, true
+	}
+	rel := filepath.Clean(path)
+	if trimmed, ok := strings.CutPrefix(rel, "hops"+string(filepath.Separator)); ok {
+		rel = trimmed
+	}
+	if rel == "." || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return rel, true
 }
 
 // ValidateWorktreeAdd performs pre-flight validation before creating a worktree

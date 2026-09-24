@@ -23,8 +23,8 @@ stdout 'No orphaned dependencies found'
 ! stdout '[^\x00-\x7F]'
 
 # --- env gc deleting an orphan ---
-mkdir $WORK/data/org/repo/deps/node_modules.abc123
-cp $WORK/registry.json $WORK/data/org/repo/deps/.registry.json
+mkdir $WORK/hub/deps/node_modules.abc123
+cp $WORK/registry.json $WORK/hub/deps/.registry.json
 exec git-hop env gc --no-prompt
 stdout 'Deleted 1 orphaned dependencies'
 ! stderr '[^\x00-\x7F]'

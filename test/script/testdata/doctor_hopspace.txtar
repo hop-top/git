@@ -1,0 +1,57 @@
+# doctor checks the hopspace the hub actually uses.
+#
+# A default clone keeps its hopspace in the hub: hop.json carries both the
+# hub and hopspace fields and nothing is written under $GIT_HOP_DATA_HOME.
+# A --global clone keeps it in $GIT_HOP_DATA_HOME/<org>/<repo>.
+#
+# The regression this pins: doctor only ever looked in the data home, so a
+# freshly cloned default hub reported "hopspace does not exist" and "failed
+# to load hopspace", and --fix wrote a second, divergent hopspace there.
+# Once the hub is the hopspace, a worktree for a slash branch
+# (hops/feat/x) must not look like an orphaned hops/feat directory, or
+# --fix would delete a live worktree.
+
+# --- upstream repo ---
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+
+# --- default (local) clone: no data-home hopspace, doctor finds none missing ---
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+! exists $WORK/data/org/repo/hop.json
+cd $WORK/hub
+exec git-hop doctor --json
+! stdout 'hopspace does not exist'
+! stdout 'failed to load hopspace'
+! stdout '"check": "hub"'
+! stdout '"check": "worktrees"'
+exec git-hop doctor
+! stderr 'Hopspace does not exist'
+! stderr 'Failed to load hopspace'
+
+# --fix leaves the data home alone: the hub already is the hopspace.
+exec git-hop doctor --fix
+! exists $WORK/data/org/repo/hop.json
+
+# --- a slash-branch worktree is not an orphan ---
+exec git-hop add feat/x
+exists $WORK/hub/hops/feat/x
+exec git-hop doctor --json
+! stdout 'orphaned directory'
+exec git-hop doctor --fix
+exists $WORK/hub/hops/feat/x
+! stderr 'orphaned'
+
+# --- --global clone: the data-home hopspace is the one checked ---
+cd $WORK
+exec git-hop --global $WORK/org/repo.git hubg
+exists $WORK/data/org/repo/hop.json
+cd $WORK/hubg
+exec git-hop doctor --json
+! stdout 'hopspace does not exist'
+! stdout 'failed to load hopspace'
+! stdout '"check": "hub"'
+! stdout '"check": "worktrees"'
