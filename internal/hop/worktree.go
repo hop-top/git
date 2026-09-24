@@ -2,13 +2,13 @@ package hop
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/output"
 )
 
 // StartPointInitial is the sentinel string that requests the legacy
@@ -212,15 +212,13 @@ func (m *WorktreeManager) resolveStartPoint(basePath, startPoint, defaultBranch 
 		if _, err := m.git.RevParse(basePath, "--verify", "refs/heads/"+defaultBranch); err == nil {
 			return "refs/heads/" + defaultBranch, true
 		}
-		fmt.Fprintf(os.Stderr,
-			"warning: could not resolve default branch %q to a ref; falling back to HEAD\n",
+		output.Warn("could not resolve default branch %q to a ref; falling back to HEAD",
 			defaultBranch)
 		return "HEAD", false
 	case StartPointInitial:
 		out, err := m.git.RunInDir(basePath, "git", "rev-list", "--max-parents=0", "HEAD")
 		if err != nil {
-			fmt.Fprintf(os.Stderr,
-				"warning: could not resolve root commit (--from initial): %v; falling back to HEAD\n",
+			output.Warn("could not resolve root commit (--from initial): %v; falling back to HEAD",
 				err)
 			return "HEAD", true
 		}

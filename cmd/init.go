@@ -440,7 +440,7 @@ func handleAlreadyInitialized(fs afero.Fs, g git.GitInterface, path string, stru
 func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path string, structure config.StructureType, noHooks, enableChdir bool) {
 	if hubPath, ok := resolveBackfillRoot(fs, path, structure); ok {
 		if created, err := backfillHubConfigIfMissing(fs, g, hubPath); err != nil {
-			fmt.Fprintf(os.Stderr, "warning: failed to back-fill hop.json at %s: %v\n", hubPath, err)
+			output.Warn("failed to back-fill hop.json at %s: %v", hubPath, err)
 		} else if created {
 			fmt.Printf("Created missing hop.json at %s.\n", hubPath)
 		}
@@ -501,7 +501,7 @@ func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath str
 
 	repoID := initRepoID(g, repoPath)
 	if repoID == "" {
-		fmt.Fprintln(os.Stderr, "warning: could not determine org/repo for hook mirror; skipping")
+		output.Warn("could not determine org/repo for hook mirror; skipping")
 		return
 	}
 
@@ -519,12 +519,11 @@ func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath str
 
 	res, err := hooks.MirrorCommittedHooks(fs, mopts)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: failed to mirror committed hooks: %v\n", err)
+		output.Warn("failed to mirror committed hooks: %v", err)
 		return
 	}
 	if res.Installed > 0 || res.Warned > 0 || res.Skipped > 0 || res.AlreadyPresent > 0 {
-		fmt.Fprintf(os.Stderr,
-			"hooks: installed=%d skipped=%d already-present=%d warned=%d\n",
+		output.Note("hooks: installed=%d skipped=%d already-present=%d warned=%d",
 			res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
 	}
 }

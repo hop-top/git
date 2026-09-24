@@ -101,11 +101,22 @@ func Fatal(msg string, args ...interface{}) {
 // convention calls for a code other than 1 — 128 for a fatal git/repo
 // error, 129 for a usage error.
 func FatalCode(code int, msg string, args ...interface{}) {
-	formatted := fmt.Sprintf(msg, args...)
+	exitWith(code, "fatal", fmt.Sprintf(msg, args...))
+}
+
+// ErrorCode prints an error with git's lowercase "error:" prefix on
+// stderr and exits with the given status: an operation failure git
+// words as an error rather than a fatal. Unlike Error it prints in
+// every mode, quiet included, since it is the run's last word.
+func ErrorCode(code int, msg string, args ...interface{}) {
+	exitWith(code, "error", fmt.Sprintf(msg, args...))
+}
+
+func exitWith(code int, prefix, msg string) {
 	if CurrentMode == ModeJSON {
-		logger.Error(formatted)
+		logger.Error(msg)
 	} else {
-		fmt.Fprintf(os.Stderr, "fatal: %s\n", formatted)
+		fmt.Fprintf(os.Stderr, "%s: %s\n", prefix, msg)
 	}
 	os.Exit(code)
 }
@@ -155,6 +166,16 @@ func Hint(msg string, args ...interface{}) {
 		}
 		fmt.Fprint(os.Stderr, b.String())
 	}
+}
+
+// Note prints unprefixed feedback on stderr, beside the result rather
+// than in it, such as a summary of side work. Like Info it is for a
+// person at a terminal: every other mode drops it.
+func Note(msg string, args ...interface{}) {
+	if CurrentMode != ModeHuman {
+		return
+	}
+	fmt.Fprintf(os.Stderr, "%s\n", fmt.Sprintf(msg, args...))
 }
 
 // Info prints standard feedback (unless quiet/porcelain/json).

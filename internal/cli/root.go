@@ -612,8 +612,7 @@ func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(strin
 			return err
 		}
 		if res.Installed > 0 || res.Warned > 0 || res.Skipped > 0 || res.AlreadyPresent > 0 {
-			fmt.Fprintf(os.Stderr,
-				"hooks: installed=%d skipped=%d already-present=%d warned=%d\n",
+			output.Note("hooks: installed=%d skipped=%d already-present=%d warned=%d",
 				res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
 		}
 		return nil

@@ -94,7 +94,7 @@ configuration, and resource usage.`,
 		// Either way the user can't tell what to do next. Surface the actual
 		// problem and the fix.
 		if root, ok := detectUnregisteredBareWorktreeRepo(fs, cwd); ok {
-			fmt.Fprintln(os.Stderr, unregisteredBareWorktreeHint(root))
+			output.Note("%s", unregisteredBareWorktreeHint(root))
 			return
 		}
 
