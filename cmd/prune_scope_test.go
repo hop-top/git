@@ -262,7 +262,7 @@ func TestRepairBackupRetention_IgnoresOutOfScopeRepo(t *testing.T) {
 	assert.Equal(t, 30*24*time.Hour, repairBackupRetention(g, scoped),
 		"an out-of-scope repo's retention must not govern this prune")
 
-	pruned := pruneRepairBackups(fs, g, scoped, false)
+	pruned := len(pruneRepairBackups(fs, g, scoped, false))
 	assert.Equal(t, 0, pruned, "day-old backup must survive the 30-day default")
 	exists, _ := afero.DirExists(fs, backupA)
 	assert.True(t, exists, "site 2: cross-repo retention must not delete this backup")

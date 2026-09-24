@@ -11,7 +11,7 @@ import (
 )
 
 // pruneOrphanedHubBranches drops hub hop.json branch entries whose
-// worktree directory no longer exists on disk, and returns the count
+// worktree directory no longer exists on disk, and returns the entries
 // removed (or that would be removed under dryRun).
 //
 // This is the hub-local half of prune. The state half (runPruneFS)
@@ -30,13 +30,13 @@ import (
 //
 // Hubs are visited in a stable order and each is handled independently:
 // one unreadable or non-hub entry does not abort the others.
-func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) int {
+func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
 	prefix := "Pruning"
 	if dryRun {
 		prefix = "[dry-run] Would prune"
 	}
 
-	pruned := 0
+	var pruned []pruneRecord
 	for _, h := range hubPathsFromState(st) {
 		hubPath := h.path
 		hub, err := hop.LoadHub(fs, hubPath)
@@ -48,6 +48,7 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 		}
 
 		plan := &hop.Plan{HubPath: hubPath}
+		var entries []pruneRecord
 		for _, branch := range sortedBranchNames(hub) {
 			wtPath := hub.BranchPath(branch)
 			if exists, _ := afero.DirExists(fs, wtPath); exists {
@@ -59,12 +60,13 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 				WorktreePath: wtPath,
 				Reason:       "hop.json references missing path for branch " + branch,
 			})
+			entries = append(entries, newPruneRecord(pruneKindHopJSONEntry, h.repoID, branch, wtPath, dryRun))
 		}
 		if len(plan.Actions) == 0 {
 			continue
 		}
 		if dryRun {
-			pruned += len(plan.Actions)
+			pruned = append(pruned, entries...)
 			continue
 		}
 
@@ -76,9 +78,12 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 		if err != nil {
 			output.Error("Failed to prune hop.json entries in %s: %v", hubPath, err)
 		}
-		// Count what actually landed, not what was planned — the
-		// "Pruned N" line must describe the post-state.
-		pruned += mutations
+		// Report what actually landed, not what was planned — the
+		// "Pruned N" line must describe the post-state. The applier works
+		// through the plan in order and stops at the first failure, and
+		// every entry it reaches changes hop.json, so the landed entries
+		// are the first mutations of them.
+		pruned = append(pruned, entries[:mutations]...)
 	}
 
 	return pruned

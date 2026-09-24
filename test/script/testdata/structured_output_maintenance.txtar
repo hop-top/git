@@ -1,0 +1,151 @@
+# doctor, prune, env gc and repair honour the structured output modes.
+#
+# Each renders a list of records: --format json|yaml a document, --json the
+# same as --format json, --porcelain one headerless tab-separated record per
+# line. Human progress never reaches stdout in those modes.
+#
+# The regression this pins: doctor, prune --dry-run and env gc --dry-run
+# printed nothing under --json / --porcelain and their human report under
+# --format json; repair -n --json printed the human plan.
+
+# --- upstream repo, hub, and a worktree whose directory is gone ---
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/gone
+rm $WORK/hub/hops/feat/gone
+
+# The XDG directories doctor's path check expects; without them every run
+# would also report them missing.
+mkdir $WORK/data/git-hop $WORK/.config/git-hop $WORK/.cache/git-hop
+
+# --- repair -n: the plan as records ---
+exec git-hop repair -n --json
+decode json stdout '#' 2
+decode json stdout 0.status repaired
+decode json stdout 0.path '~/hops/feat/gone$'
+decode json stdout 0.kind unregister
+decode json stdout 0.old ''
+decode json stdout 0.new ''
+decode json stdout 0.reason '~missing'
+decode json stdout 1.status ok
+decode json stdout 1.kind noop
+! stdout 'Repair plan'
+
+exec git-hop repair -n --format yaml
+decode yaml stdout 0.kind unregister
+
+# --porcelain keeps the line format it always had.
+exec git-hop repair -n --porcelain
+stdout '^repaired\t\S+/hops/feat/gone\tunregister\t\t$'
+stdout '^ok\t\S+/hops/main\tnoop\t\t$'
+! stdout 'Repair plan'
+
+# --- doctor: one record per finding ---
+exec git-hop doctor --json
+decode json stdout 0.kind issue
+decode json stdout 0.check
+decode json stdout 0.subject
+decode json stdout 0.message
+stdout '"subject": "feat/gone"'
+stdout '"check": "state"'
+! stdout '"kind": "fixed"'
+! stdout 'Running git-hop diagnostics'
+! stdout 'Summary'
+
+exec git-hop doctor --format yaml
+decode yaml stdout 0.kind issue
+stdout 'subject: feat/gone'
+
+exec git-hop doctor --porcelain
+stdout '^issue\thub\tfeat/gone\t'
+! stdout '^kind'
+! stdout 'Running git-hop diagnostics'
+
+# --fix --dry-run reports what it would repair and repairs nothing.
+exec git-hop doctor --fix --dry-run --json
+stdout '"kind": "would-fix"'
+! stdout '"kind": "fixed"'
+grep 'feat/gone' $WORK/hub/hop.json
+
+# The human report is unchanged by default.
+exec git-hop doctor
+stdout 'Running git-hop diagnostics'
+
+# --- prune --dry-run: the entries it would remove, nothing removed ---
+exec git-hop prune --dry-run --json
+decode json stdout '#' 2
+decode json stdout 0.action would-prune
+decode json stdout 0.kind hop-json-entry
+decode json stdout 0.repository '~repo$'
+decode json stdout 0.branch feat/gone
+decode json stdout 0.path '~/hops/feat/gone$'
+decode json stdout 1.kind worktree
+! stdout 'Scanning'
+grep 'feat/gone' $WORK/hub/hop.json
+
+exec git-hop prune --dry-run --format yaml
+decode yaml stdout 1.action would-prune
+
+exec git-hop prune --dry-run --porcelain
+stdout '^would-prune\thop-json-entry\t\S+\tfeat/gone\t\S+/hops/feat/gone$'
+stdout '^would-prune\tworktree\t'
+! stdout 'Scanning'
+
+# An unknown column is refused before prune removes anything.
+! exec git-hop prune --json --cols nope
+stderr 'unknown column .{0,2}"nope'
+grep 'feat/gone' $WORK/hub/hop.json
+
+# --- prune: the entries it removed ---
+exec git-hop prune --json
+decode json stdout '#' 2
+decode json stdout 0.action pruned
+decode json stdout 1.action pruned
+! grep 'feat/gone' $WORK/hub/hop.json
+
+# Nothing left: an empty list, not an empty stdout.
+exec git-hop prune --json
+decode json stdout '#' 0
+exec git-hop doctor --json
+! stdout 'feat/gone'
+cd $WORK
+exec git-hop doctor --json
+decode json stdout '#' 0
+cd $WORK/hub
+
+# --- env gc: orphaned dependency directories ---
+exec git-hop env gc --dry-run --json
+decode json stdout '#' 0
+
+mkdir $WORK/data/org/repo/deps/node_modules.abc123
+cp $WORK/deps-file $WORK/data/org/repo/deps/node_modules.abc123/f
+cp $WORK/registry.json $WORK/data/org/repo/deps/.registry.json
+
+exec git-hop env gc --dry-run --json
+decode json stdout '#' 1
+decode json stdout 0.action would-delete
+decode json stdout 0.key node_modules.abc123
+decode json stdout 0.size 6
+decode json stdout 0.last_used 2026-09-01T00:00:00Z
+decode json stdout 0.path '~/deps/node_modules.abc123$'
+! stdout 'Scanning'
+exists $WORK/data/org/repo/deps/node_modules.abc123/f
+
+exec git-hop env gc --dry-run --porcelain
+stdout '^would-delete\tnode_modules.abc123\t6\t2026-09-01T00:00:00Z\t\S+/deps/node_modules.abc123$'
+
+exec git-hop env gc --no-prompt --format yaml
+decode yaml stdout 0.action deleted
+decode yaml stdout 0.key node_modules.abc123
+! exists $WORK/data/org/repo/deps/node_modules.abc123
+
+-- deps-file --
+hello
+-- registry.json --
+{"entries":{"node_modules.abc123":{"lockfileHash":"abc123","lockfilePath":"package-lock.json","usedBy":[],"lastUsed":"2026-09-01T00:00:00Z","installedAt":"2026-09-01T00:00:00Z"}}}

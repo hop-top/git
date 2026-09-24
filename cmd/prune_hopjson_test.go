@@ -81,7 +81,7 @@ func TestPruneOrphanedHubBranches_DropsMissingHopJSONRows(t *testing.T) {
 	g := mocks.NewMockGit()
 	st := stateWithHub(hubPath)
 
-	pruned := pruneOrphanedHubBranches(fs, g, st, false)
+	pruned := len(pruneOrphanedHubBranches(fs, g, st, false))
 
 	assert.Equal(t, 2, pruned, "both missing hop.json rows should be pruned")
 	assert.ElementsMatch(t, []string{"main"}, hubBranchKeys(t, fs, hubPath),
@@ -100,7 +100,7 @@ func TestPruneOrphanedHubBranches_DryRun(t *testing.T) {
 	g := mocks.NewMockGit()
 	st := stateWithHub(hubPath)
 
-	pruned := pruneOrphanedHubBranches(fs, g, st, true)
+	pruned := len(pruneOrphanedHubBranches(fs, g, st, true))
 
 	assert.Equal(t, 1, pruned)
 	assert.ElementsMatch(t, []string{"main", "feat/gone"}, hubBranchKeys(t, fs, hubPath),
@@ -121,7 +121,7 @@ func TestPruneOrphanedHubBranches_BacksUpHopJSON(t *testing.T) {
 	g := mocks.NewMockGit()
 	st := stateWithHub(hubPath)
 
-	require.Equal(t, 1, pruneOrphanedHubBranches(fs, g, st, false))
+	require.Len(t, pruneOrphanedHubBranches(fs, g, st, false), 1)
 
 	backups, err := hop.NewRepairBackup(fs, hubPath).List()
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestPruneOrphanedHubBranches_NoOpWhenClean(t *testing.T) {
 	g := mocks.NewMockGit()
 	st := stateWithHub(hubPath)
 
-	assert.Equal(t, 0, pruneOrphanedHubBranches(fs, g, st, false))
+	assert.Empty(t, pruneOrphanedHubBranches(fs, g, st, false))
 	exists, _ := afero.DirExists(fs, filepath.Join(hubPath, ".hop", "backups"))
 	assert.False(t, exists, "clean hub must not accumulate backups")
 }
@@ -183,5 +183,5 @@ func TestPruneOrphanedHubBranches_SkipsHubsMissingHopJSON(t *testing.T) {
 	g := mocks.NewMockGit()
 	st := stateWithHub(hubPath)
 
-	assert.Equal(t, 0, pruneOrphanedHubBranches(fs, g, st, false))
+	assert.Empty(t, pruneOrphanedHubBranches(fs, g, st, false))
 }

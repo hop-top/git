@@ -60,6 +60,7 @@ func init() {
 	// (cobra prefers local over inherited persistent flags). A shadowing
 	// flag must repeat the global -n shorthand or -n stops working here.
 	f.BoolVarP(&repairDryRunFlag, "dry-run", "n", false, "preview changes without applying")
+	declareOutputSchema(repairCmd, &[]repairRecord{})
 }
 
 // exit codes follow git porcelain convention: 0 success, 1 op failure,
@@ -192,8 +193,12 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 	}
 
 	// 4. Print plan.
-	porcelainMode, _ := cmd.Flags().GetBool("porcelain")
-	printPlan(plan, porcelainMode)
+	if output.IsStructured() {
+		emitResult(cmd, repairRecords(plan))
+		printPlanWarnings(plan)
+	} else {
+		printPlan(plan)
+	}
 
 	// 5. Dry-run shortcut.
 	dryRun, _ := cmd.Flags().GetBool("dry-run")
@@ -293,17 +298,29 @@ func dirtyWorktrees(g git.GitInterface, plan *hop.Plan) []string {
 	return dirty
 }
 
-func printPlan(plan *hop.Plan, porcelainMode bool) {
-	if porcelainMode {
-		for _, a := range plan.Actions {
-			status := "ok"
-			if a.Kind != hop.ActionNoOp {
-				status = "repaired"
-			}
-			fmt.Printf("%s\t%s\t%s\t%s\t%s\n", status, a.WorktreePath, a.Kind.String(), a.OldValue, a.NewValue)
+// repairRecords is the plan as the command's structured result, one
+// record per action in plan order. The slice is never nil, so an empty
+// plan renders as [] rather than null.
+func repairRecords(plan *hop.Plan) []repairRecord {
+	records := make([]repairRecord, 0, len(plan.Actions))
+	for _, a := range plan.Actions {
+		status := "ok"
+		if a.Kind != hop.ActionNoOp {
+			status = "repaired"
 		}
-		return
+		records = append(records, repairRecord{
+			Status: status,
+			Path:   a.WorktreePath,
+			Kind:   a.Kind.String(),
+			Old:    a.OldValue,
+			New:    a.NewValue,
+			Reason: a.Reason,
+		})
 	}
+	return records
+}
+
+func printPlan(plan *hop.Plan) {
 	fmt.Printf("Repair plan for %s:\n", plan.HubPath)
 	if len(plan.Actions) == 0 && len(plan.Warnings) == 0 {
 		fmt.Println("  (nothing to do)")
@@ -312,6 +329,10 @@ func printPlan(plan *hop.Plan, porcelainMode bool) {
 	for _, a := range plan.Actions {
 		fmt.Printf("  %-15s %s — %s\n", a.Kind.String(), a.WorktreePath, a.Reason)
 	}
+	printPlanWarnings(plan)
+}
+
+func printPlanWarnings(plan *hop.Plan) {
 	for _, w := range plan.Warnings {
 		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
 	}
