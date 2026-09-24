@@ -89,9 +89,9 @@ See docs/hooks.md for details.`,
 
 func showConversionMenu(fs afero.Fs, g git.GitInterface, repoPath string) {
 	fmt.Println(`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-----------------------------------------------------
   Git-Hop Repository Structure
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+-----------------------------------------------------
 
 Current repository: Standard git repository`)
 

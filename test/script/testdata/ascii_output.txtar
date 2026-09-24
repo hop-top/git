@@ -1,0 +1,37 @@
+# Human output is plain ASCII, like git's: no check marks, arrows or
+# box drawing on stdout or stderr.
+#
+# The regression this pins: env gc and doctor prefixed their progress and
+# result lines with Unicode check marks.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+mkdir $WORK/data/git-hop $WORK/.config/git-hop $WORK/.cache/git-hop
+
+# --- env gc with nothing to collect ---
+exec git-hop env gc --no-prompt
+stdout 'No orphaned dependencies found'
+! stderr '[^\x00-\x7F]'
+! stdout '[^\x00-\x7F]'
+
+# --- env gc deleting an orphan ---
+mkdir $WORK/data/org/repo/deps/node_modules.abc123
+cp $WORK/registry.json $WORK/data/org/repo/deps/.registry.json
+exec git-hop env gc --no-prompt
+stdout 'Deleted 1 orphaned dependencies'
+! stderr '[^\x00-\x7F]'
+! stdout '[^\x00-\x7F]'
+
+# --- doctor on a healthy hub ---
+exec git-hop doctor
+! stderr '[^\x00-\x7F]'
+! stdout '[^\x00-\x7F]'
+
+-- registry.json --
+{"entries":{"node_modules.abc123":{"lockfileHash":"abc123","lockfilePath":"package-lock.json","usedBy":[],"lastUsed":"2026-09-01T00:00:00Z","installedAt":"2026-09-01T00:00:00Z"}}}

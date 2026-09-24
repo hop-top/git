@@ -131,7 +131,7 @@ var moveCmd = &cobra.Command{
 			output.Fatal("Hook pre-worktree-move failed: %v", err)
 		}
 
-		output.Info("Moving '%s' → '%s'...", oldBranch, newBranch)
+		output.Info("Moving '%s' -> '%s'...", oldBranch, newBranch)
 
 		// Execute move
 		wm := hop.NewWorktreeManager(fs, g)
@@ -208,7 +208,7 @@ var moveCmd = &cobra.Command{
 			},
 		))
 
-		output.Info("Moved '%s' → '%s'", oldBranch, newBranch)
+		output.Info("Moved '%s' -> '%s'", oldBranch, newBranch)
 		output.Info("Worktree: %s", actualNewPath)
 	},
 }

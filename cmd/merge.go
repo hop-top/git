@@ -137,7 +137,7 @@ If only one argument is given, the current branch is used as the source.`,
 		}
 		mergeArgs = append(mergeArgs, sourceBranch)
 
-		output.Info("Merging '%s' → '%s'...", sourceBranch, intoBranch)
+		output.Info("Merging '%s' -> '%s'...", sourceBranch, intoBranch)
 		if _, err := g.RunInDir(intoPath, "git", mergeArgs...); err != nil {
 			output.Fatal("Merge failed: %v", err)
 		}
@@ -191,7 +191,7 @@ If only one argument is given, the current branch is used as the source.`,
 		if err := hop.UpdateCurrentSymlink(fs, hubPath, intoPath); err != nil {
 			output.Warn("Failed to update current symlink: %v", err)
 		} else {
-			output.Info("Symlinked 'current' → %s", intoPath)
+			output.Info("Symlinked 'current' -> %s", intoPath)
 		}
 
 		// Emit worktree.merged event.

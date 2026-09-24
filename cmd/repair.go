@@ -339,7 +339,7 @@ func printPlan(plan *hop.Plan) {
 		return
 	}
 	for _, a := range plan.Actions {
-		fmt.Printf("  %-15s %s — %s\n", a.Kind.String(), a.WorktreePath, a.Reason)
+		fmt.Printf("  %-15s %s: %s\n", a.Kind.String(), a.WorktreePath, a.Reason)
 	}
 	printPlanWarnings(plan)
 }

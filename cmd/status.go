@@ -695,7 +695,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 		summary := fmt.Sprintf("Tracking %d worktrees across %d repositories",
 			totalWorktrees, len(st.Repositories))
 		if runningServices > 0 {
-			summary += output.Colorize(fmt.Sprintf(" · %d services running", runningServices), "success")
+			summary += output.Colorize(fmt.Sprintf(", %d services running", runningServices), "success")
 		}
 		fmt.Println(summary)
 	}

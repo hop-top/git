@@ -78,7 +78,7 @@ silently cancelling.`,
 		output.Info("Scanning worktrees...")
 		worktrees := hub.WorktreePaths()
 
-		output.Info("  ✓ Found %d worktree(s)", len(worktrees))
+		output.Info("  Found %d worktree(s)", len(worktrees))
 
 		// Run garbage collection
 		orphaned, totalSize, err := depsManager.GarbageCollect(worktrees, true)
@@ -95,7 +95,7 @@ silently cancelling.`,
 				emitResult(cmd, records)
 				return
 			}
-			output.Info("\n✓ No orphaned dependencies found. Everything is clean!")
+			output.Info("\nNo orphaned dependencies found. Everything is clean!")
 			return
 		}
 
@@ -155,8 +155,8 @@ silently cancelling.`,
 		}
 
 		totalSizeMB = float64(totalSize) / 1024 / 1024
-		output.Info("✓ Deleted %d orphaned dependencies", len(orphaned))
-		output.Info("✓ Reclaimed %.1fMB", totalSizeMB)
+		output.Info("Deleted %d orphaned dependencies", len(orphaned))
+		output.Info("Reclaimed %.1fMB", totalSizeMB)
 	},
 }
 

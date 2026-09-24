@@ -22,7 +22,7 @@ var pruneCmd = &cobra.Command{
 	Short:   "Remove orphaned worktrees and hubs from state and hop.json",
 	Long: `Remove worktrees and hubs that no longer exist on the filesystem.
 
-By default only the current repository is pruned — the one whose hub
+By default only the current repository is pruned: the one whose hub
 contains the working directory. Pass --all to sweep every repository in
 the state file. Outside any known repository prune refuses to run rather
 than defaulting to a global sweep; use --all there if that is the intent.

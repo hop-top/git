@@ -79,7 +79,7 @@ func installHopPreamble(preamble string) error {
 	if err := os.WriteFile(path, []byte(preamble), 0o600); err != nil {
 		return fmt.Errorf("upgrade preamble: write: %w", err)
 	}
-	output.Info("Installed upgrade preamble → %s", path)
+	output.Info("Installed upgrade preamble -> %s", path)
 	return nil
 }
 
