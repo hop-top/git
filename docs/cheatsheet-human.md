@@ -13,6 +13,7 @@ git hop init --no-hooks               # no .git-hop/hooks/ directory, no hook ru
 git hop init --no-prompt              # non-interactive: take the recommended (bare) layout
 git hop init --no-prompt --regular    # non-interactive: regular repo + worktrees
 git hop init --force                  # convert despite uncommitted changes (backup still taken)
+git hop init --keep-backup            # keep the conversion backup (default: hop.backup.keepBackup)
 ```
 
 `init` asks which structure you want (`1/2/3/q`). In a script, CI job, or

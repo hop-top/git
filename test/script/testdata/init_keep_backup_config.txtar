@@ -1,0 +1,33 @@
+# git config hop.backup.keepBackup is the default for init --keep-backup;
+# a typed flag, --keep-backup=false included, wins.
+
+exec git config --global hop.backup.keepBackup true
+
+# --- config on, no flag: the backup is kept ---
+exec git init $WORK/cfg
+cd $WORK/cfg
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks
+stdout '^Backup preserved at: '
+! stdout 'Backup cleaned up'
+exec find $WORK/.cache -path '*cfg*' -name backup-info.json
+stdout 'backup-info.json'
+
+# --- config on, --keep-backup=false: the flag wins, backup removed ---
+exec git init $WORK/flagoff
+cd $WORK/flagoff
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks --keep-backup=false
+stdout '^Backup cleaned up: '
+! stdout 'Backup preserved at'
+exec find $WORK/.cache -path '*flagoff*' -name backup-info.json
+! stdout .
+
+# --- repo-local config is honoured too ---
+exec git config --global hop.backup.keepBackup false
+exec git init $WORK/local
+cd $WORK/local
+exec git commit --allow-empty -m 'initial'
+exec git config hop.backup.keepBackup true
+exec git-hop init --no-prompt --no-hooks
+stdout '^Backup preserved at: '

@@ -24,7 +24,7 @@ Flags:
   -h, --help              help for init
       --hooks string      mirror committed .git-hop/hooks/ into hopspace: symlink|copy|prompt|none (overrides --no-hooks)
       --hooks-overwrite   overwrite an existing hopspace hook with different content (symlink/copy modes)
-      --keep-backup       Preserve backup after successful conversion
+      --keep-backup       Preserve backup after successful conversion (default: hop.backup.keepBackup)
       --no-hooks          Skip hooks: no .git-hop/hooks/ directory, no lifecycle hook runs
       --no-prompt         Skip the interactive menu and convert non-interactively (bare unless --regular)
       --regular           Convert to a regular repo + worktrees instead of bare (with --no-prompt)
