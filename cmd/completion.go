@@ -1,7 +1,10 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
+	"slices"
+	"strings"
 
 	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
@@ -10,7 +13,7 @@ import (
 var completionCmd = &cobra.Command{
 	Use:       "completion [bash|zsh|fish]",
 	Short:     "Generate shell completion scripts",
-	Args:      cobra.ExactArgs(1),
+	Args:      cobra.MatchAll(cobra.ExactArgs(1), supportedShell),
 	ValidArgs: []string{"bash", "zsh", "fish"},
 	Long: `Generate shell completion scripts for git-hop.
 
@@ -52,4 +55,13 @@ Fish:
 func init() {
 	completionCmd.Hidden = true
 	cli.RootCmd.AddCommand(completionCmd)
+}
+
+// supportedShell refuses a shell completion has no generator for.
+// Cobra's ValidArgs only feeds completion; it is not enforced.
+func supportedShell(cmd *cobra.Command, args []string) error {
+	if slices.Contains(cmd.ValidArgs, args[0]) {
+		return nil
+	}
+	return fmt.Errorf("unsupported shell %q (valid: %s)", args[0], strings.Join(cmd.ValidArgs, ", "))
 }

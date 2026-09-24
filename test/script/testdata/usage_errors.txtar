@@ -58,6 +58,15 @@ exec sh -c 'git-hop completion; echo "exit=$?"'
 stdout 'exit=129'
 stderr '^error: accepts 1 arg\(s\), received 0$'
 
+# An unsupported shell is refused, naming the ones that are supported.
+exec sh -c 'git-hop completion bogus; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unsupported shell "bogus" \(valid: bash, zsh, fish\)$'
+! stdout 'complete'
+
+exec git-hop completion bash
+stdout 'bash completion'
+
 # A command that takes no operand refuses one rather than ignoring it.
 exec sh -c 'git-hop list extra; echo "exit=$?"'
 stdout 'exit=129'
