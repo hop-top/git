@@ -162,6 +162,9 @@ func init() {
 			// so initConfig's Debug call can actually emit.
 			PrePersistentRunE: func(cmd *cobra.Command, args []string) error {
 				setupOutputMode()
+				if err := checkDryRunSupported(cmd); err != nil {
+					output.FatalCode(exitUsage, "%s", err)
+				}
 				initConfig()
 				if cmd.Name() != "upgrade" {
 					upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
@@ -187,6 +190,7 @@ Worktree Mode:
   Inside a project root: create/sync worktree for a branch`
 
 	RootCmd.Args = cobra.ArbitraryArgs
+	SupportDryRun(RootCmd)
 
 	RootCmd.Run = func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
@@ -238,6 +242,9 @@ Worktree Mode:
 		expandedArg := ResolveArg(arg, domain, knownBranches)
 
 		if IsURI(expandedArg) {
+			if dryRun {
+				RejectDryRun("clone")
+			}
 			branch, _ := cmd.Flags().GetString("branch")
 
 			if branch != "" && hubErr == nil {
@@ -291,6 +298,11 @@ Worktree Mode:
 			fromBranch, fromWorktreePath := resolveSwitchFromState(fs, hubPath, hub)
 
 			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+			if dryRun {
+				previewSwitch(fs, repoID, arg, worktreePath)
+				return
+			}
 
 			detectorMgr := detector.NewManager(fs, g)
 			detectorMgr.Register(detector.NewGitFlowNextDetector(g))

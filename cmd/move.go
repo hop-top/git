@@ -101,6 +101,20 @@ var moveCmd = &cobra.Command{
 
 		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
+		// Everything below writes or runs hooks; the preview stops here.
+		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
+			previewMove(fs, g, movePlan{
+				hub:       hub,
+				hubPath:   hubPath,
+				repoID:    repoID,
+				oldBranch: oldBranch,
+				newBranch: newBranch,
+				oldPath:   oldPath,
+				newPath:   newPath,
+			})
+			return
+		}
+
 		// Detector (for hook env vars)
 		detectorMgr := detector.NewManager(fs, g)
 		detectorMgr.Register(detector.NewGitFlowNextDetector(g))

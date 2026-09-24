@@ -48,6 +48,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 		merged, _ := cmd.Flags().GetBool("merged")
 		deleteRemote, _ := cmd.Flags().GetBool("delete-remote")
 		force, _ := cmd.Root().PersistentFlags().GetBool("force")
+		dryRun, _ := cmd.Flags().GetBool("dry-run")
 
 		// Validate flag/arg combinations.
 		if merged && len(args) > 0 {
@@ -67,6 +68,10 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 
 		// --merged path: collect merged worktrees and remove each.
 		if merged {
+			if dryRun {
+				previewRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
+				return
+			}
 			runRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
 			return
 		}
@@ -94,6 +99,11 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				absCwd, _ := filepath.Abs(cwd)
 				if absCwd == absWorktree || strings.HasPrefix(absCwd, absWorktree+string(filepath.Separator)) {
 					output.Fatal("Cannot remove branch '%s': you are currently inside its worktree. Change to a different worktree first.", target)
+				}
+
+				if dryRun {
+					previewRemoveBranch(fs, g, hub, hubPath, target, force, noVerify, noPrompt, deleteRemote)
+					return
 				}
 
 				// Safety gate: probe the worktree and require --force /
@@ -142,6 +152,10 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 
 		// Check if target is a hub
 		if hop.IsHub(fs, targetPath) {
+			if dryRun {
+				previewRemoveHub(fs, targetPath, noPrompt)
+				return
+			}
 			if !noPrompt {
 				// Load hub to get branch count
 				hub, err := hop.LoadHub(fs, targetPath)

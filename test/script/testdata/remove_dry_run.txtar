@@ -1,0 +1,121 @@
+# `git hop remove --dry-run` previews the removal and mutates nothing: no
+# worktree or branch deleted, no hop.json or state write, no current-symlink
+# move, and no lifecycle hooks. The preview reports the safety-gate verdict,
+# and a removal the gate would refuse still fails, exactly as the real run.
+# Covers all three targets: a branch, --merged, and a whole hub.
+
+# --- upstream repo ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/done
+exec git-hop add feat/wip
+cd $WORK/hub/hops/feat/wip
+cp $WORK/wip.txt wip.txt
+exec git add wip.txt
+exec git commit -m 'unmerged, unpushed work'
+cd $WORK/hub
+
+# --- global hooks that leave a marker when run ---
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/pre-hook $WORK/.config/git-hop/hooks/pre-worktree-remove
+cp $WORK/post-hook $WORK/.config/git-hop/hooks/post-worktree-remove
+exec chmod +x $WORK/.config/git-hop/hooks/pre-worktree-remove $WORK/.config/git-hop/hooks/post-worktree-remove
+
+# --- snapshot everything remove would write ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cp stdout $WORK/current.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cp stdout $WORK/worktrees.before
+
+# --- merged, clean branch: gate passes, removal previewed ---
+exec git-hop remove feat/done --dry-run --no-prompt
+stdout '\[dry-run\] Safety check for ''feat/done'': merged, not pushed, clean'
+stdout '\[dry-run\] Would run hook pre-worktree-remove'
+stdout '\[dry-run\] Would remove worktree at .*hops/feat/done'
+stdout '\[dry-run\] Would delete local branch ''feat/done'''
+stdout '\[dry-run\] Would remove ''feat/done'' from hop.json, hopspace and state'
+stdout '\[dry-run\] Would run hook post-worktree-remove'
+stdout '\[dry-run\] Would point ''current'' at ''main'''
+! stdout 'Would ask for confirmation'
+! stdout 'Successfully removed'
+! stdout 'on origin'
+exists $WORK/hub/hops/feat/done
+! exists $WORK/pre-hook-ran
+! exists $WORK/post-hook-ran
+
+# --- --delete-remote is previewed without contacting origin ---
+exec git-hop remove feat/done --dry-run --no-prompt --delete-remote
+stdout '\[dry-run\] Would delete branch ''feat/done'' on origin, if it exists'
+
+# --- unmerged, unpushed branch: the gate verdict is a refusal ---
+! exec git-hop remove feat/wip --dry-run --no-prompt
+stdout '\[dry-run\] Safety check for ''feat/wip'': not merged, not pushed, clean'
+stderr '\[dry-run\] would refuse to remove ''feat/wip'': branch is not merged into default and not pushed to origin'
+! stdout 'Would remove worktree'
+exists $WORK/hub/hops/feat/wip
+
+# --- same branch with the gate satisfied: previewed, prompt reported ---
+exec git-hop remove feat/wip --dry-run --force --no-verify
+stdout '\[dry-run\] Would ask for confirmation before removing ''feat/wip'''
+stdout '\[dry-run\] Would remove worktree at .*hops/feat/wip'
+exists $WORK/hub/hops/feat/wip
+
+# --- --merged: candidates listed, none removed ---
+exec git-hop remove --merged --dry-run --no-prompt
+stdout '\[dry-run\] Would remove worktree at .*hops/feat/done'
+! stdout 'hops/feat/wip'
+! stdout 'Removed 1'
+exists $WORK/hub/hops/feat/done
+
+# --- nothing changed by any of the previews above ---
+! exists $WORK/pre-hook-ran
+! exists $WORK/post-hook-ran
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cmp stdout $WORK/current.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cmp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cmp stdout $WORK/worktrees.before
+
+# --- whole hub: previewed, nothing deleted ---
+cd $WORK
+exec git-hop remove $WORK/hub --dry-run --no-prompt
+stdout '\[dry-run\] Would remove worktree for branch ''feat/done'''
+stdout '\[dry-run\] Would remove hub directory .*hub'
+! stdout 'Successfully removed hub'
+exists $WORK/hub/hop.json
+exists $WORK/hub/hops/main
+exists $WORK/hub/hops/feat/done
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+
+# --- control: without --dry-run the same removal really happens ---
+cd $WORK/hub
+exec git-hop remove feat/done --no-prompt
+stdout 'Successfully removed feat/done'
+! exists $WORK/hub/hops/feat/done
+exists $WORK/pre-hook-ran
+exists $WORK/post-hook-ran
+exec git branch --list feat/done
+! stdout .
+
+-- pre-hook --
+#!/bin/sh
+touch "$HOME/pre-hook-ran"
+-- post-hook --
+#!/bin/sh
+touch "$HOME/post-hook-ran"
+-- wip.txt --
+work in progress
