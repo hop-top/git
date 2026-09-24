@@ -915,7 +915,9 @@ A worktree path that something other than a directory occupies (a
 file, a symlink to one, or a dangling symlink) does not count as the
 worktree. The hub check reports it as an issue ("occupied by a
 non-directory"), the state check and `git hop prune` treat the worktree
-as missing, and `--fix` never checks a worktree out over it: the
+as missing, the dependency check skips it (with a note) and audits the
+other worktrees, `git hop status` shows it as `Occupied`, and `--fix`
+never checks a worktree out over it: the
 recreate fails with the path named as in the way (below), and whatever
 occupies it is left alone.
 
