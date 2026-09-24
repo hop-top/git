@@ -109,6 +109,22 @@ decode json stdout 0.action pruned
 decode json stdout 1.action pruned
 ! grep 'feat/gone' $WORK/hub/hop.json
 
+# --- repair --list-backups / --undo have no record shape: refused, 129 ---
+# prune backed hop.json up, so an --undo that ran would bring feat/gone back.
+exec git-hop repair --list-backups
+stdout '^repair-'
+exec sh -c 'git-hop repair --list-backups --json; echo "exit=$?"'
+stdout '^exit=129$'
+! stdout 'repair-'
+stderr 'not supported'
+exec sh -c 'git-hop repair --undo --format yaml; echo "exit=$?"'
+stdout '^exit=129$'
+! stdout 'Restored'
+! grep 'feat/gone' $WORK/hub/hop.json
+exec sh -c 'git-hop repair --undo --porcelain; echo "exit=$?"'
+stdout '^exit=129$'
+! grep 'feat/gone' $WORK/hub/hop.json
+
 # Nothing left: an empty list, not an empty stdout.
 exec git-hop prune --json
 decode json stdout '#' 0
