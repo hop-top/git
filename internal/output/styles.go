@@ -48,7 +48,8 @@ var (
 	ColorPath    = theme.Accent
 )
 
-// Text styles
+// Text styles. Render them with Paint (or a helper built on it), never
+// with Style.Render: Paint drops the colour stdout cannot show.
 var (
 	StyleSuccess = lipgloss.NewStyle().
 			Foreground(ColorSuccess).
@@ -93,15 +94,15 @@ var (
 func Colorize(text string, status string) string {
 	switch status {
 	case "success", "running", "active", "pass", "up":
-		return StyleSuccess.Render(text)
+		return Paint(StyleSuccess, text)
 	case "error", "failed", "fail", "down", "broken":
-		return StyleError.Render(text)
+		return Paint(StyleError, text)
 	case "warning", "warn", "attention":
-		return StyleWarning.Render(text)
+		return Paint(StyleWarning, text)
 	case "info", "neutral", "stopped", "clean":
-		return StyleInfo.Render(text)
+		return Paint(StyleInfo, text)
 	case "muted", "inactive":
-		return StyleMuted.Render(text)
+		return Paint(StyleMuted, text)
 	default:
 		return text
 	}
@@ -114,15 +115,15 @@ func ColorizeIcon(icon string, status string) string {
 
 // RenderKeyValue renders a key-value pair with styling
 func RenderKeyValue(key, value string) string {
-	return StyleKey.Render(key) + " " + StyleValue.Render(value)
+	return Paint(StyleKey, key) + " " + Paint(StyleValue, value)
 }
 
 // RenderHeader renders a header with accent color
 func RenderHeader(text string) string {
-	return StyleHeader.Render(text)
+	return Paint(StyleHeader, text)
 }
 
 // RenderPath renders a file path with accent color
 func RenderPath(path string) string {
-	return StylePath.Render(path)
+	return Paint(StylePath, path)
 }

@@ -52,21 +52,21 @@ func renderCard(title string, fields []CardField, style lipgloss.Style) string {
 
 // Render outputs the card as a formatted string
 func (c *Card) Render() string {
-	lines := []string{c.Style.Render(c.Title)}
+	lines := []string{Paint(c.Style, c.Title)}
 
 	maxKeyWidth := 0
 	for _, field := range c.Fields {
-		if len(field.Key) > maxKeyWidth {
-			maxKeyWidth = len(field.Key)
+		if lipgloss.Width(field.Key) > maxKeyWidth {
+			maxKeyWidth = lipgloss.Width(field.Key)
 		}
 	}
 
 	for _, field := range c.Fields {
 		keyPadded := field.Key + strings.Repeat(
-			" ", maxKeyWidth-len(field.Key),
+			" ", maxKeyWidth-lipgloss.Width(field.Key),
 		)
-		lines = append(lines, "  "+StyleKey.Render(keyPadded)+
-			"  "+StyleValue.Render(field.Value))
+		lines = append(lines, "  "+Paint(StyleKey, keyPadded)+
+			"  "+Paint(StyleValue, field.Value))
 	}
 
 	return strings.Join(lines, "\n")
@@ -77,7 +77,7 @@ func SimpleHeader(text string) string {
 	if CurrentMode != ModeHuman {
 		return ""
 	}
-	return StyleHeader.Render(text)
+	return Paint(StyleHeader, text)
 }
 
 // Section creates a titled section with indented content lines
@@ -86,7 +86,7 @@ func Section(title string, content []string) string {
 		return ""
 	}
 
-	lines := []string{"", StyleHeader.Render(title)}
+	lines := []string{"", Paint(StyleHeader, title)}
 	for _, line := range content {
 		if line == "" {
 			lines = append(lines, "")
@@ -126,15 +126,15 @@ func StatusLine(status, message string) string {
 
 	switch status {
 	case "success":
-		return StyleSuccess.Render(message)
+		return Paint(StyleSuccess, message)
 	case "error":
-		return StyleError.Render(IconError + ": " + message)
+		return Paint(StyleError, IconError+": "+message)
 	case "warning":
-		return StyleWarning.Render(IconWarning + ": " + message)
+		return Paint(StyleWarning, IconWarning+": "+message)
 	case "info":
-		return StyleInfo.Render(message)
+		return Paint(StyleInfo, message)
 	case "stopped":
-		return StyleMuted.Render(message)
+		return Paint(StyleMuted, message)
 	default:
 		return message
 	}
@@ -146,8 +146,8 @@ func NextStepHint(command string) string {
 		return ""
 	}
 
-	arrow := StyleAccent.Render(IconArrow)
-	cmd := StylePath.Render(command)
+	arrow := Paint(StyleAccent, IconArrow)
+	cmd := Paint(StylePath, command)
 	return fmt.Sprintf("\n%s %s\n", arrow, cmd)
 }
 
@@ -161,5 +161,5 @@ func Banner(text string) string {
 		Foreground(ColorAccent).
 		Bold(true)
 
-	return style.Render(text)
+	return Paint(style, text)
 }

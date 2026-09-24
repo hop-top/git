@@ -165,11 +165,11 @@ func ConfirmWithWarning(title string, message string) bool {
 	// Display warning
 	warningStyle := StyleWarning.Bold(true)
 	fmt.Println()
-	fmt.Println(warningStyle.Render(IconWarning + ": " + title))
+	fmt.Println(Paint(warningStyle, IconWarning+": "+title))
 	fmt.Println()
 
 	if message != "" {
-		fmt.Println(StyleMuted.Render(message))
+		fmt.Println(Paint(StyleMuted, message))
 		fmt.Println()
 	}
 
@@ -193,7 +193,7 @@ func ConfirmDeletionAnswer(target string, details []CardField) (bool, error) {
 	fmt.Println(card)
 	fmt.Println()
 
-	warning := StyleWarning.Render("Warning: This action cannot be undone!")
+	warning := Paint(StyleWarning, "Warning: This action cannot be undone!")
 	fmt.Println(warning)
 	fmt.Println()
 
@@ -263,7 +263,7 @@ func InputWithDefault(prompt string, defaultValue string) string {
 		return defaultValue
 	}
 
-	defaultHint := StyleMuted.Render(fmt.Sprintf(" [%s]", defaultValue))
+	defaultHint := Paint(StyleMuted, fmt.Sprintf(" [%s]", defaultValue))
 	fmt.Printf("%s%s: ", prompt, defaultHint)
 
 	response, err := readPromptLine()
