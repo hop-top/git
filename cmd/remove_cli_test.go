@@ -62,10 +62,22 @@ func TestRemoveCommand_Structure(t *testing.T) {
 					t.Error("Remove should have Args validator")
 					return
 				}
-				// Test with 0 args - should succeed (--merged makes target optional)
-				if err := removeCmd.Args(removeCmd, []string{}); err != nil {
-					t.Errorf("Remove should accept 0 args (paired with --merged), got error: %v", err)
+				// 0 args: a usage error alone, accepted with --merged,
+				// which picks the targets itself.
+				if err := removeCmd.Args(removeCmd, []string{}); err == nil {
+					t.Error("Remove should reject 0 args without --merged")
 				}
+				if err := removeCmd.Flags().Set("merged", "true"); err != nil {
+					t.Fatal(err)
+				}
+				defer removeCmd.Flags().Set("merged", "false")
+				if err := removeCmd.Args(removeCmd, []string{}); err != nil {
+					t.Errorf("Remove should accept 0 args with --merged, got error: %v", err)
+				}
+				if err := removeCmd.Args(removeCmd, []string{"test"}); err == nil {
+					t.Error("Remove should reject a target beside --merged")
+				}
+				removeCmd.Flags().Set("merged", "false")
 				// Test with 1 arg - should succeed
 				if err := removeCmd.Args(removeCmd, []string{"test"}); err != nil {
 					t.Errorf("Remove should accept 1 arg, got error: %v", err)
