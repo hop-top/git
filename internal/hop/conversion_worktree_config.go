@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 )
 
@@ -23,7 +24,11 @@ import (
 // with it (git-worktree(1), CONFIGURATION FILE): core.bare=true moves
 // from the shared config into the hub's own config.worktree. Left in the
 // shared config it would apply to every linked worktree, and each would
-// fail with "must be run in a work tree".
+// fail with "must be run in a work tree". As git does when it turns the
+// extension on (`git sparse-checkout init`, `git config --worktree`),
+// core.repositoryformatversion goes to 1: git honours worktreeConfig at
+// version 0 for compatibility, but other implementations read extensions
+// only at version 1 and would ignore the per-worktree core.bare.
 //
 // A repository without the extension is converted as before: git was not
 // reading a config.worktree file it may have, so it is left behind with
@@ -67,7 +72,8 @@ func (c *Converter) carryOverWorktreeConfig(plan *LocalConfigPlan, repoPath, bar
 	own := filepath.Join(bareRepo, "config.worktree")
 	for _, args := range [][]string{
 		{"config", "--file", own, "core.bare", "true"},
-		{"config", "--file", shared, "extensions.worktreeConfig", "true"},
+		{"config", "--file", shared, config.KeyRepositoryFormatVersion, "1"},
+		{"config", "--file", shared, config.KeyWorktreeConfigExtension, "true"},
 		{"config", "--file", shared, "--unset-all", "core.bare"},
 	} {
 		if _, err := c.git.Run("git", args...); err != nil {
