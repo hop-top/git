@@ -3,6 +3,7 @@ package output
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"charm.land/log/v2"
 	"github.com/spf13/viper"
@@ -116,6 +117,28 @@ func Warn(msg string, args ...interface{}) {
 		logger.Warn(formatted)
 	case ModeHuman:
 		fmt.Fprintf(os.Stderr, "warning: %s\n", formatted)
+	}
+}
+
+// Hint prints advice with git's lowercase "hint:" prefix on stderr, one
+// prefix per line of msg as git's advise() does; an empty line prints a
+// bare "hint:". JSON mode emits one structured record (kind=hint). Quiet
+// and porcelain modes drop it.
+func Hint(msg string, args ...interface{}) {
+	formatted := fmt.Sprintf(msg, args...)
+	switch CurrentMode {
+	case ModeJSON:
+		logger.Info(formatted, "kind", "hint")
+	case ModeHuman:
+		var b strings.Builder
+		for _, line := range strings.Split(formatted, "\n") {
+			if line == "" {
+				b.WriteString("hint:\n")
+				continue
+			}
+			b.WriteString("hint: " + line + "\n")
+		}
+		fmt.Fprint(os.Stderr, b.String())
 	}
 }
 

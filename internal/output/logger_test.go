@@ -268,3 +268,68 @@ func TestWarnSilentInQuietAndPorcelain(t *testing.T) {
 		}
 	}
 }
+
+// Hints use git's lowercase "hint:" prefix on stderr, one per line, as
+// git's advise() prints them; an empty line gets a bare "hint:".
+func TestHintHumanUsesGitPrefixPerLine(t *testing.T) {
+	var stderr string
+	stdout := captureStdout(t, func() {
+		stderr = captureStderr(t, func() {
+			output.SetupLogger(output.ModeHuman, false)
+			output.Hint("No remote %s.\n\n  git remote add origin <url>", "configured")
+		})
+	})
+	want := "hint: No remote configured.\nhint:\nhint:   git remote add origin <url>\n"
+	if stderr != want {
+		t.Errorf("Hint stderr = %q, want %q", stderr, want)
+	}
+	if stdout != "" {
+		t.Errorf("Hint wrote to stdout: %q", stdout)
+	}
+}
+
+func TestHintJSONStaysStructured(t *testing.T) {
+	got := captureStderr(t, func() {
+		output.SetupLogger(output.ModeJSON, false)
+		output.Hint("run %s", "git hop init")
+	})
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(got)), &rec); err != nil {
+		t.Fatalf("Hint stderr is not one JSON object: %q (%v)", got, err)
+	}
+	if rec["msg"] != "run git hop init" || rec["kind"] != "hint" {
+		t.Errorf("Hint JSON record = %v, want msg=run git hop init kind=hint", rec)
+	}
+}
+
+func TestHintSilentInQuietAndPorcelain(t *testing.T) {
+	for _, mode := range []output.Mode{output.ModeQuiet, output.ModePorcelain} {
+		var stderr string
+		stdout := captureStdout(t, func() {
+			stderr = captureStderr(t, func() {
+				output.SetupLogger(mode, false)
+				output.Hint("should not appear")
+			})
+		})
+		if stderr != "" || stdout != "" {
+			t.Errorf("mode %v: Hint stdout=%q stderr=%q, want both empty", mode, stdout, stderr)
+		}
+	}
+}
+
+// captureStdout runs fn with os.Stdout redirected and returns what it wrote.
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = old }()
+	fn()
+	w.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	return buf.String()
+}

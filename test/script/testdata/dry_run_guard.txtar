@@ -102,7 +102,7 @@ exec git-hop env gc -n
 exec git-hop repair -n
 cd $WORK/seed
 exec git-hop init -n --no-prompt
-stdout 'To proceed with conversion'
+stderr '^hint: To proceed with conversion'
 ! exists $WORK/seed/hop.json
 
 cd $WORK/hub

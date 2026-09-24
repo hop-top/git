@@ -12,6 +12,7 @@ import (
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
+	"hop.top/git/internal/output"
 )
 
 // initRepoID resolves the 3-part repo ID ("host/org/repo") init uses for
@@ -118,8 +119,6 @@ func initHooksHintLines() []string {
 
 // printInitHooksHint prints the hook list under the hooks-dir message.
 func printInitHooksHint() {
-	fmt.Println("Place executable scripts there to hook into git-hop operations:")
-	for _, l := range initHooksHintLines() {
-		fmt.Println(l)
-	}
+	output.Hint("%s", "Place executable scripts there to hook into git-hop operations:\n"+
+		strings.Join(initHooksHintLines(), "\n"))
 }

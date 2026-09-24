@@ -153,7 +153,8 @@ msp.Finish()
 ```go
 output.Info("Repository cloned successfully")
 output.Success("Operation completed!")
-output.Warn("Branch already exists")
+output.Warn("Branch already exists")          // stderr: warning: ...
+output.Hint("Run: git hop init --no-prompt")  // stderr: hint: ... (one prefix per line)
 output.Error("Failed to connect: %v", err)
 output.Fatal("Configuration file not found")
 output.Debug("Processing file: %s", filename)
