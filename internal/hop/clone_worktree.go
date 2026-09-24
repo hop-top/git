@@ -122,6 +122,12 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		return fmt.Errorf("failed to get absolute path: %v", err)
 	}
 
+	// The data home is part of a working install (doctor checks it) even
+	// when this hub keeps its hopspace locally and writes nothing there.
+	if err := fs.MkdirAll(GetGitHopDataHome(), 0o755); err != nil {
+		return fmt.Errorf("failed to create data directory: %v", err)
+	}
+
 	if globalConfig {
 		// Global mode: separate hub and hopspace configs
 		if err := createProjectConfig(fs, projectRoot, uri, org, repo, defaultBranch); err != nil {
