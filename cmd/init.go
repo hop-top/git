@@ -491,6 +491,7 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 			output.Warn("failed to back-fill hop.json at %s: %v", hubPath, err)
 		} else if created {
 			fmt.Printf("Created missing hop.json at %s.\n", hubPath)
+			registerAdoptedHub(fs, hubPath)
 		}
 	}
 

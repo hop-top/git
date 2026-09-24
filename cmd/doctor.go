@@ -49,8 +49,8 @@ var doctorCmd = &cobra.Command{
 	Long: `Run diagnostics on git-hop installation and project setup.
 
 Checks:
-- Path configuration (data home and cache home; the config home is
-  optional until something is configured)
+- Path configuration (data home; the config and cache homes are
+  optional until something is written there)
 - Hub configuration and symlinks
 - Hopspace existence and consistency
 - Worktree state (orphaned directories)
@@ -232,8 +232,8 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	return r
 }
 
-// checkPaths verifies the XDG-derived directories git-hop keeps its own
-// data in exist, creating them under --fix.
+// checkPaths verifies the data directory git-hop keeps its own data in
+// exists, creating it under --fix.
 //
 // The config directory ($XDG_CONFIG_HOME/git-hop) is shown but not
 // required. It holds only what the user (or a command acting for them)
@@ -241,6 +241,13 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 // managers.json, hops.json, the global hooks), and every reader treats
 // its absence as "nothing configured". A fresh install without it is
 // healthy, and --fix leaves creating it to the first writer.
+//
+// The cache directory ($XDG_CACHE_HOME/git-hop) is not required either,
+// for the same reason. Everything in it is disposable and rebuilt on
+// demand: its writers (conversion backups, the shell integration's
+// worktree-roots file, compose override files) create it, and its
+// readers (prune's backup sweep, the shell integration, the override
+// check) treat a missing file or directory as empty.
 func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking Paths ===")
 	dataHome := hop.GetGitHopDataHome()
@@ -251,34 +258,25 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 	output.Info("Config home: %s", configHome)
 	output.Info("Cache home:  %s", cacheHome)
 
-	for _, dir := range []struct {
-		name string
-		path string
-	}{
-		{"data", dataHome}, // already git-hop's own directory
-		{"cache", filepath.Join(cacheHome, "git-hop")},
-	} {
-		if exists, _ := afero.DirExists(fs, dir.path); exists {
-			continue
-		}
-		r.issue(doctorCheckPaths, dir.path, "%s directory does not exist", dir.name)
+	if exists, _ := afero.DirExists(fs, dataHome); exists {
+		return
+	}
+	r.issue(doctorCheckPaths, dataHome, "data directory does not exist")
 
-		if !opts.fix {
-			output.Error("%s directory does not exist: %s", dir.name, dir.path)
-			continue
+	switch {
+	case !opts.fix:
+		output.Error("data directory does not exist: %s", dataHome)
+	case !opts.mutating():
+		output.Info("[dry-run] Would create data directory: %s", dataHome)
+		r.repaired(opts, doctorCheckPaths, dataHome, "create data directory")
+	default:
+		if err := fs.MkdirAll(dataHome, 0755); err != nil {
+			output.Error("Failed to create data directory: %v", err)
+			r.failed(doctorCheckPaths, dataHome, "create data directory: %v", err)
+			return
 		}
-		if !opts.mutating() {
-			output.Info("[dry-run] Would create %s directory: %s", dir.name, dir.path)
-			r.repaired(opts, doctorCheckPaths, dir.path, "create %s directory", dir.name)
-			continue
-		}
-		if err := fs.MkdirAll(dir.path, 0755); err != nil {
-			output.Error("Failed to create %s directory: %v", dir.name, err)
-			r.failed(doctorCheckPaths, dir.path, "create %s directory: %v", dir.name, err)
-		} else {
-			output.Info("Created %s directory", dir.name)
-			r.repaired(opts, doctorCheckPaths, dir.path, "create %s directory", dir.name)
-		}
+		output.Info("Created data directory")
+		r.repaired(opts, doctorCheckPaths, dataHome, "create data directory")
 	}
 }
 

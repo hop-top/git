@@ -25,18 +25,23 @@ type NewHub struct {
 	Repo          string
 	DefaultBranch string
 	HubPath       string
-	// WorktreePath is the default branch's worktree, absolute.
+	// WorktreePath is the default branch's worktree, absolute. Empty
+	// when the hub has none yet (a bare repository init adopted before
+	// any worktree was added).
 	WorktreePath string
 	// WorktreeType is WorktreeTypeBare or WorktreeTypeMain.
 	WorktreeType string
+	// Linked maps branch to absolute path for the hub's other existing
+	// worktrees, recorded as `git hop add` records one.
+	Linked map[string]string
 	// Global marks a hub whose hopspace lives in the data home.
 	Global bool
 }
 
 // RegisterNewHub records a new hub everywhere git-hop looks for one: the
 // data home exists, the hops registry lists the default branch, and state
-// holds the repository, the hub and its initial worktree, which is what
-// list, status --all and prune read. Failures warn; the hub itself is
+// holds the repository, the hub and its worktrees, which is what list,
+// status --all and prune read. Failures warn; the hub itself is
 // already on disk and usable.
 func RegisterNewHub(fs afero.Fs, h NewHub) {
 	// The data home is part of a working install (doctor checks it) even
@@ -45,8 +50,10 @@ func RegisterNewHub(fs afero.Fs, h NewHub) {
 		output.Warn("failed to create data directory: %v", err)
 	}
 
-	if err := registerProject(fs, h.Org, h.Repo, h.DefaultBranch, h.WorktreePath); err != nil {
-		output.Warn("failed to register in global registry: %v", err)
+	if h.WorktreePath != "" {
+		if err := registerProject(fs, h.Org, h.Repo, h.DefaultBranch, h.WorktreePath); err != nil {
+			output.Warn("failed to register in global registry: %v", err)
+		}
 	}
 
 	st, err := state.LoadState(fs)
@@ -80,15 +87,21 @@ func RegisterNewHub(fs afero.Fs, h NewHub) {
 		output.Warn("failed to add hub to state: %v", err)
 	}
 
-	if err := st.AddWorktree(repoID, h.DefaultBranch, &state.WorktreeState{
-		Path:         h.WorktreePath,
-		Type:         h.WorktreeType,
-		HubPath:      h.HubPath,
-		CreatedAt:    now,
-		LastAccessed: now,
-	}); err != nil {
-		output.Warn("failed to add worktree to state: %v", err)
-		return
+	worktrees := map[string]*state.WorktreeState{}
+	for branch, path := range h.Linked {
+		worktrees[branch] = &state.WorktreeState{Path: path, Type: "linked"}
+	}
+	if h.WorktreePath != "" {
+		worktrees[h.DefaultBranch] = &state.WorktreeState{Path: h.WorktreePath, Type: h.WorktreeType}
+	}
+	for branch, wt := range worktrees {
+		wt.HubPath = h.HubPath
+		wt.CreatedAt = now
+		wt.LastAccessed = now
+		if err := st.AddWorktree(repoID, branch, wt); err != nil {
+			output.Warn("failed to add worktree to state: %v", err)
+			return
+		}
 	}
 	if err := state.SaveState(fs, st); err != nil {
 		output.Warn("failed to save state: %v", err)
