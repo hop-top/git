@@ -1021,6 +1021,12 @@ changes nothing. Any other repository is offered a conversion, including
 a regular one with linked worktrees from `git worktree add`: git does
 not consider it bare, so it is not a hub yet.
 
+Run from a linked worktree of such a repository, `init` acts on the
+repository itself, as git commands run from a linked worktree do: it
+says so on stderr and offers that repository the conversion. It never
+writes `hop.json` into the linked worktree, and does not mark the
+repository as a hub without converting it.
+
 A bare conversion refuses a repository that has linked worktrees: their
 admin directories live in the `.git` directory the conversion replaces,
 so they would be disconnected. Remove them with `git worktree remove`

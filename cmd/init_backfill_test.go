@@ -249,6 +249,7 @@ func TestBackfillHubConfigIfMissing(t *testing.T) {
 // ("", false).
 func TestResolveBackfillRoot(t *testing.T) {
 	g := git.New()
+	fs := afero.NewOsFs()
 	dir, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -264,7 +265,7 @@ func TestResolveBackfillRoot(t *testing.T) {
 	run(t, "-C", seed, "commit", "-q", "--allow-empty", "-m", "init")
 
 	t.Run("BareWorktreeRoot returns cwd", func(t *testing.T) {
-		got, ok := resolveBackfillRoot(g, "/repo", config.BareWorktreeRoot)
+		got, ok := resolveBackfillRoot(fs, g, "/repo", config.BareWorktreeRoot)
 		if !ok || got != "/repo" {
 			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
 		}
@@ -273,20 +274,35 @@ func TestResolveBackfillRoot(t *testing.T) {
 		hub := filepath.Join(dir, "hub")
 		run(t, "clone", "-q", "--bare", seed, hub)
 		run(t, "-C", hub, "worktree", "add", "-q", "hops/main", "main")
-		got, ok := resolveBackfillRoot(g, filepath.Join(hub, "hops", "main"), config.WorktreeChild)
+		got, ok := resolveBackfillRoot(fs, g, filepath.Join(hub, "hops", "main"), config.WorktreeChild)
 		if !ok || got != hub {
 			t.Errorf("got (%q, %v), want (%s, true)", got, ok, hub)
 		}
 	})
 	t.Run("WorktreeChild of a regular hub: gitdir is <hub>/.git/worktrees/<name>", func(t *testing.T) {
-		// The returned root is the hub itself, not <hub>/.git.
+		// The returned root is the hub itself, not <hub>/.git. A regular
+		// repository is a hub once a --regular conversion left hop.json.
 		hub := filepath.Join(dir, "reg")
 		run(t, "clone", "-q", seed, hub)
+		if err := os.WriteFile(filepath.Join(hub, "hop.json"), []byte("{}\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 		wt := filepath.Join(dir, "reg-feature")
 		run(t, "-C", hub, "worktree", "add", "-q", "-b", "feature", wt)
-		got, ok := resolveBackfillRoot(g, wt, config.WorktreeChild)
+		got, ok := resolveBackfillRoot(fs, g, wt, config.WorktreeChild)
 		if !ok || got != hub {
 			t.Errorf("got (%q, %v), want (%s, true)", got, ok, hub)
+		}
+	})
+	t.Run("WorktreeChild of a regular repo that is no hub declines", func(t *testing.T) {
+		// Without hop.json the repository is not a hub: back-filling one
+		// would register it without converting it.
+		repo := filepath.Join(dir, "plain")
+		run(t, "clone", "-q", seed, repo)
+		wt := filepath.Join(dir, "plain-feature")
+		run(t, "-C", repo, "worktree", "add", "-q", "-b", "feature", wt)
+		if got, ok := resolveBackfillRoot(fs, g, wt, config.WorktreeChild); ok {
+			t.Errorf("got (%q, true) for a linked worktree of a plain repository; want false", got)
 		}
 	})
 	t.Run("WorktreeChild with a gitdir git does not accept returns false", func(t *testing.T) {
@@ -298,18 +314,18 @@ func TestResolveBackfillRoot(t *testing.T) {
 			[]byte("gitdir: /some/random/dir/main\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if _, ok := resolveBackfillRoot(g, wt, config.WorktreeChild); ok {
+		if _, ok := resolveBackfillRoot(fs, g, wt, config.WorktreeChild); ok {
 			t.Errorf("got ok=true for a dangling gitdir; want false")
 		}
 	})
 	t.Run("WorktreeRoot returns cwd (regular non-bare hub)", func(t *testing.T) {
-		got, ok := resolveBackfillRoot(g, "/repo", config.WorktreeRoot)
+		got, ok := resolveBackfillRoot(fs, g, "/repo", config.WorktreeRoot)
 		if !ok || got != "/repo" {
 			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
 		}
 	})
 	t.Run("StandardRepo declines — not our case", func(t *testing.T) {
-		if _, ok := resolveBackfillRoot(g, "/repo", config.StandardRepo); ok {
+		if _, ok := resolveBackfillRoot(fs, g, "/repo", config.StandardRepo); ok {
 			t.Errorf("got ok=true for StandardRepo; want false")
 		}
 	})

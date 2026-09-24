@@ -1,0 +1,48 @@
+# `git hop init` run from a linked worktree of a regular repository acts
+# on that repository, as git commands run from a linked worktree do. The
+# repository is not a hub yet, so init offers it the conversion rather
+# than reporting it "already initialized" and writing hop.json into it.
+# A bare conversion is refused (the linked worktree would be
+# disconnected); --regular converts it. hop.json never lands in the
+# linked worktree.
+
+exec git init $WORK/p
+cd $WORK/p
+exec git commit -q --allow-empty -m 'initial'
+exec git worktree add -q $WORK/p-feat -b feat
+cd $WORK/p-feat
+
+# --- dry run: plans the repository's conversion, writes nothing ---
+exec git-hop init --no-prompt --no-hooks --regular -n
+stderr 'is a linked worktree of .*/p; init acts on that repository'
+stdout '^Location: .*/p$'
+stdout '^Repository: .*/p$'
+! exists $WORK/p/hop.json
+! exists $WORK/p-feat/hop.json
+
+# --- not "already initialized"; the bare conversion is refused ---
+! exec git-hop init --no-prompt --no-hooks
+! stdout 'already initialized'
+! stdout 'Created missing hop.json'
+stdout 'Current repository: Standard git repository'
+stderr 'Conversion failed: linked worktrees present'
+! exists $WORK/p/hop.json
+! exists $WORK/p-feat/hop.json
+! exists $WORK/p/hops
+exec git -C $WORK/p rev-parse --is-bare-repository
+stdout '^false$'
+
+# --- --regular converts the repository, not the linked worktree ---
+exec git-hop init --no-prompt --no-hooks --regular
+stdout 'Conversion successful'
+exists $WORK/p/hop.json
+exists $WORK/p/worktrees
+! exists $WORK/p-feat/hop.json
+exec git -C $WORK/p-feat status --short --branch
+stdout '^## feat$'
+
+# --- the repository is a hub now: init from the worktree recognises it ---
+exec git-hop init --no-prompt --no-hooks
+stdout 'already initialized'
+stdout 'Structure: worktree-child$'
+! exists $WORK/p-feat/hop.json
