@@ -1,0 +1,91 @@
+# A command line the CLI cannot parse is a usage error: git's status 129
+# with a lowercase `error:` line on stderr and nothing on stdout. Only a
+# command that ran and failed exits 1.
+
+# --- upstream repo + hub, so operation failures have somewhere to run ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# --- unknown long flag, on the root and on a subcommand ---
+exec sh -c 'git-hop --no-such-flag; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown flag: --no-such-flag$'
+! stderr '^Error:'
+
+exec sh -c 'git-hop list --no-such-flag; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown flag: --no-such-flag$'
+! stderr '^Error:'
+
+# --- unknown shorthand ---
+exec sh -c 'git-hop -x; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown shorthand flag: ''x'' in -x$'
+
+exec sh -c 'git-hop status -Z; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown shorthand flag: ''Z'' in -Z$'
+
+# --- bad flag value ---
+exec sh -c 'git-hop prune --dry-run=maybe; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: invalid argument "maybe" for "--dry-run" flag'
+
+# --- wrong positional count: too few, too many, out of range ---
+exec sh -c 'git-hop add; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: accepts 1 arg\(s\), received 0$'
+
+exec sh -c 'git-hop add a b; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: accepts 1 arg\(s\), received 2$'
+
+exec sh -c 'git-hop remove a b; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: accepts at most 1 arg\(s\), received 2$'
+
+exec sh -c 'git-hop move; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: accepts between 1 and 2 arg\(s\), received 0$'
+
+exec sh -c 'git-hop completion; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: accepts 1 arg\(s\), received 0$'
+
+# --- unknown subcommand under a command group ---
+exec sh -c 'git-hop env bogus; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown command "bogus" for "git-hop env"'
+! stdout 'Usage:'
+
+exec sh -c 'git-hop upgrade bogus; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown command "bogus" for "git-hop upgrade"'
+
+# A flag value is not a subcommand word.
+exec sh -c 'git-hop env --config /dev/null --help; echo "exit=$?"'
+stdout 'exit=0'
+
+# Bare group and explicit help still show help and succeed.
+exec git-hop env
+stdout 'Usage:'
+exec git-hop env --help
+stdout 'Usage:'
+
+# The rejected command ran nothing: no worktree was created.
+! exists hops/a
+
+# --- operation failures stay at 1 ---
+exec sh -c 'git-hop remove no-such-worktree --no-prompt; echo "exit=$?"'
+stdout 'exit=1'
+stderr '^fatal: '
+
+exec sh -c 'git-hop no-such-worktree; echo "exit=$?"'
+stdout 'exit=1'
+stderr '^fatal: '

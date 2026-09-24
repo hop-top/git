@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -127,13 +128,25 @@ func ResolveArg(arg string, gitDomain string, knownBranches map[string]config.Hu
 	return ExpandShorthand(arg, gitDomain)
 }
 
+// Execute runs the command line in os.Args. A usage error is reported
+// on stderr with git's `error:` prefix; map the returned error to the
+// process status with ExitCode.
 func Execute() error {
 	defer func() {
 		if EventBus != nil {
 			_ = EventBus.Close(context.Background())
 		}
 	}()
-	return RootCmd.Execute()
+	installUsageErrors(RootCmd)
+	err := checkUnknownSubcommand(RootCmd, os.Args[1:])
+	if err == nil {
+		err = RootCmd.Execute()
+	}
+	var ue *UsageError
+	if errors.As(err, &ue) {
+		fmt.Fprintf(RootCmd.ErrOrStderr(), "error: %s\n", ue.Err)
+	}
+	return err
 }
 
 func init() {
