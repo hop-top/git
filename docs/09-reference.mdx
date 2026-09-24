@@ -18,7 +18,7 @@ Complete reference for git-hop commands, configuration, and APIs.
 | `--porcelain` | bool | One tab-separated record per line, no header. See [Structured Output](#structured-output) |
 | `--cols &lt;list&gt;` | string | Select and order the columns of `csv`, `text` and `--porcelain` output |
 | `--format-opt style=&lt;style&gt;` | string | Layout of `--format text`: `kv` (default), `lines` or `paragraph` |
-| `--quiet, -q` | bool | Suppress non-essential output |
+| `--quiet, -q` | bool | Only report errors: drops progress, hints and warnings, never `error:`/`fatal:` |
 | `--verbose, -V` | count | Increase log verbosity; repeatable (`-V` debug, `-VV` trace) |
 | `--force` | bool | Bypass safety checks (use with caution) |
 | `--global, -g` | bool | Use the global hopspace in `$GIT_HOP_DATA_HOME` (default: local) |
@@ -273,6 +273,12 @@ Commands that produce a result render it in the format chosen by
 `--format`, `--json` or `--porcelain`. In those modes stdout carries the
 result and nothing else: progress, hints, warnings and hook output go to
 stderr or are suppressed.
+
+Diagnostics follow git's streams. `error:` and `fatal:` lines always
+print on stderr, in every mode and under `-q` (a JSON record under
+`--json`). `warning:` lines stay on stderr under `--porcelain` and the
+other formats, as git keeps them beside `--porcelain` output. `-q` drops
+warnings and hints, whatever the format, but never errors.
 
 | Mode | Output |
 |------|--------|

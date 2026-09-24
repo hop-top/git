@@ -179,8 +179,11 @@ fmt.Println(output.SuccessCard(...))
 
 - **ModeHuman**: Visual feedback with colors, spinners, progress
 - **ModeJSON**: Structured JSON output, no visual elements
-- **ModePorcelain**: Minimal machine-parseable output
-- **ModeQuiet**: Only errors and critical messages
+- **ModePorcelain**: Minimal machine-parseable output; warnings and errors still go to stderr
+- **ModeQuiet**: Only errors (git's `-q`); `SetQuiet` applies the same to a structured mode given `-q`
+
+`Error`, `ErrorCode` and `Fatal*` print in every mode. `Warn` and `Hint`
+are dropped by `-q`; `Hint` is also dropped by porcelain.
 
 Set the mode using:
 ```go

@@ -132,25 +132,21 @@ func TestErrorOutput(t *testing.T) {
 	}
 }
 
+// Quiet drops feedback, never errors: git's -q is "only report errors".
 func TestQuietMode(t *testing.T) {
-	// Capture stderr
-	oldStderr := os.Stderr
-	r, w, _ := os.Pipe()
-	os.Stderr = w
-
-	output.SetupLogger(output.ModeQuiet, false)
-	output.Error("should not appear")
-	output.Info("should not appear")
-
-	w.Close()
-	os.Stderr = oldStderr
-
-	var buf bytes.Buffer
-	buf.ReadFrom(r)
-	result := buf.String()
-
-	if strings.Contains(result, "should not appear") {
-		t.Errorf("Expected no output in quiet mode, got: %s", result)
+	var stdout string
+	stderr := captureStderr(t, func() {
+		stdout = captureStdout(t, func() {
+			output.SetupLogger(output.ModeQuiet, false)
+			output.Info("should not appear")
+			output.Error("still reported")
+		})
+	})
+	if stdout != "" {
+		t.Errorf("quiet stdout = %q, want empty", stdout)
+	}
+	if stderr != "error: still reported\n" {
+		t.Errorf("quiet stderr = %q, want %q", stderr, "error: still reported\n")
 	}
 }
 
@@ -259,18 +255,6 @@ func TestWarnJSONStaysStructured(t *testing.T) {
 	}
 }
 
-func TestWarnSilentInQuietAndPorcelain(t *testing.T) {
-	for _, mode := range []output.Mode{output.ModeQuiet, output.ModePorcelain} {
-		got := captureStderr(t, func() {
-			output.SetupLogger(mode, false)
-			output.Warn("should not appear")
-		})
-		if got != "" {
-			t.Errorf("mode %v: Warn stderr = %q, want empty", mode, got)
-		}
-	}
-}
-
 // Hints use git's lowercase "hint:" prefix on stderr, one per line, as
 // git's advise() prints them; an empty line gets a bare "hint:".
 func TestHintHumanUsesGitPrefixPerLine(t *testing.T) {
@@ -360,14 +344,17 @@ func TestNoteHumanOnly(t *testing.T) {
 // quiet included, with git's "error:" prefix, then the process exits.
 func TestErrorCodeAlwaysPrints(t *testing.T) {
 	if mode := os.Getenv("OUTPUT_ERRORCODE_MODE"); mode != "" {
-		m := map[string]output.Mode{"quiet": output.ModeQuiet, "json": output.ModeJSON}[mode]
+		m := map[string]output.Mode{
+			"quiet": output.ModeQuiet, "json": output.ModeJSON, "porcelain": output.ModePorcelain,
+		}[mode]
 		output.SetupLogger(m, false)
 		output.ErrorCode(3, "dirty %s", "tree")
 		return
 	}
 	for mode, want := range map[string]string{
-		"quiet": "error: dirty tree\n",
-		"json":  `{"level":"error","msg":"dirty tree"}` + "\n",
+		"quiet":     "error: dirty tree\n",
+		"porcelain": "error: dirty tree\n",
+		"json":      `{"level":"error","msg":"dirty tree"}` + "\n",
 	} {
 		cmd := exec.Command(os.Args[0], "-test.run=^TestErrorCodeAlwaysPrints$")
 		cmd.Env = append(os.Environ(), "OUTPUT_ERRORCODE_MODE="+mode)
