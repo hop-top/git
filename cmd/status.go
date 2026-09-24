@@ -27,7 +27,8 @@ var (
 )
 
 var statusCmd = &cobra.Command{
-	Use:     "status",
+	Use:     "status [target]",
+	Args:    cobra.MaximumNArgs(1),
 	Aliases: []string{"st", "info"},
 	Short:   "Show the working tree status",
 	Long: `Show the status of the current worktree or hub.

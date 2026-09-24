@@ -23,6 +23,7 @@ var (
 
 var envGcCmd = &cobra.Command{
 	Use:     "gc",
+	Args:    cobra.NoArgs,
 	Aliases: []string{"cleanup", "clean"},
 	Short:   "Garbage collect orphaned dependencies",
 	Long: `Garbage collect orphaned dependencies that are no longer used by any branch.

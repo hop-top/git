@@ -25,6 +25,7 @@ var envCmd = &cobra.Command{
 
 var envStartCmd = &cobra.Command{
 	Use:     "start",
+	Args:    cobra.NoArgs,
 	Aliases: []string{"up"},
 	Short:   "Start the environment services",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -34,6 +35,7 @@ var envStartCmd = &cobra.Command{
 
 var envStopCmd = &cobra.Command{
 	Use:     "stop",
+	Args:    cobra.NoArgs,
 	Aliases: []string{"down"},
 	Short:   "Stop the environment services",
 	Run: func(cmd *cobra.Command, args []string) {
@@ -152,6 +154,7 @@ func runEnvCommand(action string) {
 
 var envGenerateCmd = &cobra.Command{
 	Use:   "generate",
+	Args:  cobra.NoArgs,
 	Short: "Generate environment files (.env, override) for the current worktree",
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()

@@ -58,6 +58,20 @@ exec sh -c 'git-hop completion; echo "exit=$?"'
 stdout 'exit=129'
 stderr '^error: accepts 1 arg\(s\), received 0$'
 
+# A command that takes no operand refuses one rather than ignoring it.
+exec sh -c 'git-hop list extra; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown command "extra" for "git-hop list"$'
+! stdout 'Branch'
+
+exec sh -c 'git-hop env start extra; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown command "extra" for "git-hop env start"$'
+
+exec sh -c 'git-hop status a b; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: accepts at most 1 arg\(s\), received 2$'
+
 # --- unknown subcommand under a command group ---
 exec sh -c 'git-hop env bogus; echo "exit=$?"'
 stdout 'exit=129'
