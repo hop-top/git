@@ -61,14 +61,10 @@ func systemStatusRecords(fs afero.Fs, g git.GitInterface) []statusRecord {
 	listed := listRecords(fs, g, st, sortedRepoIDs(st))
 	records := make([]statusRecord, 0, len(listed))
 	for _, l := range listed {
-		state := "Missing"
-		if l.State == "active" {
-			state = "Linked"
-		}
 		records = append(records, statusRecord{
 			Branch:     l.Branch,
 			Base:       l.Base,
-			State:      state,
+			State:      statusState(worktreeAt(fs, l.Path)),
 			Status:     l.Status,
 			Path:       l.Path,
 			Repository: l.Repository,

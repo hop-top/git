@@ -3,8 +3,8 @@ package cmd
 import "github.com/spf13/afero"
 
 // worktreePresence is what is at a worktree's path. doctor's hub and
-// state checks and prune all ask worktreeAt, so they agree on which
-// worktrees are there.
+// state checks, prune and status all ask worktreeAt, so they agree on
+// which worktrees are there.
 type worktreePresence int
 
 const (

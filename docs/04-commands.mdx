@@ -302,11 +302,19 @@ Status values:
 | `N ahead` | Branch has N commits not yet on default |
 | `diverged (N ahead, M behind)` | Branch and default have both moved |
 | `unknown` | Couldn't compute (e.g. default branch ref missing locally) |
-| `-` | Worktree directory is missing on disk |
+| `-` | Worktree directory is not on disk (state `Missing` or `Occupied`) |
 
 A `Missing` row means `hop.json` still lists a branch whose worktree
 directory is gone. Run [`git hop prune`](#git-hop-prune) to drop those
 rows.
+
+An `Occupied` row means something other than a directory sits at the
+worktree's path: a regular file, a symlink to one, or a dangling symlink.
+It is not the worktree, and git cannot check the branch out over it;
+[`git hop doctor`](#git-hop-doctor) reports it and leaves it alone. Move
+it aside, then run `git hop doctor --fix` to recreate the worktree. The
+`state` field of `--format json` and `status --all` use the same three
+values: `Linked`, `Occupied`, `Missing`.
 
 ### Outside a hub
 
