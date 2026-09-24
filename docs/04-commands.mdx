@@ -529,6 +529,23 @@ candidate.
 `--merged` and a positional `<target>` are mutually exclusive — pass
 one or the other.
 
+### `--dry-run`
+
+Preview any removal (a branch, `--merged`, or a whole hub) without
+changing anything:
+
+```bash
+git hop remove feature-x --dry-run
+```
+
+The preview runs the safety gate exactly as a real removal would and
+prints its verdict. A removal the gate would refuse fails the same way,
+with exit status 1, so a script can use `--dry-run` to ask "would this
+go through?". Otherwise it lists the hooks that would run, the worktree
+and branch that would be deleted, and the hop.json, hopspace and state
+entries that would be dropped. No hook runs, the remote is never
+contacted (even with `--delete-remote`), and no prompt is shown.
+
 ## git hop prune
 
 Remove orphan state entries and aged-out repair backups. Aliased as
@@ -945,7 +962,7 @@ These flags work with all commands:
 | `--force` | Force operation (use with caution) |
 | `--hub &lt;name|path&gt;` | Specify hub name or path |
 | `--hopspace &lt;name|path&gt;` | Specify hopspace name or path |
-| `--dry-run` | Show what would happen without making changes |
+| `--dry-run` | Show what would happen without making changes. A command that cannot preview itself (`env start`, `env stop`, `env generate`, clone) refuses the flag with exit 129 instead of running |
 | `--help, -h` | Show help for command |
 | `--version` | Show git-hop version |
 

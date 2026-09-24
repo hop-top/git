@@ -1,0 +1,100 @@
+# `git hop merge --dry-run` previews the merge and the source cleanup and
+# mutates nothing: the receiving branch does not move, the source worktree
+# and branch survive, and hop.json, state and current are untouched. A merge
+# that would stop on conflicts still fails.
+
+# --- upstream repo ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/base.txt f.txt
+exec git add f.txt
+exec git commit -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/ff
+exec git-hop add feat/clash
+exec git-hop main
+
+cd $WORK/hub/hops/feat/ff
+cp $WORK/ff.txt ff.txt
+exec git add ff.txt
+exec git commit -m 'ff work'
+
+cd $WORK/hub/hops/feat/clash
+cp $WORK/clash.txt f.txt
+exec git commit -am 'clash on f'
+
+cd $WORK/hub/hops/main
+cp $WORK/main.txt f.txt
+exec git commit -am 'main edits f'
+cd $WORK/hub
+
+# --- snapshot everything merge would write ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cp stdout $WORK/current.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cp stdout $WORK/worktrees.before
+
+# --- a clean merge is previewed ---
+exec git-hop merge feat/ff main --dry-run
+stdout '\[dry-run\] Would merge ''feat/ff'' into ''main'' \(merge commit\)'
+stdout '\[dry-run\] Would remove worktree at .*hops/feat/ff'
+stdout '\[dry-run\] Would delete local branch ''feat/ff'''
+stdout '\[dry-run\] Would remove ''feat/ff'' from hop.json, hopspace and state'
+stdout '\[dry-run\] Would point ''current'' at ''main'''
+! stdout 'on origin'
+! stdout 'Merge successful'
+
+# --- --no-ff and --delete-remote are reflected ---
+exec git-hop merge feat/ff main --dry-run --no-ff --delete-remote
+stdout '\[dry-run\] Would merge ''feat/ff'' into ''main'' \(merge commit\)'
+stdout '\[dry-run\] Would delete branch ''feat/ff'' on origin, if it exists'
+
+# --- a conflicting merge is still refused ---
+! exec git-hop merge feat/clash main --dry-run
+stderr '\[dry-run\] would refuse to merge ''feat/clash'' into ''main'': merge would stop on conflicts'
+! stdout 'Would remove worktree'
+
+# --- nothing changed ---
+exists $WORK/hub/hops/feat/ff
+exists $WORK/hub/hops/feat/clash
+! exists $WORK/hub/hops/main/ff.txt
+cmp $WORK/hub/hops/main/f.txt $WORK/main.txt
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cmp stdout $WORK/current.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cmp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cmp stdout $WORK/worktrees.before
+
+# --- fast-forward is named as such ---
+cd $WORK/hub/hops/feat/ff
+exec git rebase -q main
+cd $WORK/hub
+exec git-hop merge feat/ff main --dry-run
+stdout '\[dry-run\] Would merge ''feat/ff'' into ''main'' \(fast-forward\)'
+
+# --- control: without --dry-run the same merge really happens ---
+exec git-hop merge feat/ff main
+stdout 'Merged ''feat/ff'' into ''main'''
+! exists $WORK/hub/hops/feat/ff
+exists $WORK/hub/hops/main/ff.txt
+
+-- base.txt --
+base
+-- ff.txt --
+ff
+-- clash.txt --
+clash
+-- main.txt --
+main

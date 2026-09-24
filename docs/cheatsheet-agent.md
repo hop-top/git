@@ -80,10 +80,13 @@ exits 0 without prompting.
 
 # Rename
 /usr/bin/git hop move <old-branch> <new-branch>
+/usr/bin/git hop move <old-branch> <new-branch> --dry-run  # preview; no rename, no hooks
 
 # Merge + cleanup
 /usr/bin/git hop merge <source> <into>        # merge, remove source, symlink current
 /usr/bin/git hop merge <source> <into> --no-ff  # force merge commit
+/usr/bin/git hop merge <source> <into> --dry-run  # preview: fast-forward / merge commit;
+                                              #   exits 1 if it would conflict
 # Merge stays local by default: no network calls. Opt in to deleting the
 # merged source branch on origin (or set hop.merge.deleteRemote true).
 /usr/bin/git hop merge <source> <into> --delete-remote
@@ -138,7 +141,7 @@ exits 0 without prompting.
 |----------------|-------------------------------------------------|
 | `--json`       | structured JSON; parse with `jq`                |
 | `--porcelain`  | stable line-format; safer for scripting         |
-| `--dry-run`    | preview only; no filesystem or state changes    |
+| `--dry-run`    | preview only; no filesystem or state changes; a command with no preview refuses it (exit 129) |
 | `--force`      | bypass confirmations + safety checks            |
 | `-q`           | suppress non-error output                       |
 | `-g, --global` | target global hopspace (`$GIT_HOP_DATA_HOME`)   |
@@ -190,6 +193,7 @@ cd <path from list>
 | Wrong config targeted | pass `--config <path>` explicitly |
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |
+| exited 129: "--dry-run is not supported by ..." | that command has no preview (e.g. `env start`); nothing ran — decide, then run it without `--dry-run` |
 
 ---
 

@@ -115,6 +115,19 @@ If only one argument is given, the current branch is used as the source.`,
 			output.Fatal("Source worktree '%s' has uncommitted changes. Commit or stash them first.", sourceBranch)
 		}
 
+		// Everything below writes; the preview stops here.
+		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
+			previewMerge(g, mergePlan{
+				source:       sourceBranch,
+				into:         intoBranch,
+				sourcePath:   srcPath,
+				intoPath:     intoPath,
+				noFF:         noFF,
+				deleteRemote: deleteRemote,
+			})
+			return
+		}
+
 		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 		// Perform merge: run `git merge` inside the receiving branch's worktree

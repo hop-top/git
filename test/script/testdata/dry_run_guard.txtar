@@ -1,0 +1,93 @@
+# The global --dry-run is never silently ignored. A command either honors
+# it (previews, or has nothing to write) or refuses it with a usage error
+# before doing anything. Commands with their own --dry-run (init, repair,
+# env gc) handle it themselves.
+
+# --- upstream repo ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/x
+exec git-hop main
+
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/pre-hook $WORK/.config/git-hop/hooks/pre-worktree-switch
+cp $WORK/post-hook $WORK/.config/git-hop/hooks/post-worktree-switch
+exec chmod +x $WORK/.config/git-hop/hooks/pre-worktree-switch $WORK/.config/git-hop/hooks/post-worktree-switch
+
+cp hop.json $WORK/hop.json.before
+exec readlink current
+cp stdout $WORK/current.before
+
+# --- switch: previewed, current and hooks untouched ---
+exec git-hop feat/x --dry-run
+stdout '\[dry-run\] Would run hook pre-worktree-switch'
+stdout '\[dry-run\] Would point ''current'' at .*hops/feat/x'
+stdout '\[dry-run\] Would run hook post-worktree-switch'
+! stdout 'Switched to worktree'
+exec readlink current
+cmp stdout $WORK/current.before
+! exists $WORK/pre-hook-ran
+! exists $WORK/post-hook-ran
+
+# --- commands without a preview refuse --dry-run: exit 129, no effect ---
+cd $WORK/hub/hops/main
+exec sh -c 'git-hop env start --dry-run; echo "exit=$?"'
+stdout 'exit=129'
+stderr 'fatal: --dry-run is not supported by ''git hop env start'''
+exec sh -c 'git-hop env stop --dry-run; echo "exit=$?"'
+stdout 'exit=129'
+exec sh -c 'git-hop env generate --dry-run; echo "exit=$?"'
+stdout 'exit=129'
+exec sh -c 'git-hop upgrade preamble --install --dry-run; echo "exit=$?"'
+stdout 'exit=129'
+! exists $WORK/.config/git-hop/skills/upgrade-preamble.md
+exec sh -c 'git-hop __notify-chdir . --dry-run; echo "exit=$?"'
+stdout 'exit=129'
+
+# --- clone has no preview: refused before anything is written ---
+cd $WORK
+exec sh -c 'git-hop $WORK/repo.git clone2 --dry-run; echo "exit=$?"'
+stdout 'exit=129'
+stderr 'fatal: --dry-run is not supported for clone'
+! exists $WORK/clone2
+
+# --- read-only commands accept it ---
+cd $WORK/hub
+exec git-hop list --dry-run
+exec git-hop status --dry-run
+exec git-hop completion bash --dry-run
+exec git-hop help remove --dry-run
+
+# --- --dry-run=false is not a dry run ---
+cd $WORK/hub/hops/main
+exec git-hop env start --dry-run=false
+
+# --- commands with their own --dry-run keep handling it ---
+cd $WORK/hub
+exec git-hop env gc --dry-run
+exec git-hop repair --dry-run
+
+cd $WORK/hub
+cmp hop.json $WORK/hop.json.before
+exec readlink current
+cmp stdout $WORK/current.before
+
+# --- control: without --dry-run the switch really happens ---
+exec git-hop feat/x
+stdout 'Switched to worktree ''feat/x'''
+exists $WORK/pre-hook-ran
+exists $WORK/post-hook-ran
+
+-- pre-hook --
+#!/bin/sh
+touch "$HOME/pre-hook-ran"
+-- post-hook --
+#!/bin/sh
+touch "$HOME/post-hook-ran"

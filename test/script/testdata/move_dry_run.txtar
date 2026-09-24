@@ -1,0 +1,77 @@
+# `git hop move --dry-run` previews the rename and mutates nothing: no
+# branch rename, no worktree move, no hop.json, hopspace or state write,
+# no current-symlink move, and no lifecycle hooks. A move the real run
+# would reject still fails.
+
+# --- upstream repo ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/old
+exec git-hop add feat/taken
+exec git-hop feat/old
+
+# --- global hooks that leave a marker when run ---
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/pre-hook $WORK/.config/git-hop/hooks/pre-worktree-move
+cp $WORK/post-hook $WORK/.config/git-hop/hooks/post-worktree-move
+exec chmod +x $WORK/.config/git-hop/hooks/pre-worktree-move $WORK/.config/git-hop/hooks/post-worktree-move
+
+# --- snapshot everything move would write ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cp stdout $WORK/current.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cp stdout $WORK/worktrees.before
+
+# --- the rename is previewed ---
+exec git-hop move feat/old feat/new --dry-run
+stdout '\[dry-run\] Would run hook pre-worktree-move'
+stdout '\[dry-run\] Would rename branch ''feat/old'' to ''feat/new'''
+stdout '\[dry-run\] Would move worktree .*hops/feat/old -> .*hops/feat/new'
+stdout '\[dry-run\] Would rekey ''feat/old'' to ''feat/new'' in hop.json, hopspace, state, ports and volumes'
+stdout '\[dry-run\] Would point ''current'' at .*hops/feat/new'
+stdout '\[dry-run\] Would run hook post-worktree-move'
+! stdout 'Moved '
+
+# --- a move onto a registered branch is still refused ---
+! exec git-hop move feat/old feat/taken --dry-run
+stderr '\[dry-run\] would refuse to move ''feat/old'': branch ''feat/taken'' already exists'
+
+# --- nothing changed ---
+exists $WORK/hub/hops/feat/old
+! exists $WORK/hub/hops/feat/new
+! exists $WORK/pre-hook-ran
+! exists $WORK/post-hook-ran
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cmp stdout $WORK/current.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cmp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cmp stdout $WORK/worktrees.before
+
+# --- control: without --dry-run the same move really happens ---
+exec git-hop move feat/old feat/new
+stdout 'Moved ''feat/old'' '
+exists $WORK/hub/hops/feat/new
+! exists $WORK/hub/hops/feat/old
+exists $WORK/pre-hook-ran
+exists $WORK/post-hook-ran
+
+-- pre-hook --
+#!/bin/sh
+touch "$HOME/pre-hook-ran"
+-- post-hook --
+#!/bin/sh
+touch "$HOME/post-hook-ran"
