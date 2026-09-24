@@ -270,10 +270,10 @@ func reportOrphanedDeps(fs afero.Fs, depsManager *services.DepsManager, hopspace
 	}
 	var orphanedSize int64
 	for _, depsKey := range orphaned {
-		orphanedSize += getDirSize(fs, filepath.Join(hopspacePath, "deps", depsKey))
+		orphanedSize += getDirSize(fs, filepath.Join(services.DepsStorePath(hopspacePath), depsKey))
 	}
 	output.Info("%s%d orphaned dependencies (%.1fMB)", indent, len(orphaned), float64(orphanedSize)/1024/1024)
 	output.Info("    Run 'git hop env gc' to reclaim space")
-	r.record(doctorKindWarning, doctorCheckDependencies, filepath.Join(hopspacePath, "deps"),
+	r.record(doctorKindWarning, doctorCheckDependencies, services.DepsStorePath(hopspacePath),
 		"%d orphaned dependencies (%.1fMB); run 'git hop env gc' to reclaim space", len(orphaned), float64(orphanedSize)/1024/1024)
 }

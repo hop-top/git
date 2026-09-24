@@ -7,10 +7,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
-	"hop.top/git/internal/hop"
 )
 
 // DepsManager manages shared dependencies across worktrees
@@ -202,17 +202,17 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	}
 
 	depsKey := resolvedPM.GetDepsKey(hash)
-	depsPath := m.getDepsPath(depsKey)
 	symlinkPath := filepath.Join(worktreePath, resolvedPM.DepsDir)
 
 	// Fast path: existing correct symlink to a populated cache → nothing to
 	// do. This short-circuits before touching the worktree or running the
 	// install command. "Populated" means the cache directory has at least
 	// one entry; a 0-byte cache (legacy or crashed-mid-install) is treated
-	// as missing so the install re-runs and fills it.
-	if existing, ok := readSymlink(m.fs, symlinkPath); ok && existing == depsPath {
-		if populated, _ := dirHasEntries(m.fs, depsPath); populated {
-			m.Registry.AddUsage(depsKey, branch)
+	// as missing so the install re-runs and fills it. A link into the
+	// legacy store counts as correct (see resolveDepsPath).
+	if existing, ok := readSymlink(m.fs, symlinkPath); ok && slices.Contains(m.depsPathsFor(depsKey), existing) {
+		if populated, _ := dirHasEntries(m.fs, existing); populated {
+			m.recordUsage(depsKey, existing, branch)
 			return nil
 		}
 	}
@@ -231,9 +231,9 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	// treated as missing so we re-install into it rather than symlink to
 	// emptiness — this also cleans up legacy 0-byte cache entries left by
 	// the pre-#11 bug.
-	depsPopulated, err := dirHasEntries(m.fs, depsPath)
+	depsPath, depsPopulated, err := m.resolveDepsPath(depsKey)
 	if err != nil {
-		return fmt.Errorf("failed to check deps existence: %w", err)
+		return err
 	}
 
 	if !depsPopulated {
@@ -253,7 +253,7 @@ func (m *DepsManager) ensurePMDeps(worktreePath, branch string, pm PackageManage
 	}
 
 	// Add usage to registry
-	m.Registry.AddUsage(depsKey, branch)
+	m.recordUsage(depsKey, depsPath, branch)
 
 	return nil
 }
@@ -536,7 +536,7 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 			}
 
 			expectedDepsKey := pm.GetDepsKey(expectedHash)
-			expectedDepsPath := m.getDepsPath(expectedDepsKey)
+			expectedDepsPaths := m.depsPathsFor(expectedDepsKey)
 			symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
 
 			// Check what's at the symlink path.
@@ -593,7 +593,7 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 			// which is conservative — we'd rather report a broken symlink than
 			// silently skip a genuinely inaccessible target.
 			targetExists, _ := afero.Exists(m.fs, currentTarget)
-			if currentTarget != expectedDepsPath {
+			if !slices.Contains(expectedDepsPaths, currentTarget) {
 				if !targetExists {
 					// Broken symlink (points to non-existent target)
 					issues = append(issues, Issue{
@@ -648,81 +648,24 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 			continue
 		}
 
+		symlinkPath := filepath.Join(issue.WorktreePath, issue.PM.DepsDir)
 		switch issue.Type {
 		case IssueLocalFolder:
 			// Move local folder to trash and create symlink
-			symlinkPath := filepath.Join(issue.WorktreePath, issue.PM.DepsDir)
 			if _, err := m.trash.Move(symlinkPath); err != nil {
 				return fmt.Errorf("failed to trash local folder: %w", err)
 			}
-
-			// Ensure deps exist
-			depsPath := m.getDepsPath(issue.DepsKey)
-			depsExists, _ := afero.DirExists(m.fs, depsPath)
-			if !depsExists {
-				lockfilePath, _ := issue.PM.FindLockfile(m.fs, issue.WorktreePath)
-				// Resolve install command for this branch
-				resolvedPM := ResolveInstallCmd(issue.PM, m.HopspaceConfig, issue.Branch)
-				if err := m.installDeps(depsPath, issue.WorktreePath, *resolvedPM); err != nil {
-					return fmt.Errorf("failed to install deps: %w", err)
-				}
-				m.Registry.UpdateEntryMetadata(issue.DepsKey, issue.ExpectedHash, filepath.Base(lockfilePath))
-			}
-
-			// Create symlink
-			if err := m.createSymlink(depsPath, symlinkPath); err != nil {
-				return fmt.Errorf("failed to create symlink: %w", err)
-			}
-
-			m.Registry.AddUsage(issue.DepsKey, issue.Branch)
-
 		case IssueBrokenSymlink, IssueStaleSymlink:
 			// Remove symlink and recreate
-			symlinkPath := filepath.Join(issue.WorktreePath, issue.PM.DepsDir)
 			if err := m.fs.Remove(symlinkPath); err != nil {
 				return fmt.Errorf("failed to remove symlink: %w", err)
 			}
-
-			// Ensure deps exist
-			depsPath := m.getDepsPath(issue.DepsKey)
-			depsExists, _ := afero.DirExists(m.fs, depsPath)
-			if !depsExists {
-				lockfilePath, _ := issue.PM.FindLockfile(m.fs, issue.WorktreePath)
-				// Resolve install command for this branch
-				resolvedPM := ResolveInstallCmd(issue.PM, m.HopspaceConfig, issue.Branch)
-				if err := m.installDeps(depsPath, issue.WorktreePath, *resolvedPM); err != nil {
-					return fmt.Errorf("failed to install deps: %w", err)
-				}
-				m.Registry.UpdateEntryMetadata(issue.DepsKey, issue.ExpectedHash, filepath.Base(lockfilePath))
-			}
-
-			// Create symlink
-			if err := m.createSymlink(depsPath, symlinkPath); err != nil {
-				return fmt.Errorf("failed to create symlink: %w", err)
-			}
-
-			m.Registry.AddUsage(issue.DepsKey, issue.Branch)
-
 		case IssueMissingDeps:
-			// Install and create symlink
-			depsPath := m.getDepsPath(issue.DepsKey)
-			symlinkPath := filepath.Join(issue.WorktreePath, issue.PM.DepsDir)
-
-			lockfilePath, _ := issue.PM.FindLockfile(m.fs, issue.WorktreePath)
-			// Resolve install command for this branch
-			resolvedPM := ResolveInstallCmd(issue.PM, m.HopspaceConfig, issue.Branch)
-			if err := m.installDeps(depsPath, issue.WorktreePath, *resolvedPM); err != nil {
-				return fmt.Errorf("failed to install deps: %w", err)
-			}
-
-			m.Registry.UpdateEntryMetadata(issue.DepsKey, issue.ExpectedHash, filepath.Base(lockfilePath))
-
-			// Create symlink
-			if err := m.createSymlink(depsPath, symlinkPath); err != nil {
-				return fmt.Errorf("failed to create symlink: %w", err)
-			}
-
-			m.Registry.AddUsage(issue.DepsKey, issue.Branch)
+		default:
+			continue
+		}
+		if err := m.installAndLink(issue, symlinkPath); err != nil {
+			return err
 		}
 	}
 
@@ -731,6 +674,31 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 		return fmt.Errorf("failed to save registry: %w", err)
 	}
 
+	return nil
+}
+
+// installAndLink links symlinkPath to the issue's deps, installing them
+// into the store first when no populated install exists.
+func (m *DepsManager) installAndLink(issue Issue, symlinkPath string) error {
+	depsPath, populated, err := m.resolveDepsPath(issue.DepsKey)
+	if err != nil {
+		return err
+	}
+	if !populated {
+		lockfilePath, _ := issue.PM.FindLockfile(m.fs, issue.WorktreePath)
+		// Resolve install command for this branch
+		resolvedPM := ResolveInstallCmd(issue.PM, m.HopspaceConfig, issue.Branch)
+		if err := m.installDeps(depsPath, issue.WorktreePath, *resolvedPM); err != nil {
+			return fmt.Errorf("failed to install deps: %w", err)
+		}
+		m.Registry.UpdateEntryMetadata(issue.DepsKey, issue.ExpectedHash, filepath.Base(lockfilePath))
+	}
+
+	if err := m.createSymlink(depsPath, symlinkPath); err != nil {
+		return fmt.Errorf("failed to create symlink: %w", err)
+	}
+
+	m.recordUsage(issue.DepsKey, depsPath, issue.Branch)
 	return nil
 }
 
@@ -774,20 +742,47 @@ func (m *DepsManager) GarbageCollect(worktrees map[string]string, dryRun bool) (
 	return orphaned, totalSize, nil
 }
 
-// getDepsPath returns the full path to a deps directory
+// getDepsPath returns where depsKey is installed in this hopspace's store.
 func (m *DepsManager) getDepsPath(depsKey string) string {
-	dataHome := hop.GetGitHopDataHome()
-	// Extract org/repo from repoPath
-	// Assuming repoPath is like: /path/to/data-home/org/repo
-	if len(m.RepoPath) > len(dataHome) {
-		relPath := m.RepoPath[len(dataHome):]
-		if len(relPath) > 0 && relPath[0] == filepath.Separator {
-			relPath = relPath[1:]
-		}
-		return filepath.Join(dataHome, relPath, "deps", depsKey)
+	return getDepsPath(m.RepoPath, depsKey)
+}
+
+// depsPathsFor returns the paths depsKey may live at, the store first,
+// then the legacy store when this hopspace has one (legacyDepsStorePath).
+func (m *DepsManager) depsPathsFor(depsKey string) []string {
+	paths := []string{m.getDepsPath(depsKey)}
+	if legacy := legacyDepsStorePath(m.RepoPath); legacy != "" {
+		paths = append(paths, filepath.Join(legacy, depsKey))
 	}
-	// Fallback
-	return filepath.Join(m.RepoPath, "deps", depsKey)
+	return paths
+}
+
+// resolveDepsPath returns the first populated install of depsKey, store
+// before legacy store, and whether one was found; when none is, it
+// returns the store path, where a new install goes. Installs are only
+// ever written to the store: legacy ones are reused while they last, so
+// worktrees linking there keep working, and move to the store as their
+// lockfile changes.
+func (m *DepsManager) resolveDepsPath(depsKey string) (string, bool, error) {
+	for _, path := range m.depsPathsFor(depsKey) {
+		populated, err := dirHasEntries(m.fs, path)
+		if err != nil {
+			return "", false, fmt.Errorf("failed to check deps existence: %w", err)
+		}
+		if populated {
+			return path, true, nil
+		}
+	}
+	return m.getDepsPath(depsKey), false, nil
+}
+
+// recordUsage records that branch links depsPath. Only store installs are
+// tracked: the registry and gc cover the store alone, and a legacy install
+// is left for whatever still links it.
+func (m *DepsManager) recordUsage(depsKey, depsPath, branch string) {
+	if depsPath == m.getDepsPath(depsKey) {
+		m.Registry.AddUsage(depsKey, branch)
+	}
 }
 
 // getDirSize calculates the total size of a directory

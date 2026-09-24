@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/spf13/afero"
@@ -203,29 +204,38 @@ func (r *DepsRegistry) DeleteEntry(depsKey string) {
 
 // getRegistryPath returns the path to the registry file
 func getRegistryPath(repoPath string) string {
-	return filepath.Join(getDepsBasePath(repoPath), ".registry.json")
+	return filepath.Join(DepsStorePath(repoPath), ".registry.json")
 }
 
-// getDepsBasePath returns the base path for deps storage
-func getDepsBasePath(repoPath string) string {
-	// Extract org/repo from repoPath
-	// Assuming repoPath is like: /path/to/data-home/org/repo
-	dataHome := hop.GetGitHopDataHome()
-
-	// If repoPath starts with dataHome, extract the org/repo part
-	if len(repoPath) > len(dataHome) {
-		relPath := repoPath[len(dataHome):]
-		if len(relPath) > 0 && relPath[0] == filepath.Separator {
-			relPath = relPath[1:]
-		}
-		return filepath.Join(dataHome, relPath, "deps")
-	}
-
-	// Fallback: just append deps to repoPath
-	return filepath.Join(repoPath, "deps")
+// DepsStorePath returns the directory holding a hopspace's shared
+// dependency installs and their registry: <hopspace>/deps. That is the
+// hub for a default clone and <data>/<org>/<repo> for a --global one.
+func DepsStorePath(hopspacePath string) string {
+	return filepath.Join(hopspacePath, "deps")
 }
 
 // getDepsPath returns the full path to a specific deps installation
 func getDepsPath(repoPath, depsKey string) string {
-	return filepath.Join(getDepsBasePath(repoPath), depsKey)
+	return filepath.Join(DepsStorePath(repoPath), depsKey)
+}
+
+// legacyDepsStorePath returns where earlier releases put a hopspace's deps
+// store when that differs from DepsStorePath, else "". They cut the
+// hopspace path at the data home's length without checking the hopspace
+// was inside the data home, so a hub path longer than the data home got
+// <data>/<tail of hub path>/deps. Worktrees still link there; the store is
+// read, never written or collected (see DepsManager.resolveDepsPath). The
+// slicing is reproduced verbatim on purpose: it is the only way to find
+// those stores.
+func legacyDepsStorePath(hopspacePath string) string {
+	dataHome := hop.GetGitHopDataHome()
+	if len(hopspacePath) <= len(dataHome) {
+		return ""
+	}
+	tail := strings.TrimPrefix(hopspacePath[len(dataHome):], string(filepath.Separator))
+	legacy := filepath.Join(dataHome, tail, "deps")
+	if legacy == DepsStorePath(hopspacePath) {
+		return ""
+	}
+	return legacy
 }

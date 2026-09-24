@@ -25,9 +25,9 @@ func pnpmPM() services.PackageManager {
 	}
 }
 
-// setupDepsTestDir creates a temporary directory structure for deps tests and
-// configures GIT_HOP_DATA_HOME so that getDepsBasePath computes the correct
-// canonical path for symlink targets. Returns the tmpDir.
+// setupDepsTestDir creates a temporary hopspace directory for deps tests,
+// under a data home it isolates via GIT_HOP_DATA_HOME. The deps store is
+// tmpDir/deps. Returns the tmpDir.
 func setupDepsTestDir(t *testing.T) string {
 	t.Helper()
 	// Use os.MkdirTemp so we control the parent directory.
@@ -35,9 +35,6 @@ func setupDepsTestDir(t *testing.T) string {
 	require.NoError(t, err)
 	t.Cleanup(func() { os.RemoveAll(parent) })
 
-	// With GIT_HOP_DATA_HOME=parent and repoPath=tmpDir (a child of parent),
-	// getDepsBasePath correctly resolves to tmpDir/deps because repoPath starts
-	// with dataHome and the relative segment is the tmpDir's base name.
 	t.Setenv("GIT_HOP_DATA_HOME", parent)
 
 	tmpDir, err := os.MkdirTemp(parent, "repo-")

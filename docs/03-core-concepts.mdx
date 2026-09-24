@@ -233,7 +233,7 @@ git-hop automatically shares dependencies across worktrees to save disk space an
 ### How It Works
 
 1. **Lockfile Hashing**: git-hop hashes your lockfile (package-lock.json, go.sum, etc.) using SHA256
-2. **Centralized Storage**: Dependencies are installed to `$GIT_HOP_DATA_HOME/org/repo/deps/{depsdir}.{hash}/`
+2. **Centralized Storage**: Dependencies are installed to `<hopspace>/deps/{depsdir}.{hash}/` (`<hub>/deps/` for a default clone, `$GIT_HOP_DATA_HOME/org/repo/deps/` for a `--global` one)
 3. **Symlink Creation**: Each worktree gets a symlink pointing to the shared storage
 4. **Usage Tracking**: A registry tracks which branches use which dependencies
 
