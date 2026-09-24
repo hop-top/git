@@ -20,12 +20,12 @@ type SchemaConfig struct {
 	Doctor   DoctorSchema   `json:"doctor"`
 }
 
-// DefaultsSchema represents default settings
+// DefaultsSchema represents default settings. Whether add and clone
+// start the environment is git config hop.autoEnvStart, not a field here.
 type DefaultsSchema struct {
-	GitDomain    string `json:"gitDomain"`
-	AutoEnvStart bool   `json:"autoEnvStart"`
-	Editor       string `json:"editor"`
-	Shell        string `json:"shell"`
+	GitDomain string `json:"gitDomain"`
+	Editor    string `json:"editor"`
+	Shell     string `json:"shell"`
 }
 
 // OutputSchema represents output settings
@@ -90,10 +90,9 @@ func NewSchemaConfig() *SchemaConfig {
 
 	return &SchemaConfig{
 		Defaults: DefaultsSchema{
-			GitDomain:    "github.com",
-			AutoEnvStart: false,
-			Editor:       "${EDITOR}",
-			Shell:        "${SHELL}",
+			GitDomain: "github.com",
+			Editor:    "${EDITOR}",
+			Shell:     "${SHELL}",
 		},
 		Output: OutputSchema{
 			Format:      "human",

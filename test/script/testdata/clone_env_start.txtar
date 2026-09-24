@@ -1,0 +1,80 @@
+# A clone starts the environment of the worktree it creates under the same
+# rule as add: --env-start / --no-env-start, else GIT_HOP_AUTO_ENV_START,
+# else hop.autoEnvStart (default false). A failed start warns and hints at
+# env start; the clone itself still succeeds.
+#
+# A stub docker on PATH stands in for compose and logs each `up` with the
+# directory and branch it ran in.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+cd $WORK
+
+# --- default: off ---
+exec git-hop $WORK/org/repo.git hub-default
+exists $WORK/hub-default/hops/main/docker-compose.yml
+! exists $WORK/up.log
+
+# --- hop.autoEnvStart=true: the cloned worktree's environment starts once ---
+exec git config --global hop.autoEnvStart true
+exec git-hop $WORK/org/repo.git hub-auto
+grep -count=1 '^up ' $WORK/up.log
+grep '^up compose -p org-repo-main up -d in .*/hub-auto/hops/main on main$' $WORK/up.log
+! stderr 'warning:'
+
+# --- --no-env-start overrides it ---
+exec git-hop $WORK/org/repo.git hub-off --no-env-start
+exists $WORK/hub-off/hops/main
+grep -count=1 '^up ' $WORK/up.log
+
+# --- --env-start overrides hop.autoEnvStart=false ---
+exec git config --global hop.autoEnvStart false
+exec git-hop $WORK/org/repo.git hub-on --env-start
+grep -count=2 '^up ' $WORK/up.log
+grep ' in .*/hub-on/hops/main on main$' $WORK/up.log
+
+# --- GIT_HOP_AUTO_ENV_START=true overrides hop.autoEnvStart=false ---
+env GIT_HOP_AUTO_ENV_START=true
+exec git-hop $WORK/org/repo.git hub-env
+grep -count=3 '^up ' $WORK/up.log
+env GIT_HOP_AUTO_ENV_START=
+
+# --- start failure: warning + hint, clone still succeeds ---
+env STUB_UP_FAIL=1
+exec git-hop $WORK/org/repo.git hub-broken --env-start
+stderr '^warning: failed to start environment: '
+stderr '^hint: .*git hop env start'
+exists $WORK/hub-broken/hops/main/docker-compose.yml
+exists $WORK/hub-broken/hop.json
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" up "*)
+	echo "up $* in $PWD on $(git rev-parse --abbrev-ref HEAD)" >> "$WORK/up.log"
+	if [ -n "$STUB_UP_FAIL" ]; then
+		echo "stub: up failed" >&2
+		exit 1
+	fi
+	echo "stub-compose-up-stdout"
+	exit 0
+	;;
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

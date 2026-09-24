@@ -187,9 +187,11 @@ git hop status  # Shows running services
 docker ps       # Verify containers are running
 ```
 
-To auto-start services on worktree creation:
+Services are not started on worktree creation unless you ask. To have
+`git hop add` and clone start them once the worktree exists:
 ```bash
-git hop config auto_env_start detect
+git config --global hop.autoEnvStart true   # standing choice
+git hop add feat/x --env-start              # this run only (--no-env-start to skip)
 ```
 
 ### Inspect Environment State

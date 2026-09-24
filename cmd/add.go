@@ -44,8 +44,13 @@ var addCmd = &cobra.Command{
 	Long: `Add a new worktree and environment for a branch.
 
 Creates the branch (if missing) from the start-point, checks it out under
-hops/<branch>, sets up shared dependencies, and starts the environment if
-configured.
+hops/<branch>, and sets up shared dependencies.
+
+The environment is not started unless asked: --env-start starts it once
+the worktree exists, through the same code as 'git hop env start'. 'git
+config hop.autoEnvStart true' (or GIT_HOP_AUTO_ENV_START=true) makes that
+the default; --no-env-start skips it for one run. A worktree without an
+environment is skipped, and a failed start only warns: add still succeeds.
 
 An existing branch is checked out as-is unless --from is given. With
 --from it must end up at that start-point: it is fast-forwarded when at or
@@ -83,9 +88,9 @@ a standing choice; --fetch / --no-fetch decide for one run. When the
 fetch was asked for (--fetch, hop.add.fetch true) a failure is fatal; the
 automatic one only warns and carries on from the refs already present.
 
-With --dry-run, add reports the fetch, branch, start-point, worktree path
-and hooks it would run, then stops: nothing is fetched, created or written
-and no hook runs.`,
+With --dry-run, add reports the fetch, branch, start-point, worktree path,
+hooks and environment start it would run, then stops: nothing is fetched,
+created or written and no hook runs.`,
 	Args: addArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
@@ -147,8 +152,10 @@ and no hook runs.`,
 		wm.EnforceStartPoint = addFromFlag != ""
 
 		fetch := decideFetch(g, config.NewGitConfig(),
-			negatableFlag(cmd, "fetch", addFetchFlag, addNoFetchFlag),
+			cli.NegatableFlag(cmd, "fetch", addFetchFlag, addNoFetchFlag),
 			hubPath, startPoint, hub.Config.Repo.DefaultBranch)
+		envStart := cli.DecideAutoEnvStart(
+			cli.NegatableFlag(cmd, "env-start", addEnvStartFlag, addNoEnvStartFlag), globalConfig)
 
 		// Everything below writes; the preview must stop before any of it.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
@@ -163,6 +170,7 @@ and no hook runs.`,
 				startPoint:    startPoint,
 				defaultBranch: hub.Config.Repo.DefaultBranch,
 				task:          taskID,
+				envStart:      envStart,
 			})
 			return
 		}
@@ -401,8 +409,16 @@ and no hook runs.`,
 			},
 		))
 
+		// Last, once the worktree is complete: a failed start only warns.
+		envStarted := envStart && services.StartNewWorktreeEnv(fs, services.EnvTarget{
+			Root:         worktreePath,
+			Branch:       branch,
+			HopspacePath: hopspacePath,
+			Hub:          hub.Config,
+		}, globalConfig, cli.EventBus)
+
 		if output.IsStructured() {
-			emitResult(cmd, newAddResult(g, hub, branch, worktreePath, !branchExisted, branchPorts))
+			emitResult(cmd, newAddResult(g, hub, branch, worktreePath, !branchExisted, branchPorts, envStarted))
 			return
 		}
 
@@ -545,6 +561,7 @@ func init() {
 		"fetch origin before resolving the start-point (default: when it is an origin ref)")
 	addCmd.Flags().BoolVar(&addNoFetchFlag, "no-fetch", false,
 		"do not fetch origin before resolving the start-point")
+	cli.AddEnvStartFlags(addCmd.Flags(), &addEnvStartFlag, &addNoEnvStartFlag)
 	addCmd.Flags().StringVar(&addTaskFlag, "task", "",
 		"record a task id for the worktree (metadata only); without <branch>, derive the branch from the task via tlc")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames

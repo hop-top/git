@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -15,6 +16,15 @@ type HookContext struct {
 	Branch       string
 	RepoPath     string
 	Command      string // "start", "stop"
+	// Out receives the hook's output; nil means os.Stdout.
+	Out io.Writer
+}
+
+func (c HookContext) out() io.Writer {
+	if c.Out == nil {
+		return os.Stdout
+	}
+	return c.Out
 }
 
 // ExecuteHooks executes a list of hooks in order
@@ -68,7 +78,7 @@ func ExecuteHook(hook string, ctx HookContext) error {
 
 	// Show output to user
 	if len(output) > 0 {
-		fmt.Printf("  %s\n", string(output))
+		fmt.Fprintf(ctx.out(), "  %s\n", string(output))
 	}
 
 	if err != nil {

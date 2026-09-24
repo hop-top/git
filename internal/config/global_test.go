@@ -42,9 +42,9 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// gitconfig.go defaults: gitDomain=github.com, autoEnvStart=true
-	if cfg.Defaults.AutoEnvStart != true {
-		t.Errorf("AutoEnvStart = %v, want true", cfg.Defaults.AutoEnvStart)
+	// gitconfig.go defaults: gitDomain=github.com, autoEnvStart=false
+	if cfg.Defaults.AutoEnvStart != false {
+		t.Errorf("AutoEnvStart = %v, want false", cfg.Defaults.AutoEnvStart)
 	}
 	if cfg.Defaults.GitDomain != "github.com" {
 		t.Errorf("GitDomain = %q, want %q", cfg.Defaults.GitDomain, "github.com")

@@ -65,12 +65,10 @@ Each hub has a `hop.json` file in the hub directory:
 
 ```json
 {
-  "auto_env_start": "detect",
   "port_base": 10000,
   "port_limit": 5000,
   "services": {
-    "enabled": true,
-    "auto_start": true
+    "enabled": true
   }
 }
 ```
@@ -78,9 +76,6 @@ Each hub has a `hop.json` file in the hub directory:
 ### Creating Hub Config
 
 ```bash
-# Create hub with custom config
-git hop https://github.com/org/repo.git --config auto_env_start=true
-
 # Edit hub config manually
 cd org/repo
 vim hop.json
@@ -111,15 +106,25 @@ Each hopspace can have its own `hop.json` for branch-specific settings:
 
 ## Configuration Options
 
-### auto_env_start
+### Starting the environment on add and clone
 
-Control automatic environment startup:
+`git hop add` and clone do not start the new worktree's environment unless
+asked to. The standing choice is git config, not `hop.json`:
 
-| Value | Behavior |
-|-------|----------|
-| `true` | Always start environment when creating worktree |
-| `false` | Never start environment automatically |
-| `"detect"` (default) | Start only if service config exists |
+```bash
+git config --global hop.autoEnvStart true   # every repository
+git config hop.autoEnvStart true            # this repository only
+```
+
+| Setting | Behavior |
+|---------|----------|
+| `false` (default) | Never start automatically; run `git hop env start` |
+| `true` | Start once the worktree exists, if it has an environment |
+
+`GIT_HOP_AUTO_ENV_START=true|false` overrides it for one process, and
+`--env-start` / `--no-env-start` for one run. The start is the same one
+`git hop env start` does; a worktree without an environment is skipped, and
+a failed start only warns.
 
 ### port_base / port_limit
 
@@ -174,26 +179,16 @@ services:
 
 ### Minimal Config
 
-For simple projects without services:
-
-```json
-{
-  "auto_env_start": false
-}
-```
+For simple projects without services, nothing to set: environments are
+never started unless you ask.
 
 ### Service-Focused Config
 
-For projects with Docker services:
+For projects with Docker services, start them on every add in this
+repository:
 
-```json
-{
-  "auto_env_start": "detect",
-  "services": {
-    "enabled": true,
-    "auto_start": true
-  }
-}
+```bash
+git config hop.autoEnvStart true
 ```
 
 ### Team Config
@@ -202,7 +197,6 @@ Shared configuration for team members:
 
 ```json
 {
-  "auto_env_start": "detect",
   "port_base": 20000,
   "port_limit": 10000,
   "docker": {
@@ -213,11 +207,11 @@ Shared configuration for team members:
 
 ### CI Config
 
-Optimized for CI/CD:
+Optimized for CI/CD (set `GIT_HOP_AUTO_ENV_START=true` in the job to start
+services on add and clone):
 
 ```json
 {
-  "auto_env_start": true,
   "docker": {
     "remove_orphans": true,
     "timeout": 300

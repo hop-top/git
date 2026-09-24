@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
@@ -145,24 +146,7 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 // decides. --no-copy-ignored wins over --copy-ignored when both appear,
 // matching git's habit of letting the more restrictive request stand.
 func copyIgnoredOverride(cmd *cobra.Command, yes, no bool) *bool {
-	return negatableFlag(cmd, "copy-ignored", yes, no)
-}
-
-// negatableFlag reads a --<name> / --no-<name> pair: nil when neither was
-// given on the command line, so config decides; --no-<name> wins.
-func negatableFlag(cmd *cobra.Command, name string, yes, no bool) *bool {
-	if cmd == nil {
-		return nil
-	}
-	if cmd.Flags().Changed("no-"+name) && no {
-		off := false
-		return &off
-	}
-	if cmd.Flags().Changed(name) {
-		v := yes
-		return &v
-	}
-	return nil
+	return cli.NegatableFlag(cmd, "copy-ignored", yes, no)
 }
 
 // pluralEntries returns the correctly-pluralised noun for a count.

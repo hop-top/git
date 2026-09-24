@@ -1,0 +1,141 @@
+# git hop add starts the new worktree's environment only when asked to:
+# --env-start / --no-env-start for one run, else GIT_HOP_AUTO_ENV_START,
+# else hop.autoEnvStart (default false). The start runs once the worktree
+# exists, through the same code as `git hop env start`, and never fails
+# the add: a failure warns and hints at env start, and the exit status
+# stays 0. A worktree without an environment is skipped silently.
+#
+# A stub docker on PATH stands in for compose: `compose config` fails (so
+# the raw compose file is parsed) and each `up` is logged with the
+# directory and branch it ran in.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+exec git checkout -b plain
+exec git rm -q docker-compose.yml
+exec git commit -m 'no compose'
+exec git push origin plain
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+
+# --- default: hop.autoEnvStart unset means off ---
+exec git-hop add feat/default
+exists $WORK/hub/hops/feat/default/docker-compose.yml
+! exists $WORK/up.log
+
+# --- hop.autoEnvStart=true: one start, in the new worktree, on its branch ---
+exec git config --global hop.autoEnvStart true
+exec git-hop add feat/auto
+grep -count=1 '^up ' $WORK/up.log
+grep '^up compose -p org-repo-feat-auto up -d in .*/hub/hops/feat/auto on feat/auto$' $WORK/up.log
+stdout 'stub-compose-up-stdout'
+! stderr 'warning:'
+
+# --- --no-env-start overrides hop.autoEnvStart=true ---
+exec git-hop add feat/off --no-env-start
+grep -count=1 '^up ' $WORK/up.log
+
+# --- GIT_HOP_AUTO_ENV_START=false overrides hop.autoEnvStart=true ---
+env GIT_HOP_AUTO_ENV_START=false
+exec git-hop add feat/env-off
+grep -count=1 '^up ' $WORK/up.log
+
+# --- --env-start overrides GIT_HOP_AUTO_ENV_START=false ---
+exec git-hop add feat/flag-on --env-start
+grep -count=2 '^up ' $WORK/up.log
+grep ' on feat/flag-on$' $WORK/up.log
+env GIT_HOP_AUTO_ENV_START=
+
+# --- --env-start overrides hop.autoEnvStart=false ---
+exec git config --global hop.autoEnvStart false
+exec git-hop add feat/on --env-start
+grep -count=3 '^up ' $WORK/up.log
+grep ' on feat/on$' $WORK/up.log
+
+# --- GIT_HOP_AUTO_ENV_START=true overrides hop.autoEnvStart=false ---
+env GIT_HOP_AUTO_ENV_START=true
+exec git-hop add feat/env-on
+grep -count=4 '^up ' $WORK/up.log
+grep ' on feat/env-on$' $WORK/up.log
+
+# --- a value git would not read as a boolean is fatal, before any write ---
+env GIT_HOP_AUTO_ENV_START=maybe
+! exec git-hop add feat/bad
+stderr '^fatal: bad boolean environment value ''maybe'' for ''GIT_HOP_AUTO_ENV_START''$'
+! exists $WORK/hub/hops/feat/bad
+env GIT_HOP_AUTO_ENV_START=
+
+# --- no environment in the worktree: skipped silently ---
+exec git config --global hop.autoEnvStart true
+exec git-hop add plain
+! exists $WORK/hub/hops/plain/docker-compose.yml
+grep -count=4 '^up ' $WORK/up.log
+! stdout 'Environment'
+! stderr 'warning:'
+
+# --- start failure: warning + hint, exit 0, worktree kept ---
+env STUB_UP_FAIL=1
+exec git-hop add feat/broken
+stderr '^warning: failed to start environment: '
+stderr '^hint: .*git hop env start'
+exists $WORK/hub/hops/feat/broken/docker-compose.yml
+grep '"feat/broken"' $WORK/hub/hop.json
+env STUB_UP_FAIL=
+grep -count=5 '^up ' $WORK/up.log
+
+# --- --dry-run previews the start, and only when it would happen ---
+exec git-hop add feat/preview --dry-run
+stdout '^\[dry-run\] Would start environment'
+! exists $WORK/hub/hops/feat/preview
+exec git-hop add feat/preview --dry-run --no-env-start
+! stdout 'Would start environment'
+grep -count=5 '^up ' $WORK/up.log
+
+# --- structured: env_started reported; compose chatter kept off stdout ---
+exec git-hop add feat/json --json
+decode json stdout env_started true
+decode json stdout branch feat/json
+stderr 'stub-compose-up-stdout'
+grep -count=6 '^up ' $WORK/up.log
+exec git-hop add feat/json-off --json --no-env-start
+! decode json stdout env_started
+decode json stdout branch feat/json-off
+
+# --- env start goes through the same path ---
+cd $WORK/hub/hops/feat/default
+exec git-hop env start
+grep -count=7 '^up ' $WORK/up.log
+grep ' in .*/hub/hops/feat/default on feat/default$' $WORK/up.log
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" up "*)
+	echo "up $* in $PWD on $(git rev-parse --abbrev-ref HEAD)" >> "$WORK/up.log"
+	if [ -n "$STUB_UP_FAIL" ]; then
+		echo "stub: up failed" >&2
+		exit 1
+	fi
+	echo "stub-compose-up-stdout"
+	exit 0
+	;;
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

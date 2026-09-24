@@ -62,11 +62,13 @@ Each hub has a `hop.json` file for configuration:
 
 ```json
 {
-  "auto_env_start": "detect",
   "port_base": 10000,
   "port_limit": 5000
 }
 ```
+
+Whether `add` and clone start the new worktree's environment is not a
+hub setting: it is git config `hop.autoEnvStart` (off by default).
 
 ### Per-Repo State at the Hub Root
 
@@ -200,8 +202,11 @@ git-hop looks for:
 ### Service Lifecycle
 
 ```bash
-# Auto-start when creating worktree
-git hop feature-x
+# Start when creating the worktree (this run only)
+git hop add feature-x --env-start
+
+# ...or on every add and clone
+git config --global hop.autoEnvStart true
 
 # Manual start
 git hop env start
