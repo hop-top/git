@@ -86,8 +86,8 @@ exits 0 without prompting.
                                               #   pattern excludes it permanently
 
 # Inspect
-/usr/bin/git hop list --json                  # [{repository, branch, base, type, path, state, status}]
-/usr/bin/git hop status --json                # [{branch, base, state, status, path}]
+/usr/bin/git hop list --json                  # [{repository, branch, base, type, path, state, status, hub}]
+/usr/bin/git hop status --json                # [{branch, base, state, status, path, hub}]
 /usr/bin/git hop status <branch> --json       # one-element list; + ports, services
 
 # Rename
@@ -140,13 +140,13 @@ exits 0 without prompting.
 ```bash
 /usr/bin/git hop doctor --json        # [{kind, check, subject, message}]; [] = healthy
                                       #   exit 1 on any issue; warnings alone exit 0
-/usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json)
+/usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json; records an unlisted hub)
                                       #   exit 0 only if every issue was fixed
 /usr/bin/git hop doctor --fix --dry-run  # preview those repairs; writes nothing, no backups
                                       #   exit 0 only if every issue would be fixed
 /usr/bin/git hop prune --dry-run      # list this repo's orphaned state + hop.json entries
 /usr/bin/git hop prune                # remove them (clears status Missing rows); current repo only
-/usr/bin/git hop prune --all          # sweep every registered repo; state removals are not undoable
+/usr/bin/git hop prune --all          # sweep every registered repo (+ aged state backups); state removals are not undoable
 /usr/bin/git hop prune --dry-run --json  # [{action, kind, repository, branch, path, reason?}]
 # action: pruned | would-prune | skipped (locked worktree kept; reason says why)
 # kind: worktree | hub | hop-json-entry | repair-backup | conversion-backup

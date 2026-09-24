@@ -679,7 +679,7 @@ The state file tracks all repositories and their locations across your system so
 
 ```json
 {
-  "version": "1.0.0",
+  "version": "2.0.0",
   "lastUpdated": "2026-02-03T12:00:00Z",
   "repositories": {
     "github.com/org/repo": {
@@ -688,12 +688,21 @@ The state file tracks all repositories and their locations across your system so
       "repo": "repo",
       "defaultBranch": "main",
       "worktrees": {
-        "main": {
-          "path": "/home/user/.local/share/git-hop/github.com/org/repo/hops/main",
+        "/home/user/projects/repo/hops/main": {
+          "path": "/home/user/projects/repo/hops/main",
+          "branch": "main",
           "type": "bare",
           "hubPath": "/home/user/projects/repo",
           "createdAt": "2026-01-15T09:00:00Z",
           "lastAccessed": "2026-02-03T11:30:00Z"
+        },
+        "/home/user/scratch/repo/hops/main": {
+          "path": "/home/user/scratch/repo/hops/main",
+          "branch": "main",
+          "type": "bare",
+          "hubPath": "/home/user/scratch/repo",
+          "createdAt": "2026-01-20T10:00:00Z",
+          "lastAccessed": "2026-01-20T10:00:00Z"
         }
       },
       "hubs": [
@@ -702,17 +711,51 @@ The state file tracks all repositories and their locations across your system so
           "mode": "local",
           "createdAt": "2026-01-15T09:00:00Z",
           "lastAccessed": "2026-02-03T11:30:00Z"
+        },
+        {
+          "path": "/home/user/scratch/repo",
+          "mode": "local",
+          "createdAt": "2026-01-20T10:00:00Z",
+          "lastAccessed": "2026-01-20T10:00:00Z"
         }
       ],
-      "globalHopspace": {
-        "enabled": true,
-        "path": "/home/user/.local/share/git-hop/github.com/org/repo"
-      }
+      "globalHopspace": null
     }
   },
   "orphaned": []
 }
 ```
+
+A repository's `hubs` lists every hub of it, and `worktrees` every
+worktree of those hubs, keyed by the worktree's path. `branch` names the
+branch checked out there and `hubPath` the hub it belongs to, so two hubs
+of one repository each keep their own worktree of `main`.
+
+### Format versions and migration
+
+`version` is the format. Releases before 2.0.0 keyed `worktrees` by
+branch, so a repository could record only one worktree per branch across
+all its hubs. git-hop reads such a file as it is and migrates it in
+memory: each entry's old key becomes its `branch`, an entry without a
+`hubPath` gets the deepest recorded hub containing its path, and two
+entries for the same worktree become one. Nothing is dropped. Commands
+that only read state (`list`, `status`, `doctor` without `--fix`) write
+nothing; the next command that saves state writes the file in the current
+format.
+
+Before that first save, the old file is copied to
+`$XDG_STATE_HOME/git-hop/backups/state-<UTC timestamp>.json`. A backup is
+written once and never overwritten. `git hop prune --all` removes backups
+older than `hop.repair.backupRetention` (default 30 days; `0` or a
+negative value keeps them).
+
+git-hop never saves over a `state.json` it cannot parse, or one a newer
+release wrote (a higher major `version`); the command warns and leaves
+the file as it is.
+
+An older release can still read a file in the current format: it shows
+worktree paths where it used to show branches, and entries it adds are
+migrated again by the next current release.
 
 ### Purpose
 

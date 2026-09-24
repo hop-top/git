@@ -222,7 +222,8 @@ git hop remove &lt;target&gt; [flags]
 ### git hop prune
 
 Remove orphaned state entries, `hop.json` rows, and aged-out repair
-and conversion backups. Scoped to the current repository unless `--all` is given.
+and conversion backups; with `--all`, aged-out state backups too. Scoped
+to the current repository unless `--all` is given.
 
 **Synopsis:**
 ```bash
@@ -293,7 +294,7 @@ Rules:
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.5): a MINOR bump adds
+- Result shapes are versioned together (currently 1.6): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
 - Commands not listed here have no structured result: the output flags
   only switch their log format.
@@ -336,6 +337,7 @@ human `--all` summary (paths, counts, disk use) is not part of the result.
 | `status` | string | Sync label: `default`, `synced`, `merged`, `merged (N behind)`, `behind (N)`, `N ahead`, `diverged (N ahead, M behind)`, `unknown`; a dirty suffix may follow; `-` when missing |
 | `path` | string | Absolute path of the worktree |
 | `repository` | string | *json/yaml only*; `status --all` only. Repository id (`host/org/repo`) |
+| `hub` | string | *json/yaml only*. Absolute path of the hub the worktree belongs to; with `--all`, absent when state does not know it |
 | `ports` | map service → port | *json/yaml only*; `status <branch>` only, when ports are allocated |
 | `services` | list of `{service, name, state}` | *json/yaml only*; `status <branch>` only, the worktree's Docker Compose containers |
 
@@ -356,6 +358,10 @@ one.
 | `path` | string | Absolute path of the worktree |
 | `state` | string | `active` when the worktree directory exists, `missing` otherwise |
 | `status` | string | Sync label, as in `status` |
+| `hub` | string | *json/yaml only*. Absolute path of the hub the worktree belongs to; absent when state does not know it |
+
+Records of two hubs of one repository can share a branch; `path` and
+`hub` tell them apart.
 
 Columns: `repository branch base type path state status`.
 
@@ -370,7 +376,7 @@ matching `fixed` (or `would-fix`) record, or any repair `failed`; see
 |-------|------|---------|
 | `kind` | string | `issue` (makes the installation unhealthy), `warning` (reported, harmless), `fixed` (repaired by `--fix`), `would-fix` (`--fix --dry-run` would repair it), `failed` (`--fix` could not repair it) |
 | `check` | string | `paths`, `hub`, `hopspace` (a stale data-home hopspace copy beside a default hub), `dependencies`, `worktrees`, `state` or `config` (a `--global` `hop.*` key left by the old `global.json` migration, a retired `hop.*` setting, or the current hub's repository format). The published output schema lists all seven |
-| `subject` | string | What the record is about: a path, a branch, `repository:branch`, a dependency directory, or a git config key |
+| `subject` | string | What the record is about: a path, a branch, a dependency directory, or a git config key. `state` records about a worktree name the worktree's path (two hubs can each have a worktree of the same branch); only an entry without a path, kept from a state file an earlier release wrote, is named `repository:branch` |
 | `message` | string | Human-readable description; for repairs, the repair itself (`create data directory`) |
 
 Columns: `kind check subject message`.
@@ -379,15 +385,15 @@ Columns: `kind check subject message`.
 
 A list of the entries removed, or with `--dry-run` the entries that would
 be, in the order the passes run: hop.json entries, state worktrees, state
-hubs, repair backups, conversion backups. Entries left in place although
+hubs, repair backups, conversion backups, and with `--all` state backups. Entries left in place although
 their path is missing (a worktree git has locked) are listed as `skipped`,
 with or without `--dry-run`.
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `action` | string | `pruned`, or `would-prune` under `--dry-run`; `skipped` for an entry left in place (see `reason`) |
-| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup) |
-| `repository` | string | Repository id the entry belongs to |
+| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup), `state-backup` (an expired copy of `state.json`, `--all` only) |
+| `repository` | string | Repository id the entry belongs to; empty for `state-backup` |
 | `branch` | string | Branch of a `worktree` or `hop-json-entry`; empty otherwise |
 | `path` | string | Worktree, hub or backup path the entry pointed at |
 | `reason` | string | *json/yaml only*, `skipped` entries only: why it was left in place, e.g. `locked in git: on the usb drive` |
