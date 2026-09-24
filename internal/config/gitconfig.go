@@ -32,6 +32,8 @@ const (
 	KeyBackupEnabled          = "hop.backup.enabled"
 	KeyBackupMaxBackups       = "hop.backup.maxBackups"
 	KeyHooksInstallMode       = "hop.hooks.installMode"
+	KeyEventsSink             = "hop.events.sink"
+	KeyEventsPath             = "hop.events.path"
 )
 
 // Defaults for keys that have them.
@@ -81,6 +83,13 @@ func (gc *GitConfig) GetInt(key string) (int, error) {
 	return strconv.Atoi(raw)
 }
 
+// GetPath reads a path from git config with git's own path conversion
+// (`--type=path`), so `~/` and `~user/` expand the way git expands them.
+// Missing keys return ("", ErrKeyNotFound).
+func (gc *GitConfig) GetPath(key string) (string, error) {
+	return gc.get(key, "--type=path")
+}
+
 // Set writes a key to --global scope.
 func (gc *GitConfig) Set(key, value string) error {
 	_, err := gc.RunCmd("config", "--global", key, value)
@@ -97,8 +106,9 @@ func (gc *GitConfig) SetLocal(key, value string) error {
 var ErrKeyNotFound = fmt.Errorf("git config key not found")
 
 // get retrieves a raw value via `git config --get`.
-func (gc *GitConfig) get(key string) (string, error) {
-	out, err := gc.RunCmd("config", "--get", key)
+func (gc *GitConfig) get(key string, opts ...string) (string, error) {
+	args := append(append([]string{"config"}, opts...), "--get", key)
+	out, err := gc.RunCmd(args...)
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
 			return "", ErrKeyNotFound
