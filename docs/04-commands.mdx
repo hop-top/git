@@ -732,6 +732,10 @@ git hop doctor --fix --dry-run
   layout). Checked only when `hop.migrated` is `true` and
   `global.json.bak` still exists; a key counts only while it holds the
   value the migration wrote
+- A `--global` `hop.autoEnvStart`, whatever its value, reported as a
+  warning (exit status unaffected): the setting is retired, nothing reads
+  it, and earlier releases wrote it when installing shell integration. The
+  setting is now `hop.env.autoStart`
 
 ### Output
 
@@ -783,6 +787,8 @@ The `--fix` flag will:
 - Recreate a `--global` hub's missing hopspace
 - Unset the `global.json` migration leftovers from `git config --global`
   (only here; git-hop never does it on its own)
+- Unset a leftover `hop.autoEnvStart` from `git config --global`, and no
+  other key
 - Register branches from hub to hopspace
 - Sync hub-hopspace configurations
 - Recreate or clean up worktrees missing on disk (see below)

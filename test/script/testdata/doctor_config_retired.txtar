@@ -1,0 +1,63 @@
+# doctor warns about a --global hop.autoEnvStart, whatever its value, and
+# doctor --fix unsets it.
+#
+# The setting is retired (hop.env.autoStart replaced it) and nothing reads
+# it, but earlier releases wrote hop.autoEnvStart=true to --global whenever
+# shell integration was installed or declined, so most copies were never
+# the user's choice. It is a warning, not an issue: it changes nothing, so
+# the exit status stays 0.
+# git's global config here is $WORK/gitconfig (see the script setup).
+
+mkdir $WORK/data $WORK/.config/git-hop $WORK/.cache/git-hop
+exec git config --global hop.autoEnvStart true
+exec git config --global hop.env.autoStart true
+exec git config --global hop.backup.enabled false
+
+# --- doctor warns, with a hint to the new key, and exits 0 ---
+exec sh -c 'git-hop doctor --json; echo "exit=$?"'
+stdout '^exit=0$'
+stdout '"kind": "warning"'
+stdout '"check": "config"'
+stdout '"subject": "hop.autoEnvStart"'
+stdout 'retired setting hop.autoEnvStart is ignored; the setting is now hop.env.autoStart'
+! stdout '"kind": "issue"'
+! stdout '"subject": "hop.env.autoStart"'
+! stdout '"subject": "hop.backup.enabled"'
+
+exec git-hop doctor
+stderr 'retired setting hop.autoEnvStart is ignored; the setting is now hop.env.autoStart'
+stderr 'git config --global hop.env.autoStart true'
+stderr 'git hop doctor --fix'
+
+# --- the preview reports would-fix and changes nothing ---
+exec git-hop doctor --fix --dry-run --json
+stdout '"kind": "would-fix"'
+stdout '"subject": "hop.autoEnvStart"'
+exec git config --global --get hop.autoEnvStart
+stdout true
+
+# --- --fix unsets that key only ---
+exec git-hop doctor --fix --json
+stdout '"kind": "fixed"'
+stdout '"subject": "hop.autoEnvStart"'
+! exec git config --global --get hop.autoEnvStart
+exec git config --global --get hop.env.autoStart
+stdout true
+exec git config --global --get hop.backup.enabled
+stdout false
+
+# --- without the key there is nothing to report ---
+exec git-hop doctor --json
+! stdout 'hop.autoEnvStart'
+
+# --- a migration-written false is reported once, as migration debris ---
+cp $WORK/bak.json $WORK/.config/git-hop/global.json.bak
+exec git config --global hop.migrated true
+exec git config --global hop.autoEnvStart false
+exec sh -c 'git-hop doctor --json | grep -c ''"subject": "hop.autoEnvStart"'''
+stdout '^1$'
+exec git-hop doctor --fix
+! exec git config --global --get hop.autoEnvStart
+
+-- bak.json --
+{"defaults": {"gitDomain": "example.com"}}
