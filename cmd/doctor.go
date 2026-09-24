@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -400,7 +399,7 @@ func inspectState(fs afero.Fs, g git.GitInterface, r *doctorReport) (*state.Stat
 
 	var stateIssues []stateIssue
 	for _, issue := range missingStateWorktrees(fs, st) {
-		wt := st.Repositories[issue.repoID].Worktrees[issue.branch]
+		wt := st.Repositories[issue.repoID].Worktrees[issue.key]
 		if reason, locked := stateWorktreeLock(fs, g, issue.repoID, wt); locked {
 			warnLockedWorktree(r, doctorCheckState, issue.repoID+":"+issue.branch, issue.path, reason)
 			continue
@@ -487,8 +486,9 @@ func checkStateConsistency(fs afero.Fs, st *state.State) []string {
 }
 
 // stateIssue is a worktree recorded in state whose directory is gone.
+// key is its entry's key in the repository's worktrees.
 type stateIssue struct {
-	repoID, branch, path string
+	repoID, key, branch, path string
 }
 
 func (i stateIssue) String() string {
@@ -496,21 +496,17 @@ func (i stateIssue) String() string {
 }
 
 // missingStateWorktrees returns every worktree in st whose directory does
-// not exist, in repository then branch order.
+// not exist, in repository then branch order (state.SortedWorktreeKeys).
 func missingStateWorktrees(fs afero.Fs, st *state.State) []stateIssue {
 	var issues []stateIssue
 	for _, repoID := range scopeRepoIDs(st) {
-		for branch, wt := range st.Repositories[repoID].Worktrees {
+		repo := st.Repositories[repoID]
+		for _, key := range repo.SortedWorktreeKeys() {
+			wt := repo.Worktrees[key]
 			if !worktreeDirPresent(fs, wt.Path) {
-				issues = append(issues, stateIssue{repoID: repoID, branch: branch, path: wt.Path})
+				issues = append(issues, stateIssue{repoID: repoID, key: key, branch: wt.Branch, path: wt.Path})
 			}
 		}
 	}
-	sort.SliceStable(issues, func(i, j int) bool {
-		if issues[i].repoID != issues[j].repoID {
-			return issues[i].repoID < issues[j].repoID
-		}
-		return issues[i].branch < issues[j].branch
-	})
 	return issues
 }

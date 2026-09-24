@@ -58,8 +58,9 @@ func TestUpdateLastAccessed(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"feature-x": {
+					"/path/to/worktree": {
 						Path:         "/path/to/worktree",
+						Branch:       "feature-x",
 						Type:         "linked",
 						HubPath:      "/path/to/hub",
 						CreatedAt:    oldTime,
@@ -86,7 +87,7 @@ func TestUpdateLastAccessed(t *testing.T) {
 	err := st.UpdateLastAccessed("github.com/test/repo", "feature-x", "/path/to/hub")
 
 	require.NoError(t, err)
-	assert.True(t, st.Repositories["github.com/test/repo"].Worktrees["feature-x"].LastAccessed.After(oldTime))
+	assert.True(t, st.Repositories["github.com/test/repo"].Worktrees["/path/to/worktree"].LastAccessed.After(oldTime))
 	assert.True(t, st.Repositories["github.com/test/repo"].Hubs[0].LastAccessed.After(oldTime))
 }
 

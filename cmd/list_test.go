@@ -26,15 +26,17 @@ func TestListWorktrees_FromState(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main": {
+					"/path/to/repo": {
 						Path:         "/path/to/repo",
+						Branch:       "main",
 						Type:         "bare",
 						HubPath:      "/path/to/repo",
 						CreatedAt:    time.Now(),
 						LastAccessed: time.Now(),
 					},
-					"feature-x": {
+					"/path/to/repo/hops/feature-x": {
 						Path:         "/path/to/repo/hops/feature-x",
+						Branch:       "feature-x",
 						Type:         "linked",
 						HubPath:      "/path/to/repo",
 						CreatedAt:    time.Now(),
@@ -80,9 +82,9 @@ func TestShowRepositoryWorktrees_SyncColumn(t *testing.T) {
 		Repo:          "repo",
 		DefaultBranch: "main",
 		Worktrees: map[string]*state.WorktreeState{
-			"main":    {Path: "/wt/main", Type: "bare"},
-			"feature": {Path: "/wt/feature", Type: "linked"},
-			"gone":    {Path: "/wt/gone", Type: "linked"},
+			"/wt/main":    {Path: "/wt/main", Branch: "main", Type: "bare"},
+			"/wt/feature": {Path: "/wt/feature", Branch: "feature", Type: "linked"},
+			"/wt/gone":    {Path: "/wt/gone", Branch: "gone", Type: "linked"},
 		},
 	}
 

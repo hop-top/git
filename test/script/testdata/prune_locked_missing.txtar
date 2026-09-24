@@ -40,8 +40,8 @@ stdout 'Pruning hop.json entry: github.com/org/repo:gone'
 stdout 'Pruned 1 worktree\(s\), 0 hub\(s\), 1 hop.json entry\(ies\)'
 decode json $WORK/hub/hop.json branches.usb.hopspaceBranch usb
 ! decode json $WORK/hub/hop.json branches.gone
-grep '"usb": \{' $WORK/.local/state/git-hop/state.json
-! grep '"gone": \{' $WORK/.local/state/git-hop/state.json
+grep '"branch": "usb"' $WORK/.local/state/git-hop/state.json
+! grep '"branch": "gone"' $WORK/.local/state/git-hop/state.json
 exec git worktree list --porcelain
 stdout '^locked on the usb drive$'
 

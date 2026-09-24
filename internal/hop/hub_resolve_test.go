@@ -17,7 +17,7 @@ func recordedState(repoID, org, repo, hubPath string) *state.State {
 	st.AddRepository(repoID, &state.RepositoryState{
 		Org: org, Repo: repo, DefaultBranch: "main",
 		Worktrees: map[string]*state.WorktreeState{
-			"main": {Path: hubPath, Type: WorktreeTypeMain, HubPath: hubPath},
+			hubPath: {Path: hubPath, Branch: "main", Type: WorktreeTypeMain, HubPath: hubPath},
 		},
 		Hubs: []*state.HubState{{Path: hubPath}},
 	})

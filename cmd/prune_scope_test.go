@@ -32,8 +32,8 @@ func twoRepoState(hubA, hubB string) *state.State {
 				Repo:          "a",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main":      {Path: filepath.Join(hubA, "hops", "main"), Type: "linked", HubPath: hubA},
-					"feat/gone": {Path: filepath.Join(hubA, "hops", "feat", "gone"), Type: "linked", HubPath: hubA},
+					filepath.Join(hubA, "hops", "main"):         {Path: filepath.Join(hubA, "hops", "main"), Branch: "main", Type: "linked", HubPath: hubA},
+					filepath.Join(hubA, "hops", "feat", "gone"): {Path: filepath.Join(hubA, "hops", "feat", "gone"), Branch: "feat/gone", Type: "linked", HubPath: hubA},
 				},
 				Hubs: []*state.HubState{{Path: hubA, Mode: "local"}},
 			},
@@ -43,7 +43,7 @@ func twoRepoState(hubA, hubB string) *state.State {
 				Repo:          "b",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main": {Path: filepath.Join(hubB, "hops", "main"), Type: "linked", HubPath: hubB},
+					filepath.Join(hubB, "hops", "main"): {Path: filepath.Join(hubB, "hops", "main"), Branch: "main", Type: "linked", HubPath: hubB},
 				},
 				Hubs: []*state.HubState{{Path: hubB, Mode: "local"}},
 			},
@@ -149,8 +149,8 @@ func TestRunPruneAll_ScopedLeavesOtherRepoUntouched(t *testing.T) {
 	require.NoError(t, fs.Chtimes(oldBackupB, ancient, ancient))
 
 	st := twoRepoState(hubA, hubB)
-	st.Repositories["github.com/other/b"].Worktrees["feat/b-gone"] =
-		&state.WorktreeState{Path: filepath.Join(hubB, "hops", "feat", "b-gone"), Type: "linked", HubPath: hubB}
+	require.NoError(t, st.PutWorktree("github.com/other/b",
+		&state.WorktreeState{Branch: "feat/b-gone", Path: filepath.Join(hubB, "hops", "feat", "b-gone"), Type: "linked", HubPath: hubB}))
 	// Repo B also carries a hub whose directory is gone — the exact shape
 	// of the 2026-07-18 repro, where a prune inside repo A emitted
 	// "Pruning orphaned hub: github.com/ExoFramework/monolith". Without
@@ -170,11 +170,11 @@ func TestRunPruneAll_ScopedLeavesOtherRepoUntouched(t *testing.T) {
 	assert.Equal(t, 0, counts.hubs, "repo A has no orphaned hub")
 	assert.Equal(t, 1, counts.hopJSONEntries, "repo A's stale hop.json row pruned")
 	assert.Equal(t, 1, counts.repairBackups, "only repo A's expired backup pruned")
-	assert.NotContains(t, st.Repositories["github.com/test/a"].Worktrees, "feat/gone")
+	assert.NotContains(t, stateBranches(st.Repositories["github.com/test/a"]), "feat/gone")
 	assert.ElementsMatch(t, []string{"main"}, hubBranchKeys(t, fs, hubA))
 
 	// Repo B is untouched across every surface.
-	assert.Contains(t, st.Repositories["github.com/other/b"].Worktrees, "feat/b-gone",
+	assert.Contains(t, stateBranches(st.Repositories["github.com/other/b"]), "feat/b-gone",
 		"site 3: unrelated repo's state.json worktree rows must survive")
 	assert.Len(t, st.Repositories["github.com/other/b"].Hubs, 2,
 		"site 4: unrelated repo's state.json hub rows must survive, "+
@@ -204,8 +204,8 @@ func TestRunPruneAll_AllStillSweepsGlobally(t *testing.T) {
 	require.NoError(t, fs.Chtimes(oldBackupB, ancient, ancient))
 
 	st := twoRepoState(hubA, hubB)
-	st.Repositories["github.com/other/b"].Worktrees["feat/b-gone"] =
-		&state.WorktreeState{Path: filepath.Join(hubB, "hops", "feat", "b-gone"), Type: "linked", HubPath: hubB}
+	require.NoError(t, st.PutWorktree("github.com/other/b",
+		&state.WorktreeState{Branch: "feat/b-gone", Path: filepath.Join(hubB, "hops", "feat", "b-gone"), Type: "linked", HubPath: hubB}))
 	st.Repositories["github.com/other/b"].Hubs = append(
 		st.Repositories["github.com/other/b"].Hubs,
 		&state.HubState{Path: "/elsewhere/b/deleted-hub", Mode: "local"})
@@ -219,7 +219,7 @@ func TestRunPruneAll_AllStillSweepsGlobally(t *testing.T) {
 	assert.Equal(t, 1, counts.hubs, "--all must prune repo B's orphaned hub")
 	assert.Equal(t, 2, counts.hopJSONEntries, "--all must prune both repos' stale hop.json rows")
 	assert.Equal(t, 1, counts.repairBackups, "--all must reach repo B's expired backup")
-	assert.NotContains(t, st.Repositories["github.com/other/b"].Worktrees, "feat/b-gone")
+	assert.NotContains(t, stateBranches(st.Repositories["github.com/other/b"]), "feat/b-gone")
 	assert.Len(t, st.Repositories["github.com/other/b"].Hubs, 1,
 		"--all must drop repo B's missing hub row")
 	assert.ElementsMatch(t, []string{"main"}, hubBranchKeys(t, fs, hubB))
@@ -284,8 +284,8 @@ func TestPruneOutput_NamesAffectedRepo(t *testing.T) {
 	require.NoError(t, fs.Chtimes(oldBackupB, ancient, ancient))
 
 	st := twoRepoState(hubA, hubB)
-	st.Repositories["github.com/other/b"].Worktrees["feat/b-gone"] =
-		&state.WorktreeState{Path: filepath.Join(hubB, "hops", "feat", "b-gone"), Type: "linked", HubPath: hubB}
+	require.NoError(t, st.PutWorktree("github.com/other/b",
+		&state.WorktreeState{Branch: "feat/b-gone", Path: filepath.Join(hubB, "hops", "feat", "b-gone"), Type: "linked", HubPath: hubB}))
 	// Orphan repo B's hub so pruneOrphanedHubs emits its line too.
 	st.Repositories["github.com/other/b"].Hubs = append(
 		st.Repositories["github.com/other/b"].Hubs,

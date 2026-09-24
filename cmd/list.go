@@ -28,17 +28,21 @@ func displayBase(compare, defaultBranch string) string {
 	return compare
 }
 
-// compareBranchesForRepo resolves the comparison branch for every branch
-// in repo.Worktrees by loading the hub(s) tracked in state. The result
-// maps branch name → compare branch (per resolveCompareBranch precedence).
-// When the hub can't be loaded (deleted, corrupted) we fall back to
-// repo.DefaultBranch — callers still get a usable label, just not the
-// per-branch override.
+// compareBranchesForRepo resolves the comparison branch for every
+// worktree in repo.Worktrees by loading the hub(s) tracked in state. The
+// result maps the worktree's key → compare branch (per
+// resolveCompareBranch precedence). When the hub can't be loaded
+// (deleted, corrupted) we fall back to repo.DefaultBranch — callers still
+// get a usable label, just not the per-branch override.
 func compareBranchesForRepo(fs afero.Fs, repo *state.RepositoryState) map[string]string {
 	out := make(map[string]string, len(repo.Worktrees))
 	type hubKey string
 	cache := map[hubKey]*config.HubConfig{}
-	for branch, wt := range repo.Worktrees {
+	for key, wt := range repo.Worktrees {
+		if wt == nil {
+			continue
+		}
+		branch := wt.Branch
 		k := hubKey(wt.HubPath)
 		hubCfg, seen := cache[k]
 		if !seen {
@@ -48,15 +52,15 @@ func compareBranchesForRepo(fs afero.Fs, repo *state.RepositoryState) map[string
 			cache[k] = hubCfg // may be nil
 		}
 		if hubCfg == nil {
-			out[branch] = repo.DefaultBranch
+			out[key] = repo.DefaultBranch
 			continue
 		}
 		b, ok := hubCfg.Branches[branch]
 		if !ok {
-			out[branch] = repo.DefaultBranch
+			out[key] = repo.DefaultBranch
 			continue
 		}
-		out[branch] = resolveCompareBranch(hubCfg, b)
+		out[key] = resolveCompareBranch(hubCfg, b)
 	}
 	return out
 }
@@ -137,10 +141,12 @@ func showRepositoryWorktrees(fs afero.Fs, g git.GitInterface, repoID string, rep
 	if output.CurrentMode != output.ModeHuman {
 		// Use old table for non-human modes
 		t := tui.NewTable([]interface{}{"Branch", "Base", "Type", "Path", "State", "Status"})
-		for branch, wt := range repo.Worktrees {
+		for _, key := range repo.SortedWorktreeKeys() {
+			wt := repo.Worktrees[key]
+			branch := wt.Branch
 			state := "missing"
 			sync := "-"
-			compare := compareMap[branch]
+			compare := compareMap[key]
 			if exists, _ := afero.DirExists(fs, wt.Path); exists {
 				state = "active"
 				sync = getBranchSyncStatus(g, wt.Path, branch, compare)
@@ -154,24 +160,18 @@ func showRepositoryWorktrees(fs afero.Fs, g git.GitInterface, repoID string, rep
 	// Enhanced table for human mode
 	table := output.NewStatusTable("Branch", "Base", "Type", "Path", "State", "Status")
 
-	// Sort branches for consistent output
-	var branches []string
-	for branch := range repo.Worktrees {
-		branches = append(branches, branch)
-	}
-	sort.Strings(branches)
-
 	activeCount := 0
 	missingCount := 0
 
-	for _, branch := range branches {
-		wt := repo.Worktrees[branch]
+	for _, key := range repo.SortedWorktreeKeys() {
+		wt := repo.Worktrees[key]
+		branch := wt.Branch
 		exists, _ := afero.DirExists(fs, wt.Path)
 
 		status := "error"
 		stateText := "missing"
 		sync := "-"
-		compare := compareMap[branch]
+		compare := compareMap[key]
 		if exists {
 			status = "success"
 			stateText = "active"
@@ -220,17 +220,12 @@ func showAllRepositories(fs afero.Fs, g git.GitInterface, st *state.State) {
 		for _, repoID := range repoIDs {
 			repo := st.Repositories[repoID]
 			compareMap := compareBranchesForRepo(fs, repo)
-			var branches []string
-			for branch := range repo.Worktrees {
-				branches = append(branches, branch)
-			}
-			sort.Strings(branches)
-
-			for _, branch := range branches {
-				wt := repo.Worktrees[branch]
+			for _, key := range repo.SortedWorktreeKeys() {
+				wt := repo.Worktrees[key]
+				branch := wt.Branch
 				state := "missing"
 				sync := "-"
-				compare := compareMap[branch]
+				compare := compareMap[key]
 				if exists, _ := afero.DirExists(fs, wt.Path); exists {
 					state = "active"
 					sync = getBranchSyncStatus(g, wt.Path, branch, compare)
@@ -260,22 +255,16 @@ func showAllRepositories(fs afero.Fs, g git.GitInterface, st *state.State) {
 		repo := st.Repositories[repoID]
 		compareMap := compareBranchesForRepo(fs, repo)
 
-		// Sort branches
-		var branches []string
-		for branch := range repo.Worktrees {
-			branches = append(branches, branch)
-		}
-		sort.Strings(branches)
-
-		for _, branch := range branches {
-			wt := repo.Worktrees[branch]
+		for _, key := range repo.SortedWorktreeKeys() {
+			wt := repo.Worktrees[key]
+			branch := wt.Branch
 			totalWorktrees++
 
 			exists, _ := afero.DirExists(fs, wt.Path)
 			status := "error"
 			stateText := "missing"
 			sync := "-"
-			compare := compareMap[branch]
+			compare := compareMap[key]
 			if exists {
 				status = "success"
 				stateText = "active"
@@ -325,18 +314,13 @@ func listRecords(fs afero.Fs, g git.GitInterface, st *state.State, repoIDs []str
 	for _, repoID := range repoIDs {
 		repo := st.Repositories[repoID]
 		compareMap := compareBranchesForRepo(fs, repo)
-		branches := make([]string, 0, len(repo.Worktrees))
-		for branch := range repo.Worktrees {
-			branches = append(branches, branch)
-		}
-		sort.Strings(branches)
-
-		for _, branch := range branches {
-			wt := repo.Worktrees[branch]
+		for _, key := range repo.SortedWorktreeKeys() {
+			wt := repo.Worktrees[key]
+			branch := wt.Branch
 			r := listRecord{
 				Repository: repoID,
 				Branch:     branch,
-				Base:       compareMap[branch],
+				Base:       compareMap[key],
 				Type:       wt.Type,
 				Path:       wt.Path,
 				State:      "missing",

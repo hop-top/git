@@ -95,8 +95,8 @@ func newQuietRemoveHub(t *testing.T) (afero.Fs, *hop.Hub, string, string) {
 		Repo:          "repo",
 		DefaultBranch: "main",
 		Worktrees: map[string]*state.WorktreeState{
-			"main":    {Path: mainPath, Type: "linked", HubPath: hubPath},
-			"feature": {Path: featurePath, Type: "linked", HubPath: hubPath},
+			mainPath:    {Path: mainPath, Branch: "main", Type: "linked", HubPath: hubPath},
+			featurePath: {Path: featurePath, Branch: "feature", Type: "linked", HubPath: hubPath},
 		},
 	})
 	require.NoError(t, state.SaveState(fs, st))

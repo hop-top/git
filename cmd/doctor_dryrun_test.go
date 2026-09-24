@@ -280,7 +280,7 @@ func TestDoctorDryRun_DoesNotWriteState(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"feat/gone": {Path: "/hubs/repo/hops/feat/gone", Type: "linked"},
+		"/hubs/repo/hops/feat/gone": {Path: "/hubs/repo/hops/feat/gone", Branch: "feat/gone", Type: "linked"},
 	}
 	require.NoError(t, state.SaveState(fs, st))
 
@@ -299,7 +299,7 @@ func TestDoctorDryRun_DoesNotWriteState(t *testing.T) {
 
 	reloaded, err := state.LoadState(fs)
 	require.NoError(t, err)
-	assert.Contains(t, reloaded.Repositories["github.com/test/repo"].Worktrees,
+	assert.Contains(t, stateBranches(reloaded.Repositories["github.com/test/repo"]),
 		"feat/gone", "the orphaned state row must survive a dry run")
 }
 
@@ -318,7 +318,7 @@ func TestDoctorFix_WritesState(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"feat/gone": {Path: "/hubs/repo/hops/feat/gone", Type: "linked", HubPath: hubPath},
+		"/hubs/repo/hops/feat/gone": {Path: "/hubs/repo/hops/feat/gone", Branch: "feat/gone", Type: "linked", HubPath: hubPath},
 	}
 	require.NoError(t, state.SaveState(fs, st))
 
@@ -331,7 +331,7 @@ func TestDoctorFix_WritesState(t *testing.T) {
 
 	reloaded, err := state.LoadState(fs)
 	require.NoError(t, err)
-	assert.NotContains(t, reloaded.Repositories["github.com/test/repo"].Worktrees,
+	assert.NotContains(t, stateBranches(reloaded.Repositories["github.com/test/repo"]),
 		"feat/gone", "--fix must prune the orphaned state row")
 }
 

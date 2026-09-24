@@ -32,7 +32,7 @@ cd $WORK
 stdin $WORK/delete.txt
 exec git-hop doctor --fix
 stdout 'Deleted entry'
-! grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+! grep '"branch": "feat"' $WORK/.local/state/git-hop/state.json
 cd $WORK/hub
 
 # --- the real run fails the same way and keeps the row ---

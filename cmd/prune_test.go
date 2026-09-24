@@ -26,15 +26,17 @@ func TestPruneOrphanedWorktrees(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main": {
+					"/path/to/existing": {
 						Path:         "/path/to/existing",
+						Branch:       "main",
 						Type:         "bare",
 						HubPath:      "/path/to/existing",
 						CreatedAt:    time.Now(),
 						LastAccessed: time.Now(),
 					},
-					"orphaned": {
+					"/path/to/orphaned": {
 						Path:         "/path/to/orphaned",
+						Branch:       "orphaned",
 						Type:         "linked",
 						HubPath:      "/path/to/existing",
 						CreatedAt:    time.Now(),
@@ -59,8 +61,8 @@ func TestPruneOrphanedWorktrees(t *testing.T) {
 
 	assert.Equal(t, 1, pruned)
 	assert.Len(t, st.Repositories["github.com/test/repo"].Worktrees, 1)
-	assert.Contains(t, st.Repositories["github.com/test/repo"].Worktrees, "main")
-	assert.NotContains(t, st.Repositories["github.com/test/repo"].Worktrees, "orphaned")
+	assert.Contains(t, stateBranches(st.Repositories["github.com/test/repo"]), "main")
+	assert.NotContains(t, stateBranches(st.Repositories["github.com/test/repo"]), "orphaned")
 }
 
 // TestRunPrune_DryRun verifies that --dry-run reports what would be pruned
@@ -80,8 +82,8 @@ func TestRunPrune_DryRun(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main":     {Path: "/path/to/existing", Type: "bare"},
-					"orphaned": {Path: "/path/to/orphaned", Type: "linked"},
+					"/path/to/existing": {Path: "/path/to/existing", Branch: "main", Type: "bare"},
+					"/path/to/orphaned": {Path: "/path/to/orphaned", Branch: "orphaned", Type: "linked"},
 				},
 				Hubs:           []*state.HubState{},
 				GlobalHopspace: &state.GlobalHopspaceState{},
@@ -104,7 +106,7 @@ func TestRunPrune_DryRun(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, disk.Repositories["github.com/test/repo"].Worktrees, 2,
 		"dry-run must not mutate state.json")
-	assert.Contains(t, disk.Repositories["github.com/test/repo"].Worktrees, "orphaned")
+	assert.Contains(t, stateBranches(disk.Repositories["github.com/test/repo"]), "orphaned")
 }
 
 // TestRunPrune_Apply confirms that without --dry-run the orphaned entry is
@@ -120,8 +122,8 @@ func TestRunPrune_Apply(t *testing.T) {
 			"github.com/test/repo": {
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main":     {Path: "/path/to/existing", Type: "bare"},
-					"orphaned": {Path: "/path/to/orphaned", Type: "linked"},
+					"/path/to/existing": {Path: "/path/to/existing", Branch: "main", Type: "bare"},
+					"/path/to/orphaned": {Path: "/path/to/orphaned", Branch: "orphaned", Type: "linked"},
 				},
 				Hubs:           []*state.HubState{},
 				GlobalHopspace: &state.GlobalHopspaceState{},
@@ -139,7 +141,7 @@ func TestRunPrune_Apply(t *testing.T) {
 	// the in-memory map reflects the prune. Persistence is covered by
 	// the runPrune wrapper, which TestRunPrune_DryRun proves is gated.
 	assert.Len(t, loaded.Repositories["github.com/test/repo"].Worktrees, 1)
-	assert.NotContains(t, loaded.Repositories["github.com/test/repo"].Worktrees, "orphaned")
+	assert.NotContains(t, stateBranches(loaded.Repositories["github.com/test/repo"]), "orphaned")
 }
 
 func TestPruneOrphanedHubs(t *testing.T) {

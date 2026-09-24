@@ -33,7 +33,7 @@ func lockedMissingHub(t *testing.T, lockLine string) (afero.Fs, *registryGit, st
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"usb": {Path: usb, Type: "linked", HubPath: hubPath},
+		usb: {Path: usb, Branch: "usb", Type: "linked", HubPath: hubPath},
 	}
 	require.NoError(t, state.SaveState(fs, st))
 
@@ -74,7 +74,7 @@ func TestDoctor_LockedMissingWorktree_IsAWarning(t *testing.T) {
 			assert.Contains(t, hubBranchKeys(t, fs, hubPath), "usb", "the hop.json row is kept")
 			st, err := state.LoadState(fs)
 			require.NoError(t, err)
-			assert.Contains(t, st.Repositories["github.com/test/repo"].Worktrees, "usb", "the state entry is kept")
+			assert.Contains(t, stateBranches(st.Repositories["github.com/test/repo"]), "usb", "the state entry is kept")
 		})
 	}
 }

@@ -161,8 +161,8 @@ func TestRunPruneAll_ClearsHopJSONRows(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"main":      {Path: filepath.Join(hubPath, "hops", "main"), Type: "linked"},
-		"feat/gone": {Path: filepath.Join(hubPath, "hops", "feat", "gone"), Type: "linked"},
+		filepath.Join(hubPath, "hops", "main"):         {Path: filepath.Join(hubPath, "hops", "main"), Branch: "main", Type: "linked"},
+		filepath.Join(hubPath, "hops", "feat", "gone"): {Path: filepath.Join(hubPath, "hops", "feat", "gone"), Branch: "feat/gone", Type: "linked"},
 	}
 
 	counts := runPruneAll(fs, mocks.NewMockGit(), st, false)

@@ -52,7 +52,7 @@ func TestDoctorFix_KeepsLockedWorktreeStateEntry(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"usb": {Path: usb, Type: "linked", HubPath: hubPath},
+		usb: {Path: usb, Branch: "usb", Type: "linked", HubPath: hubPath},
 	}
 
 	g := mocks.NewMockGit()
@@ -64,7 +64,7 @@ func TestDoctorFix_KeepsLockedWorktreeStateEntry(t *testing.T) {
 		var r doctorReport
 		fixed := fixStateIssues(fs, g, st, hubPath, nil, opts, &r)
 		assert.Zero(t, fixed, "dry-run=%v: nothing to fix: %+v", opts.dryRun, r.records)
-		assert.Contains(t, st.Repositories["github.com/test/repo"].Worktrees, "usb")
+		assert.Contains(t, stateBranches(st.Repositories["github.com/test/repo"]), "usb")
 		assert.ElementsMatch(t, []string{"main", "usb"}, hubBranchKeys(t, fs, hubPath))
 	}
 }
@@ -80,9 +80,9 @@ func TestFixMissingWorktrees_ReportsKept(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"merged": {Path: path("merged"), HubPath: hubPath},
-		"open":   {Path: path("open"), HubPath: hubPath},
-		"usb":    {Path: path("usb"), HubPath: hubPath},
+		path("merged"): {Path: path("merged"), Branch: "merged", HubPath: hubPath},
+		path("open"):   {Path: path("open"), Branch: "open", HubPath: hubPath},
+		path("usb"):    {Path: path("usb"), Branch: "usb", HubPath: hubPath},
 	}
 	g := mocks.NewMockGit()
 	g.WorktreeListOut = porcelainEntry(path("usb"), "usb", "locked")

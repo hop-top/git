@@ -19,7 +19,7 @@ func TestLoadState_NewFile(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.NotNil(t, state)
-	assert.Equal(t, "1.0.0", state.Version)
+	assert.Equal(t, Version, state.Version)
 	assert.NotNil(t, state.Repositories)
 	assert.Empty(t, state.Repositories)
 	assert.NotNil(t, state.Orphaned)
@@ -76,9 +76,12 @@ func TestLoadState_ExistingFile(t *testing.T) {
 	state, err := LoadState(fs)
 
 	require.NoError(t, err)
-	assert.Equal(t, "1.0.0", state.Version)
+	assert.Equal(t, Version, state.Version, "a 1.x file is migrated on load")
 	assert.Len(t, state.Repositories, 1)
 	assert.Contains(t, state.Repositories, "github.com/test/repo")
+	wt, ok := state.Repositories["github.com/test/repo"].Worktree("/path/to/hub", "main")
+	require.True(t, ok, "the branch-keyed entry is found by hub and branch")
+	assert.Equal(t, "/path/to/worktree", wt.Path)
 }
 
 func TestSaveState(t *testing.T) {
@@ -194,8 +197,10 @@ func TestAddWorktree(t *testing.T) {
 	err := state.AddWorktree("github.com/test/repo", "feature-x", worktree)
 
 	require.NoError(t, err)
-	assert.Len(t, state.Repositories["github.com/test/repo"].Worktrees, 1)
-	assert.Contains(t, state.Repositories["github.com/test/repo"].Worktrees, "feature-x")
+	repo := state.Repositories["github.com/test/repo"]
+	assert.Len(t, repo.Worktrees, 1)
+	assert.Contains(t, repo.Worktrees, "/path/to/worktree", "keyed by path")
+	assert.Equal(t, "feature-x", repo.Worktrees["/path/to/worktree"].Branch)
 }
 
 func TestRemoveWorktree(t *testing.T) {
@@ -210,8 +215,9 @@ func TestRemoveWorktree(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*WorktreeState{
-					"feature-x": {
+					"/path/to/worktree": {
 						Path:         "/path/to/worktree",
+						Branch:       "feature-x",
 						Type:         "linked",
 						HubPath:      "/path/to/hub",
 						CreatedAt:    now,
@@ -228,7 +234,7 @@ func TestRemoveWorktree(t *testing.T) {
 		Orphaned: []*OrphanedEntry{},
 	}
 
-	err := state.RemoveWorktree("github.com/test/repo", "feature-x")
+	err := state.RemoveWorktreeAt("github.com/test/repo", "/path/to/worktree")
 
 	require.NoError(t, err)
 	assert.Empty(t, state.Repositories["github.com/test/repo"].Worktrees)
@@ -246,8 +252,9 @@ func TestUpdateLastAccessed(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*WorktreeState{
-					"main": {
+					"/path/to/worktree": {
 						Path:         "/path/to/worktree",
+						Branch:       "main",
 						Type:         "bare",
 						HubPath:      "/path/to/hub",
 						CreatedAt:    oldTime,
@@ -274,6 +281,6 @@ func TestUpdateLastAccessed(t *testing.T) {
 	err := state.UpdateLastAccessed("github.com/test/repo", "main", "/path/to/hub")
 
 	require.NoError(t, err)
-	assert.True(t, state.Repositories["github.com/test/repo"].Worktrees["main"].LastAccessed.After(oldTime))
+	assert.True(t, state.Repositories["github.com/test/repo"].Worktrees["/path/to/worktree"].LastAccessed.After(oldTime))
 	assert.True(t, state.Repositories["github.com/test/repo"].Hubs[0].LastAccessed.After(oldTime))
 }

@@ -1,0 +1,81 @@
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-09-24T17:33:25.1-04:00",
+  "repositories": {
+    "github.com/work/remote": {
+      "uri": "/w/remote.git",
+      "org": "work",
+      "repo": "remote",
+      "defaultBranch": "main",
+      "worktrees": {
+        "feat": {
+          "path": "/w/proj/hops/feat",
+          "type": "linked",
+          "hubPath": "/w/proj",
+          "createdAt": "2026-09-24T17:20:24.38469-04:00",
+          "lastAccessed": "2026-09-24T17:20:24.38469-04:00"
+        },
+        "main": {
+          "path": "/w/proj2/hops/main",
+          "type": "bare",
+          "hubPath": "/w/proj2",
+          "createdAt": "2026-09-24T17:33:24.5-04:00",
+          "lastAccessed": "2026-09-24T17:33:24.5-04:00"
+        },
+        "fix": {
+          "path": "/w/proj2/hops/fix",
+          "type": "linked",
+          "hubPath": "/w/proj2",
+          "createdAt": "2026-09-24T17:40:00-04:00",
+          "lastAccessed": "2026-09-24T17:41:00-04:00"
+        }
+      },
+      "hubs": [
+        {
+          "path": "/w/proj",
+          "mode": "local",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        },
+        {
+          "path": "/w/proj2",
+          "mode": "global",
+          "createdAt": "2026-09-24T17:33:24.5-04:00",
+          "lastAccessed": "2026-09-24T17:33:24.5-04:00"
+        }
+      ],
+      "globalHopspace": null
+    },
+    "github.com/acme/other": {
+      "uri": "git@github.com:acme/other.git",
+      "org": "acme",
+      "repo": "other",
+      "defaultBranch": "trunk",
+      "worktrees": {
+        "trunk": {
+          "path": "/w/other",
+          "type": "main",
+          "hubPath": "/w/other",
+          "createdAt": "2026-01-01T00:00:00Z",
+          "lastAccessed": "2026-02-01T00:00:00Z"
+        }
+      },
+      "hubs": [
+        {
+          "path": "/w/other",
+          "mode": "local",
+          "createdAt": "2026-01-01T00:00:00Z",
+          "lastAccessed": "2026-02-01T00:00:00Z"
+        }
+      ],
+      "globalHopspace": null
+    }
+  },
+  "orphaned": [
+    {
+      "path": "/w/old",
+      "detectedAt": "2026-03-01T00:00:00Z",
+      "reason": "hub removed"
+    }
+  ]
+}

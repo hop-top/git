@@ -1,0 +1,40 @@
+{
+  "version": "2.0.0",
+  "lastUpdated": "-",
+  "repositories": {
+    "github.com/work/remote": {
+      "uri": "/w/remote.git",
+      "org": "work",
+      "repo": "remote",
+      "defaultBranch": "main",
+      "worktrees": {
+        "/w/proj/hops/feat": {
+          "path": "/w/proj/hops/feat",
+          "branch": "feat",
+          "type": "linked",
+          "hubPath": "/w/proj",
+          "createdAt": "2026-09-24T17:20:24.38469-04:00",
+          "lastAccessed": "2026-09-24T17:20:24.38469-04:00"
+        },
+        "/w/proj/hops/main": {
+          "path": "/w/proj/hops/main",
+          "branch": "main",
+          "type": "bare",
+          "hubPath": "/w/proj",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      },
+      "hubs": [
+        {
+          "path": "/w/proj",
+          "mode": "local",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      ],
+      "globalHopspace": null
+    }
+  },
+  "orphaned": []
+}

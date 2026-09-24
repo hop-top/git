@@ -208,8 +208,13 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 		kept[path] = struct{}{}
 	}
 
-	for repoID, repo := range st.Repositories {
-		for branch, wt := range repo.Worktrees {
+	for _, repoID := range scopeRepoIDs(st) {
+		repo := st.Repositories[repoID]
+		// The keys are listed up front: a relocated entry is re-keyed by
+		// its new path, and must not be visited again.
+		for _, key := range repo.SortedWorktreeKeys() {
+			wt := repo.Worktrees[key]
+			branch := wt.Branch
 			if worktreeDirPresent(fs, wt.Path) {
 				continue
 			}
@@ -241,7 +246,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 
 			if merged {
 				output.Info("  Branch '%s' is merged into '%s'; auto-removing entry.", branch, repo.DefaultBranch)
-				delete(repo.Worktrees, branch)
+				delete(repo.Worktrees, key)
 				r.repaired(opts, doctorCheckState, repoID+":"+branch, "remove entry: branch is merged into %s", repo.DefaultBranch)
 				resolved++
 				continue
@@ -272,15 +277,16 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 					continue
 				}
 				kept.remove(wt.Path)
+				delete(repo.Worktrees, key)
 				wt.Path = newPath
-				repo.Worktrees[branch] = wt
+				_ = st.PutWorktree(repoID, wt)
 				output.Info("  Updated path to %s", newPath)
 				r.repaired(opts, doctorCheckState, repoID+":"+branch, "relocate entry to %s", newPath)
 				resolved++
 
 			case 1: // delete
 				kept.remove(wt.Path)
-				delete(repo.Worktrees, branch)
+				delete(repo.Worktrees, key)
 				output.Info("  Deleted entry for '%s'", branch)
 				r.repaired(opts, doctorCheckState, repoID+":"+branch, "delete entry")
 				resolved++

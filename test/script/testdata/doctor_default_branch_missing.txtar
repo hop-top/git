@@ -28,4 +28,4 @@ stdout 'Would prompt'
 ! exec git-hop doctor --fix
 ! stdout 'is merged into'
 stdout 'Kept as-is'
-grep '"main": \{' $WORK/.local/state/git-hop/state.json
+grep '"branch": "main"' $WORK/.local/state/git-hop/state.json

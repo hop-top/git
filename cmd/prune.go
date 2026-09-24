@@ -338,7 +338,7 @@ func runPruneFS(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) (
 }
 
 // pruneOrphanedWorktrees reports worktrees whose paths no longer exist,
-// in repository then branch order. When dryRun is false it also removes
+// in repository then branch order (state.SortedWorktreeKeys). When dryRun is false it also removes
 // them from st.
 //
 // A worktree git has locked is kept and reported skipped
@@ -353,14 +353,9 @@ func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dr
 
 	for _, repoID := range scopeRepoIDs(st) {
 		repo := st.Repositories[repoID]
-		branches := make([]string, 0, len(repo.Worktrees))
-		for branch := range repo.Worktrees {
-			branches = append(branches, branch)
-		}
-		sort.Strings(branches)
-
-		for _, branch := range branches {
-			wt := repo.Worktrees[branch]
+		for _, key := range repo.SortedWorktreeKeys() {
+			wt := repo.Worktrees[key]
+			branch := wt.Branch
 			if !worktreeDirPresent(fs, wt.Path) {
 				if reason, locked := stateWorktreeLock(fs, g, repoID, wt); locked {
 					pruned = append(pruned, skipLockedEntry(pruneKindWorktree, "orphaned worktree", repoID, branch, wt.Path, reason))
@@ -368,7 +363,7 @@ func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dr
 				}
 				output.Info("%s orphaned worktree: %s:%s (%s)", prefix, repoID, branch, wt.Path)
 				if !dryRun {
-					delete(repo.Worktrees, branch)
+					delete(repo.Worktrees, key)
 				}
 				pruned = append(pruned, newPruneRecord(pruneKindWorktree, repoID, branch, wt.Path, dryRun))
 			}
