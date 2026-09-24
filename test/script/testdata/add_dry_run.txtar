@@ -1,0 +1,92 @@
+# `git hop add --dry-run` previews the add and mutates nothing: no
+# worktree, no branch, no hop.json or state write, no current-symlink
+# move, and no lifecycle hooks (a hook may mutate, and the preview cannot
+# know whether it does).
+
+# --- upstream repo ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b existing
+exec git push origin existing
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+exists $WORK/hub/hops/main
+
+# --- global hooks that leave a marker when run ---
+mkdir $WORK/.config/git-hop/hooks
+cp pre-hook $WORK/.config/git-hop/hooks/pre-worktree-add
+cp post-hook $WORK/.config/git-hop/hooks/post-worktree-add
+exec chmod +x $WORK/.config/git-hop/hooks/pre-worktree-add $WORK/.config/git-hop/hooks/post-worktree-add
+
+# --- snapshot everything add would write ---
+cd $WORK/hub
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cp stdout $WORK/current.before
+
+# --- new branch from an explicit start-point ---
+exec git-hop add feat/new --from main --dry-run
+stdout '\[dry-run\] Would create branch ''feat/new'' from ''main'''
+stdout '\[dry-run\] Would create worktree at .*hops/feat/new'
+stdout '\[dry-run\] Would run hook pre-worktree-add'
+stdout '\[dry-run\] Would run hook post-worktree-add'
+! stdout 'Created hopspace'
+
+! exists $WORK/hub/hops/feat/new
+! exists $WORK/hub/hops/feat
+exec git branch --list feat/new
+! stdout .
+! exists $WORK/pre-hook-ran
+! exists $WORK/post-hook-ran
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cmp stdout $WORK/current.before
+
+# --- no --from: start-point falls back to the default branch ---
+exec git-hop add feat/other --dry-run
+stdout '\[dry-run\] Would create branch ''feat/other'' from default branch ''main'''
+! exists $WORK/hub/hops/feat/other
+
+# --- existing local branch is checked out, not forked ---
+exec git branch --list existing
+stdout existing
+exec git-hop add existing --from main --dry-run
+stdout '\[dry-run\] Would check out existing branch ''existing'''
+! stdout 'Would create branch'
+! exists $WORK/hub/hops/existing
+cmp hop.json $WORK/hop.json.before
+
+# --- remote-only branch would be created tracking origin, but is not ---
+cd $WORK/seed
+exec git checkout -b remote-only
+exec git push origin remote-only
+cd $WORK/hub
+exec git fetch origin
+exec git branch --list remote-only
+! stdout .
+exec git-hop add remote-only --dry-run
+stdout '\[dry-run\] Would check out existing branch ''remote-only'' \(tracking ''origin/remote-only''\)'
+! exists $WORK/hub/hops/remote-only
+exec git branch --list remote-only
+! stdout .
+cmp hop.json $WORK/hop.json.before
+
+# --- control: without --dry-run the same add really happens ---
+exec git-hop add feat/new --from main
+stdout 'Created hopspace for ''feat/new'''
+exists $WORK/hub/hops/feat/new
+exists $WORK/pre-hook-ran
+exists $WORK/post-hook-ran
+
+-- pre-hook --
+#!/bin/sh
+touch "$HOME/pre-hook-ran"
+-- post-hook --
+#!/bin/sh
+touch "$HOME/post-hook-ran"

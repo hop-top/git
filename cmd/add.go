@@ -62,7 +62,11 @@ directly above its pattern in any ignore file:
     .tlc/
 
 The marker must be on its own comment line: git reads a mid-line '#' as
-part of the pattern.`,
+part of the pattern.
+
+With --dry-run, add reports the branch, start-point, worktree path and
+hooks it would run, then stops: nothing is created or written and no hook
+runs.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		branch := args[0]
@@ -106,8 +110,6 @@ part of the pattern.`,
 			hopspacePath = localHopspacePath
 		}
 
-		output.Info("Adding branch %s...", branch)
-
 		// Load global config for worktree location
 		globalLoader := config.NewGlobalLoader()
 		globalConfig, err := globalLoader.Load()
@@ -129,6 +131,28 @@ part of the pattern.`,
 
 		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
+		// Resolve the branch start-point per precedence:
+		// --from (CLI) > GIT_HOP_ADD_FROM env > hop.add.defaultStartPoint > built-in default ("default-branch").
+		startPoint := resolveAddStartPoint(addFromFlag, os.Getenv("GIT_HOP_ADD_FROM"), globalConfig.Defaults.DefaultStartPoint)
+
+		hookRunner := hooks.NewRunner(fs)
+
+		// Everything below writes; the preview must stop before any of it.
+		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
+			previewAdd(g, hookRunner, addPlan{
+				cwd:           cwd,
+				hubPath:       hubPath,
+				repoID:        repoID,
+				branch:        branch,
+				worktreePath:  worktreePath,
+				startPoint:    startPoint,
+				defaultBranch: hub.Config.Repo.DefaultBranch,
+			})
+			return
+		}
+
+		output.Info("Adding branch %s...", branch)
+
 		// Create detector manager and register detectors
 		detectorMgr := detector.NewManager(fs, g)
 		detectorMgr.Register(detector.NewGitFlowNextDetector(g))
@@ -142,15 +166,10 @@ part of the pattern.`,
 		}
 
 		// Execute pre-worktree-add hook with detector env vars
-		hookRunner := hooks.NewRunner(fs)
 		detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
 		if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
 			output.Fatal("Hook pre-worktree-add failed: %v", err)
 		}
-
-		// Resolve the branch start-point per precedence:
-		// --from (CLI) > GIT_HOP_ADD_FROM env > hop.add.defaultStartPoint > built-in default ("default-branch").
-		startPoint := resolveAddStartPoint(addFromFlag, os.Getenv("GIT_HOP_ADD_FROM"), globalConfig.Defaults.DefaultStartPoint)
 
 		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
@@ -358,11 +377,7 @@ part of the pattern.`,
 
 		output.Info("Created hopspace for '%s'", branch)
 
-		relPath, _ := filepath.Rel(cwd, worktreePath)
-		if !strings.HasPrefix(relPath, ".") && !filepath.IsAbs(relPath) {
-			relPath = "./" + relPath
-		}
-		output.Info("Worktree: %s", relPath)
+		output.Info("Worktree: %s", displayPath(cwd, worktreePath))
 
 		// If running inside an AI coding agent, hint how to add the worktree directory
 		if hint := agentDirHint(worktreePath); hint != "" {

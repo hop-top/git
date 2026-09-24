@@ -67,7 +67,7 @@ git hop add &lt;branch&gt; [flags]
 |------|-------------|
 | `--from <ref>` | Start-point for a new branch: branch name, ref, SHA, or `initial` for the root commit. Defaults to the tip of the repo's default branch (or `hop.add.defaultStartPoint`). |
 | `--copy-ignored` / `--no-copy-ignored` | Copy the git-ignored local files from the fork-source worktree into the new one. Default follows `hop.add.copyIgnored` (`true`). |
-| `--dry-run` | Preview the worktree path and environment without writing anything. |
+| `--dry-run` | Preview the branch, start-point, worktree path and hooks without writing anything or running any hook. |
 
 ### Examples
 
