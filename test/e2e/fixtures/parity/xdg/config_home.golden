@@ -19,6 +19,6 @@ No repositories in state. Skipping state checks.
 
 === Summary ===
 Issues found. Run 'git hop doctor --fix' to automatically repair them.
-error: data directory does not exist: $TMPDIR/data/git-hop
+error: data directory does not exist: $TMPDIR/data
 error: config directory does not exist: $TMPDIR/custom-config/git-hop
 error: cache directory does not exist: $TMPDIR/cache/git-hop
