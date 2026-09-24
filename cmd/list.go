@@ -314,8 +314,8 @@ func showAllRepositories(fs afero.Fs, g git.GitInterface, st *state.State) {
 	// Legend
 	fmt.Println()
 	legend := output.Legend(map[string]string{
-		output.ColorizeIcon(output.IconSuccess, "success"): "Active",
-		output.ColorizeIcon(output.IconError, "error"):     "Missing",
+		"active":  "worktree on disk",
+		"missing": "worktree directory not found",
 	})
 	fmt.Println(legend)
 }

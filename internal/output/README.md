@@ -1,26 +1,31 @@
 # Output Package
 
-Modern, polished CLI output for git-hop with rich visual components using Charm's Bubbles and Lipgloss.
+CLI output for git-hop, styled with Charm's Bubbles and Lipgloss.
 
-## 🎨 Features
+Human output is plain ASCII like git's: states are words (`active`,
+`missing`, `running`), not symbols; no emoji, no box drawing. Colour is
+decoration only, so output reads the same without it.
+`cmd/ascii_output_test.go` and `ascii_test.go` enforce this.
 
-- **Rich Visual Components**: Cards, tables, sections, trees, banners
-- **Styled Output**: Colors, icons, borders using Lipgloss
+## Features
+
+- **Visual Components**: Cards, tables, sections, trees, banners
+- **Styled Output**: Colors using Lipgloss
 - **Dynamic Feedback**: Spinners, progress bars, multi-step progress
 - **Interactive Prompts**: Confirmations, selections, text input
 - **Mode-Aware**: Automatically adapts to human, JSON, porcelain, and quiet modes
 - **Git-Style Messages**: Familiar error/warning/info patterns
 
-## 📦 Components
+## Components
 
 ### Visual Components (NEW)
 - **Cards**: `SuccessCard`, `WarningCard`, `ErrorCard`, `InfoCard`
 - **Tables**: `NewTable`, `NewStatusTable`, `SummaryTable`
-- **Sections**: `Section` (with emoji headers)
+- **Sections**: `Section` (titled, indented content)
 - **Trees**: `TreeItem` (hierarchical data)
 - **Banners**: `SimpleHeader`, `Banner`
 - **Status Lines**: `StatusLine` (colored status)
-- **Legends**: `Legend` (symbol explanations)
+- **Legends**: `Legend` (explains the words a table uses)
 
 ### Dynamic Components
 - **Spinners**: Visual feedback for long-running operations
@@ -35,10 +40,10 @@ Modern, polished CLI output for git-hop with rich visual components using Charm'
 
 ### Styling (NEW)
 - **Colors**: Success (green), error (red), warning (yellow), info (blue), muted (gray)
-- **Icons**: ✓✗⚠●○ for status, 📁🐳📦💾🔧 for categories
-- **Tree Elements**: ├─└─│ for hierarchical display
+- **Status words**: `ok`, `error`, `warning`, `running`, `stopped`, ...
+- **Tree Elements**: `|-` and `` `- `` (tree(1) `--charset=ascii` style)
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Success Card
 ```go
@@ -59,11 +64,11 @@ table.Print()
 
 ### Section with Tree
 ```go
-section := output.Section(output.IconDocker, "Services", []string{
-    "Status: Running",
+section := output.Section("Services", []string{
+    "Status: running",
     "",
-    output.TreeItem(false, "api", "● Running (11500)"),
-    output.TreeItem(true, "db", "● Running (11501)"),
+    output.TreeItem(false, "api", "running (11500)"),
+    output.TreeItem(true, "db", "running (11501)"),
 })
 fmt.Println(section)
 ```
@@ -73,7 +78,7 @@ fmt.Println(section)
 spinner := output.NewSpinner("Processing...")
 spinner.Start()
 // ... do work ...
-spinner.Success("Done")
+spinner.Stop() // "Processing..., done."
 ```
 
 ### Confirmation
@@ -91,7 +96,7 @@ if output.ConfirmDeletion("worktree", []output.CardField{
 }
 ```
 
-## 📋 Classic Usage (Still Supported)
+## Classic Usage (Still Supported)
 
 ### Spinners
 ```go
@@ -154,7 +159,7 @@ output.Fatal("Configuration file not found")
 output.Debug("Processing file: %s", filename)
 ```
 
-## 🎯 Mode-Aware Pattern
+## Mode-Aware Pattern
 
 Always check mode before using rich components:
 
@@ -169,9 +174,9 @@ if output.CurrentMode != output.ModeHuman {
 fmt.Println(output.SuccessCard(...))
 ```
 
-## 📋 Output Modes
+## Output Modes
 
-- **ModeHuman**: Rich visual feedback with colors, icons, spinners
+- **ModeHuman**: Visual feedback with colors, spinners, progress
 - **ModeJSON**: Structured JSON output, no visual elements
 - **ModePorcelain**: Minimal machine-parseable output
 - **ModeQuiet**: Only errors and critical messages
@@ -181,33 +186,31 @@ Set the mode using:
 output.SetupLogger(output.ModeHuman, verbose)
 ```
 
-## 🎨 Icons Reference
+## Icons Reference
 
 ```go
-// Status
-output.IconSuccess   // ✓
-output.IconError     // ✗
-output.IconWarning   // ⚠
-output.IconRunning   // ●
-output.IconStopped   // ○
-
-// Category (emoji)
-output.IconRepo      // 📁
-output.IconDocker    // 🐳
-output.IconPackage   // 📦
-output.IconVolume    // 💾
-output.IconConfig    // 🔧
+// Status words
+output.IconSuccess   // ok
+output.IconError     // error
+output.IconWarning   // warning
+output.IconRunning   // running
+output.IconStopped   // stopped
 
 // Tree
-output.IconTreeBranch // ├─
-output.IconTreeLast   // └─
-output.IconTreeLine   // │
+output.IconTreeBranch // |-
+output.IconTreeLast   // `-
+output.IconTreeLine   // |
 
 // Action
-output.IconArrow      // ▶
+output.IconArrow      // >
+
+// Spinner
+output.SpinnerFrames  // | / - \
 ```
 
-## 🎨 Color Functions
+Progress follows git: `<msg>:  NN% (x/y)`, closed with `, done.`
+
+## Color Functions
 
 ```go
 // Colorize text based on status
@@ -216,7 +219,7 @@ output.Colorize("text", "error")    // Red
 output.Colorize("text", "warning")  // Yellow
 output.Colorize("text", "info")     // Blue
 
-// Colorize icons
+// Colorize a status word
 output.ColorizeIcon(output.IconSuccess, "success")
 
 // Styled rendering
@@ -225,18 +228,18 @@ output.RenderKeyValue("Key", "Value")
 output.RenderPath("/path/to/file")
 ```
 
-## 📝 Files
+## Files
 
 - `logger.go` - Core logging and mode handling
 - `spinner.go` - Spinner progress indicators
 - `progress.go` - Progress bars and multi-step
-- **`icons.go`** - Icon and symbol constants (NEW)
+- **`icons.go`** - Status words, tree and spinner glyphs (ASCII)
 - **`styles.go`** - Color palette and lipgloss styles (NEW)
 - **`cards.go`** - Cards, sections, banners (NEW)
 - **`tables.go`** - Table builders and status tables (NEW)
 - **`prompts.go`** - Interactive prompts (NEW)
 
-## 🎯 Examples
+## Examples
 
 ### Complete Demo
 ```bash
@@ -247,7 +250,7 @@ go run examples/enhanced_output_demo.go
 - `cmd/list.go` - Enhanced list command with status table
 - `cmd/status.go` - Enhanced status with system-wide view
 
-## 📚 Documentation
+## Documentation
 
 - **Quick Start**: `../../docs/OUTPUT_QUICK_START.md`
 - **Complete Guide**: `../../docs/OUTPUT_README.md`
@@ -255,40 +258,39 @@ go run examples/enhanced_output_demo.go
 - **Full Proposal**: `../../docs/OUTPUT_ENHANCEMENT_PROPOSAL.md`
 - **Quick Reference**: `../../docs/OUTPUT_QUICK_REF.md`
 
-## 💡 Best Practices
+## Best Practices
 
-1. ✅ **Check mode first**: Use `output.CurrentMode != output.ModeHuman`
-2. ✅ **Provide fallbacks**: Simple text for non-human modes
-3. ✅ **Use icons + color**: Accessibility for color-blind users
-4. ✅ **Add legends**: When using symbols in tables
-5. ✅ **Include summaries**: Show counts and totals
-6. ✅ **Stop indicators**: Always finish spinners/progress bars
-7. ✅ **Emoji headers**: Use for visual section breaks
+1. **Check mode first**: Use `output.CurrentMode != output.ModeHuman`
+2. **Provide fallbacks**: Simple text for non-human modes
+3. **Spell states out**: Words, not symbols; colour is only decoration
+4. **Plain ASCII**: No emoji, no box drawing, like git
+5. **Include summaries**: Show counts and totals
+6. **Stop indicators**: Always finish spinners/progress bars
 
-## 🎨 Component Examples
+## Component Examples
 
 ### Card Types
 ```go
-output.SuccessCard(title, fields)  // ✓ Green border
-output.WarningCard(title, fields)  // ⚠ Yellow border
-output.ErrorCard(title, fields)    // ✗ Red border
-output.InfoCard(title, fields)     // Blue border
+output.SuccessCard(title, fields)  // green title, aligned fields
+output.WarningCard(title, fields)  // yellow title
+output.ErrorCard(title, fields)    // red title
+output.InfoCard(title, fields)     // accent title
 ```
 
 ### Table Types
 ```go
 output.NewTable(headers...)           // Basic table
-output.NewStatusTable(headers...)     // With status icons
+output.NewStatusTable(headers...)     // Rows coloured by status
 output.SummaryTable(keyValueMap)      // Key-value pairs
-output.CompactList(items, status)     // Bulleted list
+output.CompactList(items, status)     // Indented list
 output.AlignedList(labelValuePairs)   // Aligned pairs
 ```
 
 ### Status Lines
 ```go
-output.StatusLine("success", "Done")   // ✓ Done (green)
-output.StatusLine("error", "Failed")   // ✗ Failed (red)
-output.StatusLine("warning", "Alert")  // ⚠ Alert (yellow)
+output.StatusLine("success", "Done")   // Done (green)
+output.StatusLine("error", "Failed")   // error: Failed (red)
+output.StatusLine("warning", "Alert")  // warning: Alert (yellow)
 ```
 
 ### Interactive
@@ -300,7 +302,7 @@ output.Input("Name:")
 output.InputWithDefault("Port:", "8080")
 ```
 
-## 🚀 Migration from Old API
+## Migration from Old API
 
 Old code continues to work. To use new features:
 
@@ -316,14 +318,3 @@ card := output.SuccessCard("Repository Ready", []output.CardField{
 })
 fmt.Println(card)
 ```
-
-## 📊 What's New
-
-- ✅ Rich visual components (cards, tables, sections)
-- ✅ Status tables with colored icons
-- ✅ Interactive prompts
-- ✅ Comprehensive icon set
-- ✅ Color styling system
-- ✅ Tree structure display
-- ✅ Mode-aware by design
-- ✅ Full documentation suite

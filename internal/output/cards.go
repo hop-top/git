@@ -7,12 +7,13 @@ import (
 	"charm.land/lipgloss/v2"
 )
 
-// Card represents a styled information card
+// Card represents a styled information card: a title line followed by
+// aligned key/value fields. There is no border; git never boxes its
+// output.
 type Card struct {
 	Title  string
 	Fields []CardField
 	Style  lipgloss.Style
-	Width  int
 }
 
 // CardField represents a key-value field in a card
@@ -23,78 +24,36 @@ type CardField struct {
 
 // SuccessCard creates a success-styled card
 func SuccessCard(title string, fields []CardField) string {
-	if CurrentMode != ModeHuman {
-		return ""
-	}
-
-	card := Card{
-		Title:  IconSuccess + " " + title,
-		Fields: fields,
-		Style:  StyleBorderHeavy,
-		Width:  50,
-	}
-	return card.Render()
+	return renderCard(title, fields, StyleSuccess)
 }
 
 // WarningCard creates a warning-styled card
 func WarningCard(title string, fields []CardField) string {
-	if CurrentMode != ModeHuman {
-		return ""
-	}
-
-	card := Card{
-		Title:  IconWarning + " " + title,
-		Fields: fields,
-		Style:  StyleBorderWarning,
-		Width:  50,
-	}
-	return card.Render()
+	return renderCard(title, fields, StyleWarning)
 }
 
 // InfoCard creates an info-styled card
 func InfoCard(title string, fields []CardField) string {
-	if CurrentMode != ModeHuman {
-		return ""
-	}
-
-	card := Card{
-		Title:  title,
-		Fields: fields,
-		Style:  StyleBorderInfo,
-		Width:  50,
-	}
-	return card.Render()
+	return renderCard(title, fields, StyleHeader)
 }
 
 // ErrorCard creates an error-styled card
 func ErrorCard(title string, fields []CardField) string {
+	return renderCard(title, fields, StyleError)
+}
+
+func renderCard(title string, fields []CardField, style lipgloss.Style) string {
 	if CurrentMode != ModeHuman {
 		return ""
 	}
-
-	card := Card{
-		Title:  IconError + " " + title,
-		Fields: fields,
-		Style:  StyleBorderError,
-		Width:  50,
-	}
+	card := Card{Title: title, Fields: fields, Style: style}
 	return card.Render()
 }
 
 // Render outputs the card as a formatted string
 func (c *Card) Render() string {
-	var lines []string
+	lines := []string{c.Style.Render(c.Title)}
 
-	// Title line
-	titleStyle := lipgloss.NewStyle().Bold(true)
-	lines = append(lines, titleStyle.Render(c.Title))
-
-	// Separator
-	if len(c.Fields) > 0 {
-		lines = append(lines, strings.Repeat("─", c.Width-4))
-	}
-
-	// Calculate max key width for alignment
 	maxKeyWidth := 0
 	for _, field := range c.Fields {
 		if len(field.Key) > maxKeyWidth {
@@ -102,49 +61,37 @@ func (c *Card) Render() string {
 		}
 	}
 
-	// Field lines
 	for _, field := range c.Fields {
 		keyPadded := field.Key + strings.Repeat(
 			" ", maxKeyWidth-len(field.Key),
 		)
-		line := StyleKey.Render(" "+keyPadded) +
-			" │ " + StyleValue.Render(field.Value)
-		lines = append(lines, line)
+		lines = append(lines, "  "+StyleKey.Render(keyPadded)+
+			"  "+StyleValue.Render(field.Value))
 	}
 
-	content := strings.Join(lines, "\n")
-	return c.Style.Width(c.Width).Render(content)
+	return strings.Join(lines, "\n")
 }
 
-// SimpleHeader creates a simple bordered header
+// SimpleHeader creates a plain, styled header line
 func SimpleHeader(text string) string {
 	if CurrentMode != ModeHuman {
 		return ""
 	}
-
-	style := lipgloss.NewStyle().
-		Border(lipgloss.NormalBorder()).
-		BorderForeground(ColorAccent).
-		Padding(0, 1).
-		Width(50)
-
-	return style.Render(text)
+	return StyleHeader.Render(text)
 }
 
-// Section creates a section with an emoji header
-func Section(emoji, title string, content []string) string {
+// Section creates a titled section with indented content lines
+func Section(title string, content []string) string {
 	if CurrentMode != ModeHuman {
 		return ""
 	}
 
-	var lines []string
-
-	// Section header
-	header := emoji + " " + StyleHeader.Render(title)
-	lines = append(lines, "", header)
-
-	// Content lines with indentation
+	lines := []string{"", StyleHeader.Render(title)}
 	for _, line := range content {
+		if line == "" {
+			lines = append(lines, "")
+			continue
+		}
 		lines = append(lines, "  "+line)
 	}
 
@@ -169,36 +116,28 @@ func TreeItem(isLast bool, label, value string) string {
 	return fmt.Sprintf("  %s %-15s %s", prefix, label, value)
 }
 
-// StatusLine creates a status line with icon and message
+// StatusLine creates a status-coloured message line. Errors and
+// warnings carry git's lowercase "error:" / "warning:" prefix so the
+// line still reads correctly without colour.
 func StatusLine(status, message string) string {
 	if CurrentMode != ModeHuman {
 		return ""
 	}
 
-	var icon string
-	var style lipgloss.Style
-
 	switch status {
 	case "success":
-		icon = IconSuccess
-		style = StyleSuccess
+		return StyleSuccess.Render(message)
 	case "error":
-		icon = IconError
-		style = StyleError
+		return StyleError.Render(IconError + ": " + message)
 	case "warning":
-		icon = IconWarning
-		style = StyleWarning
+		return StyleWarning.Render(IconWarning + ": " + message)
 	case "info":
-		icon = IconRunning
-		style = StyleInfo
+		return StyleInfo.Render(message)
 	case "stopped":
-		icon = IconStopped
-		style = StyleMuted
+		return StyleMuted.Render(message)
 	default:
 		return message
 	}
-
-	return style.Render(icon + " " + message)
 }
 
 // NextStepHint creates a styled next action hint
@@ -218,18 +157,9 @@ func Banner(text string) string {
 		return ""
 	}
 
-	width := len(text) + 4
-	border := strings.Repeat("─", width)
-
 	style := lipgloss.NewStyle().
 		Foreground(ColorAccent).
 		Bold(true)
 
-	lines := []string{
-		"┌" + border + "┐",
-		"│ " + text + " │",
-		"└" + border + "┘",
-	}
-
-	return style.Render(strings.Join(lines, "\n"))
+	return style.Render(text)
 }

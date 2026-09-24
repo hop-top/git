@@ -1,46 +1,38 @@
 package output
 
-// Status indicators
+import "charm.land/bubbles/v2/spinner"
+
+// Status words. Output is plain ASCII like git's, and git names states
+// in words ("modified", "deleted", "ahead") rather than symbols, so the
+// status indicators are words too.
 const (
-	IconSuccess = "✓"
-	IconError   = "✗"
-	IconWarning = "⚠"
-	IconRunning = "●"
-	IconStopped = "○"
-	IconClean   = "○"
-	IconDirty   = "✗"
-	IconActive  = "✓"
+	IconSuccess = "ok"
+	IconError   = "error"
+	IconWarning = "warning"
+	IconRunning = "running"
+	IconStopped = "stopped"
+	IconClean   = "clean"
+	IconDirty   = "dirty"
+	IconActive  = "active"
 )
 
-// Category icons (emoji)
+// Tree structure elements, as drawn by tree(1) with --charset=ascii.
 const (
-	IconRepo    = "📁"
-	IconDocker  = "🐳"
-	IconPackage = "📦"
-	IconVolume  = "💾"
-	IconConfig  = "🔧"
-	IconNetwork = "🌐"
-	IconSpeed   = "⚡"
-	IconHealth  = "❤️"
-)
-
-// Tree structure elements
-const (
-	IconTreeBranch = "├─"
-	IconTreeLast   = "└─"
-	IconTreeLine   = "│"
+	IconTreeBranch = "|-"
+	IconTreeLast   = "`-"
+	IconTreeLine   = "|"
 	IconTreeSpace  = "  "
 )
 
 // Navigation and action hints
 const (
-	IconArrow       = "▶"
-	IconArrowRight  = "→"
-	IconArrowLeft   = "←"
-	IconArrowUp     = "↑"
-	IconArrowDown   = "↓"
-	IconBulletPoint = "•"
+	IconArrow       = ">"
+	IconArrowRight  = "->"
+	IconArrowLeft   = "<-"
+	IconArrowUp     = "^"
+	IconArrowDown   = "v"
+	IconBulletPoint = "-"
 )
 
-// Spinner frames (for manual spinner if needed)
-var SpinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+// SpinnerFrames is the classic |/-\ spinner.
+var SpinnerFrames = spinner.Line.Frames

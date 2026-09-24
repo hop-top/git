@@ -46,14 +46,14 @@ func main() {
 
 	// 4. Section with Tree Demo
 	fmt.Println("4. Section with Tree Structure:")
-	section := output.Section(output.IconDocker, "Environment", []string{
-		"Status         " + output.ColorizeIcon(output.IconRunning, "success") + " Running",
+	section := output.Section("Environment", []string{
+		"Status         " + output.Colorize(output.IconRunning, "success"),
 		"Started        2h ago",
 		"",
 		"Services:",
-		output.TreeItem(false, "api", output.ColorizeIcon(output.IconRunning, "success")+" Running   11500   Health: "+output.ColorizeIcon(output.IconSuccess, "success")),
-		output.TreeItem(false, "db", output.ColorizeIcon(output.IconRunning, "success")+" Running   11501   Health: "+output.ColorizeIcon(output.IconSuccess, "success")),
-		output.TreeItem(true, "cache", output.ColorizeIcon(output.IconStopped, "neutral")+" Stopped   11502   Health: -"),
+		output.TreeItem(false, "api", output.Colorize(output.IconRunning, "success")+"   11500   health: "+output.Colorize(output.IconSuccess, "success")),
+		output.TreeItem(false, "db", output.Colorize(output.IconRunning, "success")+"   11501   health: "+output.Colorize(output.IconSuccess, "success")),
+		output.TreeItem(true, "cache", output.Colorize(output.IconStopped, "neutral")+"   11502   health: -"),
 	})
 	fmt.Println(section)
 	fmt.Println()
@@ -71,7 +71,7 @@ func main() {
 	list := output.AlignedList([]struct{ Label, Value string }{
 		{"Branch", "feature-x"},
 		{"Remote", "origin/feature-x (2 commits ahead)"},
-		{"Status", output.ColorizeIcon(output.IconDirty, "warning") + " Modified (3 files)"},
+		{"Status", output.Colorize(output.IconDirty, "warning") + " (3 files)"},
 		{"Path", "~/code/org/repo/feature-x"},
 		{"Last Active", "5m ago"},
 	})
@@ -81,12 +81,11 @@ func main() {
 	// 7. Legend Demo
 	fmt.Println("7. Legend:")
 	legend := output.Legend(map[string]string{
-		output.ColorizeIcon(output.IconSuccess, "success"): "Active",
-		output.ColorizeIcon(output.IconStopped, "neutral"): "Clean",
-		output.ColorizeIcon(output.IconDirty, "warning"):   "Dirty",
-		output.ColorizeIcon(output.IconRunning, "success"): "Running",
-		output.ColorizeIcon(output.IconStopped, "info"):    "Stopped",
-		output.ColorizeIcon(output.IconError, "error"):     "Error",
+		output.IconActive:  "worktree on disk",
+		output.IconClean:   "no local changes",
+		output.IconDirty:   "uncommitted changes",
+		output.IconRunning: "services up",
+		output.IconStopped: "services down",
 	})
 	fmt.Println(legend)
 	fmt.Println()
@@ -95,7 +94,7 @@ func main() {
 	fmt.Println("8. Headers:")
 	fmt.Println(output.SimpleHeader("Cloning github.com/org/repo"))
 	fmt.Println()
-	fmt.Println(output.RenderHeader("✓ Repository Ready"))
+	fmt.Println(output.RenderHeader("Repository Ready"))
 	fmt.Println()
 
 	// 9. Next Step Hint Demo
@@ -121,7 +120,6 @@ func main() {
 	// 12. Icons Demo
 	fmt.Println("12. Available Icons:")
 	fmt.Println("Status:   ", output.IconSuccess, output.IconError, output.IconWarning, output.IconRunning, output.IconStopped)
-	fmt.Println("Category: ", output.IconRepo, output.IconDocker, output.IconPackage, output.IconVolume, output.IconConfig)
 	fmt.Println("Tree:     ", output.IconTreeBranch, output.IconTreeLast, output.IconTreeLine)
 	fmt.Println("Action:   ", output.IconArrow, output.IconArrowRight, output.IconBulletPoint)
 	fmt.Println()
