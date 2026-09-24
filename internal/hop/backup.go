@@ -360,21 +360,14 @@ func LoadBackupManager(fs afero.Fs, g git.GitInterface, backupPath string) (*Bac
 		return nil, fmt.Errorf("failed to parse backup metadata: %w", err)
 	}
 
-	parts := strings.Split(metadata.RemoteUrl, "/")
-	if len(parts) < 2 {
-		return nil, fmt.Errorf("could not parse org/repo from backup metadata")
-	}
-
-	org := parts[len(parts)-2]
-	repo := strings.TrimSuffix(parts[len(parts)-1], ".git")
-
+	// org/repo only name the directory a new backup is created in; a
+	// loaded backup already has its directory, so a repository without a
+	// remote (empty RemoteUrl) loads like any other.
 	return &BackupManager{
 		fs:        fs,
 		git:       g,
 		backupDir: backupPath,
 		metadata:  &metadata,
-		org:       org,
-		repo:      repo,
 	}, nil
 }
 

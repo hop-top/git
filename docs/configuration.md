@@ -438,8 +438,13 @@ The flag wins over the key in both directions. The `hop.backup.*` keys
 are read from the repository being converted, so a repo-local `git config
 hop.backup.keepBackup true` applies to that repository alone.
 
-`git hop init --restore <backup-dir>` takes the backup's full path, so it
-works wherever the backup lives.
+`git hop init --restore <backup-dir>` takes the backup's path, so it
+works wherever the backup lives, and restores to the location recorded in
+the backup's `backup-info.json`, not the current directory. When that
+location exists and is not empty (after a successful conversion it holds
+the new hub), restore refuses; add `--force` to delete what is there and
+put the backup in its place. When a backup is kept, init prints the
+restore command as a hint.
 
 #### Retention
 
