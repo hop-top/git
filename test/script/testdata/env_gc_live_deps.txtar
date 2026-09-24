@@ -1,0 +1,51 @@
+# env gc keeps dependency directories a live worktree still links to and
+# deletes only the ones nothing links to.
+#
+# The regression this pins: `git hop add` records worktree paths in hop.json
+# as absolute paths, and env gc joined them onto the hub path, scanning
+# <hub>/<hub>/hops/<branch> instead of the worktree. It found no links, so
+# every dependency directory looked orphaned and a real run deleted deps a
+# live worktree was using.
+
+# --- upstream repo, hub, and a worktree recorded with an absolute path ---
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/x
+grep '"path": "/' $WORK/hub/hop.json
+
+# --- one deps dir the worktree links to, one nothing links to ---
+mkdir $WORK/data/org/repo/deps/node_modules.live
+mkdir $WORK/data/org/repo/deps/node_modules.orphan
+cp $WORK/deps-file $WORK/data/org/repo/deps/node_modules.live/f
+cp $WORK/deps-file $WORK/data/org/repo/deps/node_modules.orphan/f
+cp $WORK/registry.json $WORK/data/org/repo/deps/.registry.json
+cp $WORK/package.json $WORK/hub/hops/feat/x/package.json
+cp $WORK/package.json $WORK/hub/hops/feat/x/package-lock.json
+symlink $WORK/hub/hops/feat/x/node_modules -> $WORK/data/org/repo/deps/node_modules.live
+
+# --- preview names only the orphan ---
+exec git-hop env gc --dry-run --json
+decode json stdout '#' 1
+decode json stdout 0.key node_modules.orphan
+
+# --- a real run deletes the orphan and keeps the linked deps ---
+exec git-hop env gc --no-prompt --json
+decode json stdout '#' 1
+decode json stdout 0.action deleted
+decode json stdout 0.key node_modules.orphan
+! exists $WORK/data/org/repo/deps/node_modules.orphan
+exists $WORK/data/org/repo/deps/node_modules.live/f
+exists $WORK/hub/hops/feat/x/node_modules/f
+
+-- deps-file --
+hello
+-- package.json --
+{}
+-- registry.json --
+{"entries":{"node_modules.live":{"lockfileHash":"live","lockfilePath":"package-lock.json","usedBy":["feat/x"],"lastUsed":"2026-09-01T00:00:00Z","installedAt":"2026-09-01T00:00:00Z"},"node_modules.orphan":{"lockfileHash":"orphan","lockfilePath":"package-lock.json","usedBy":[],"lastUsed":"2026-09-01T00:00:00Z","installedAt":"2026-09-01T00:00:00Z"}}}

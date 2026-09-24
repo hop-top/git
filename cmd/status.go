@@ -512,7 +512,7 @@ func showTargetStatus(fs afero.Fs, d *docker.Docker, hubPath, target string) {
 	}
 
 	output.Info("\nServices:")
-	fullPath := filepath.Join(hubPath, branch.Path)
+	fullPath := config.ResolveWorktreePath(branch.Path, hubPath)
 	if _, err := fs.Stat(filepath.Join(fullPath, "docker-compose.yml")); err == nil {
 		project := services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, branch.HopspaceBranch)
 		ps, err := d.ComposePs(fullPath, project)

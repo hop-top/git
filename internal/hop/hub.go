@@ -29,6 +29,18 @@ func LoadHub(fs afero.Fs, path string) (*Hub, error) {
 	}, nil
 }
 
+// WorktreePaths maps each branch in the hub to its worktree directory.
+// hop.json records paths both absolute (`git hop add`) and relative to
+// the hub (`git hop init`); both resolve through
+// config.ResolveWorktreePath, so neither lands on <hub>/<absolute path>.
+func (h *Hub) WorktreePaths() map[string]string {
+	paths := make(map[string]string, len(h.Config.Branches))
+	for name, b := range h.Config.Branches {
+		paths[name] = config.ResolveWorktreePath(b.Path, h.Path)
+	}
+	return paths
+}
+
 // IsHub checks if a directory is a hub
 func IsHub(fs afero.Fs, path string) bool {
 	exists, _ := afero.Exists(fs, filepath.Join(path, "hop.json"))
