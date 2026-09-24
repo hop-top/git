@@ -193,8 +193,7 @@ To convert anyway, carrying uncommitted files into the new worktree
 		fmt.Println("DRY RUN - No changes will be made")
 		fmt.Printf("Repository: %s\n", repoPath)
 
-		remoteURL, _ := g.GetRemoteURL(repoPath)
-		fmt.Printf("Remote: %s\n", remoteURL)
+		fmt.Printf("Remote: %s\n", initRemoteLabel(g, repoPath))
 
 		branch, _ := g.GetCurrentBranch(repoPath)
 		fmt.Printf("Branch: %s\n", branch)
@@ -207,16 +206,9 @@ To convert anyway, carrying uncommitted files into the new worktree
 		}
 
 		fmt.Println("\nConversion plan:")
-		fmt.Printf("  1. Create backup in %s/\n", backupRoot)
-		fmt.Println("  2. Create worktree structure")
-
-		if useBare {
-			fmt.Println("     - Convert to bare repository")
+		for _, step := range initConversionPlan(backupRoot, branch, useBare) {
+			fmt.Println(step)
 		}
-
-		fmt.Println("     - Create main/ worktree for current branch")
-		fmt.Println("  3. Create hop.json configuration")
-		fmt.Println("  4. Register in global registry")
 
 		if !noHooks {
 			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)
