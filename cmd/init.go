@@ -653,7 +653,7 @@ func initHintedFlags() []string {
 }
 
 func init() {
-	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Convert even with uncommitted changes (DANGEROUS; a backup is still taken); with --restore, replace what occupies the original location")
+	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Convert even with uncommitted changes (DANGEROUS; a backup is still taken); with --restore, move what occupies the original location aside (never deleted)")
 	initCmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "n", false, "Show conversion steps without executing")
 	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion (default: hop.backup.keepBackup)")
 	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Convert to a regular repo + worktrees instead of bare (with --no-prompt)")

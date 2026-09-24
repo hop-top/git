@@ -2,10 +2,12 @@ package hop_test
 
 import (
 	"errors"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -54,9 +56,10 @@ func TestRestoreToOriginal_NoRemoteBackupRestores(t *testing.T) {
 	require.NoError(t, os.RemoveAll(repoPath))
 
 	conv := hop.NewConverter(afero.NewOsFs(), git.New())
-	target, err := conv.RestoreToOriginal(backupPath, false)
+	res, err := conv.RestoreToOriginal(backupPath, hop.RestoreOptions{})
 	require.NoError(t, err)
-	assert.Equal(t, repoPath, target)
+	assert.Equal(t, repoPath, res.Target)
+	assert.Empty(t, res.MovedAside, "nothing was there to move aside")
 	assertStandardRepoAt(t, repoPath)
 }
 
@@ -73,7 +76,7 @@ func TestRestoreToOriginal_IgnoresCwd(t *testing.T) {
 	t.Chdir(elsewhere)
 
 	conv := hop.NewConverter(afero.NewOsFs(), git.New())
-	_, err := conv.RestoreToOriginal(backupPath, false)
+	_, err := conv.RestoreToOriginal(backupPath, hop.RestoreOptions{})
 	require.NoError(t, err)
 	assertStandardRepoAt(t, repoPath)
 	entries, err := os.ReadDir(elsewhere)
@@ -82,7 +85,7 @@ func TestRestoreToOriginal_IgnoresCwd(t *testing.T) {
 }
 
 // The converted hub still occupies the original location: restore
-// refuses and leaves it alone unless told to replace it.
+// refuses and leaves it alone unless told to move it aside.
 func TestRestoreToOriginal_RefusesNonEmptyTarget(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("posix-only")
@@ -90,14 +93,14 @@ func TestRestoreToOriginal_RefusesNonEmptyTarget(t *testing.T) {
 	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
 
 	conv := hop.NewConverter(afero.NewOsFs(), git.New())
-	target, err := conv.RestoreToOriginal(backupPath, false)
+	res, err := conv.RestoreToOriginal(backupPath, hop.RestoreOptions{})
 	require.Error(t, err)
 	assert.True(t, errors.Is(err, hop.ErrRestoreTargetNotEmpty), "err = %v", err)
-	assert.Equal(t, repoPath, target)
+	assert.Equal(t, repoPath, res.Target)
 	_, statErr := os.Stat(filepath.Join(repoPath, "hop.json"))
 	assert.NoError(t, statErr, "refused restore still touched the hub")
 
-	_, err = conv.RestoreToOriginal(backupPath, true)
+	_, err = conv.RestoreToOriginal(backupPath, force)
 	require.NoError(t, err)
 	assertStandardRepoAt(t, repoPath)
 }
@@ -112,7 +115,7 @@ func TestRestoreToOriginal_EmptyTargetRestores(t *testing.T) {
 	require.NoError(t, os.MkdirAll(repoPath, 0o755))
 
 	conv := hop.NewConverter(afero.NewOsFs(), git.New())
-	_, err := conv.RestoreToOriginal(backupPath, false)
+	_, err := conv.RestoreToOriginal(backupPath, hop.RestoreOptions{})
 	require.NoError(t, err)
 	assertStandardRepoAt(t, repoPath)
 }
@@ -128,7 +131,7 @@ func TestRestoreToOriginal_RefusesBackupInsideTarget(t *testing.T) {
 	mustRun(t, "cp", "-R", backupPath, inside)
 
 	conv := hop.NewConverter(afero.NewOsFs(), git.New())
-	_, err := conv.RestoreToOriginal(inside, true)
+	_, err := conv.RestoreToOriginal(inside, force)
 	require.Error(t, err)
 	_, statErr := os.Stat(filepath.Join(inside, "backup-info.json"))
 	assert.NoError(t, statErr, "backup inside the target was deleted")
@@ -143,7 +146,123 @@ func TestRestoreToOriginal_RequiresRecordedLocation(t *testing.T) {
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(bk, "backup-info.json"), []byte(`{"remoteUrl":""}`), 0o644))
 
 	conv := hop.NewConverter(fs, git.New())
-	_, err := conv.RestoreToOriginal(bk, true)
+	_, err := conv.RestoreToOriginal(bk, force)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "original location")
+}
+
+// fixedClock pins the moved-aside timestamp so names are predictable and
+// two restores can land in the same second.
+func fixedClock() time.Time { return time.Date(2026, 9, 24, 10, 15, 0, 0, time.UTC) }
+
+// force is init --restore --force, on the fixed clock.
+var force = hop.RestoreOptions{Replace: true, Clock: fixedClock}
+
+// treeSnapshot maps every path under root (relative) to its kind and
+// content, so a tree can be compared with where it was moved.
+func treeSnapshot(t *testing.T, root string) map[string]string {
+	t.Helper()
+	snap := map[string]string{}
+	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(root, path)
+		switch {
+		case d.Type()&fs.ModeSymlink != 0:
+			dest, err := os.Readlink(path)
+			if err != nil {
+				return err
+			}
+			snap[rel] = "link:" + dest
+		case d.IsDir():
+			snap[rel] = "dir"
+		default:
+			data, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+			snap[rel] = "file:" + string(data)
+		}
+		return nil
+	})
+	require.NoError(t, err)
+	return snap
+}
+
+// --force never deletes what occupies the original location: the whole
+// tree, including a worktree added after the conversion and untracked
+// work in it, moves to <path>.pre-restore-<UTC time>, and the backup is
+// restored into the freed path.
+func TestRestoreToOriginal_ForceMovesOccupantAside(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only")
+	}
+	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
+	mustRun(t, "git", "-C", repoPath, "worktree", "add", "-q", filepath.Join(repoPath, "hops", "feat"), "-b", "feat")
+	require.NoError(t, os.WriteFile(filepath.Join(repoPath, "hops", "feat", "wip.txt"), []byte("unsaved work\n"), 0o644))
+	before := treeSnapshot(t, repoPath)
+
+	conv := hop.NewConverter(afero.NewOsFs(), git.New())
+	res, err := conv.RestoreToOriginal(backupPath, force)
+	require.NoError(t, err)
+
+	assert.Equal(t, repoPath+".pre-restore-20260924T101500Z", res.MovedAside)
+	assert.Equal(t, before, treeSnapshot(t, res.MovedAside), "moved-aside tree differs from what occupied the location")
+	assertStandardRepoAt(t, repoPath)
+}
+
+// Two restores in the same second must not collide on the moved-aside
+// name: the second gets a numeric suffix and the first stays intact.
+func TestRestoreToOriginal_SameSecondDistinctNames(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only")
+	}
+	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
+	conv := hop.NewConverter(afero.NewOsFs(), git.New())
+
+	first, err := conv.RestoreToOriginal(backupPath, force)
+	require.NoError(t, err)
+	firstSnap := treeSnapshot(t, first.MovedAside)
+	second, err := conv.RestoreToOriginal(backupPath, force)
+	require.NoError(t, err)
+
+	assert.Equal(t, repoPath+".pre-restore-20260924T101500Z", first.MovedAside)
+	assert.Equal(t, repoPath+".pre-restore-20260924T101500Z-1", second.MovedAside)
+	assert.Equal(t, firstSnap, treeSnapshot(t, first.MovedAside), "second restore disturbed the first moved-aside tree")
+	_, err = os.Stat(filepath.Join(first.MovedAside, "hop.json"))
+	assert.NoError(t, err, "first moved-aside tree lost the hub")
+	_, err = os.Stat(filepath.Join(second.MovedAside, ".git", "HEAD"))
+	assert.NoError(t, err, "second moved-aside tree is not the first restore's repo")
+	assertStandardRepoAt(t, repoPath)
+}
+
+// When the occupant cannot be moved aside, restore stops before touching
+// anything: the location keeps its contents and nothing is created.
+func TestRestoreToOriginal_FailedMoveTouchesNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
+	before := treeSnapshot(t, repoPath)
+	parent := filepath.Dir(repoPath)
+	require.NoError(t, os.Chmod(parent, 0o555))
+	t.Cleanup(func() { _ = os.Chmod(parent, 0o755) })
+
+	conv := hop.NewConverter(afero.NewOsFs(), git.New())
+	res, err := conv.RestoreToOriginal(backupPath, force)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "move")
+	assert.Empty(t, res.MovedAside)
+
+	require.NoError(t, os.Chmod(parent, 0o755))
+	assert.Equal(t, before, treeSnapshot(t, repoPath), "failed restore changed the location")
+	entries, err := os.ReadDir(parent)
+	require.NoError(t, err)
+	for _, e := range entries {
+		assert.NotContains(t, e.Name(), "pre-restore", "failed restore left %s behind", e.Name())
+	}
 }

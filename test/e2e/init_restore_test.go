@@ -52,8 +52,9 @@ func assertRestoredStandardRepo(t *testing.T, repoPath string) {
 }
 
 // The converted hub occupies the original location, so a restore run
-// from inside it is refused with a hint; with --force it replaces the hub
-// at the recorded location, not the worktree it was run from.
+// from inside it is refused with a hint; with --force it moves the hub
+// aside and restores at the recorded location, not the worktree it was
+// run from.
 func TestInitRestore_NoRemoteRefusesThenForceRestoresOriginal(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -74,11 +75,30 @@ func TestInitRestore_NoRemoteRefusesThenForceRestoresOriginal(t *testing.T) {
 		t.Fatalf("refused restore touched the hub: %v", err)
 	}
 
-	_, stderr, code = env.RunCommandWithExit(t, worktree, env.BinPath, "init", "--restore", backupPath, "--force")
+	WriteFile(t, filepath.Join(worktree, "wip.txt"), "unsaved work\n")
+	out, stderr, code := env.RunCommandWithExit(t, worktree, env.BinPath, "init", "--restore", backupPath, "--force")
 	if code != 0 {
 		t.Fatalf("restore --force exited %d:\n%s", code, stderr)
 	}
 	assertRestoredStandardRepo(t, repoPath)
+
+	// --force moves the hub aside; nothing of it is deleted.
+	m := regexp.MustCompile(`(?m)^Previous contents moved aside to: (.+)$`).FindStringSubmatch(out)
+	if m == nil {
+		t.Fatalf("restore --force does not say where the hub went:\n%s", out)
+	}
+	aside := m[1]
+	if !regexp.MustCompile(`\.pre-restore-\d{8}T\d{6}Z$`).MatchString(aside) {
+		t.Errorf("moved-aside path %q is not <path>.pre-restore-<UTC time>", aside)
+	}
+	for _, kept := range []string{"hop.json", filepath.Join("hops", "main", "README.md"), filepath.Join("hops", "main", "wip.txt")} {
+		if _, err := os.Stat(filepath.Join(aside, kept)); err != nil {
+			t.Errorf("%s of the hub is not kept under %s: %v", kept, aside, err)
+		}
+	}
+	if !strings.Contains(stderr, "rm -rf "+aside) {
+		t.Errorf("no hint on removing the moved-aside hub:\n%s", stderr)
+	}
 }
 
 // With the original location gone, restore needs no --force and puts the
