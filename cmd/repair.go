@@ -76,6 +76,18 @@ func runRepair(cmd *cobra.Command, args []string) error {
 	fs := afero.NewOsFs()
 	g := git.New()
 
+	// The declared result is the repair plan. A backup listing or a
+	// restore is not a plan action, and folding them into the plan record
+	// would give one field set three meanings, so these views refuse the
+	// structured modes -- before --undo restores anything -- rather than
+	// print text where a document was asked for.
+	if output.IsStructured() && (repairListBackupsFlag || repairUndoFlag != "") {
+		view := "--list-backups"
+		if repairUndoFlag != "" {
+			view = "--undo"
+		}
+		output.FatalCode(exitUsage, "structured output is not supported for 'git hop repair %s'", view)
+	}
 	if repairListBackupsFlag {
 		return repairListBackups(fs)
 	}
