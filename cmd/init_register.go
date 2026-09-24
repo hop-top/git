@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
@@ -55,18 +56,25 @@ func registerAsIsHub(fs afero.Fs, uri, org, repo, branch, repoPath string) {
 
 // registerAdoptedHub records a hub whose hop.json init just back-filled,
 // i.e. one git-hop did not create (a bare clone made with plain git), the
-// way clone and conversion record theirs. Every worktree the back-fill
-// listed goes into state: the default branch's as the hub's initial
-// worktree, the rest as linked ones.
+// way clone and conversion record theirs.
 func registerAdoptedHub(fs afero.Fs, hubPath string) {
 	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
 		output.Warn("failed to read hop.json at %s: %v", hubPath, err)
 		return
 	}
-	absHub, err := filepath.Abs(hubPath)
+	_, _ = hop.RegisterNewHub(fs, hubFromConfig(fs, hub))
+}
+
+// hubFromConfig describes the hub at hub.Path, as its hop.json lists it,
+// for hop.RegisterNewHub: every branch whose worktree directory is there,
+// the default branch's as the hub's initial worktree and the rest as
+// linked ones. A row whose directory is gone is left out; state would
+// only record a missing worktree.
+func hubFromConfig(fs afero.Fs, hub *hop.Hub) hop.NewHub {
+	absHub, err := filepath.Abs(hub.Path)
 	if err != nil {
-		absHub = hubPath
+		absHub = hub.Path
 	}
 	repo := hub.Config.Repo
 	h := hop.NewHub{
@@ -76,17 +84,22 @@ func registerAdoptedHub(fs afero.Fs, hubPath string) {
 		DefaultBranch: repo.DefaultBranch,
 		HubPath:       absHub,
 		Linked:        map[string]string{},
+		Global:        repo.Mode == config.RepoModeGlobal,
 	}
-	for branch, b := range hub.Config.Branches {
-		if branch != repo.DefaultBranch {
-			h.Linked[branch] = b.Path
+	for branch := range hub.Config.Branches {
+		path := hub.BranchPath(branch)
+		if !worktreeDirPresent(fs, path) {
 			continue
 		}
-		h.WorktreePath = b.Path
+		if branch != repo.DefaultBranch {
+			h.Linked[branch] = path
+			continue
+		}
+		h.WorktreePath = path
 		h.WorktreeType = hop.WorktreeTypeBare
-		if filepath.Clean(b.Path) == absHub {
+		if filepath.Clean(path) == absHub {
 			h.WorktreeType = hop.WorktreeTypeMain
 		}
 	}
-	hop.RegisterNewHub(fs, h)
+	return h
 }

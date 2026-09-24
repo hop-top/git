@@ -54,6 +54,10 @@ Checks:
 - Hopspace existence and consistency
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
+- The current hub's record in state: a hub with hop.json that state does
+  not record, or records without some of its worktrees, is invisible to
+  list, status --all and prune --all (--fix records it, merging with
+  state and never overwriting an entry)
 - --global hop.* keys the old global.json migration wrote but the user
   never set (--fix unsets them)
 - Retired hop.* settings (hop.autoEnvStart, hop.bareRepo and the other
@@ -360,10 +364,13 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 }
 
 // checkState reconciles the global state file (and the current hub's
-// hop.json) against the filesystem. hubKept are the missing worktrees the
-// hub check could not recreate; their hop.json rows are kept.
+// hop.json) against the filesystem, first recording the current hub and
+// its worktrees when state lacks them (checkHubRegistration). hubKept are
+// the missing worktrees the hub check could not recreate; their hop.json
+// rows are kept.
 func checkState(fs afero.Fs, g git.GitInterface, hubPath string, hubKept keptWorktrees, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking State ===")
+	checkHubRegistration(fs, hubPath, opts, r)
 	st, stateIssues := inspectState(fs, g, r)
 	switch {
 	case len(stateIssues) > 0 && opts.fix:
@@ -401,7 +408,7 @@ func inspectState(fs afero.Fs, g git.GitInterface, r *doctorReport) (*state.Stat
 	for _, issue := range missingStateWorktrees(fs, st) {
 		wt := st.Repositories[issue.repoID].Worktrees[issue.key]
 		if reason, locked := stateWorktreeLock(fs, g, issue.repoID, wt); locked {
-			warnLockedWorktree(r, doctorCheckState, issue.repoID+":"+issue.branch, issue.path, reason)
+			warnLockedWorktree(r, doctorCheckState, stateWorktreeSubject(issue.repoID, issue.branch, issue.path), issue.path, reason)
 			continue
 		}
 		stateIssues = append(stateIssues, issue)
@@ -414,7 +421,7 @@ func inspectState(fs afero.Fs, g git.GitInterface, r *doctorReport) (*state.Stat
 	output.Info("Found %d state consistency issue(s):", len(stateIssues))
 	for _, issue := range stateIssues {
 		output.Error("  %s", issue)
-		r.issue(doctorCheckState, issue.repoID+":"+issue.branch, "worktree missing: %s", issue.path)
+		r.issue(doctorCheckState, stateWorktreeSubject(issue.repoID, issue.branch, issue.path), "worktree missing: %s (%s:%s)", issue.path, issue.repoID, issue.branch)
 	}
 	return st, stateIssues
 }

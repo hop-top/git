@@ -33,7 +33,8 @@ func lockedMissingHub(t *testing.T, lockLine string) (afero.Fs, *registryGit, st
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		usb: {Path: usb, Branch: "usb", Type: "linked", HubPath: hubPath},
+		worktreeDir(hubPath, "main"): {Path: worktreeDir(hubPath, "main"), Branch: "main", Type: "bare", HubPath: hubPath},
+		usb:                          {Path: usb, Branch: "usb", Type: "linked", HubPath: hubPath},
 	}
 	require.NoError(t, state.SaveState(fs, st))
 
@@ -59,7 +60,7 @@ func TestDoctor_LockedMissingWorktree_IsAWarning(t *testing.T) {
 
 			assert.NoError(t, doctorResult(r), "a locked worktree is a warning, not an issue: %+v", r.records)
 			for _, rec := range r.records {
-				if rec.Subject == "usb" || rec.Subject == "github.com/test/repo:usb" || rec.Subject == usb {
+				if rec.Subject == "usb" || rec.Subject == usb {
 					assert.Equal(t, doctorKindWarning, rec.Kind, "only warnings about the locked worktree: %+v", rec)
 				}
 			}

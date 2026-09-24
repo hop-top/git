@@ -366,6 +366,11 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 func registerProject(fs afero.Fs, org, repo, branch, worktreePath string) error {
 	registry := LoadRegistry(fs)
 	repoKey := org + "/" + repo
+	if _, ok := registry.Config.Hops[repoKey+":"+branch]; ok {
+		// Recorded already, by this hub or another one of the repository:
+		// kept as it is, like the state entries RegisterNewHub merges with.
+		return nil
+	}
 
 	absPath, err := filepath.Abs(worktreePath)
 	if err != nil {
@@ -376,7 +381,7 @@ func registerProject(fs afero.Fs, org, repo, branch, worktreePath string) error 
 		return err
 	}
 
-	fmt.Printf("Registered in global registry: %s:%s\n", repoKey, branch)
+	output.Info("Registered in global registry: %s:%s", repoKey, branch)
 
 	return nil
 }

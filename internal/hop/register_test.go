@@ -3,6 +3,7 @@ package hop
 import (
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -63,4 +64,102 @@ func TestRegisterNewHub_LinkedWorktrees(t *testing.T) {
 	assert.Equal(t, "feature", wts["/hub/hops/feature"].Branch)
 	assert.Equal(t, "linked", wts["/hub/hops/feature"].Type)
 	assert.Equal(t, "/hub", wts["/hub/hops/feature"].HubPath)
+}
+
+// Recording a hub a second time changes nothing: no entry is rewritten,
+// not even its timestamps, and the plan is empty.
+func TestRegisterNewHub_Idempotent(t *testing.T) {
+	isolateRegisterPaths(t)
+	fs := afero.NewMemMapFs()
+	h := NewHub{
+		Org: "acme", Repo: "widget", DefaultBranch: "main", HubPath: "/hub",
+		WorktreePath: "/hub/hops/main", WorktreeType: WorktreeTypeBare,
+		Linked: map[string]string{"feature": "/hub/hops/feature"},
+	}
+	_, err := RegisterNewHub(fs, h)
+	require.NoError(t, err)
+	statePath := filepath.Join(state.GetStateHome(), "state.json")
+	first, err := afero.ReadFile(fs, statePath)
+	require.NoError(t, err)
+
+	plan, err := RegisterNewHub(fs, h)
+	require.NoError(t, err)
+
+	assert.True(t, plan.Empty(), "nothing left to record: %+v", plan)
+	again, err := afero.ReadFile(fs, statePath)
+	require.NoError(t, err)
+	assert.Equal(t, string(first), string(again), "state is not rewritten")
+}
+
+// Entries state already holds for the repository are merged with, never
+// overwritten: another hub of the same repository stays with its
+// worktrees, including its own main; this hub's main is recorded next to
+// it; and a worktree already recorded keeps its entry as it is. The
+// state is seeded in the branch-keyed format of earlier releases, so the
+// merge also runs over a migrated file.
+func TestRegisterNewHub_MergesWithExistingEntries(t *testing.T) {
+	isolateRegisterPaths(t)
+	fs := afero.NewMemMapFs()
+	created := time.Date(2020, 1, 2, 3, 4, 5, 0, time.UTC)
+	st := state.NewState()
+	st.AddRepository("github.com/acme/widget", &state.RepositoryState{
+		Org: "acme", Repo: "widget", DefaultBranch: "main", URI: "keep-me",
+		Hubs: []*state.HubState{{Path: "/other", Mode: state.HubModeLocal, CreatedAt: created}},
+		Worktrees: map[string]*state.WorktreeState{
+			"main":    {Path: "/other/hops/main", Type: WorktreeTypeBare, HubPath: "/other", CreatedAt: created},
+			"feature": {Path: "/hub/hops/feature", Type: "linked", HubPath: "/hub", CreatedAt: created},
+		},
+	})
+	require.NoError(t, state.SaveState(fs, st))
+
+	plan, err := RegisterNewHub(fs, NewHub{
+		URI: "new-uri", Org: "acme", Repo: "widget", DefaultBranch: "main", HubPath: "/hub",
+		WorktreePath: "/hub/hops/main", WorktreeType: WorktreeTypeBare,
+		Linked: map[string]string{"feature": "/hub/hops/feature", "extra": "/hub/hops/extra"},
+	})
+	require.NoError(t, err)
+
+	assert.False(t, plan.Repo)
+	assert.True(t, plan.Hub)
+	assert.Equal(t, []string{"extra", "main"}, plan.Branches())
+
+	got, err := state.LoadState(fs)
+	require.NoError(t, err)
+	repo := got.Repositories["github.com/acme/widget"]
+	require.NotNil(t, repo)
+	assert.Equal(t, "keep-me", repo.URI, "the repository entry is kept")
+	require.Len(t, repo.Hubs, 2)
+	assert.Equal(t, "/other", repo.Hubs[0].Path)
+	assert.True(t, repo.Hubs[0].CreatedAt.Equal(created))
+	assert.Equal(t, "/hub", repo.Hubs[1].Path)
+	require.Len(t, repo.Worktrees, 4)
+
+	other, ok := repo.Worktree("/other", "main")
+	require.True(t, ok, "the other hub's main is kept")
+	assert.True(t, other.CreatedAt.Equal(created))
+	mine, ok := repo.Worktree("/hub", "main")
+	require.True(t, ok, "this hub's main is recorded next to it")
+	assert.Equal(t, "/hub/hops/main", mine.Path)
+	feature, ok := repo.Worktree("/hub", "feature")
+	require.True(t, ok)
+	assert.True(t, feature.CreatedAt.Equal(created), "a worktree already recorded is kept as is")
+	extra, ok := repo.Worktree("/hub", "extra")
+	require.True(t, ok)
+	assert.Equal(t, "/hub/hops/extra", extra.Path)
+}
+
+// A state file that cannot be read is left as it is, rather than replaced
+// by one that holds only this hub.
+func TestRegisterNewHub_UnreadableStateUntouched(t *testing.T) {
+	isolateRegisterPaths(t)
+	fs := afero.NewMemMapFs()
+	statePath := filepath.Join(state.GetStateHome(), "state.json")
+	require.NoError(t, afero.WriteFile(fs, statePath, []byte("{not json"), 0o644))
+
+	_, err := RegisterNewHub(fs, NewHub{Org: "acme", Repo: "widget", DefaultBranch: "main", HubPath: "/hub"})
+
+	assert.Error(t, err)
+	data, readErr := afero.ReadFile(fs, statePath)
+	require.NoError(t, readErr)
+	assert.Equal(t, "{not json", string(data))
 }

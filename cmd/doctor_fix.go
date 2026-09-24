@@ -149,14 +149,14 @@ func pruneMissingHubRows(fs afero.Fs, g git.GitInterface, hubPath string, kept k
 }
 
 // recordStatePrune records one entry doctor's state repair prunes, under
-// the check and subject that reported the problem: repository:branch
-// for a state worktree and the path for a state hub (the state check),
+// the check and subject that reported the problem: the path for a state
+// worktree (stateWorktreeSubject) and for a state hub (the state check),
 // the branch for a hop.json row (the hub check, which reports the row's
 // missing worktree directory).
 func recordStatePrune(r *doctorReport, opts doctorOpts, p pruneRecord) {
 	switch p.Kind {
 	case pruneKindWorktree:
-		r.repaired(opts, doctorCheckState, p.Repository+":"+p.Branch, "prune worktree entry from state")
+		r.repaired(opts, doctorCheckState, stateWorktreeSubject(p.Repository, p.Branch, p.Path), "prune worktree entry from state")
 	case pruneKindHub:
 		r.repaired(opts, doctorCheckState, p.Path, "prune hub entry from state")
 	case pruneKindHopJSONEntry:
@@ -218,6 +218,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 			if worktreeDirPresent(fs, wt.Path) {
 				continue
 			}
+			subject := stateWorktreeSubject(repoID, branch, wt.Path)
 
 			output.Info("\nMissing worktree: %s:%s (was at %s)", repoID, branch, wt.Path)
 
@@ -235,7 +236,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 				if merged {
 					output.Info("  [dry-run] Would remove entry: branch '%s' is merged into '%s'",
 						branch, repo.DefaultBranch)
-					r.repaired(opts, doctorCheckState, repoID+":"+branch, "remove entry: branch is merged into %s", repo.DefaultBranch)
+					r.repaired(opts, doctorCheckState, subject, "remove entry: branch is merged into %s", repo.DefaultBranch)
 					resolved++
 				} else {
 					output.Info("  [dry-run] Would prompt to relocate, delete, or keep entry for '%s'", branch)
@@ -247,7 +248,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 			if merged {
 				output.Info("  Branch '%s' is merged into '%s'; auto-removing entry.", branch, repo.DefaultBranch)
 				delete(repo.Worktrees, key)
-				r.repaired(opts, doctorCheckState, repoID+":"+branch, "remove entry: branch is merged into %s", repo.DefaultBranch)
+				r.repaired(opts, doctorCheckState, subject, "remove entry: branch is merged into %s", repo.DefaultBranch)
 				resolved++
 				continue
 			}
@@ -281,14 +282,14 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 				wt.Path = newPath
 				_ = st.PutWorktree(repoID, wt)
 				output.Info("  Updated path to %s", newPath)
-				r.repaired(opts, doctorCheckState, repoID+":"+branch, "relocate entry to %s", newPath)
+				r.repaired(opts, doctorCheckState, subject, "relocate entry to %s", newPath)
 				resolved++
 
 			case 1: // delete
 				kept.remove(wt.Path)
 				delete(repo.Worktrees, key)
 				output.Info("  Deleted entry for '%s'", branch)
-				r.repaired(opts, doctorCheckState, repoID+":"+branch, "delete entry")
+				r.repaired(opts, doctorCheckState, subject, "delete entry")
 				resolved++
 
 			default: // skip / invalid
@@ -344,4 +345,15 @@ func isBranchMerged(g git.GitInterface, dir, branch, base string) bool {
 	}
 
 	return false
+}
+
+// stateWorktreeSubject names a state worktree entry in doctor's records:
+// its path, which tells two hubs' worktrees of one branch apart (doctor
+// pairs an issue with its repair by subject). An entry without a path,
+// kept from a file an earlier release wrote, is named repository:branch.
+func stateWorktreeSubject(repoID, branch, path string) string {
+	if path != "" {
+		return path
+	}
+	return repoID + ":" + branch
 }
