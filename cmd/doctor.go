@@ -49,7 +49,8 @@ var doctorCmd = &cobra.Command{
 	Long: `Run diagnostics on git-hop installation and project setup.
 
 Checks:
-- Path configuration (data home, config home, cache home)
+- Path configuration (data home and cache home; the config home is
+  optional until something is configured)
 - Hub configuration and symlinks
 - Hopspace existence and consistency
 - Worktree state (orphaned directories)
@@ -231,8 +232,15 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	return r
 }
 
-// checkPaths verifies the XDG-derived directories exist, creating them
-// under --fix.
+// checkPaths verifies the XDG-derived directories git-hop keeps its own
+// data in exist, creating them under --fix.
+//
+// The config directory ($XDG_CONFIG_HOME/git-hop) is shown but not
+// required. It holds only what the user (or a command acting for them)
+// has configured, every writer creates it on demand (config.json,
+// managers.json, hops.json, the global hooks), and every reader treats
+// its absence as "nothing configured". A fresh install without it is
+// healthy, and --fix leaves creating it to the first writer.
 func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking Paths ===")
 	dataHome := hop.GetGitHopDataHome()
@@ -248,7 +256,6 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 		path string
 	}{
 		{"data", dataHome}, // already git-hop's own directory
-		{"config", filepath.Join(configHome, "git-hop")},
 		{"cache", filepath.Join(cacheHome, "git-hop")},
 	} {
 		if exists, _ := afero.DirExists(fs, dir.path); exists {

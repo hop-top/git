@@ -73,6 +73,10 @@ func TestDoctorDryRun_DoesNotCreateDirectories(t *testing.T) {
 
 // TestDoctorFix_CreatesDirectories is the non-dry-run counterpart: the
 // guard must not turn doctor into a command that no longer repairs.
+//
+// The config directory is not among them: nothing requires it until
+// something is configured (TestDoctorPaths_ConfigHomeOptional), so --fix
+// leaves creating it to the first writer. This test used to demand it.
 func TestDoctorFix_CreatesDirectories(t *testing.T) {
 	p := isolateDoctorPaths(t)
 	fs := afero.NewMemMapFs()
@@ -81,11 +85,31 @@ func TestDoctorFix_CreatesDirectories(t *testing.T) {
 
 	for _, dir := range []string{
 		p.dataHome,
-		filepath.Join(p.configHome, "git-hop"),
 		filepath.Join(p.cacheHome, "git-hop"),
 	} {
 		exists, _ := afero.DirExists(fs, dir)
 		assert.True(t, exists, "--fix must create %s", dir)
+	}
+	exists, _ := afero.DirExists(fs, filepath.Join(p.configHome, "git-hop"))
+	assert.False(t, exists, "--fix must not create the config directory")
+}
+
+// TestDoctorPaths_ConfigHomeOptional: a missing config directory is not a
+// problem. Every writer creates it on demand and every reader treats it
+// as "nothing configured", so a fresh install has none and is healthy.
+func TestDoctorPaths_ConfigHomeOptional(t *testing.T) {
+	p := isolateDoctorPaths(t)
+	fs := afero.NewMemMapFs()
+	for _, dir := range []string{p.dataHome, filepath.Join(p.cacheHome, "git-hop")} {
+		require.NoError(t, fs.MkdirAll(dir, 0o755))
+	}
+
+	r := runDoctor(fs, mocks.NewMockGit(), "/nowhere", doctorOpts{})
+
+	assert.False(t, r.issuesFound, "records: %+v", r.records)
+	assert.NoError(t, doctorResult(r))
+	for _, rec := range r.records {
+		assert.NotEqual(t, doctorCheckPaths, rec.Check, "unexpected paths record: %+v", rec)
 	}
 }
 
