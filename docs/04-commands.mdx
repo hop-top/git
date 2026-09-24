@@ -745,6 +745,13 @@ Recommendations:
 Issues found. Run 'git hop doctor --fix' to automatically repair them.
 ```
 
+### Exit status
+
+Like `git fsck`: 0 when healthy or only warnings were found, 1 when an
+issue was reported and not fixed. With `--fix`, 0 only if every issue was
+fixed; `--fix --dry-run` exits 0 only if every issue would be. The report
+is printed either way.
+
 ### Auto-fix
 
 When issues are found, use `--fix` to automatically repair them:

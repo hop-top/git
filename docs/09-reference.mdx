@@ -248,8 +248,12 @@ git hop doctor [flags]
 **Exit Codes:**
 | Code | Description |
 |------|-------------|
-| 0 | Checks ran, whatever they found; read the report (or the `kind` of each [structured record](#doctor)) for the verdict |
-| 1 | Fatal error (for example, the working directory cannot be read) |
+| 0 | Healthy, or only warnings found. With `--fix`, every issue was fixed; with `--fix --dry-run`, every issue would be |
+| 1 | An issue was reported and not fixed (without `--fix`, any issue), a repair failed, or a fatal error (for example, the working directory cannot be read) |
+
+Like `git fsck`, the report is printed either way; the status is the
+verdict. An issue counts as fixed when a `fixed` (or, under `--dry-run`,
+`would-fix`) [record](#doctor) names the same `check` and `subject`.
 
 ## Structured Output
 

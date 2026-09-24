@@ -47,7 +47,7 @@ stdout '^ok\t\S+/hops/main\tnoop\t\t$'
 ! stdout 'Repair plan'
 
 # --- doctor: one record per finding ---
-exec git-hop doctor --json
+! exec git-hop doctor --json
 decode json stdout 0.kind issue
 decode json stdout 0.check
 decode json stdout 0.subject
@@ -58,11 +58,11 @@ stdout '"check": "state"'
 ! stdout 'Running git-hop diagnostics'
 ! stdout 'Summary'
 
-exec git-hop doctor --format yaml
+! exec git-hop doctor --format yaml
 decode yaml stdout 0.kind issue
 stdout 'subject: feat/gone'
 
-exec git-hop doctor --porcelain
+! exec git-hop doctor --porcelain
 stdout '^issue\thub\tfeat/gone\t'
 ! stdout '^kind'
 ! stdout 'Running git-hop diagnostics'
@@ -74,7 +74,7 @@ stdout '"kind": "would-fix"'
 grep 'feat/gone' $WORK/hub/hop.json
 
 # The human report is unchanged by default.
-exec git-hop doctor
+! exec git-hop doctor
 stdout 'Running git-hop diagnostics'
 
 # --- prune --dry-run: the entries it would remove, nothing removed ---
@@ -128,8 +128,11 @@ stdout '^exit=129$'
 # Nothing left: an empty list, not an empty stdout.
 exec git-hop prune --json
 decode json stdout '#' 0
-exec git-hop doctor --json
+# The rm above left hops/feat behind, empty: an orphaned directory.
+! exec git-hop doctor --json
 ! stdout 'feat/gone'
+decode json stdout 0.message 'orphaned directory'
+decode json stdout 0.subject '~/hops/feat$'
 cd $WORK
 exec git-hop doctor --json
 decode json stdout '#' 0

@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -61,8 +62,12 @@ the change can be undone with 'git hop repair --undo'.
 
 Combine --fix with --dry-run to preview every repair without applying any
 of it: no directories created, no worktrees recreated, no dependencies
-touched, no state or hop.json rewritten, and no backup snapshot taken.`,
-	Run: func(cmd *cobra.Command, args []string) {
+touched, no state or hop.json rewritten, and no backup snapshot taken.
+
+Exit status, like git fsck: 0 when healthy or only warnings were found,
+1 when an issue was reported and not fixed. With --fix, 0 only if every
+issue was fixed; with --fix --dry-run, only if every issue would be.`,
+	RunE: func(cmd *cobra.Command, args []string) error {
 		fs := afero.NewOsFs()
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -74,7 +79,42 @@ touched, no state or hop.json rewritten, and no backup snapshot taken.`,
 		if output.IsStructured() {
 			emitResult(cmd, r.records)
 		}
+		if err := doctorResult(r); err != nil {
+			// The report already says what is wrong; the status is the
+			// only thing left to convey.
+			cmd.SilenceErrors = true
+			cmd.SilenceUsage = true
+			return err
+		}
+		return nil
 	},
+}
+
+// errDoctorUnresolved is doctor's result when it leaves an issue behind.
+var errDoctorUnresolved = errors.New("doctor found issues it did not fix")
+
+// doctorResult maps a report to doctor's exit, like git fsck: an error
+// (exit 1) when an issue was reported and not fixed, nil (exit 0) when the
+// run was healthy or found only warnings. An issue counts as fixed when a
+// fixed record (would-fix under --dry-run) names the same check and
+// subject; any failed repair leaves the run unresolved.
+func doctorResult(r doctorReport) error {
+	type key struct{ check, subject string }
+	resolved := map[key]bool{}
+	for _, rec := range r.records {
+		if rec.Kind == doctorKindFixed || rec.Kind == doctorKindWouldFix {
+			resolved[key{rec.Check, rec.Subject}] = true
+		}
+	}
+	for _, rec := range r.records {
+		switch {
+		case rec.Kind == doctorKindFailed:
+			return errDoctorUnresolved
+		case rec.Kind == doctorKindIssue && !resolved[key{rec.Check, rec.Subject}]:
+			return errDoctorUnresolved
+		}
+	}
+	return nil
 }
 
 func init() {
@@ -339,7 +379,9 @@ func summarizeDoctor(opts doctorOpts, r doctorReport) {
 		if r.fixed > 0 {
 			output.Info("Fixed %d issue(s).", r.fixed)
 		}
-		output.Info("Some issues could not be automatically fixed. Please review the errors above.")
+		if doctorResult(r) != nil {
+			output.Info("Some issues could not be automatically fixed. Please review the errors above.")
+		}
 	default:
 		output.Info("Issues found. Run 'git hop doctor --fix' to automatically repair them.")
 	}

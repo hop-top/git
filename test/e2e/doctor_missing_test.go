@@ -50,8 +50,11 @@ func TestDoctor_MissingWorktree_Merged_AutoDeleted(t *testing.T) {
 		t.Fatalf("expected featurePath to be absent before doctor run")
 	}
 
-	// Run doctor --fix; should auto-delete the state entry.
-	out := env.RunGitHop(t, env.HubPath, "doctor", "--fix")
+	// Run doctor --fix; should auto-delete the state entry. Its exit status
+	// is not this test's subject: in the same run the hub check tries to
+	// recreate the removed worktree, which git refuses while the worktree
+	// is still registered, and doctor reports that failed repair.
+	out := env.RunGitHopCombined(t, env.HubPath, "doctor", "--fix")
 
 	// Output should mention the auto-removal (merged branch path).
 	lowerOut := strings.ToLower(out)
