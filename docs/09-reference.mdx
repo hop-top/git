@@ -350,7 +350,9 @@ Columns: `repository branch base type path state status`.
 ### doctor
 
 A list of findings and repairs, in the order the checks ran. A healthy run
-returns `[]`. The exit status does not change with the findings.
+returns `[]`. The exit status is 1 when an `issue` is left without a
+matching `fixed` (or `would-fix`) record, or any repair `failed`; see
+[git hop doctor](#git-hop-doctor).
 
 | Field | Type | Meaning |
 |-------|------|---------|
