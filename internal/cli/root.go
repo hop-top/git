@@ -625,6 +625,11 @@ func setupOutputMode(cmd *cobra.Command) {
 	if err != nil {
 		output.FatalCode(129, "%v", err)
 	}
+	if format != "" {
+		if err := output.ValidateResultCols(cmd, Root.Viper); err != nil {
+			output.FatalCode(129, "%v", err)
+		}
+	}
 	output.SetResultFormat(format, formatOpts...)
 
 	var mode output.Mode

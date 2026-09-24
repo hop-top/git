@@ -1,6 +1,10 @@
 package output
 
 import (
+	"fmt"
+	"reflect"
+	"strings"
+
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	kitout "hop.top/kit/go/console/output"
@@ -67,4 +71,68 @@ func EmitResult(cmd *cobra.Command, data any) error {
 		v.Set("format-opt", resultFormatOpts)
 	}
 	return kitout.Dispatch(cmd, v, data)
+}
+
+// resultShapes maps each command with a declared output schema to the
+// value the schema was reflected from, so its --cols can be checked
+// before the command runs; see ValidateResultCols.
+var resultShapes = map[*cobra.Command]any{}
+
+// RegisterResultShape records shape as the result type cmd renders.
+func RegisterResultShape(cmd *cobra.Command, shape any) {
+	resultShapes[cmd] = shape
+}
+
+// ValidateResultCols rejects --cols/--columns naming a column cmd's result
+// does not have. kit's Dispatch runs the same check, but only when the
+// result renders -- after a mutating command has already done its work --
+// so the root runs it in the pre-run instead. Headers come from kit's
+// TableHeaders and the message matches Dispatch's.
+func ValidateResultCols(cmd *cobra.Command, v *viper.Viper) error {
+	shape, ok := resultShapes[cmd]
+	if !ok {
+		return nil
+	}
+	cols := requestedCols(cmd, v)
+	if len(cols) == 0 {
+		return nil
+	}
+	headers := kitout.TableHeaders(reflect.TypeOf(shape))
+	have := make(map[string]struct{}, len(headers))
+	for _, h := range headers {
+		have[h] = struct{}{}
+	}
+	for _, c := range cols {
+		if _, ok := have[c]; !ok {
+			return fmt.Errorf("unknown column %q (valid: %s)", c, strings.Join(headers, ", "))
+		}
+	}
+	return nil
+}
+
+// requestedCols merges --cols and --columns the way kit's Dispatch does:
+// a flag set on the command line wins over v, and each value may itself
+// be comma-separated.
+func requestedCols(cmd *cobra.Command, v *viper.Viper) []string {
+	var raw []string
+	for _, name := range []string{"cols", "columns"} {
+		if f := cmd.Flags().Lookup(name); f != nil && f.Changed {
+			if s, err := cmd.Flags().GetStringSlice(name); err == nil {
+				raw = append(raw, s...)
+				continue
+			}
+		}
+		if v != nil {
+			raw = append(raw, v.GetStringSlice(name)...)
+		}
+	}
+	var out []string
+	for _, item := range raw {
+		for _, part := range strings.Split(item, ",") {
+			if p := strings.TrimSpace(part); p != "" {
+				out = append(out, p)
+			}
+		}
+	}
+	return out
 }

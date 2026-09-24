@@ -124,6 +124,12 @@ stderr 'mutually exclusive'
 ! exec git-hop add feat/xml --format xml
 stderr 'unknown output format'
 ! exists $WORK/hub/hops/feat/xml
+! exec git-hop add feat/cols --format json --cols branch,nope
+stderr 'unknown column .{0,2}"nope'
+! exists $WORK/hub/hops/feat/cols
+! exec git-hop add feat/porcelain-cols --porcelain --columns nope
+stderr 'unknown column .{0,2}"nope'
+! exists $WORK/hub/hops/feat/porcelain-cols
 
 # --- status views without a structured shape refuse instead of going silent ---
 ! exec git-hop status --all --format json
