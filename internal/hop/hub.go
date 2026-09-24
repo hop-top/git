@@ -138,18 +138,21 @@ func (h *Hub) RemoveBranch(branchName string) error {
 	return h.Save()
 }
 
-// RenameBranch updates the hub config to reflect a branch rename.
-// The old key is removed and a new key is added with the updated path.
+// RenameBranch rekeys oldBranch's entry to newBranch at newPath. The rest
+// of the entry (base, fork) carries over. HopspaceBranch follows the rename
+// only when it named oldBranch itself; a fork entry's HopspaceBranch names
+// the fork-side branch, which a hub rename does not touch.
 func (h *Hub) RenameBranch(oldBranch, newBranch, newPath string) error {
-	old, exists := h.Config.Branches[oldBranch]
+	entry, exists := h.Config.Branches[oldBranch]
 	if !exists {
 		return fmt.Errorf("branch %s not found in hub", oldBranch)
 	}
-	delete(h.Config.Branches, oldBranch)
-	h.Config.Branches[newBranch] = config.HubBranch{
-		Path:           newPath,
-		HopspaceBranch: old.HopspaceBranch,
+	entry.Path = newPath
+	if entry.HopspaceBranch == oldBranch {
+		entry.HopspaceBranch = newBranch
 	}
+	delete(h.Config.Branches, oldBranch)
+	h.Config.Branches[newBranch] = entry
 	return h.Save()
 }
 

@@ -89,19 +89,17 @@ func (h *Hopspace) UnregisterBranch(branch string) error {
 	return h.Save()
 }
 
-// RenameBranch updates the hopspace config to reflect a branch rename.
+// RenameBranch rekeys oldBranch's entry to newBranch at newPath; the rest
+// of the entry carries over.
 func (h *Hopspace) RenameBranch(oldBranch, newBranch, newPath string) error {
-	old, exists := h.Config.Branches[oldBranch]
+	entry, exists := h.Config.Branches[oldBranch]
 	if !exists {
 		// Not in hopspace — silently skip (same pattern as UnregisterBranch)
 		return nil
 	}
+	entry.Path = newPath
 	delete(h.Config.Branches, oldBranch)
-	h.Config.Branches[newBranch] = config.HopspaceBranch{
-		Exists:   old.Exists,
-		Path:     newPath,
-		LastSync: old.LastSync,
-	}
+	h.Config.Branches[newBranch] = entry
 	return h.Save()
 }
 
