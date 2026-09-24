@@ -29,8 +29,8 @@ stdout '^feature$'
 # --- status and doctor run clean against a local-only hub ---
 exec git-hop status
 ! stderr 'origin'
-# (doctor's path checks want an installed data and config home)
-mkdir $WORK/data $WORK/.config/git-hop
+# (doctor's path checks also want a config home, which init does not create)
+mkdir $WORK/.config/git-hop
 exec git-hop doctor
 ! stdout 'refspec'
 ! stderr 'origin'
