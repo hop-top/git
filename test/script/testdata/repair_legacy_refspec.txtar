@@ -38,7 +38,7 @@ exec git config --unset-all remote.origin.fetch
 
 # --- detection ---
 exec git-hop repair -n
-stdout 'restore-fetch-refspec\s+.*/hub — missing fetch refspec on origin'
+stdout 'restore-fetch-refspec\s+.*/hub: missing fetch refspec on origin'
 
 # Porcelain carries the replacement value in its own column, so scripts do
 # not have to parse the prose reason.

@@ -211,7 +211,7 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 			output.Error("Failed to create %s directory: %v", dir.name, err)
 			r.failed(doctorCheckPaths, dir.path, "create %s directory: %v", dir.name, err)
 		} else {
-			output.Info("✓ Created %s directory", dir.name)
+			output.Info("Created %s directory", dir.name)
 			r.repaired(opts, doctorCheckPaths, dir.path, "create %s directory", dir.name)
 		}
 	}
@@ -251,7 +251,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 		return
 	}
 	if len(orphanedDirs) == 0 {
-		output.Info("✓ No orphaned directories found")
+		output.Info("No orphaned directories found")
 		return
 	}
 
@@ -273,7 +273,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 			output.Error("    Failed to remove: %v", err)
 			r.failed(doctorCheckWorktrees, fullPath, "remove orphaned directory: %v", err)
 		} else {
-			output.Info("    ✓ Removed")
+			output.Info("    Removed")
 			r.repaired(opts, doctorCheckWorktrees, fullPath, "remove orphaned directory")
 		}
 	}
@@ -300,7 +300,7 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts
 
 	stateIssues := missingStateWorktrees(fs, st)
 	if len(stateIssues) == 0 {
-		output.Info("✓ State is consistent")
+		output.Info("State is consistent")
 		return
 	}
 
@@ -323,7 +323,7 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts
 func summarizeDoctor(opts doctorOpts, r doctorReport) {
 	output.Info("\n=== Summary ===")
 	if !r.issuesFound {
-		output.Info("✓ No issues found. Your git-hop installation is healthy!")
+		output.Info("No issues found. Your git-hop installation is healthy!")
 		return
 	}
 

@@ -38,7 +38,7 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 		r.issue(doctorCheckHub, hopspacePath, "hopspace does not exist")
 		createMissingHopspace(fs, hub, hubPath, hopspacePath, opts, r)
 	} else {
-		output.Info("✓ Hopspace exists")
+		output.Info("Hopspace exists")
 		reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
 	}
 
@@ -81,7 +81,7 @@ func createMissingHopspace(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath stri
 			r.failed(doctorCheckHub, branchName, "register branch in hopspace: %v", err)
 		}
 	}
-	output.Info("✓ Created hopspace")
+	output.Info("Created hopspace")
 	r.repaired(opts, doctorCheckHub, hopspacePath, "create hopspace and register %d branch(es)", len(hub.Config.Branches))
 }
 
@@ -116,7 +116,7 @@ func reconcileHopspaceBranches(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath 
 			output.Error("Failed to register branch %s: %v", branchName, err)
 			r.failed(doctorCheckHub, branchName, "register branch in hopspace: %v", err)
 		} else {
-			output.Info("✓ Registered branch %s in hopspace", branchName)
+			output.Info("Registered branch %s in hopspace", branchName)
 			r.repaired(opts, doctorCheckHub, branchName, "register branch in hopspace")
 		}
 	}
@@ -175,7 +175,7 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 			// Continue anyway as the worktree was created.
 		}
 		if _, err := fs.Stat(linkPath); err == nil {
-			output.Info("✓ Fixed worktree for branch %s", name)
+			output.Info("Fixed worktree for branch %s", name)
 			r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
 		} else {
 			output.Error("Worktree creation appeared to succeed but path still not accessible")
@@ -224,7 +224,7 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 	}
 
 	if len(issues) == 0 {
-		output.Info("✓ All dependencies are properly configured")
+		output.Info("All dependencies are properly configured")
 		reportOrphanedDeps(fs, depsManager, hopspacePath, "  ", r)
 		return
 	}
@@ -244,17 +244,17 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		switch issue.Type {
 		case services.IssueLocalFolder:
 			sizeMB := float64(issue.Size) / 1024 / 1024
-			output.Error("  ⚠ %s: local %s (%.1fMB) instead of symlink", issue.Branch, issue.PM.DepsDir, sizeMB)
+			output.Error("  %s: local %s (%.1fMB) instead of symlink", issue.Branch, issue.PM.DepsDir, sizeMB)
 			msg = fmt.Sprintf("local %s (%.1fMB) instead of symlink", issue.PM.DepsDir, sizeMB)
 			totalReclaimableSize += issue.Size
 		case services.IssueBrokenSymlink:
-			output.Error("  ✗ %s: broken symlink %s → %s (missing)", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget))
+			output.Error("  %s: broken symlink %s -> %s (missing)", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget))
 			msg = fmt.Sprintf("broken symlink %s -> %s (missing)", issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget))
 		case services.IssueStaleSymlink:
-			output.Warn("  %s: stale symlink %s → %s (lockfile changed to %s); refreshed by the next install", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
+			output.Warn("  %s: stale symlink %s -> %s (lockfile changed to %s); refreshed by the next install", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
 			msg = fmt.Sprintf("stale symlink %s -> %s (lockfile changed to %s); refreshed by the next install", issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
 		case services.IssueMissingDeps:
-			output.Error("  ✗ %s: missing %s", issue.Branch, issue.PM.DepsDir)
+			output.Error("  %s: missing %s", issue.Branch, issue.PM.DepsDir)
 			msg = fmt.Sprintf("missing %s", issue.PM.DepsDir)
 		}
 		kind := doctorKindIssue
@@ -294,10 +294,10 @@ func fixDependencies(depsManager *services.DepsManager, issues []services.Issue,
 		r.failed(doctorCheckDependencies, depsManager.RepoPath, "fix dependency issues: %v", err)
 		return
 	}
-	output.Info("✓ Fixed %d dependency issue(s)", len(issues))
+	output.Info("Fixed %d dependency issue(s)", len(issues))
 	recordDependencyFixes(issues, opts, r)
 	if reclaimable > 0 {
-		output.Info("✓ Reclaimed %.1fMB", float64(reclaimable)/1024/1024)
+		output.Info("Reclaimed %.1fMB", float64(reclaimable)/1024/1024)
 	}
 }
 
@@ -320,7 +320,7 @@ func reportOrphanedDeps(fs afero.Fs, depsManager *services.DepsManager, hopspace
 	for _, depsKey := range orphaned {
 		orphanedSize += getDirSize(fs, filepath.Join(hopspacePath, "deps", depsKey))
 	}
-	output.Info("%s⚠ %d orphaned dependencies (%.1fMB)", indent, len(orphaned), float64(orphanedSize)/1024/1024)
+	output.Info("%s%d orphaned dependencies (%.1fMB)", indent, len(orphaned), float64(orphanedSize)/1024/1024)
 	output.Info("    Run 'git hop env gc' to reclaim space")
 	r.record(doctorKindWarning, doctorCheckDependencies, filepath.Join(hopspacePath, "deps"),
 		"%d orphaned dependencies (%.1fMB); run 'git hop env gc' to reclaim space", len(orphaned), float64(orphanedSize)/1024/1024)

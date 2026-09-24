@@ -66,7 +66,7 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 					fixes.records[i].Message += ": save state: " + err.Error()
 				}
 			} else {
-				output.Info("✓ Pruned %d worktree(s) and %d hub(s) from state", len(worktreesPruned), len(hubsPruned))
+				output.Info("Pruned %d worktree(s) and %d hub(s) from state", len(worktreesPruned), len(hubsPruned))
 				fixed += len(worktreesPruned) + len(hubsPruned)
 			}
 		}
@@ -77,7 +77,7 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 			if dryRun {
 				output.Info("[dry-run] Would prune %d hop.json entry(ies) from %s", len(rows), hubPath)
 			} else {
-				output.Info("✓ Pruned %d hop.json entry(ies) from %s", len(rows), hubPath)
+				output.Info("Pruned %d hop.json entry(ies) from %s", len(rows), hubPath)
 			}
 			for _, p := range rows {
 				recordStatePrune(&fixes, opts, p)
@@ -146,7 +146,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts 
 			}
 
 			if merged {
-				output.Info("  Branch '%s' is merged into '%s' — auto-removing entry.", branch, repo.DefaultBranch)
+				output.Info("  Branch '%s' is merged into '%s'; auto-removing entry.", branch, repo.DefaultBranch)
 				delete(repo.Worktrees, branch)
 				r.repaired(opts, doctorCheckState, repoID+":"+branch, "remove entry: branch is merged into %s", repo.DefaultBranch)
 				resolved++
@@ -168,22 +168,22 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts 
 				newPath := output.Input("Enter new path for worktree")
 				newPath = strings.TrimSpace(newPath)
 				if newPath == "" {
-					output.Warn("  No path entered — skipping.")
+					output.Warn("  No path entered; skipping.")
 					continue
 				}
 				if exists, _ := afero.DirExists(fs, newPath); !exists {
-					output.Error("  Path does not exist: %s — skipping.", newPath)
+					output.Error("  Path does not exist: %s; skipping.", newPath)
 					continue
 				}
 				wt.Path = newPath
 				repo.Worktrees[branch] = wt
-				output.Info("  ✓ Updated path to %s", newPath)
+				output.Info("  Updated path to %s", newPath)
 				r.repaired(opts, doctorCheckState, repoID+":"+branch, "relocate entry to %s", newPath)
 				resolved++
 
 			case 1: // delete
 				delete(repo.Worktrees, branch)
-				output.Info("  ✓ Deleted entry for '%s'", branch)
+				output.Info("  Deleted entry for '%s'", branch)
 				r.repaired(opts, doctorCheckState, repoID+":"+branch, "delete entry")
 				resolved++
 

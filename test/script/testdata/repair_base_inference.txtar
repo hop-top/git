@@ -73,13 +73,13 @@ exec git config branch.hotfix.merge refs/heads/release
 cd $WORK/hub
 
 exec git-hop repair -n --base
-stdout 'record-base\s+.*/hub/hops/hotfix — branch\.hotfix\.merge=refs/heads/release'
+stdout 'record-base\s+.*/hub/hops/hotfix: branch\.hotfix\.merge=refs/heads/release'
 
 # release has no tracking config, so it falls back to the second signal:
 # the branch whose merge-base with it is most recent. That is hotfix
 # (they share the release-work commit) rather than main (whose merge-base
 # is the older initial commit).
-stdout 'record-base\s+.*/hub/hops/release — most-recent merge-base with hotfix'
+stdout 'record-base\s+.*/hub/hops/release: most-recent merge-base with hotfix'
 
 # Dry run must not persist anything.
 exec cat hop.json

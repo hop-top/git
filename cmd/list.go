@@ -192,10 +192,10 @@ func showRepositoryWorktrees(fs afero.Fs, g git.GitInterface, repoID string, rep
 	fmt.Println()
 	summary := fmt.Sprintf("Summary: %d worktrees", len(repo.Worktrees))
 	if activeCount > 0 {
-		summary += fmt.Sprintf(" · %d active", activeCount)
+		summary += fmt.Sprintf(", %d active", activeCount)
 	}
 	if missingCount > 0 {
-		summary += output.StyleWarning.Render(fmt.Sprintf(" · %d missing", missingCount))
+		summary += output.StyleWarning.Render(fmt.Sprintf(", %d missing", missingCount))
 	}
 	fmt.Println(summary)
 }
@@ -303,10 +303,10 @@ func showAllRepositories(fs afero.Fs, g git.GitInterface, st *state.State) {
 	fmt.Println()
 	summary := fmt.Sprintf("Summary: %d worktrees across %d repositories", totalWorktrees, len(repoIDs))
 	if activeCount > 0 {
-		summary += fmt.Sprintf(" · %d active", activeCount)
+		summary += fmt.Sprintf(", %d active", activeCount)
 	}
 	if missingCount > 0 {
-		summary += output.StyleWarning.Render(fmt.Sprintf(" · %d missing", missingCount))
+		summary += output.StyleWarning.Render(fmt.Sprintf(", %d missing", missingCount))
 	}
 	fmt.Println(summary)
 
