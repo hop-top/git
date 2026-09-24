@@ -1,63 +1,109 @@
-# doctor warns about a --global hop.autoEnvStart, whatever its value, and
-# doctor --fix unsets it.
+# doctor warns about every retired hop.* key, whatever its value, in
+# git config --global and in the current hub's own --local config, and
+# doctor --fix unsets each in the scope that holds it.
 #
-# The setting is retired (hop.env.autoStart replaced it) and nothing reads
-# it, but earlier releases wrote hop.autoEnvStart=true to --global whenever
-# shell integration was installed or declined, so most copies were never
-# the user's choice. It is a warning, not an issue: it changes nothing, so
-# the exit status stays 0.
+# The retired keys: the nine settings git-hop never acted on
+# (hop.showAllManagedRepos, hop.unusedThresholdDays, hop.conventionWarning,
+# hop.enforceCleanForConversion, hop.conversion.enforceClean,
+# hop.conversion.allowDirtyForce, hop.conversion.autoRollback,
+# hop.backup.enabled, hop.backup.preserveStashes), the removed
+# hop.bareRepo, and hop.autoEnvStart, which hop.env.autoStart replaced.
+# Nothing reads them, and git-hop wrote several on its own (the zero-value
+# migration, shell integration's hop.autoEnvStart=true), so a value says
+# nothing about the user's choice. They change nothing, so they are
+# warnings and the exit status stays 0.
 # git's global config here is $WORK/gitconfig (see the script setup).
 
-mkdir $WORK/data $WORK/.config/git-hop $WORK/.cache/git-hop
-exec git config --global hop.autoEnvStart true
-exec git config --global hop.env.autoStart true
-exec git config --global hop.backup.enabled false
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
 
-# --- doctor warns, with a hint to the new key, and exits 0 ---
-exec sh -c 'git-hop doctor --json; echo "exit=$?"'
+# Live settings, some sharing a section with a retired key: never touched.
+exec git config --global hop.env.autoStart true
+exec git config --global hop.backup.maxBackups 5
+exec git config --global hop.backup.keepBackup true
+exec git config --local hop.env.autoStart false
+exec git config --local hop.backup.maxBackups 7
+
+# Every retired key, true / false / anything else, in both scopes.
+env RETIRED='hop.showAllManagedRepos hop.unusedThresholdDays hop.conventionWarning hop.enforceCleanForConversion hop.conversion.enforceClean hop.conversion.allowDirtyForce hop.conversion.autoRollback hop.backup.enabled hop.backup.preserveStashes hop.bareRepo hop.autoEnvStart'
+exec sh -c 'set -e; i=0; for k in $RETIRED; do case $((i % 3)) in 0) v=true;; 1) v=false;; *) v=whatever;; esac; git config --global $k $v; git config --local $k $v; i=$((i+1)); done'
+
+# --- one warning per key and scope, naming both; exit 0 ---
+exec sh -c 'git-hop doctor --porcelain; echo "exit=$?"'
 stdout '^exit=0$'
-stdout '"kind": "warning"'
-stdout '"check": "config"'
-stdout '"subject": "hop.autoEnvStart"'
-stdout 'retired setting hop.autoEnvStart is ignored; the setting is now hop.env.autoStart'
-! stdout '"kind": "issue"'
-! stdout '"subject": "hop.env.autoStart"'
-! stdout '"subject": "hop.backup.enabled"'
+! stdout '^issue'
+exec sh -c 'git-hop doctor --porcelain | grep -c "^warning	config	hop\."'
+stdout '^22$'
+exec git-hop doctor --porcelain
+stdout '^warning	config	hop.autoEnvStart	retired setting hop.autoEnvStart in git config --global is ignored; the setting is now hop.env.autoStart; run ''git hop doctor --fix'' to unset it$'
+stdout '^warning	config	hop.autoEnvStart	retired setting hop.autoEnvStart in git config --local is ignored; the setting is now hop.env.autoStart'
+stdout '^warning	config	hop.bareRepo	retired setting hop.bareRepo in git config --global is no longer used'
+stdout '^warning	config	hop.bareRepo	retired setting hop.bareRepo in git config --local is no longer used'
+stdout '^warning	config	hop.backup.enabled	retired setting hop.backup.enabled in git config --local is no longer used'
+stdout '^warning	config	hop.conversion.autoRollback	retired setting hop.conversion.autoRollback in git config --global is no longer used'
+! stdout 'hop.env.autoStart	'
+! stdout 'hop.backup.maxBackups'
+! stdout 'hop.backup.keepBackup'
 
 exec git-hop doctor
-stderr 'retired setting hop.autoEnvStart is ignored; the setting is now hop.env.autoStart'
+stderr 'warning: retired setting hop.showAllManagedRepos in git config --global is no longer used'
 stderr 'git config --global hop.env.autoStart true'
 stderr 'git hop doctor --fix'
 
-# --- the preview reports would-fix and changes nothing ---
-exec git-hop doctor --fix --dry-run --json
-stdout '"kind": "would-fix"'
-stdout '"subject": "hop.autoEnvStart"'
-exec git config --global --get hop.autoEnvStart
-stdout true
+# --- the preview reports would-fix for all 22 and changes nothing ---
+exec sh -c 'git-hop doctor --fix --dry-run --porcelain | grep -c "^would-fix	config	hop\."'
+stdout '^22$'
+exec sh -c 'git config --global --get-regexp "^hop\." | wc -l'
+stdout '^ *14$'
+exec sh -c 'git config --local --get-regexp "^hop\." | wc -l'
+stdout '^ *13$'
 
-# --- --fix unsets that key only ---
-exec git-hop doctor --fix --json
-stdout '"kind": "fixed"'
-stdout '"subject": "hop.autoEnvStart"'
-! exec git config --global --get hop.autoEnvStart
-exec git config --global --get hop.env.autoStart
-stdout true
-exec git config --global --get hop.backup.enabled
+# --- --fix unsets exactly the retired keys, in both scopes ---
+exec git-hop doctor --fix --porcelain
+stdout '^fixed	config	hop.bareRepo	unset from git config --global$'
+stdout '^fixed	config	hop.bareRepo	unset from git config --local$'
+exec git config --global --get-regexp '^hop\.'
+cmp stdout $WORK/global-after
+exec git config --local --get-regexp '^hop\.'
+cmp stdout $WORK/local-after
+
+# --- nothing left to report ---
+exec git-hop doctor --porcelain
+! stdout 'config'
+
+# --- outside the hub only --global is checked ---
+exec git config --global hop.backup.enabled false
+exec git config --local hop.backup.enabled false
+cd $WORK
+exec git-hop doctor --fix --porcelain
+stdout '^fixed	config	hop.backup.enabled	unset from git config --global$'
+! stdout 'git config --local'
+exec git -C $WORK/hub config --local --get hop.backup.enabled
 stdout false
+cd $WORK/hub
+exec git config --local --unset hop.backup.enabled
 
-# --- without the key there is nothing to report ---
-exec git-hop doctor --json
-! stdout 'hop.autoEnvStart'
-
-# --- a migration-written false is reported once, as migration debris ---
+# --- a migration-written retired key is reported once ---
 cp $WORK/bak.json $WORK/.config/git-hop/global.json.bak
 exec git config --global hop.migrated true
 exec git config --global hop.autoEnvStart false
-exec sh -c 'git-hop doctor --json | grep -c ''"subject": "hop.autoEnvStart"'''
+exec sh -c 'git-hop doctor --porcelain | grep -c "	hop.autoEnvStart	"'
 stdout '^1$'
 exec git-hop doctor --fix
 ! exec git config --global --get hop.autoEnvStart
 
+-- global-after --
+hop.env.autostart true
+hop.backup.maxbackups 5
+hop.backup.keepbackup true
+-- local-after --
+hop.env.autostart false
+hop.backup.maxbackups 7
 -- bak.json --
 {"defaults": {"gitDomain": "example.com"}}

@@ -1,39 +1,53 @@
 package cmd
 
 import (
+	"fmt"
+
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/output"
 )
 
 // checkConfig reports --global hop.* keys the zero-value global.json
 // migration wrote and the user never set (see
-// config.GlobalLoader.MigrationDebris), and retired settings git-hop wrote
-// on its own (see config.GlobalLoader.StaleRetiredSettings). Under --fix it
-// unsets both. The repair runs only here, never on its own: it edits the
-// user's global git config.
-func checkConfig(l *config.GlobalLoader, opts doctorOpts, r *doctorReport) {
+// config.GlobalLoader.MigrationDebris), and keys of retired settings in
+// --global and in the current hub's --local config (see
+// config.ConfigScope.StaleRetiredSettings). Under --fix it unsets both.
+// The repair runs only here, never on its own: it edits the user's git
+// config. hubPath is "" outside a hub.
+func checkConfig(l *config.GlobalLoader, hubPath string, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking Config ===")
-	reported := checkMigrationDebris(l, opts, r)
-	checkStaleRetired(l, opts, r, reported)
+	checkMigrationDebris(l, opts, r)
+
+	scopes := []config.ConfigScope{l.GlobalScope()}
+	if hubPath != "" {
+		if s, ok := config.HubScope(hubPath); ok {
+			scopes = append(scopes, s)
+		}
+	}
+	found := 0
+	for _, s := range scopes {
+		found += checkStaleRetired(s, opts, r)
+	}
+	if found > 0 && !opts.fix {
+		output.Hint("run 'git hop doctor --fix' to unset them")
+	}
 }
 
 // checkMigrationDebris reports and, under --fix, unsets the migration
-// leftovers. It returns the keys it reported.
-func checkMigrationDebris(l *config.GlobalLoader, opts doctorOpts, r *doctorReport) map[string]bool {
+// leftovers.
+func checkMigrationDebris(l *config.GlobalLoader, opts doctorOpts, r *doctorReport) {
 	debris, err := l.MigrationDebris()
 	if err != nil {
 		output.Warn("Could not check for migration leftovers: %v", err)
 		r.record(doctorKindWarning, doctorCheckConfig, "global.json.bak", "could not check for migration leftovers: %v", err)
-		return nil
+		return
 	}
 	if len(debris) == 0 {
 		output.Info("No migration leftovers in git config --global")
-		return nil
+		return
 	}
 
-	reported := map[string]bool{}
 	for _, e := range debris {
-		reported[e.Key] = true
 		output.Error("%s = %q was written by the global.json migration and shadows the default", e.Key, e.Value)
 		r.issue(doctorCheckConfig, e.Key, "%q was written by the global.json migration and shadows the default; run 'git hop doctor --fix' to unset it", e.Value)
 		if !opts.fix {
@@ -55,44 +69,55 @@ func checkMigrationDebris(l *config.GlobalLoader, opts doctorOpts, r *doctorRepo
 	if !opts.fix {
 		output.Info("  Run 'git hop doctor --fix' to unset them")
 	}
-	return reported
 }
 
-// checkStaleRetired warns about --global keys of retired settings git-hop
-// wrote on its own and, under --fix, unsets them. Nothing reads them, so
-// they are warnings and leave the exit status alone. Keys already reported
-// as migration debris are skipped: that check owns them.
-func checkStaleRetired(l *config.GlobalLoader, opts doctorOpts, r *doctorReport, skip map[string]bool) {
-	stale, err := l.StaleRetiredSettings()
+// checkStaleRetired warns about keys of retired settings in one git config
+// scope and, under --fix, unsets them there. Nothing reads them, so they
+// are warnings and leave the exit status alone. It returns how many keys
+// it found.
+func checkStaleRetired(scope config.ConfigScope, opts doctorOpts, r *doctorReport) int {
+	where := "git config " + scope.String()
+	stale, err := scope.StaleRetiredSettings()
 	if err != nil {
-		output.Warn("Could not check for retired settings: %v", err)
-		r.record(doctorKindWarning, doctorCheckConfig, "git config --global", "could not check for retired settings: %v", err)
-		return
+		output.Warn("Could not check %s for retired settings: %v", where, err)
+		r.record(doctorKindWarning, doctorCheckConfig, where, "could not check for retired settings: %v", err)
+		return 0
 	}
 
 	for _, s := range stale {
-		if skip[s.Key] {
-			continue
+		msg := fmt.Sprintf("retired setting %s in %s is no longer used", s.Key, where)
+		if s.Replacement != "" {
+			msg = fmt.Sprintf("retired setting %s in %s is ignored; the setting is now %s", s.Key, where, s.Replacement)
 		}
-		const msg = "retired setting %s is ignored; the setting is now %s"
-		output.Warn(msg, s.Key, s.Replacement)
-		r.record(doctorKindWarning, doctorCheckConfig, s.Key, msg+"; run 'git hop doctor --fix' to unset it", s.Key, s.Replacement)
+		output.Warn("%s", msg)
+		r.record(doctorKindWarning, doctorCheckConfig, s.Key, "%s; run 'git hop doctor --fix' to unset it", msg)
 		if !opts.fix {
-			output.Hint("to turn %s on, run 'git config --global %s true'\n"+
-				"run 'git hop doctor --fix' to unset %s", s.Replacement, s.Replacement, s.Key)
+			if s.Replacement != "" {
+				output.Hint("to turn %s on, run 'git config %s true'", s.Replacement, setArgs(scope, s.Replacement))
+			}
 			continue
 		}
 		if !opts.mutating() {
-			output.Info("[dry-run] Would unset %s from git config --global", s.Key)
-			r.repaired(opts, doctorCheckConfig, s.Key, "unset from git config --global")
+			output.Info("[dry-run] Would unset %s from %s", s.Key, where)
+			r.repaired(opts, doctorCheckConfig, s.Key, "unset from %s", where)
 			continue
 		}
-		if err := l.RemoveStaleRetiredSetting(s.Key); err != nil {
-			output.Error("Failed to unset %s: %v", s.Key, err)
-			r.failed(doctorCheckConfig, s.Key, "unset from git config --global: %v", err)
+		if err := scope.RemoveStaleRetiredSetting(s.Key); err != nil {
+			output.Error("Failed to unset %s from %s: %v", s.Key, where, err)
+			r.failed(doctorCheckConfig, s.Key, "unset from %s: %v", where, err)
 			continue
 		}
-		output.Info("Unset %s from git config --global", s.Key)
-		r.repaired(opts, doctorCheckConfig, s.Key, "unset from git config --global")
+		output.Info("Unset %s from %s", s.Key, where)
+		r.repaired(opts, doctorCheckConfig, s.Key, "unset from %s", where)
 	}
+	return len(stale)
+}
+
+// setArgs is how to name key to `git config` for the scope: --global
+// explicitly, the hub's own config by running it inside the hub.
+func setArgs(scope config.ConfigScope, key string) string {
+	if scope.String() == "--global" {
+		return "--global " + key
+	}
+	return key
 }

@@ -5,39 +5,12 @@ import (
 	"time"
 )
 
-// Keys of retired settings: global.json had them, git-hop never read them.
-// The migration no longer carries them into git config, but the zero-value
-// migration wrote them, so MigrationDebris still has to recognise them.
-const (
-	keyShowAllManagedRepos       = "hop.showAllManagedRepos"
-	keyUnusedThresholdDays       = "hop.unusedThresholdDays"
-	keyEnforceCleanForConversion = "hop.enforceCleanForConversion"
-	keyConventionWarning         = "hop.conventionWarning"
-	keyBackupEnabled             = "hop.backup.enabled"
-	keyBackupPreserveStashes     = "hop.backup.preserveStashes"
-	keyConversionEnforceClean    = "hop.conversion.enforceClean"
-	keyConversionAllowDirtyForce = "hop.conversion.allowDirtyForce"
-	keyConversionAutoRollback    = "hop.conversion.autoRollback"
-)
-
-var retiredKeys = map[string]bool{
-	keyShowAllManagedRepos:       true,
-	keyUnusedThresholdDays:       true,
-	keyEnforceCleanForConversion: true,
-	keyConventionWarning:         true,
-	keyBackupEnabled:             true,
-	keyBackupPreserveStashes:     true,
-	keyConversionEnforceClean:    true,
-	keyConversionAllowDirtyForce: true,
-	keyConversionAutoRollback:    true,
-	keyRetiredAutoEnvStart:       true,
-}
-
 // legacyGlobalConfig mirrors the global.json schema with pointer scalars so
 // migration can tell a key the user wrote from one the file never had.
 // Decoding into GlobalConfig would turn every absent key into false/0/"",
 // and writing those to git config would shadow the compiled defaults.
-// It keeps the retired settings so MigrationDebris can see them.
+// It keeps the retired settings so the migration can tell them apart and
+// skip them.
 type legacyGlobalConfig struct {
 	Defaults struct {
 		AutoEnvStart              *bool   `json:"autoEnvStart"`
@@ -71,12 +44,6 @@ type legacyGlobalConfig struct {
 		AutoRollback    *bool `json:"autoRollback"`
 	} `json:"conversion"`
 }
-
-// keyRetiredAutoEnvStart is the git config key global.json's autoEnvStart
-// migrated to. Nothing reads it: whether add and clone start the
-// environment is hop.env.autoStart, a new key, so a copy pinned by the
-// migration or by shell integration cannot turn the start on.
-const keyRetiredAutoEnvStart = "hop.autoEnvStart"
 
 type configEntry struct {
 	key string
@@ -153,7 +120,7 @@ func (lc *legacyGlobalConfig) scalars() []legacyScalar {
 	addBool(keyConversionAutoRollback, c.AutoRollback)
 
 	for i := range out {
-		out[i].retired = retiredKeys[out[i].key]
+		out[i].retired = isRetired(out[i].key)
 	}
 	return out
 }

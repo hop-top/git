@@ -56,8 +56,9 @@ Checks:
 - Orphaned worktrees in state
 - --global hop.* keys the old global.json migration wrote but the user
   never set (--fix unsets them)
-- A --global hop.autoEnvStart: retired, never read, written by earlier
-  releases on their own; a warning (--fix unsets it)
+- Retired hop.* settings (hop.autoEnvStart, hop.bareRepo and the other
+  settings git-hop no longer has) in --global or the current hub's
+  config, whatever their value: never read; a warning (--fix unsets them)
 
 Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows
@@ -224,7 +225,7 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	checkDependencies(fs, hubPath, opts, &r)
 	checkWorktreeState(fs, g, hubPath, opts, &r)
 	checkState(fs, g, hubPath, opts, &r)
-	checkConfig(config.NewGlobalLoader(), opts, &r)
+	checkConfig(config.NewGlobalLoader(), hubPath, opts, &r)
 
 	summarizeDoctor(opts, r)
 	return r

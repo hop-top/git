@@ -154,16 +154,21 @@ These settings were never acted on and are gone too: `hop.showAllManagedRepos`,
 `hop.enforceCleanForConversion`, `hop.conversion.enforceClean`,
 `hop.conversion.allowDirtyForce`, `hop.conversion.autoRollback`,
 `hop.backup.enabled` and `hop.backup.preserveStashes`. Old config files and
-git config that still carry them load as before; the keys are ignored, and
-`git hop doctor --fix` unsets the ones the `global.json` migration wrote.
+git config that still carry them load as before; the keys are ignored.
 
 `hop.autoEnvStart` is retired too. git-hop never acted on it, yet earlier
 releases wrote it to `--global` (as `true`) when installing shell
 integration, so it cannot tell a choice from a leftover. It is no longer
 read; the setting that starts the environment on add and clone is
-`hop.env.autoStart`. `git hop doctor` warns about a `--global`
-`hop.autoEnvStart` whatever its value, and `git hop doctor --fix` unsets
-it (or run `git config --global --unset hop.autoEnvStart`).
+`hop.env.autoStart`.
+
+`git hop doctor` warns about each of these retired keys, whatever its
+value, in `git config --global` and in the current hub's own config, and
+`git hop doctor --fix` unsets every value of it (`--unset-all`) in the
+scope that holds it. Nothing reads them, and git-hop wrote several on its
+own (the old `global.json` migration, shell integration), so no value is
+kept as the user's choice. To remove one by hand, run for example
+`git config --global --unset-all hop.autoEnvStart`.
 
 ### Package and Environment Managers
 
