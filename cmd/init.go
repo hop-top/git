@@ -224,6 +224,12 @@ To convert anyway, carrying uncommitted files into the new worktree
 		for _, errMsg := range result.Errors {
 			fmt.Printf("  - %s\n", errMsg)
 		}
+		for _, warning := range result.Warnings {
+			output.Warn("%s", warning)
+		}
+		// A failed conversion keeps its backup: it is what the automatic
+		// rollback restored from.
+		reportPreservedBackup(fs, result.BackupPath)
 
 		os.Exit(1)
 	}
@@ -290,10 +296,7 @@ To convert anyway, carrying uncommitted files into the new worktree
 		output.Warn("%s", warning)
 	}
 
-	if keepBackupFlag || len(result.Warnings) > 0 {
-		fmt.Printf("\nBackup preserved at: %s\n", result.BackupPath)
-		output.Hint("To remove backup manually:\n  rm -rf %s", result.BackupPath)
-	}
+	reportPreservedBackup(fs, result.BackupPath)
 
 	if !noHooks {
 		if err := installInitHooks(fs, repoPath, mainWorktreePath, isRegularRepo); err != nil {
@@ -334,6 +337,22 @@ To convert anyway, carrying uncommitted files into the new worktree
 		next += fmt.Sprintf("  cd %s   # Work on %s branch\n", mainWorktreePath, currentBranchName)
 	}
 	output.Hint("%s", next+initNextSteps)
+}
+
+// reportPreservedBackup tells the user where the conversion backup is,
+// but only while it is actually on disk. The converter deletes it after a
+// successful conversion unless --keep-backup; a failed conversion or a
+// failed cleanup leaves it behind. Asking the filesystem keeps this line
+// honest in every one of those cases.
+func reportPreservedBackup(fs afero.Fs, backupPath string) {
+	if backupPath == "" {
+		return
+	}
+	if exists, _ := afero.DirExists(fs, backupPath); !exists {
+		return
+	}
+	fmt.Printf("\nBackup preserved at: %s\n", backupPath)
+	output.Hint("To remove backup manually:\n  rm -rf %s", backupPath)
 }
 
 // initNextSteps is the command list init's closing hint suggests.

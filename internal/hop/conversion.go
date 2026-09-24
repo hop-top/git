@@ -128,12 +128,12 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 	result.CreatedFiles = append(result.CreatedFiles, filepath.Join(repoPath, "hop.json"))
 	result.ModifiedDirs = append(result.ModifiedDirs, repoPath)
 
+	// A kept backup is not a warning: the caller reports result.BackupPath
+	// when it is still on disk.
 	if !c.KeepBackup {
 		if err := c.backupMgr.Cleanup(); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to cleanup backup: %v", err))
 		}
-	} else {
-		result.Warnings = append(result.Warnings, fmt.Sprintf("backup preserved at: %s", c.backupMgr.GetBackupPath()))
 	}
 
 	return result, nil
