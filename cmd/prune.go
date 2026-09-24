@@ -269,7 +269,9 @@ func newPruneRecord(kind, repoID, branch, path string, dryRun bool) pruneRecord 
 }
 
 // repairBackupRetention reads hop.repair.backupRetention from the first
-// in-scope hub that has it configured, falling back to 30 days. Ranging
+// in-scope hub that has it configured, falling back to 30 days. A value
+// that is not a Go duration is skipped. Zero or less is returned as is:
+// it means pruning is off, which pruneRepairBackups honours. Ranging
 // over the scoped state matters: reading the setting from an unrelated
 // repository would silently apply repo B's retention to repo A's backups.
 // Repositories are visited in sorted order so the answer is deterministic

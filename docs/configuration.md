@@ -211,7 +211,7 @@ inside any hub for that repository.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of repair backup snapshots (`repair-*` directories under `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/`, or a legacy `<hub>/.hop/backups/`) before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
+| `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of repair backup snapshots (`repair-*` directories under `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/`, or a legacy `<hub>/.hop/backups/`) before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). `0` (or a negative duration) turns pruning of repair backups off; a value that is not a duration is ignored, as if unset. |
 | `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`, the `fetch` in `git hop add`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
 | `hop.backup.keepBackup` | boolean | `false` | Keep the conversion backup `git hop init` takes after a successful conversion, as if `--keep-backup` were passed. An explicit `--keep-backup` / `--keep-backup=false` overrides this. See [Conversion backups](#conversion-backups-hopbackup). |
 | `hop.backup.path` | path | `$XDG_CACHE_HOME/git-hop` | Directory `git hop init` puts conversion backups under (`<path>/<org>-<repo>/<timestamp>/`). `~/` is expanded the way git expands path values; a relative path is refused. See [Conversion backups](#conversion-backups-hopbackup). |
@@ -385,9 +385,13 @@ git config --global hop.repair.backupRetention 168h
 # Keep them for an hour (CI/scratch repos)
 git config --global hop.repair.backupRetention 1h
 
-# Disable auto-pruning of repair backups
+# Never prune repair backups
 git config --global hop.repair.backupRetention 0
 ```
+
+`0` or a negative duration turns pruning off: `git hop prune` keeps every
+repair backup, and `--dry-run` lists none. A value that is not a Go
+duration (a bare `30`, a typo) is ignored, as if unset.
 
 The setting is read at prune time. `git hop prune` walks every hub
 recorded in state and reads `hop.repair.backupRetention` from the

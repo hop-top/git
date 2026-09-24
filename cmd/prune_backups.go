@@ -20,6 +20,7 @@ import (
 // Retention is read from `git config --get hop.repair.backupRetention`
 // from any in-scope hub; falls back to 30 days when unconfigured. The
 // value uses Go duration syntax (e.g. "720h" for 30 days, "168h" for 7).
+// Zero or less turns pruning off; the legacy footprint is still retired.
 func pruneRepairBackups(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
 	retention := repairBackupRetention(g, st)
 	cutoff := time.Now().Add(-retention)
@@ -27,7 +28,9 @@ func pruneRepairBackups(fs afero.Fs, g git.GitInterface, st *state.State, dryRun
 	for _, repoID := range scopeRepoIDs(st) {
 		repo := st.Repositories[repoID]
 		for _, hub := range repo.Hubs {
-			pruned = append(pruned, pruneHubRepairBackups(fs, hub.Path, repoID, cutoff, dryRun)...)
+			if retention > 0 {
+				pruned = append(pruned, pruneHubRepairBackups(fs, hub.Path, repoID, cutoff, dryRun)...)
+			}
 			retireLegacyRepairDir(fs, hub.Path, dryRun)
 		}
 	}
