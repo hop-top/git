@@ -157,6 +157,10 @@ Current repository: Standard git repository`)
 }
 
 func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRegular, noHooks, enableChdir bool) {
+	if useBare {
+		refuseOperationInProgress(fs, repoPath)
+	}
+
 	converter := hop.NewConverter(fs, g)
 	converter.DryRun = dryRunFlag
 	converter.Force = forceFlag

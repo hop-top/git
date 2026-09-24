@@ -54,6 +54,15 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 	}
 	_ = currentBranch
 
+	// Ahead of the clean check, and not waived by Force: an operation in
+	// progress would be lost, not carried, whatever the working tree.
+	if useBare {
+		if err := CheckNoOperationInProgress(c.fs, repoPath); err != nil {
+			result.Errors = append(result.Errors, err.Error())
+			return result, err
+		}
+	}
+
 	// The clean check guards the bare layout, whose conversion moves the
 	// working tree; Force (init --force) is the caller's explicit consent
 	// to carry uncommitted changes across. The backup is taken either way.

@@ -1054,10 +1054,31 @@ clone. The index and editor scratch files are rebuilt. For each of these,
 - `config.worktree` (per-worktree config from
   `extensions.worktreeConfig`): not carried over. Set its keys again
   with `git config`.
-- The state of a merge, rebase, cherry-pick, revert or bisect in
-  progress: that operation is abandoned. Finish it before running
-  `init`.
 - Any entry git-hop does not recognise.
+
+### Operations in progress
+
+A merge, rebase, `git am`, cherry-pick, revert or bisect stopped midway
+keeps its state in the old `.git` directory, tied to its layout, so a
+bare conversion could not carry it. `init` refuses to convert while one
+is in progress, even when the working tree is clean (a rebase at an
+`edit` stop, a bisect), and before it backs up or moves anything. It
+looks for the same markers git does: `MERGE_HEAD`, `rebase-merge/`,
+`rebase-apply/`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `sequencer/`,
+`BISECT_START` and `BISECT_LOG`.
+
+```text
+$ git hop init --no-prompt
+hint: finish the merge with 'git merge --continue' or abort it with 'git merge --abort'
+hint: then run git hop init again
+fatal: a merge is in progress; converting would abandon it
+```
+
+The exit status is 1. `--force` does not override the refusal: it
+consents to carrying uncommitted files, not to losing a paused
+operation. `--dry-run` reports the same refusal. A regular conversion
+(`--regular`) keeps `.git` in place, so the operation survives it and
+`init` does not refuse.
 
 ## Command Aliases
 

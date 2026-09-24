@@ -77,7 +77,7 @@ var gitDirLeftBehind = map[string]string{
 // Left-behind name prefixes, for entries whose names carry a suffix.
 // Checked after gitDirWarned.
 var gitDirLeftBehindPrefixes = map[string]string{
-	"BISECT_":      "bisect state; BISECT_START alone is warned about",
+	"BISECT_":      "bisect state; BISECT_START and BISECT_LOG mark a bisect in progress",
 	"sharedindex.": "split index of the old index",
 }
 
@@ -85,21 +85,14 @@ var gitDirLeftBehindPrefixes = map[string]string{
 var gitDirWarned = map[string]string{
 	"config.worktree": "per-worktree config (extensions.worktreeConfig) is not " +
 		"carried over; set its keys again with git config",
-	// An operation stopped with a clean working tree (a rebase at an
-	// edit stop, a bisect) passes the clean check. Its state is
-	// per-worktree and names the old layout; it is abandoned.
-	"MERGE_HEAD":       inProgress("merge"),
-	"rebase-merge":     inProgress("rebase"),
-	"rebase-apply":     inProgress("rebase or am"),
-	"sequencer":        inProgress("cherry-pick or revert sequence"),
-	"CHERRY_PICK_HEAD": inProgress("cherry-pick"),
-	"REVERT_HEAD":      inProgress("revert"),
-	"BISECT_START":     inProgress("bisect"),
 }
 
-func inProgress(op string) string {
-	return "a " + op + " was in progress and is abandoned"
-}
+// Refused up front: the markers of an operation in progress
+// (gitDirInProgress: MERGE_HEAD, rebase-merge, sequencer, BISECT_START,
+// ...). Their state is per-worktree and names the old layout, so a bare
+// conversion refuses to start while one is present (see
+// CheckNoOperationInProgress). Should one appear mid-conversion anyway,
+// it is warned about, never dropped in silence.
 
 // gitDirCarry names the three places a carry moves things between.
 type gitDirCarry struct {
@@ -160,6 +153,9 @@ func gitDirWarning(name string) string {
 	}
 	if w, ok := gitDirWarned[name]; ok {
 		return fmt.Sprintf(".git/%s: %s", name, w)
+	}
+	if isInProgressMarker(name) {
+		return fmt.Sprintf(".git/%s: an operation was in progress and is abandoned", name)
 	}
 	if _, ok := gitDirLeftBehind[name]; ok {
 		return ""
