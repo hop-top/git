@@ -87,54 +87,6 @@ var (
 			Foreground(lipgloss.Color("#FFFFFF"))
 )
 
-// Border styles
-var (
-	StyleBorderSuccess = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColorSuccess).
-				Padding(0, 1)
-
-	StyleBorderWarning = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColorWarning).
-				Padding(0, 1)
-
-	StyleBorderError = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColorError).
-				Padding(0, 1)
-
-	StyleBorderInfo = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(ColorInfo).
-			Padding(0, 1)
-
-	StyleBorderNeutral = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(ColorMuted).
-				Padding(0, 1)
-
-	// Heavy border for emphasis (success cards, etc.)
-	StyleBorderHeavy = lipgloss.NewStyle().
-				Border(lipgloss.ThickBorder()).
-				BorderForeground(ColorSuccess).
-				Padding(0, 1)
-)
-
-// Box styles (simpler, no rounded borders)
-var (
-	StyleBoxHeader = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), true, true, true, true).
-			BorderForeground(ColorAccent).
-			Padding(0, 1).
-			Bold(true)
-
-	StyleBoxSection = lipgloss.NewStyle().
-			Border(lipgloss.NormalBorder(), false, false, false, true).
-			BorderForeground(ColorMuted).
-			PaddingLeft(1)
-)
-
 // Utility functions
 
 // Colorize applies the appropriate color style based on status

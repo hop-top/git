@@ -61,12 +61,12 @@ func (m spinnerModel) View() tea.View {
 		if m.err != nil {
 			s := lipgloss.NewStyle().
 				Foreground(ColorError).
-				Render("✗ " + m.message + ": " + m.err.Error())
+				Render(IconError + ": " + m.message + ": " + m.err.Error())
 			return tea.NewView(s)
 		}
 		s := lipgloss.NewStyle().
 			Foreground(ColorSuccess).
-			Render("✓ " + m.message)
+			Render(m.message + ", done.")
 		return tea.NewView(s)
 	}
 
@@ -86,6 +86,7 @@ func NewSpinner(message string) *Spinner {
 	}
 
 	s := tui.NewSpinner(theme)
+	s.Spinner = spinner.Line
 
 	model := spinnerModel{
 		spinner: s,

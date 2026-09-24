@@ -165,7 +165,7 @@ func ConfirmWithWarning(title string, message string) bool {
 	// Display warning
 	warningStyle := StyleWarning.Bold(true)
 	fmt.Println()
-	fmt.Println(warningStyle.Render(IconWarning + " " + title))
+	fmt.Println(warningStyle.Render(IconWarning + ": " + title))
 	fmt.Println()
 
 	if message != "" {

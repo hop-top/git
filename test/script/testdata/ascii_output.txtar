@@ -1,8 +1,10 @@
 # Human output is plain ASCII, like git's: no check marks, arrows or
 # box drawing on stdout or stderr.
 #
-# The regression this pins: env gc and doctor prefixed their progress and
-# result lines with Unicode check marks.
+# The regressions this pins: env gc and doctor prefixed their progress and
+# result lines with Unicode check marks; list marked worktree state with
+# check/cross glyphs and a glyph legend; status --all drew a box header,
+# emoji section icons and a box-drawing tree.
 
 exec git init --bare $WORK/org/repo.git
 exec git clone $WORK/org/repo.git $WORK/seed
@@ -30,6 +32,27 @@ stdout 'Deleted 1 orphaned dependencies'
 
 # --- doctor on a healthy hub ---
 exec git-hop doctor
+! stderr '[^\x00-\x7F]'
+! stdout '[^\x00-\x7F]'
+
+# --- list inside the hub, and across all repositories ---
+exec git-hop list
+stdout 'active'
+! stderr '[^\x00-\x7F]'
+! stdout '[^\x00-\x7F]'
+
+cd $WORK
+exec git-hop list
+stdout 'All Repositories'
+stdout 'Legend: active = worktree on disk, missing = worktree directory not found'
+! stderr '[^\x00-\x7F]'
+! stdout '[^\x00-\x7F]'
+
+# --- status --all: plain header, sections and tree ---
+exec git-hop status --all
+stdout 'Git-Hop System Status'
+stdout 'Configuration'
+stdout '^    `- github.com/org/repo +1 worktrees  .*0 stopped'
 ! stderr '[^\x00-\x7F]'
 ! stdout '[^\x00-\x7F]'
 

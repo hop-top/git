@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
@@ -156,13 +157,11 @@ func (st *StatusTable) Render() string {
 
 	fmt.Fprintln(tw, strings.Join(st.headers, "\t"))
 
+	// The row status only colours the row; callers spell the state out
+	// in a column of words, as git does, so it survives without colour.
 	for _, row := range st.rows {
 		cells := make([]string, len(row.Cells))
 		for i, cell := range row.Cells {
-			if i == 0 {
-				icon := getStatusIcon(row.Status)
-				cell = icon + " " + cell
-			}
 			cells[i] = colorizeCell(cell, row.Status)
 		}
 		fmt.Fprintln(tw, strings.Join(cells, "\t"))
@@ -214,21 +213,6 @@ func (st *StatusTable) toMaps() []map[string]string {
 
 // Helper functions
 
-func getStatusIcon(status string) string {
-	switch status {
-	case "success", "pass", "running", "up", "active":
-		return ColorizeIcon(IconSuccess, "success")
-	case "error", "fail", "down", "broken":
-		return ColorizeIcon(IconError, "error")
-	case "warning", "warn":
-		return ColorizeIcon(IconWarning, "warning")
-	case "stopped", "clean", "neutral":
-		return ColorizeIcon(IconStopped, "info")
-	default:
-		return ColorizeIcon(IconStopped, "muted")
-	}
-}
-
 func colorizeCell(cell string, status string) string {
 	if CurrentMode != ModeHuman {
 		return cell
@@ -258,16 +242,15 @@ func SummaryTable(items map[string]string) string {
 	return strings.TrimRight(buf.String(), "\n")
 }
 
-// CompactList creates a compact list with bullets.
+// CompactList creates a compact, indented list coloured by status.
 func CompactList(items []string, status string) string {
 	if CurrentMode != ModeHuman {
 		return strings.Join(items, "\n")
 	}
 
-	icon := getStatusIcon(status)
 	var lines []string
 	for _, item := range items {
-		lines = append(lines, fmt.Sprintf("  %s %s", icon, item))
+		lines = append(lines, "  "+colorizeCell(item, status))
 	}
 	return strings.Join(lines, "\n")
 }
@@ -305,20 +288,25 @@ func AlignedList(items []struct{ Label, Value string }) string {
 	return strings.Join(lines, "\n")
 }
 
-// Legend creates a legend for table symbols.
+// Legend explains the words a table uses, as "word = meaning" pairs in
+// sorted order so the line is stable from run to run.
 func Legend(items map[string]string) string {
 	if CurrentMode != ModeHuman {
 		return ""
 	}
 
-	var parts []string
-	for icon, desc := range items {
-		parts = append(parts, fmt.Sprintf(
-			"%s %s", icon, StyleMuted.Render(desc),
-		))
+	words := make([]string, 0, len(items))
+	for word := range items {
+		words = append(words, word)
+	}
+	sort.Strings(words)
+
+	parts := make([]string, 0, len(words))
+	for _, word := range words {
+		parts = append(parts, word+" = "+items[word])
 	}
 
-	return StyleMuted.Render("Legend: ") + strings.Join(parts, "  ")
+	return StyleMuted.Render("Legend: " + strings.Join(parts, ", "))
 }
 
 // RenderStructTable renders a slice of structs using kit/output.Render.

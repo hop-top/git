@@ -563,7 +563,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 	configHome := hop.GetConfigHome()
 	configPath := filepath.Join(configHome, "git-hop", "config.json")
 
-	configInfo := output.Section(output.IconConfig, "Configuration", []string{
+	configInfo := output.Section("Configuration", []string{
 		output.RenderKeyValue("Data Home", output.RenderPath(dataHome)),
 		output.RenderKeyValue("Config", output.RenderPath(configPath)),
 		output.RenderKeyValue("Version", "git-hop"),
@@ -597,7 +597,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 		diskUsageStr = "unknown"
 	}
 
-	resourceInfo := output.Section(output.IconPackage, "Resources", []string{
+	resourceInfo := output.Section("Resources", []string{
 		output.RenderKeyValue("Repositories", fmt.Sprintf("%d", len(st.Repositories))),
 		output.RenderKeyValue("Total Worktrees", fmt.Sprintf("%d", totalWorktrees)),
 		output.RenderKeyValue("Active", output.Colorize(fmt.Sprintf("%d", activeWorktrees), "success")),
@@ -625,7 +625,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 	}
 
 	// Environment section
-	envInfo := output.Section(output.IconDocker, "Environment", []string{
+	envInfo := output.Section("Environment", []string{
 		output.RenderKeyValue("Running Services", fmt.Sprintf("%d", runningServices)),
 		output.RenderKeyValue("Port Range", "11500-11520"),
 		output.RenderKeyValue("Active Volumes", fmt.Sprintf("%d", activeVolumes)),
@@ -666,25 +666,21 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 				shortRepo = "..." + shortRepo[len(shortRepo)-37:]
 			}
 
-			statusIcon := output.IconStopped
-			statusText := "stopped"
+			statusText := output.IconStopped
 			if repoRunning > 0 {
-				statusIcon = output.IconRunning
-				statusText = "running"
+				statusText = output.IconRunning
 			}
 
-			line := fmt.Sprintf("%-42s  %d worktrees  %s %d %s",
+			line := fmt.Sprintf("%-42s  %d worktrees  %s",
 				shortRepo,
 				len(repo.Worktrees),
-				output.Colorize(statusIcon, statusText),
-				repoRunning,
-				statusText,
+				output.Colorize(fmt.Sprintf("%d %s", repoRunning, statusText), statusText),
 			)
 
 			repoLines = append(repoLines, output.TreeItem(isLast, line, ""))
 		}
 
-		repoInfo := output.Section(output.IconRepo, "Repositories", repoLines)
+		repoInfo := output.Section("Repositories", repoLines)
 		fmt.Println(repoInfo)
 	}
 

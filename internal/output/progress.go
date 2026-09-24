@@ -3,22 +3,19 @@ package output
 import (
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
-	"charm.land/lipgloss/v2"
-	"hop.top/kit/go/console/tui"
 )
 
-// ProgressBar represents a progress bar for operations with known total
+// ProgressBar reports progress for operations with a known total. Like
+// git, it prints a percentage ("<msg>:  42%") rather than drawing a bar.
 type ProgressBar struct {
 	program *tea.Program
 	model   progressModel
 }
 
 type progressModel struct {
-	progress tui.Progress
 	message  string
 	percent  float64
 	done     bool
@@ -42,20 +39,11 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case progressMsg:
 		m.percent = float64(msg)
-		m.progress = m.progress.SetPercent(m.percent)
 		if m.percent >= 1.0 {
 			m.done = true
 			m.quitting = true
 			return m, tea.Quit
 		}
-		return m, nil
-
-	case tea.WindowSizeMsg:
-		w := msg.Width - 4
-		if w > 80 {
-			w = 80
-		}
-		m.progress = m.progress.SetWidth(w)
 		return m, nil
 
 	default:
@@ -65,20 +53,14 @@ func (m progressModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m progressModel) View() tea.View {
 	if m.done {
-		s := lipgloss.NewStyle().
-			Foreground(ColorSuccess).
-			Render("✓ " + m.message + " (100%)")
-		return tea.NewView(s)
+		return tea.NewView(m.message + ": 100%, done.")
 	}
 
 	if m.quitting {
 		return tea.NewView("")
 	}
 
-	percent := fmt.Sprintf(" %.0f%%", m.percent*100)
-	return tea.NewView(
-		m.message + "\n" + m.progress.View() + percent,
-	)
+	return tea.NewView(fmt.Sprintf("%s: %3.0f%%", m.message, m.percent*100))
 }
 
 // NewProgressBar creates a new progress bar with the given message
@@ -87,13 +69,7 @@ func NewProgressBar(message string) *ProgressBar {
 		return &ProgressBar{}
 	}
 
-	prog := tui.NewProgress(theme).SetWidth(80)
-
-	model := progressModel{
-		progress: prog,
-		message:  message,
-		percent:  0,
-	}
+	model := progressModel{message: message}
 
 	return &ProgressBar{
 		program: tea.NewProgram(model, tea.WithOutput(os.Stderr)),
@@ -234,38 +210,22 @@ func (msp *MultiStepProgress) Finish() {
 	}
 }
 
-// SimpleProgress shows a simple percentage-based progress
+// SimpleProgress prints a git-style progress line to stderr,
+// "<msg>:  NN% (x/y)", redrawn in place and closed with ", done." once
+// current reaches total.
 func SimpleProgress(current, total int, message string) {
 	if CurrentMode != ModeHuman {
 		return
 	}
 
-	percent := float64(current) / float64(total) * 100
-	bar := progressBar(current, total, 40)
-	fmt.Fprintf(
-		os.Stderr,
-		"\r%s %s %.0f%% (%d/%d)",
-		message, bar, percent, current, total,
-	)
+	percent := 100.0
+	if total > 0 {
+		percent = float64(current) / float64(total) * 100
+	}
+	fmt.Fprintf(os.Stderr, "\r%s: %3.0f%% (%d/%d)",
+		message, percent, current, total)
 
 	if current >= total {
-		fmt.Fprintln(os.Stderr)
+		fmt.Fprintln(os.Stderr, ", done.")
 	}
-}
-
-func progressBar(current, total, width int) string {
-	if total == 0 {
-		return strings.Repeat("━", width)
-	}
-
-	filled := int(float64(current) / float64(total) * float64(width))
-	if filled > width {
-		filled = width
-	}
-
-	bar := strings.Repeat("━", filled) +
-		strings.Repeat("─", width-filled)
-	return lipgloss.NewStyle().
-		Foreground(ColorAccent).
-		Render(bar)
 }
