@@ -85,14 +85,17 @@ func parseGlobalFlagTable(t *testing.T, doc, heading string) []documentedFlag {
 }
 
 // rootGlobalFlags is the flag set every git-hop invocation accepts: the
-// root's visible persistent flags, plus --help and the top-level --version.
-func rootGlobalFlags() map[string]*pflag.Flag {
+// root's persistent flags, plus --help and the top-level --version. With
+// includeHidden false it keeps only the flags --help lists, which the
+// tables must document; hidden ones (kit's --cols, --format-opt) may be
+// documented but are not required.
+func rootGlobalFlags(includeHidden bool) map[string]*pflag.Flag {
 	RootCmd.InitDefaultHelpFlag()
 	RootCmd.InitDefaultVersionFlag()
 
 	flags := map[string]*pflag.Flag{}
 	RootCmd.PersistentFlags().VisitAll(func(f *pflag.Flag) {
-		if !f.Hidden {
+		if includeHidden || !f.Hidden {
 			flags[f.Name] = f
 		}
 	})
@@ -105,7 +108,8 @@ func rootGlobalFlags() map[string]*pflag.Flag {
 }
 
 func TestGlobalFlagsDocsMatchRootFlags(t *testing.T) {
-	actual := rootGlobalFlags()
+	actual := rootGlobalFlags(true)
+	required := rootGlobalFlags(false)
 
 	for _, tbl := range globalFlagTables {
 		t.Run(tbl.file, func(t *testing.T) {
@@ -147,7 +151,7 @@ func TestGlobalFlagsDocsMatchRootFlags(t *testing.T) {
 			}
 
 			var missing []string
-			for name := range actual {
+			for name := range required {
 				if _, ok := documented[name]; !ok {
 					missing = append(missing, "--"+name)
 				}
