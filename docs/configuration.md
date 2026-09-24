@@ -4,17 +4,20 @@ Git-hop separates three types of data across your system. Here's where they live
 
 ## Quick Start
 
-**TL;DR:** You only edit `global.json`. Everything else is managed automatically.
+**TL;DR:** Your preferences are `hop.*` keys in git config. Everything else is managed automatically.
 
 ```bash
 # View your settings
-git hop config
+git config --get-regexp '^hop\.'
 
-# Change a setting
-git hop config port_base 20000
+# Change a setting for every repository
+git config --global hop.worktreeLocation '{hubPath}/hops/{branch}'
 
-# See where settings come from
-git hop config --verbose
+# Change it for one repository only (run inside its hub)
+git config hop.add.fetch false
+
+# See where a setting comes from
+git config --show-origin --get-all hop.gitDomain
 ```
 
 ---
@@ -28,14 +31,14 @@ git-hop uses different directories for different types of data:
 **Linux/Unix:**
 ```
 ~/.config/git-hop/
-├── global.json        # Global settings
+├── managers.json      # Custom package / environment managers (optional)
 └── hooks/             # Global hooks
 ```
 
 **macOS:**
 ```
 ~/Library/Preferences/git-hop/
-├── global.json
+├── managers.json
 └── hooks/
 ```
 
@@ -120,71 +123,58 @@ git hop clone https://github.com/org/repo.git
 
 ## Customize Your Settings
 
-The global configuration file (`global.json`) stores your preferences. This is the ONLY file you'll typically edit.
+Preferences are `hop.*` keys in git config, the same store git plugins such
+as git-lfs use. Set them with `git config --global <key> <value>` for every
+repository, or with `git config <key> <value>` inside a hub for one
+repository. An unset key uses the default below; remove a key with
+`git config --global --unset <key>` to go back to the default.
 
-**Location:**
-- Linux/Unix: `~/.config/git-hop/global.json`
-- macOS: `~/Library/Preferences/git-hop/global.json`
-- Custom: `$XDG_CONFIG_HOME/git-hop/global.json`
+Setting a key to an empty value is not the same as unsetting it: the empty
+value is used as-is. For `hop.worktreeLocation` an empty value selects the
+centralized layout (`{dataHome}/{org}/{repo}/hops/{branch}`).
 
 ### Settings Reference
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `autoEnvStart` | boolean | `false` | Automatically start environment services when switching to a branch |
-| `showAllManagedRepos` | boolean | `false` | Show all managed repositories in list command |
-| `unusedThresholdDays` | number | `30` | Days before a worktree is considered unused |
-| `enforceCleanForConversion` | boolean | `true` | Require clean working directory for repo conversion |
-| `conventionWarning` | boolean | `true` | Warn when worktree doesn't follow naming conventions |
-| `gitDomain` | string | `"github.com"` | Default Git hosting domain |
-| `worktreeLocation` | string | `"hops"` | Directory name for worktrees |
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `hop.gitDomain` | string | `github.com` | Git hosting domain used to expand `org/repo` shorthands |
+| `hop.worktreeLocation` | string | `{hubPath}/hops/{branch}` | Where `git hop add` and `git hop move` put worktrees. Variables: `{hubPath}`, `{branch}`, `{org}`, `{repo}`, `{dataHome}`. A relative result is resolved against the hub |
+| `hop.add.defaultStartPoint` | string | `default-branch` | Start-point for new branches: `default-branch`, `initial` (root commit), or any ref / SHA |
+| `hop.hooks.installMode` | string | `prompt` | How committed `.git-hop/hooks/` scripts are mirrored on clone / init: `prompt`, `symlink`, `copy`, `none` |
+| `hop.shellIntegration.status` | string | `unknown` | Shell wrapper state: `unknown` (offer to install), `approved`, `declined`, `disabled`. Written by git-hop when you answer the prompt |
 
 The former `bareRepo` setting is gone: clones always create a bare hub (see
 [story 015](stories/015-hopspace-shape-contract.md)). A leftover `bareRepo`
 in an old config file, or `hop.bareRepo` in git config, is ignored.
 
-### Full Configuration Schema
+### Stored Settings Not Yet Acted On
 
-For reference, here's the complete JSON structure:
+These keys are read into the global configuration with the defaults below,
+but no command changes its behavior on them yet. They are listed so the
+defaults are on record.
 
-```json
-{
-  "defaults": {
-    "autoEnvStart": false,
-    "showAllManagedRepos": false,
-    "unusedThresholdDays": 30,
-    "enforceCleanForConversion": true,
-    "conventionWarning": true,
-    "gitDomain": "github.com",
-    "worktreeLocation": "hops"
-  },
-  "packageManagers": [
-    {
-      "name": "bun",
-      "detectFiles": ["bun.lockb"],
-      "lockFiles": ["bun.lockb"],
-      "depsDir": "node_modules",
-      "installCmd": ["bun", "install", "--frozen-lockfile"]
-    }
-  ],
-  "backup": {
-    "enabled": true,
-    "keepBackup": true,
-    "maxBackups": 5,
-    "cleanupAgeDays": 90,
-    "preserveStashes": true
-  },
-  "conversion": {
-    "enforceClean": true,
-    "allowDirtyForce": false,
-    "autoRollback": true
-  }
-}
-```
+| Key | Type | Default |
+|-----|------|---------|
+| `hop.autoEnvStart` | boolean | `true` |
+| `hop.showAllManagedRepos` | boolean | `false` |
+| `hop.unusedThresholdDays` | number | `30` |
+| `hop.enforceCleanForConversion` | boolean | `true` |
+| `hop.conventionWarning` | boolean | `true` |
+| `hop.backup.enabled` | boolean | `true` |
+| `hop.backup.keepBackup` | boolean | `false` |
+| `hop.backup.maxBackups` | number | `3` |
+| `hop.backup.cleanupAgeDays` | number | `30` |
+| `hop.backup.preserveStashes` | boolean | `true` |
+| `hop.conversion.enforceClean` | boolean | `true` |
+| `hop.conversion.allowDirtyForce` | boolean | `false` |
+| `hop.conversion.autoRollback` | boolean | `true` |
 
-### Package Managers
+### Package and Environment Managers
 
-Custom package managers can be defined to extend or override built-in support. See [Dependency Sharing](dependency-sharing.md) for details.
+Custom package managers and environment managers are lists, so they live in
+`managers.json` in the config directory (`$XDG_CONFIG_HOME/git-hop/managers.json`)
+instead of git config. See [Dependency Sharing](dependency-sharing.md) for
+details.
 
 ```json
 {
@@ -196,38 +186,33 @@ Custom package managers can be defined to extend or override built-in support. S
       "depsDir": "dependencies",
       "installCmd": ["custom-pm", "install"]
     }
-  ]
+  ],
+  "environmentManagers": []
 }
 ```
 
-### Backup Settings
+### Legacy `global.json`
 
-Control automatic backup behavior during repository conversions:
+Older releases kept these settings in `$XDG_CONFIG_HOME/git-hop/global.json`.
+The first git-hop run that finds that file migrates it once:
 
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `enabled` | boolean | `true` | Enable automatic backups |
-| `keepBackup` | boolean | `true` | Keep backup after successful conversion |
-| `maxBackups` | number | `5` | Maximum number of backups to retain |
-| `cleanupAgeDays` | number | `90` | Delete backups older than this many days |
-| `preserveStashes` | boolean | `true` | Include stashes in backups |
+- each setting the file contains is written to the matching `hop.*` key in
+  `git config --global`; settings the file does not contain are left unset,
+  so they keep their defaults. An empty string counts as not set, except for
+  `worktreeLocation`, where it selects the centralized layout;
+- `packageManagers` and `environmentManagers` move to `managers.json`;
+- `hop.migrated=true` is recorded in git config and the file is renamed to
+  `global.json.bak`.
 
-### Conversion Settings
-
-Control repository conversion behavior:
-
-| Setting | Type | Default | Description |
-|---------|------|---------|-------------|
-| `enforceClean` | boolean | `true` | Require clean working directory |
-| `allowDirtyForce` | boolean | `false` | Allow `--force` to bypass clean check |
-| `autoRollback` | boolean | `true` | Automatically rollback on conversion failure |
+git-hop does not read `global.json` after that. Edit git config and
+`managers.json` instead; a new `global.json` is ignored once `hop.migrated`
+is set.
 
 ## git config Settings
 
-A few tunables live in `git config` rather than `global.json` so they
-follow git's own conventions. Set them with `git config --global
-<key> <value>`, or per-repo with `git config <key> <value>` inside any
-hub for that repository.
+Command-specific tunables, set the same way as the settings above: `git
+config --global <key> <value>`, or per-repo with `git config <key> <value>`
+inside any hub for that repository.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
@@ -671,7 +656,7 @@ Settings follow a hierarchy — git-hop uses the first one it finds:
 1. **Environment variables** — for one command
 2. **Hub config** (`<hub>/hop.json`) — for one workspace
 3. **Hopspace config** (`$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`) — for one repository
-4. **Global config** (`~/.config/git-hop/global.json`) — for all repositories
+4. **git config** (`hop.*` keys; `--global` for all repositories, repo-local for one)
 5. **Built-in defaults** — fallback
 
 **Example:** Change port base for one repo only (don't affect others):
@@ -697,23 +682,27 @@ GIT_HOP_PORT_BASE=20000 git hop add feature-x
 - Documentation about repository-specific configuration
 
 **DO NOT commit:**
-- Global config (`global.json`)
+- Machine-specific paths in `managers.json`
 - State tracking (`state.json`)
 - Dependency registry (`.registry.json`)
 - Personal overrides
 
 ### 2. Portable Configuration
 
-Global config can be synced across machines:
+Your settings travel with your git config. Keep them in a file you sync
+and include it from `~/.gitconfig`:
 
 ```bash
-# Backup your config
-cp ~/.config/git-hop/global.json ~/Dropbox/git-hop-config.json
+# Collect current hop.* settings into a shareable file
+git config --global --get-regexp '^hop\.' \
+  | grep -v '^hop.migrated ' \
+  | while read -r key value; do git config -f ~/Dropbox/git-hop.gitconfig "$key" "$value"; done
 
-# Restore on another machine
-mkdir -p ~/.config/git-hop
-cp ~/Dropbox/git-hop-config.json ~/.config/git-hop/global.json
+# On another machine
+git config --global include.path ~/Dropbox/git-hop.gitconfig
 ```
+
+Copy `managers.json` alongside it if you define custom managers.
 
 ### 3. Team Sharing
 
@@ -728,38 +717,20 @@ For team-wide conventions:
 Check effective configuration:
 
 ```bash
-# Show current settings
-git hop config
+# Show every hop.* key and the file that sets it
+git config --show-origin --get-regexp '^hop\.'
 
-# Show where settings come from
-git hop config --verbose
-
-# Show only specific setting
-git hop config defaults.autoEnvStart
+# Show one setting (prints nothing and exits 1 when unset: the default applies)
+git config --get hop.worktreeLocation
 ```
-
-## Migration from Legacy Config
-
-If you have an old `~/.config/git-hop/config.json`, migrate to the new structure:
-
-```bash
-git hop migrate
-```
-
-This will:
-1. Read the legacy `config.json`
-2. Create the new `global.json` with equivalent settings
-3. Migrate repository tracking to `state.json`
-4. Create the `.registry.json` for dependency tracking
-5. Back up the old config files
 
 ## Troubleshooting
 
 ### Finding Configuration Files
 
 ```bash
-# Show all config file locations
-git hop config --paths
+# Where each hop.* setting is defined
+git config --show-origin --get-regexp '^hop\.'
 
 # Verify XDG directories
 echo $XDG_CONFIG_HOME
@@ -770,26 +741,30 @@ echo $XDG_CACHE_HOME
 
 ### Resetting Configuration
 
-To start fresh:
+To go back to the defaults, remove the `hop.*` keys you set:
 
 ```bash
-# Backup current config
-cp ~/.config/git-hop/global.json ~/git-hop-config-backup.json
+# Back up current settings
+git config --global --get-regexp '^hop\.' > ~/git-hop-config-backup.txt
 
-# Remove config (will use defaults)
-rm ~/.config/git-hop/global.json
+# Remove one setting (its default applies again)
+git config --global --unset hop.worktreeLocation
 
-# Run git-hop - it will create new default config
-git hop --version
+# Remove every hop.* setting in the global scope
+git config --global --remove-section hop
 ```
+
+`--remove-section hop` only removes top-level keys such as
+`hop.worktreeLocation`; subsections like `hop.add.*` or `hop.backup.*` are
+removed with `git config --global --remove-section hop.add`, and so on.
 
 ### Invalid JSON
 
-If you get JSON parsing errors:
+If git-hop ignores your custom managers, check that `managers.json` parses:
 
 ```bash
-# Validate your config file
-jq . ~/.config/git-hop/global.json
+# Validate the file
+jq . ~/.config/git-hop/managers.json
 ```
 
 Fix any syntax errors, or restore from backup.
@@ -798,7 +773,7 @@ Fix any syntax errors, or restore from backup.
 
 For developers interested in the implementation:
 
-- **Global config loader**: `internal/config/global.go`
+- **Global config loader**: `internal/config/global.go` (defaults table: `internal/config/gitconfig.go`)
 - **State management**: `internal/state/state.go`
 - **Hub config**: `internal/config/config.go` (`HubConfig`)
 - **Hopspace config**: `internal/config/config.go` (`HopspaceConfig`)

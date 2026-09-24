@@ -50,8 +50,7 @@ func NewGlobalLoaderWithGitConfig(gc *GitConfig) *GlobalLoader {
 
 // Load reads global config from git config hop.* keys,
 // falling back to compiled defaults for missing keys.
-// If a legacy global.json exists and git config is empty,
-// migrates values automatically.
+// A legacy global.json is migrated first, once (see maybeMigrate).
 func (l *GlobalLoader) Load() (*GlobalConfig, error) {
 	if err := l.maybeMigrate(); err != nil {
 		// Migration failure is non-fatal; log and continue
@@ -59,7 +58,7 @@ func (l *GlobalLoader) Load() (*GlobalConfig, error) {
 			"warning: git-hop config migration failed: %v\n", err)
 	}
 
-	cfg := l.readFromGitConfig()
+	cfg := readFromGitConfig(l.gc)
 
 	// Load complex arrays from managers.json sidecar
 	mgrs, err := l.loadManagers()
@@ -90,42 +89,21 @@ func (l *GlobalLoader) Write(cfg *GlobalConfig) error {
 	return nil
 }
 
-// GetDefaults returns the default global configuration.
+// GetDefaults returns the default global configuration: what Load returns
+// when git config holds no hop.* keys. It is read through the git-config
+// defaults table, so the two cannot drift.
 func (l *GlobalLoader) GetDefaults() *GlobalConfig {
-	return &GlobalConfig{
-		Defaults: DefaultSettings{
-			AutoEnvStart:              true,
-			ShowAllManagedRepos:       false,
-			UnusedThresholdDays:       30,
-			EnforceCleanForConversion: true,
-			ConventionWarning:         true,
-			WorktreeLocation:          "{hubPath}/hops/{branch}",
-			DefaultStartPoint:         "default-branch",
-			HooksInstallMode:          "prompt",
-		},
-		ShellIntegration: ShellIntegrationSettings{
-			Status: "unknown",
-		},
-		Backup: BackupSettings{
-			Enabled:         true,
-			KeepBackup:      false,
-			MaxBackups:      3,
-			CleanupAgeDays:  30,
-			PreserveStashes: true,
-		},
-		Conversion: ConversionSettings{
-			EnforceClean:    true,
-			AllowDirtyForce: false,
-			AutoRollback:    true,
-		},
-	}
+	return readFromGitConfig(emptyGitConfig)
 }
 
-// readFromGitConfig populates a GlobalConfig from git config hop.* keys.
-func (l *GlobalLoader) readFromGitConfig() *GlobalConfig {
-	gc := l.gc
-	defs := l.GetDefaults()
+// emptyGitConfig reports every key as unset.
+var emptyGitConfig = &GitConfig{
+	RunCmd: func(...string) (string, error) { return "", ErrKeyNotFound },
+}
 
+// readFromGitConfig populates a GlobalConfig from git config hop.* keys,
+// falling back to the git-config defaults table for unset keys.
+func readFromGitConfig(gc *GitConfig) *GlobalConfig {
 	installedAt := time.Time{}
 	if raw, err := gc.GetString(KeyShellIntegrationAt); err == nil {
 		installedAt, _ = time.Parse(time.RFC3339, raw)
@@ -134,9 +112,9 @@ func (l *GlobalLoader) readFromGitConfig() *GlobalConfig {
 	return &GlobalConfig{
 		Defaults: DefaultSettings{
 			AutoEnvStart:              gc.GetBoolOrDefault(KeyAutoEnvStart),
-			ShowAllManagedRepos:       boolOrDefault(gc, KeyShowAllManagedRepos, defs.Defaults.ShowAllManagedRepos),
-			UnusedThresholdDays:       intOrDefault(gc, KeyUnusedThresholdDays, defs.Defaults.UnusedThresholdDays),
-			EnforceCleanForConversion: boolOrDefault(gc, KeyEnforceCleanForConversion, defs.Defaults.EnforceCleanForConversion),
+			ShowAllManagedRepos:       gc.GetBoolOrDefault(KeyShowAllManagedRepos),
+			UnusedThresholdDays:       gc.GetIntOrDefault(KeyUnusedThresholdDays),
+			EnforceCleanForConversion: gc.GetBoolOrDefault(KeyEnforceCleanForConversion),
 			ConventionWarning:         gc.GetBoolOrDefault(KeyConventionWarning),
 			GitDomain:                 gc.GetStringOrDefault(KeyGitDomain),
 			WorktreeLocation:          gc.GetStringOrDefault(KeyWorktreeLocation),
@@ -145,21 +123,21 @@ func (l *GlobalLoader) readFromGitConfig() *GlobalConfig {
 		},
 		ShellIntegration: ShellIntegrationSettings{
 			Status:         gc.GetStringOrDefault(KeyShellIntegrationStatus),
-			InstalledShell: stringOrDefault(gc, KeyShellIntegrationShell, ""),
-			InstalledPath:  stringOrDefault(gc, KeyShellIntegrationPath, ""),
+			InstalledShell: gc.GetStringOrDefault(KeyShellIntegrationShell),
+			InstalledPath:  gc.GetStringOrDefault(KeyShellIntegrationPath),
 			InstalledAt:    installedAt,
 		},
 		Backup: BackupSettings{
 			Enabled:         gc.GetBoolOrDefault(KeyBackupEnabled),
-			KeepBackup:      boolOrDefault(gc, KeyBackupKeepBackup, defs.Backup.KeepBackup),
+			KeepBackup:      gc.GetBoolOrDefault(KeyBackupKeepBackup),
 			MaxBackups:      gc.GetIntOrDefault(KeyBackupMaxBackups),
-			CleanupAgeDays:  intOrDefault(gc, KeyBackupCleanupAgeDays, defs.Backup.CleanupAgeDays),
-			PreserveStashes: boolOrDefault(gc, KeyBackupPreserveStashes, defs.Backup.PreserveStashes),
+			CleanupAgeDays:  gc.GetIntOrDefault(KeyBackupCleanupAgeDays),
+			PreserveStashes: gc.GetBoolOrDefault(KeyBackupPreserveStashes),
 		},
 		Conversion: ConversionSettings{
-			EnforceClean:    boolOrDefault(gc, KeyConversionEnforceClean, defs.Conversion.EnforceClean),
-			AllowDirtyForce: boolOrDefault(gc, KeyConversionAllowDirtyForce, defs.Conversion.AllowDirtyForce),
-			AutoRollback:    boolOrDefault(gc, KeyConversionAutoRollback, defs.Conversion.AutoRollback),
+			EnforceClean:    gc.GetBoolOrDefault(KeyConversionEnforceClean),
+			AllowDirtyForce: gc.GetBoolOrDefault(KeyConversionAllowDirtyForce),
+			AutoRollback:    gc.GetBoolOrDefault(KeyConversionAutoRollback),
 		},
 	}
 }
@@ -214,9 +192,9 @@ func (l *GlobalLoader) writeToGitConfig(cfg *GlobalConfig) error {
 
 // --- Migration from legacy global.json ---
 
-// maybeMigrate checks if a legacy global.json exists and git config
-// hop.* keys are unset, then migrates values to git config --global.
-// The JSON file is renamed to global.json.bak (not deleted).
+// maybeMigrate migrates a legacy global.json to git config --global unless
+// the hop.migrated sentinel is set. Only keys present in the file are
+// written. The JSON file is renamed to global.json.bak (not deleted).
 func (l *GlobalLoader) maybeMigrate() error {
 	jsonPath := getGlobalConfigPath()
 	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {
@@ -323,32 +301,6 @@ func (l *GlobalLoader) saveManagers(mgrs *managersFile) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0644)
-}
-
-// --- helpers ---
-
-func boolOrDefault(gc *GitConfig, key string, def bool) bool {
-	v, err := gc.GetBool(key)
-	if err != nil {
-		return def
-	}
-	return v
-}
-
-func intOrDefault(gc *GitConfig, key string, def int) int {
-	v, err := gc.GetInt(key)
-	if err != nil {
-		return def
-	}
-	return v
-}
-
-func stringOrDefault(gc *GitConfig, key string, def string) string {
-	v, err := gc.GetString(key)
-	if err != nil {
-		return def
-	}
-	return v
 }
 
 func getGlobalConfigPath() string {

@@ -229,18 +229,22 @@ git hop doctor --fix
 
 For detailed configuration, see [Configuration Guide](docs/configuration.md).
 
-Quick setup:
+Preferences are `hop.*` keys in git config:
 
 ```bash
-git hop config --help          # View all settings
-git hop config port_base 20000  # Change port base
+git config --get-regexp '^hop\.'                    # View your settings
+git config --global hop.add.fetch true               # Change one for every repo
+git config --global --unset hop.add.fetch            # Back to the default
 ```
+
+Custom package and environment managers live in
+`~/.config/git-hop/managers.json`.
 
 Configuration hierarchy (first found wins):
 1. Environment variables
 2. Hub-level `hop.json`
 3. Hopspace-level `hop.json`
-4. Global `~/.config/git-hop/config.json`
+4. git config `hop.*` keys (repo-local, then `--global`)
 5. Built-in defaults
 
 ## Troubleshooting

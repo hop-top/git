@@ -122,18 +122,17 @@ cd $(git rev-parse --show-toplevel)/../current
 
 ## Configuration
 
-Shell integration status is tracked in your global config (`~/.config/git-hop/global.json`):
+Shell integration status is tracked in your global git config as `hop.shellIntegration.*` keys:
 
-```json
-{
-  "shellIntegration": {
-    "status": "approved",
-    "installedShell": "bash",
-    "installedPath": "/home/user/.bashrc",
-    "installedAt": "2025-02-05T..."
-  }
-}
+```bash
+$ git config --global --get-regexp '^hop\.shellintegration\.'
+hop.shellintegration.status approved
+hop.shellintegration.shell bash
+hop.shellintegration.path /home/user/.bashrc
+hop.shellintegration.installedat 2025-02-05T09:30:00Z
 ```
+
+Unset, `hop.shellIntegration.status` defaults to `unknown`.
 
 **Status values:**
 - `unknown` - Never prompted (default for new installs)

@@ -107,7 +107,7 @@ You can add custom package managers or override built-in ones in your global con
 }
 ```
 
-Save this to `$XDG_CONFIG_HOME/git-hop/global.json` (usually `~/.config/git-hop/global.json` on Linux or `~/Library/Preferences/git-hop/global.json` on macOS).
+Save this to `$XDG_CONFIG_HOME/git-hop/managers.json` (usually `~/.config/git-hop/managers.json` on Linux or `~/Library/Preferences/git-hop/managers.json` on macOS).
 
 Custom package managers with the same `name` as built-in ones will override the built-in configuration.
 

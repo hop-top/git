@@ -36,19 +36,30 @@ const (
 	KeyEventsPath             = "hop.events.path"
 )
 
-// Defaults for keys that have them.
+// defaults is the single source of compiled defaults for hop.* keys.
+// Every *OrDefault accessor falls back to it, and GlobalLoader.GetDefaults
+// is derived from it. A key missing here defaults to its zero value.
 var defaults = map[string]string{
-	KeyGitDomain:              "github.com",
-	KeyAutoEnvStart:           "true",
-	KeyConventionWarning:      "true",
-	KeyWorktreeLocation:       "{hubPath}/hops/{branch}",
-	KeyAddDefaultStartPoint:   "default-branch",
-	KeyAddCopyIgnored:         "true",
-	KeyAddCopyIgnoredMaxSize:  "10m",
-	KeyShellIntegrationStatus: "unknown",
-	KeyBackupEnabled:          "true",
-	KeyBackupMaxBackups:       "3",
-	KeyHooksInstallMode:       "prompt",
+	KeyGitDomain:                 "github.com",
+	KeyAutoEnvStart:              "true",
+	KeyShowAllManagedRepos:       "false",
+	KeyUnusedThresholdDays:       "30",
+	KeyEnforceCleanForConversion: "true",
+	KeyConventionWarning:         "true",
+	KeyWorktreeLocation:          "{hubPath}/hops/{branch}",
+	KeyAddDefaultStartPoint:      "default-branch",
+	KeyAddCopyIgnored:            "true",
+	KeyAddCopyIgnoredMaxSize:     "10m",
+	KeyShellIntegrationStatus:    "unknown",
+	KeyBackupEnabled:             "true",
+	KeyBackupKeepBackup:          "false",
+	KeyBackupMaxBackups:          "3",
+	KeyBackupCleanupAgeDays:      "30",
+	KeyBackupPreserveStashes:     "true",
+	KeyConversionEnforceClean:    "true",
+	KeyConversionAllowDirtyForce: "false",
+	KeyConversionAutoRollback:    "true",
+	KeyHooksInstallMode:          "prompt",
 }
 
 // NewGitConfig returns a GitConfig that shells out to git.
