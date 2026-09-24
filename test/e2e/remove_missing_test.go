@@ -52,7 +52,7 @@ func setupHubWithMissingWorktrees(t *testing.T) (*TestEnv, string, string) {
 // TestRemove_AllWorktreesMissing_NoChdir verifies that removing a branch
 // whose hub has no live worktrees does not emit a chdir error.
 //
-// Failing symptom: WARN with "chdir … no such file or directory"
+// Failing symptom: a "warning:" line with "chdir … no such file or directory"
 func TestRemove_AllWorktreesMissing_NoChdir(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
