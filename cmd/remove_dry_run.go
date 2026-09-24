@@ -50,7 +50,7 @@ func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	runner := hooks.NewRunner(fs)
 
-	if err := previewDetector(fs, g, branch, hubPath, "finish"); err != nil {
+	if err := previewDetector(g, branch, hubPath, "finish"); err != nil {
 		refuseDryRun(fmt.Sprintf("remove '%s'", branch), fmt.Errorf("branch type detector failed: %v", err))
 	}
 	cli.PreviewHook(runner, "pre-worktree-remove", worktreePath, repoID)

@@ -14,7 +14,6 @@ import (
 	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
-	"hop.top/git/internal/detector"
 	"hop.top/git/internal/docker"
 	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
@@ -189,9 +188,7 @@ and no hook runs.`,
 		}
 
 		// Create detector manager and register detectors
-		detectorMgr := detector.NewManager(fs, g)
-		detectorMgr.Register(detector.NewGitFlowNextDetector(g))
-		detectorMgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
+		detectorMgr := newBranchDetectors(fs, g, hubPath)
 
 		// Execute pre-add (detector OnAdd)
 		detectorCtx := context.Background()

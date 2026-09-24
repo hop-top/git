@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -29,11 +30,14 @@ var addHooks = []string{"pre-worktree-add", "post-worktree-add"}
 
 // previewAdd reports what `git hop add` would do for p without doing any
 // of it. Reads only: no worktree, branch, hop.json, state, symlink or
-// dependency writes, and no hook or branch-type detector runs, since
-// either may mutate the repo.
+// dependency writes, and no hook or branch-type detector action runs,
+// since either may mutate the repo.
 func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.Runner, p addPlan) {
 	if p.fetch {
 		output.Info("[dry-run] Would fetch origin")
+	}
+	if err := previewDetector(g, p.branch, p.hubPath, "start"); err != nil {
+		refuseDryRun(fmt.Sprintf("add '%s'", p.branch), fmt.Errorf("branch type detector failed: %v", err))
 	}
 	if wm.EnforceStartPoint {
 		previewEnforcedBranch(wm, p)

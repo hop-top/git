@@ -34,6 +34,7 @@ const (
 	KeyHooksInstallMode       = "hop.hooks.installMode"
 	KeyEventsSink             = "hop.events.sink"
 	KeyEventsPath             = "hop.events.path"
+	KeyGitflowEnabled         = "hop.gitflow.enabled"
 )
 
 // defaults is the single source of compiled defaults for hop.* keys.
@@ -60,11 +61,21 @@ var defaults = map[string]string{
 	KeyConversionAllowDirtyForce: "false",
 	KeyConversionAutoRollback:    "true",
 	KeyHooksInstallMode:          "prompt",
+	KeyGitflowEnabled:            "false",
 }
 
 // NewGitConfig returns a GitConfig that shells out to git.
 func NewGitConfig() *GitConfig {
 	return &GitConfig{RunCmd: execGitConfig}
+}
+
+// NewGitConfigIn returns a GitConfig that reads the repository at dir
+// (`git -C <dir> config`) rather than the one around the process's cwd.
+// Use it for per-repo settings read alongside other config of that repo.
+func NewGitConfigIn(dir string) *GitConfig {
+	return &GitConfig{RunCmd: func(args ...string) (string, error) {
+		return execGitConfig(append([]string{"-C", dir}, args...)...)
+	}}
 }
 
 // GetBool reads a boolean from git config.

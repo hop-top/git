@@ -662,18 +662,11 @@ exit 0
 
 ### 7. Git-Flow Integration
 
-git-hop has **built-in integration** with [git-flow-next](https://github.com/gittower/git-flow-next) that automatically detects branch types and runs appropriate git-flow commands.
+git-hop has **built-in integration** with [git-flow-next](https://github.com/gittower/git-flow-next). It always **detects** branch types from your git-flow configuration; it **runs git-flow commands** only when you opt in.
 
-#### Built-in Detection
+#### Built-in Detection (always on)
 
-When you run `git hop add feature/my-feature`, git-hop:
-
-1. **Detects the branch type** by reading your git-flow configuration
-2. **Runs `git flow feature start my-feature`** automatically
-3. **Creates the worktree**
-4. **Sets environment variables** for hooks to use
-
-Similarly, `git hop remove feature/my-feature` will run `git flow feature finish my-feature` before removing the worktree.
+In a repository where `gitflow.initialized` is `true`, `git hop add`, `remove`, `move` and switching read the `gitflow.branch.<type>.*` config to work out the branch type, and hand it to hooks as the `GIT_HOP_BRANCH_*` variables below. Detection only reads git config; it never changes the repository.
 
 This works with **any branch types configured in git-flow-next**, including custom types:
 
@@ -683,9 +676,26 @@ git config gitflow.branch.bugfix.type topic
 git config gitflow.branch.bugfix.parent develop
 git config gitflow.branch.bugfix.prefix bugfix/
 
-# git-hop automatically detects it
-git hop add bugfix/fix-login  # Runs: git flow bugfix start fix-login
+# git-hop detects it: hooks see GIT_HOP_BRANCH_TYPE=bugfix
+git hop add bugfix/fix-login
 ```
+
+#### Running git-flow commands (opt-in: `hop.gitflow.enabled`)
+
+By default git-hop runs **no** `git flow` command. `git flow <type> finish` merges the branch into its parent (for example `develop`), which is not something removing a worktree should do unasked. To have git-hop drive git-flow, turn it on per repository (or with `--global` for all of them):
+
+```bash
+git config hop.gitflow.enabled true
+```
+
+With it on, for a branch whose prefix matches a git-flow type:
+
+1. `git hop add feature/my-feature` runs `git flow feature start my-feature` before the `pre-worktree-add` hook, then creates the worktree
+2. `git hop remove feature/my-feature` runs `git flow feature finish my-feature` before the `pre-worktree-remove` hook, then removes the worktree
+
+A failing git-flow command aborts the add or remove. `--dry-run` shows the `Would run 'git flow ...'` step only when the setting is on. With it off, `--verbose` prints one `hint:` line per command when a git-flow action was skipped.
+
+git-flow-next refuses to run outside a work tree, so with the setting on, add and remove currently fail in a bare hub (the layout git-hop creates when it clones or converts a repository).
 
 #### Environment Variables
 
@@ -739,28 +749,32 @@ exit 0
 
 #### Workflow
 
-| Command | Built-in Action | Git-Hop Action |
-|---------|-----------------|----------------|
-| `git hop add feature/my-feature` | `git flow feature start my-feature` | Creates worktree |
-| `git hop remove feature/my-feature` | `git flow feature finish my-feature` | Removes worktree |
-| `git hop add release/v1.0.0` | `git flow release start v1.0.0` | Creates worktree |
-| `git hop remove release/v1.0.0` | `git flow release finish v1.0.0` | Removes worktree |
-| `git hop move feature/a feature/b` | None (type detected for `GIT_HOP_BRANCH_*` only) | Renames branch and worktree |
+| Command | git-flow action (`hop.gitflow.enabled=true`) | Default (unset / `false`) | Git-Hop Action |
+|---------|-----------------|---------|----------------|
+| `git hop add feature/my-feature` | `git flow feature start my-feature` | None | Creates worktree |
+| `git hop remove feature/my-feature` | `git flow feature finish my-feature` | None | Removes worktree |
+| `git hop add release/v1.0.0` | `git flow release start v1.0.0` | None | Creates worktree |
+| `git hop remove release/v1.0.0` | `git flow release finish v1.0.0` | None | Removes worktree |
+| `git hop move feature/a feature/b` | None | None | Renames branch and worktree |
+
+In every row the branch type is detected and passed to hooks as `GIT_HOP_BRANCH_*`.
 
 #### Manual Hook Integration (Optional)
 
-If you need custom git-flow behavior not handled by the built-in detector, you can still use hooks:
+If you want git-flow behavior the built-in actions do not cover, leave `hop.gitflow.enabled` off and drive git-flow from a hook, using the detected type:
 
 ```bash
 #!/bin/bash
 # pre-worktree-add - Custom git-flow logic
 
-# Skip if git-flow-next already handled it
-if [ "$GIT_HOP_DETECTOR_SOURCE" = "gitflow-next" ]; then
-    exit 0  # Already handled by built-in detector
+# Leave it to git-hop when the built-in actions are on
+if [ "$(git config --type=bool hop.gitflow.enabled)" = "true" ]; then
+    exit 0
 fi
 
-# Your custom logic here
+if [ "$GIT_HOP_DETECTOR_SOURCE" = "gitflow-next" ]; then
+    : # Your custom logic here, e.g. based on $GIT_HOP_BRANCH_TYPE
+fi
 ```
 
 ## Installing Hook Directories

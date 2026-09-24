@@ -222,6 +222,7 @@ inside any hub for that repository.
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
 | `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, it fetches only when the start-point is an origin ref: the default branch or an explicit `origin/<branch>`. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. |
+| `hop.gitflow.enabled` | boolean | `false` | Let `git hop add` / `git hop remove` run `git flow <type> start` / `git flow <type> finish` for branches whose prefix matches a git-flow-next type. Off, git-hop only detects the branch type (for the `GIT_HOP_BRANCH_*` hook variables) and runs no git-flow command. See [`hop.gitflow.enabled`](#hopgitflowenabled). |
 | `hop.events.sink` | `jsonl` \| `none` | `none` | Append every lifecycle event (worktree created/removed/merged/moved/switched, env started/stopped, ...) to a JSONL file, so external tools can react without file hooks. See [`hop.events.sink`](#hopeventssink). |
 | `hop.events.path` | path | `$XDG_STATE_HOME/git-hop/events.jsonl` | File `hop.events.sink=jsonl` appends to. `~/` is expanded the way git expands path values. |
 
@@ -344,6 +345,30 @@ git hop merge feature-x main --delete-remote=false
 With the key unset and no flag, merge never contacts the network. When
 remote deletion does run, the probe and the delete push are bounded by
 [`hop.remote.timeout`](#hopremotetimeout).
+
+### `hop.gitflow.enabled`
+
+In a repository set up for [git-flow-next](https://github.com/gittower/git-flow-next)
+(`gitflow.initialized=true`), git-hop reads the git-flow branch types to
+detect what kind of branch you are adding or removing, and passes that to
+hooks. It does not run git-flow itself unless you ask:
+`git flow <type> finish` merges the branch into its parent, which removing
+a worktree should not do on its own.
+
+```bash
+# This repository: add runs 'git flow <type> start', remove runs 'finish'
+git config hop.gitflow.enabled true
+
+# Back to detection only
+git config --unset hop.gitflow.enabled
+```
+
+The key is read from the hub's repository, the same place the `gitflow.*`
+settings live, so `--global` works too. `--dry-run` lists the git-flow
+step only when the key is on. With it off, `--verbose` prints a single
+`hint:` when a command skipped a git-flow action. See
+[Git-Flow Integration](hooks.md#7-git-flow-integration) for the full
+behavior, including the current bare-hub limitation.
 
 ### `hop.repair.backupRetention`
 
