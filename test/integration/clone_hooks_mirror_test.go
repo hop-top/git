@@ -172,7 +172,7 @@ func runRecordedClone(t *testing.T, c *cloneRecorder) string {
 	projectRoot := filepath.Join(t.TempDir(), "proj")
 	err := hop.CloneWorktree(afero.NewMemMapFs(), mocks.NewMockGit(),
 		"git@github.com:testorg/testrepo.git", projectRoot,
-		true, false, c.mirror(), c.dispatch())
+		false, c.mirror(), c.dispatch())
 	if err != nil {
 		t.Fatalf("CloneWorktree: %v", err)
 	}
@@ -307,7 +307,7 @@ func TestClonePreCloneFailureAbortsClone(t *testing.T) {
 
 	projectRoot := filepath.Join(t.TempDir(), "proj")
 	err := hop.CloneWorktree(fs, mocks.NewMockGit(),
-		"git@github.com:testorg/testrepo.git", projectRoot, true, false,
+		"git@github.com:testorg/testrepo.git", projectRoot, false,
 		hop.HookMirrorOptions{
 			Run: func(string, string) error {
 				fired = append(fired, "mirror")

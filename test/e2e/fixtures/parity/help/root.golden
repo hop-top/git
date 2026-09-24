@@ -3,8 +3,7 @@ Git worktrees, Docker environments, and structured workspaces.
 
 Clone Mode:
   git-hop <uri> [path]
-  Clones a repository using bare repo + worktree structure (recommended)
-  Configure default behavior via global config: bareRepo setting
+  Clones a repository into a bare hub + worktree structure
 
 Worktree Mode:
   git-hop <branch>

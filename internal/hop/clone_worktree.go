@@ -62,7 +62,11 @@ type HookDispatchOptions struct {
 	PostClone func(path, repoID, branch string) error
 }
 
-func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, useBare bool, globalConfig bool, hookOpts HookMirrorOptions, dispatch HookDispatchOptions) error {
+// CloneWorktree clones uri into a hub at projectPath. The hub is always a
+// bare repository with the default branch checked out at
+// hops/<defaultBranch>/ (docs/stories/015-hopspace-shape-contract.md); the
+// hop.bareRepo setting does not change that shape and is not consulted.
+func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, globalConfig bool, hookOpts HookMirrorOptions, dispatch HookDispatchOptions) error {
 	projectRoot := projectPath
 
 	if projectRoot == "" {
@@ -109,14 +113,8 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 	fmt.Printf("Project root: %s\n", projectRoot)
 	fmt.Printf("Default branch: %s\n", defaultBranch)
 
-	if useBare {
-		if err := cloneBareRepo(fs, g, uri, projectRoot, defaultBranch); err != nil {
-			return err
-		}
-	} else {
-		if err := cloneRegularRepo(fs, g, uri, projectRoot, defaultBranch); err != nil {
-			return err
-		}
+	if err := cloneBareRepo(fs, g, uri, projectRoot, defaultBranch); err != nil {
+		return err
 	}
 
 	// All worktrees are under hops/ subdirectory (default pattern)
@@ -130,7 +128,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 
 	if globalConfig {
 		// Global mode: separate hub and hopspace configs
-		if err := createProjectConfig(fs, g, projectRoot, uri, org, repo, defaultBranch, useBare); err != nil {
+		if err := createProjectConfig(fs, projectRoot, uri, org, repo, defaultBranch); err != nil {
 			return err
 		}
 
@@ -142,7 +140,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 		}
 	} else {
 		// Local mode (default): merged hub+hopspace config in project root
-		if err := createMergedConfig(fs, projectRoot, uri, org, repo, defaultBranch, absMainWorktreePath, useBare); err != nil {
+		if err := createMergedConfig(fs, projectRoot, uri, org, repo, defaultBranch, absMainWorktreePath); err != nil {
 			return err
 		}
 	}
@@ -236,10 +234,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, use
 
 	fmt.Printf("\nSuccessfully cloned to %s\n", projectRoot)
 	fmt.Printf("\nProject structure:\n")
-	fmt.Printf("  %s/\n", projectRoot)
-	if useBare {
-		fmt.Printf("    .git/              (bare repository)\n")
-	}
+	fmt.Printf("  %s/  (bare repository)\n", projectRoot)
 	fmt.Printf("    hop.json\n")
 	fmt.Printf("    %s/\n", worktreeDir)
 	fmt.Printf("      %s/           (worktree for current branch)\n", defaultBranch)
@@ -306,23 +301,6 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 	return nil
 }
 
-// cloneRegularRepo previously attempted a non-bare clone at <projectRoot>
-// plus a worktree at hops/<defaultBranch>. That layout is incoherent —
-// the root and the worktree both claimed <defaultBranch>, and the root's
-// index disagreed with the on-disk hopspace shape, leaving `git status`
-// at the hub root permanently dirty.
-//
-// The hopspace contract (per design and the original CLAUDE.md note on
-// "Bare Worktree Repos") is unconditional: <projectRoot> is a bare repo
-// and source code lives only in hops/<defaultBranch>/. The
-// Defaults.BareRepo flag is therefore effectively a no-op now; kept for
-// backwards compatibility of any persisted config but does not change
-// the hopspace shape. See docs/stories/015-hopspace-shape-contract.md for
-// the invariants both clone paths must satisfy.
-func cloneRegularRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
-	return cloneBareRepo(fs, g, uri, projectRoot, defaultBranch)
-}
-
 // setUpstreamTracking sets the upstream tracking branch so first push
 // doesn't require --set-upstream.
 func setUpstreamTracking(g git.GitInterface, worktreePath, branch string) error {
@@ -341,7 +319,7 @@ func ensureWorktreeHooksDir(fs afero.Fs, worktreePath string) error {
 	return fs.MkdirAll(hooksDir, 0755)
 }
 
-func createProjectConfig(fs afero.Fs, g git.GitInterface, projectRoot, uri, org, repo, defaultBranch string, useBare bool) error {
+func createProjectConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch string) error {
 	cfgPath := filepath.Join(projectRoot, "hop.json")
 
 	cfg := map[string]any{
@@ -351,7 +329,7 @@ func createProjectConfig(fs afero.Fs, g git.GitInterface, projectRoot, uri, org,
 			"repo":          repo,
 			"defaultBranch": defaultBranch,
 			"structure":     "bare-worktree",
-			"isBare":        useBare,
+			"isBare":        true,
 		},
 		"branches": map[string]any{
 			defaultBranch: map[string]any{
@@ -377,7 +355,7 @@ func createProjectConfig(fs afero.Fs, g git.GitInterface, projectRoot, uri, org,
 }
 
 // createMergedConfig creates a single hop.json with both hub and hopspace fields (local mode)
-func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch, worktreePath string, useBare bool) error {
+func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch, worktreePath string) error {
 	cfgPath := filepath.Join(projectRoot, "hop.json")
 
 	cfg := map[string]any{
@@ -387,7 +365,7 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 			"repo":          repo,
 			"defaultBranch": defaultBranch,
 			"structure":     "bare-worktree",
-			"isBare":        useBare,
+			"isBare":        true,
 		},
 		// Hub branches (points to worktree paths - full absolute paths)
 		"branches": map[string]any{
