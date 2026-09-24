@@ -1,0 +1,31 @@
+# The default branch is never "merged into itself": when its worktree is
+# missing, doctor's state check does not auto-remove its entry as merged.
+# The hub check already treats the default branch that way; both checks
+# share one rule.
+#
+# The regression this pins: `git branch --merged main` lists main, so the
+# state check auto-removed main's entry as "merged into main".
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+rm $WORK/hub/hops/main
+
+# Outside the hub only the state check runs, so nothing recreates main
+# before the state check sees it missing.
+cd $WORK
+
+# --- preview ---
+! exec git-hop doctor --fix --dry-run
+! stdout 'is merged into'
+stdout 'Would prompt'
+
+# --- real run, nobody to answer the prompt: the entry is kept ---
+! exec git-hop doctor --fix
+! stdout 'is merged into'
+stdout 'Kept as-is'
+grep '"main": \{' $WORK/.local/state/git-hop/state.json

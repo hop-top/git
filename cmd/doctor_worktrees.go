@@ -57,17 +57,24 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 
 // mergedMissingBranch reports whether branch is merged into the hub's
 // default branch, and names that branch. It is the state check's test
-// (isBranchMerged, run in the hub), so both checks agree on which missing
-// worktrees are cleanup. The default branch never counts, since it is
-// trivially merged into itself. An unknown default branch, or a merge
-// test that fails, answers false: recreating is the repair that loses
-// nothing.
+// (mergedIntoDefault, run in the hub), so both checks agree on which
+// missing worktrees are cleanup.
 func mergedMissingBranch(g git.GitInterface, hub *hop.Hub, branch string) (string, bool) {
 	base := hub.Config.Repo.DefaultBranch
-	if base == "" || branch == base {
-		return base, false
+	return base, mergedIntoDefault(g, hub.Path, branch, base)
+}
+
+// mergedIntoDefault reports whether branch is merged into defaultBranch,
+// run in the repository at dir. It is how both the hub check and the
+// state check decide that a missing worktree is cleanup rather than work
+// to keep. The default branch never counts, since it is trivially merged
+// into itself. An unknown default branch, or a merge test that fails,
+// answers false: keeping or recreating is the repair that loses nothing.
+func mergedIntoDefault(g git.GitInterface, dir, branch, defaultBranch string) bool {
+	if defaultBranch == "" || branch == defaultBranch {
+		return false
 	}
-	return base, isBranchMerged(g, hub.Path, branch, base)
+	return isBranchMerged(g, dir, branch, defaultBranch)
 }
 
 // recreateWorktree checks out branch again at linkPath, the directory its
