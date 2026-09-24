@@ -14,20 +14,11 @@ import (
 
 // Additional hop.* config keys not defined in gitconfig.go.
 const (
-	KeyShowAllManagedRepos       = "hop.showAllManagedRepos"
-	KeyUnusedThresholdDays       = "hop.unusedThresholdDays"
-	KeyEnforceCleanForConversion = "hop.enforceCleanForConversion"
-
 	KeyShellIntegrationPath = "hop.shellIntegration.path"
 	KeyShellIntegrationAt   = "hop.shellIntegration.installedAt"
 
-	KeyBackupKeepBackup      = "hop.backup.keepBackup"
-	KeyBackupCleanupAgeDays  = "hop.backup.cleanupAgeDays"
-	KeyBackupPreserveStashes = "hop.backup.preserveStashes"
-
-	KeyConversionEnforceClean    = "hop.conversion.enforceClean"
-	KeyConversionAllowDirtyForce = "hop.conversion.allowDirtyForce"
-	KeyConversionAutoRollback    = "hop.conversion.autoRollback"
+	KeyBackupKeepBackup     = "hop.backup.keepBackup"
+	KeyBackupCleanupAgeDays = "hop.backup.cleanupAgeDays"
 )
 
 // GlobalLoader handles loading and saving global configuration.
@@ -111,15 +102,11 @@ func readFromGitConfig(gc *GitConfig) *GlobalConfig {
 
 	return &GlobalConfig{
 		Defaults: DefaultSettings{
-			AutoEnvStart:              gc.GetBoolOrDefault(KeyAutoEnvStart),
-			ShowAllManagedRepos:       gc.GetBoolOrDefault(KeyShowAllManagedRepos),
-			UnusedThresholdDays:       gc.GetIntOrDefault(KeyUnusedThresholdDays),
-			EnforceCleanForConversion: gc.GetBoolOrDefault(KeyEnforceCleanForConversion),
-			ConventionWarning:         gc.GetBoolOrDefault(KeyConventionWarning),
-			GitDomain:                 gc.GetStringOrDefault(KeyGitDomain),
-			WorktreeLocation:          gc.GetStringOrDefault(KeyWorktreeLocation),
-			DefaultStartPoint:         gc.GetStringOrDefault(KeyAddDefaultStartPoint),
-			HooksInstallMode:          gc.GetStringOrDefault(KeyHooksInstallMode),
+			AutoEnvStart:      gc.GetBoolOrDefault(KeyAutoEnvStart),
+			GitDomain:         gc.GetStringOrDefault(KeyGitDomain),
+			WorktreeLocation:  gc.GetStringOrDefault(KeyWorktreeLocation),
+			DefaultStartPoint: gc.GetStringOrDefault(KeyAddDefaultStartPoint),
+			HooksInstallMode:  gc.GetStringOrDefault(KeyHooksInstallMode),
 		},
 		ShellIntegration: ShellIntegrationSettings{
 			Status:         gc.GetStringOrDefault(KeyShellIntegrationStatus),
@@ -128,16 +115,9 @@ func readFromGitConfig(gc *GitConfig) *GlobalConfig {
 			InstalledAt:    installedAt,
 		},
 		Backup: BackupSettings{
-			Enabled:         gc.GetBoolOrDefault(KeyBackupEnabled),
-			KeepBackup:      gc.GetBoolOrDefault(KeyBackupKeepBackup),
-			MaxBackups:      gc.GetIntOrDefault(KeyBackupMaxBackups),
-			CleanupAgeDays:  gc.GetIntOrDefault(KeyBackupCleanupAgeDays),
-			PreserveStashes: gc.GetBoolOrDefault(KeyBackupPreserveStashes),
-		},
-		Conversion: ConversionSettings{
-			EnforceClean:    gc.GetBoolOrDefault(KeyConversionEnforceClean),
-			AllowDirtyForce: gc.GetBoolOrDefault(KeyConversionAllowDirtyForce),
-			AutoRollback:    gc.GetBoolOrDefault(KeyConversionAutoRollback),
+			KeepBackup:     gc.GetBoolOrDefault(KeyBackupKeepBackup),
+			MaxBackups:     gc.GetIntOrDefault(KeyBackupMaxBackups),
+			CleanupAgeDays: gc.GetIntOrDefault(KeyBackupCleanupAgeDays),
 		},
 	}
 }
@@ -150,10 +130,6 @@ func (l *GlobalLoader) writeToGitConfig(cfg *GlobalConfig) error {
 		val string
 	}{
 		{KeyAutoEnvStart, strconv.FormatBool(cfg.Defaults.AutoEnvStart)},
-		{KeyShowAllManagedRepos, strconv.FormatBool(cfg.Defaults.ShowAllManagedRepos)},
-		{KeyUnusedThresholdDays, strconv.Itoa(cfg.Defaults.UnusedThresholdDays)},
-		{KeyEnforceCleanForConversion, strconv.FormatBool(cfg.Defaults.EnforceCleanForConversion)},
-		{KeyConventionWarning, strconv.FormatBool(cfg.Defaults.ConventionWarning)},
 		{KeyGitDomain, cfg.Defaults.GitDomain},
 		{KeyWorktreeLocation, cfg.Defaults.WorktreeLocation},
 		{KeyAddDefaultStartPoint, cfg.Defaults.DefaultStartPoint},
@@ -163,15 +139,9 @@ func (l *GlobalLoader) writeToGitConfig(cfg *GlobalConfig) error {
 		{KeyShellIntegrationShell, cfg.ShellIntegration.InstalledShell},
 		{KeyShellIntegrationPath, cfg.ShellIntegration.InstalledPath},
 
-		{KeyBackupEnabled, strconv.FormatBool(cfg.Backup.Enabled)},
 		{KeyBackupKeepBackup, strconv.FormatBool(cfg.Backup.KeepBackup)},
 		{KeyBackupMaxBackups, strconv.Itoa(cfg.Backup.MaxBackups)},
 		{KeyBackupCleanupAgeDays, strconv.Itoa(cfg.Backup.CleanupAgeDays)},
-		{KeyBackupPreserveStashes, strconv.FormatBool(cfg.Backup.PreserveStashes)},
-
-		{KeyConversionEnforceClean, strconv.FormatBool(cfg.Conversion.EnforceClean)},
-		{KeyConversionAllowDirtyForce, strconv.FormatBool(cfg.Conversion.AllowDirtyForce)},
-		{KeyConversionAutoRollback, strconv.FormatBool(cfg.Conversion.AutoRollback)},
 	}
 
 	// Write installedAt only if non-zero

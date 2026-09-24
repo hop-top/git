@@ -42,16 +42,12 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// gitconfig.go defaults: gitDomain=github.com, autoEnvStart=true,
-	// conventionWarning=true
+	// gitconfig.go defaults: gitDomain=github.com, autoEnvStart=true
 	if cfg.Defaults.AutoEnvStart != true {
 		t.Errorf("AutoEnvStart = %v, want true", cfg.Defaults.AutoEnvStart)
 	}
 	if cfg.Defaults.GitDomain != "github.com" {
 		t.Errorf("GitDomain = %q, want %q", cfg.Defaults.GitDomain, "github.com")
-	}
-	if cfg.Defaults.ConventionWarning != true {
-		t.Errorf("ConventionWarning = %v, want true", cfg.Defaults.ConventionWarning)
 	}
 	if cfg.ShellIntegration.Status != "unknown" {
 		t.Errorf("ShellIntegration.Status = %q, want %q",
@@ -66,10 +62,8 @@ func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	store := map[string]string{
 		"hop.gitDomain":               "gitlab.com",
 		"hop.autoEnvStart":            "false",
-		"hop.conventionWarning":       "false",
 		"hop.worktreeLocation":        "/custom/{branch}",
 		"hop.backup.maxBackups":       "10",
-		"hop.backup.enabled":          "false",
 		"hop.shellIntegration.status": "approved",
 		"hop.shellIntegration.shell":  "zsh",
 	}
@@ -94,9 +88,6 @@ func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	if cfg.Backup.MaxBackups != 10 {
 		t.Errorf("Backup.MaxBackups = %d, want 10", cfg.Backup.MaxBackups)
 	}
-	if cfg.Backup.Enabled != false {
-		t.Errorf("Backup.Enabled = %v, want false", cfg.Backup.Enabled)
-	}
 	if cfg.ShellIntegration.Status != "approved" {
 		t.Errorf("ShellIntegration.Status = %q, want %q",
 			cfg.ShellIntegration.Status, "approved")
@@ -114,13 +105,9 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 
 	original := &config.GlobalConfig{
 		Defaults: config.DefaultSettings{
-			AutoEnvStart:              false,
-			GitDomain:                 "bitbucket.org",
-			ConventionWarning:         false,
-			WorktreeLocation:          "/my/path/{branch}",
-			ShowAllManagedRepos:       true,
-			UnusedThresholdDays:       60,
-			EnforceCleanForConversion: false,
+			AutoEnvStart:     false,
+			GitDomain:        "bitbucket.org",
+			WorktreeLocation: "/my/path/{branch}",
 		},
 		ShellIntegration: config.ShellIntegrationSettings{
 			Status:         "approved",
@@ -128,16 +115,9 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 			InstalledPath:  "/home/me/.config/fish/config.fish",
 		},
 		Backup: config.BackupSettings{
-			Enabled:         false,
-			KeepBackup:      true,
-			MaxBackups:      5,
-			CleanupAgeDays:  7,
-			PreserveStashes: false,
-		},
-		Conversion: config.ConversionSettings{
-			EnforceClean:    false,
-			AllowDirtyForce: true,
-			AutoRollback:    false,
+			KeepBackup:     true,
+			MaxBackups:     5,
+			CleanupAgeDays: 7,
 		},
 	}
 
@@ -165,10 +145,6 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 		t.Errorf("roundtrip Backup.MaxBackups = %d, want 5",
 			cfg.Backup.MaxBackups)
 	}
-	if cfg.Conversion.AllowDirtyForce != true {
-		t.Errorf("roundtrip Conversion.AllowDirtyForce = %v, want true",
-			cfg.Conversion.AllowDirtyForce)
-	}
 }
 
 func TestMigration_JSONToGitConfig(t *testing.T) {
@@ -195,7 +171,6 @@ func TestMigration_JSONToGitConfig(t *testing.T) {
 			Status: "approved",
 		},
 		Backup: config.BackupSettings{
-			Enabled:    true,
 			MaxBackups: 7,
 		},
 		PackageManagers: []config.PackageManagerConfig{
@@ -302,9 +277,5 @@ func TestGetDefaults(t *testing.T) {
 	}
 	if defs.Backup.MaxBackups != 3 {
 		t.Errorf("default Backup.MaxBackups = %d, want 3", defs.Backup.MaxBackups)
-	}
-	if defs.Conversion.AutoRollback != true {
-		t.Errorf("default Conversion.AutoRollback = %v, want true",
-			defs.Conversion.AutoRollback)
 	}
 }

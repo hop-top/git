@@ -6,6 +6,7 @@
 # hop.worktreeLocation "" selects the centralized layout). Evidence is
 # global.json.bak, the file it read, plus the hop.migrated sentinel; a key
 # is only touched while it still holds the value the migration wrote.
+# Settings git-hop has since dropped (hop.conversion.autoRollback) count too.
 # git's global config here is $WORK/gitconfig (see the script setup).
 
 mkdir $WORK/data $WORK/.config/git-hop $WORK/.cache/git-hop
@@ -17,6 +18,7 @@ exec git config --global hop.worktreeLocation ''
 exec git config --global hop.shellIntegration.status ''
 exec git config --global hop.backup.keepBackup false
 exec git config --global hop.backup.maxBackups 5
+exec git config --global hop.conversion.autoRollback false
 
 # --- nothing happens on its own ---
 exec git-hop list
@@ -29,6 +31,7 @@ stdout '"check": "config"'
 stdout '"subject": "hop.shellIntegration.status"'
 stdout '"subject": "hop.backup.keepBackup"'
 stdout '"subject": "hop.worktreeLocation"'
+stdout '"subject": "hop.conversion.autoRollback"'
 stdout 'run ''git hop doctor --fix'' to unset it'
 ! stdout '"subject": "hop.gitDomain"'
 ! stdout '"subject": "hop.backup.enabled"'
@@ -43,6 +46,7 @@ exec git-hop doctor --fix
 ! exec git config --global --get hop.shellIntegration.status
 ! exec git config --global --get hop.backup.keepBackup
 ! exec git config --global --get hop.worktreeLocation
+! exec git config --global --get hop.conversion.autoRollback
 exec git config --global --get hop.gitDomain
 stdout example.com
 exec git config --global --get hop.backup.enabled

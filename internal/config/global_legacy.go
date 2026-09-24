@@ -5,10 +5,38 @@ import (
 	"time"
 )
 
+// Keys of retired settings: global.json had them, git-hop never read them.
+// The migration no longer carries them into git config, but the zero-value
+// migration wrote them, so MigrationDebris still has to recognise them.
+const (
+	keyShowAllManagedRepos       = "hop.showAllManagedRepos"
+	keyUnusedThresholdDays       = "hop.unusedThresholdDays"
+	keyEnforceCleanForConversion = "hop.enforceCleanForConversion"
+	keyConventionWarning         = "hop.conventionWarning"
+	keyBackupEnabled             = "hop.backup.enabled"
+	keyBackupPreserveStashes     = "hop.backup.preserveStashes"
+	keyConversionEnforceClean    = "hop.conversion.enforceClean"
+	keyConversionAllowDirtyForce = "hop.conversion.allowDirtyForce"
+	keyConversionAutoRollback    = "hop.conversion.autoRollback"
+)
+
+var retiredKeys = map[string]bool{
+	keyShowAllManagedRepos:       true,
+	keyUnusedThresholdDays:       true,
+	keyEnforceCleanForConversion: true,
+	keyConventionWarning:         true,
+	keyBackupEnabled:             true,
+	keyBackupPreserveStashes:     true,
+	keyConversionEnforceClean:    true,
+	keyConversionAllowDirtyForce: true,
+	keyConversionAutoRollback:    true,
+}
+
 // legacyGlobalConfig mirrors the global.json schema with pointer scalars so
 // migration can tell a key the user wrote from one the file never had.
 // Decoding into GlobalConfig would turn every absent key into false/0/"",
 // and writing those to git config would shadow the compiled defaults.
+// It keeps the retired settings so MigrationDebris can see them.
 type legacyGlobalConfig struct {
 	Defaults struct {
 		AutoEnvStart              *bool   `json:"autoEnvStart"`
@@ -59,6 +87,8 @@ type legacyScalar struct {
 	// ("false", "0" or ""); isString marks string keys.
 	zero     string
 	isString bool
+	// retired marks a setting git-hop no longer has.
+	retired bool
 }
 
 // scalars lists every scalar key of the legacy file except installedAt,
@@ -89,10 +119,10 @@ func (lc *legacyGlobalConfig) scalars() []legacyScalar {
 
 	d := &lc.Defaults
 	addBool(KeyAutoEnvStart, d.AutoEnvStart)
-	addBool(KeyShowAllManagedRepos, d.ShowAllManagedRepos)
-	addInt(KeyUnusedThresholdDays, d.UnusedThresholdDays)
-	addBool(KeyEnforceCleanForConversion, d.EnforceCleanForConversion)
-	addBool(KeyConventionWarning, d.ConventionWarning)
+	addBool(keyShowAllManagedRepos, d.ShowAllManagedRepos)
+	addInt(keyUnusedThresholdDays, d.UnusedThresholdDays)
+	addBool(keyEnforceCleanForConversion, d.EnforceCleanForConversion)
+	addBool(keyConventionWarning, d.ConventionWarning)
 	addString(KeyGitDomain, d.GitDomain)
 	addString(KeyWorktreeLocation, d.WorktreeLocation)
 	addString(KeyAddDefaultStartPoint, d.DefaultStartPoint)
@@ -104,31 +134,40 @@ func (lc *legacyGlobalConfig) scalars() []legacyScalar {
 	addString(KeyShellIntegrationPath, s.InstalledPath)
 
 	b := &lc.Backup
-	addBool(KeyBackupEnabled, b.Enabled)
+	addBool(keyBackupEnabled, b.Enabled)
 	addBool(KeyBackupKeepBackup, b.KeepBackup)
 	addInt(KeyBackupMaxBackups, b.MaxBackups)
 	addInt(KeyBackupCleanupAgeDays, b.CleanupAgeDays)
-	addBool(KeyBackupPreserveStashes, b.PreserveStashes)
+	addBool(keyBackupPreserveStashes, b.PreserveStashes)
 
 	c := &lc.Conversion
-	addBool(KeyConversionEnforceClean, c.EnforceClean)
-	addBool(KeyConversionAllowDirtyForce, c.AllowDirtyForce)
-	addBool(KeyConversionAutoRollback, c.AutoRollback)
+	addBool(keyConversionEnforceClean, c.EnforceClean)
+	addBool(keyConversionAllowDirtyForce, c.AllowDirtyForce)
+	addBool(keyConversionAutoRollback, c.AutoRollback)
 
+	for i := range out {
+		out[i].retired = retiredKeys[out[i].key]
+	}
 	return out
 }
 
-// migrates reports whether the migration carries the scalar into git
-// config. An empty string is skipped for every key but worktreeLocation:
-// legacy git-hop wrote "gitDomain": "" by default and read "" as
-// github.com, and no other string key gives "" a meaning, so writing it
-// would only shadow the default. worktreeLocation "" selects the
-// centralized layout and is kept.
-func (e legacyScalar) migrates() bool {
+// userSet reports whether the file holds a value the user chose for the
+// scalar. An empty string counts for no key but worktreeLocation: legacy
+// git-hop wrote "gitDomain": "" by default and read "" as github.com, and
+// no other string key gives "" a meaning, so writing it would only shadow
+// the default. worktreeLocation "" selects the centralized layout and is
+// kept.
+func (e legacyScalar) userSet() bool {
 	if !e.set {
 		return false
 	}
 	return !e.isString || e.val != "" || e.key == KeyWorktreeLocation
+}
+
+// migrates reports whether the migration carries the scalar into git
+// config: a value the user chose for a setting git-hop still has.
+func (e legacyScalar) migrates() bool {
+	return e.userSet() && !e.retired
 }
 
 // gitConfigEntries returns the hop.* entries for the keys present in the

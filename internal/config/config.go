@@ -116,16 +116,10 @@ type BranchPorts struct {
 type VolumesConfig struct {
 	BasePath string                   `json:"basePath"`
 	Branches map[string]BranchVolumes `json:"branches"`
-	Cleanup  VolumeCleanup            `json:"cleanup"`
 }
 
 type BranchVolumes struct {
 	Volumes map[string]string `json:"volumes"`
-}
-
-type VolumeCleanup struct {
-	Orphaned            string `json:"orphaned"`
-	UnusedThresholdDays int    `json:"unusedThresholdDays"`
 }
 
 // HopsConfig represents $XDG_CONFIG_HOME/git-hop/hops.json
@@ -135,15 +129,14 @@ type HopsConfig struct {
 
 // HopEntry represents a single managed worktree
 type HopEntry struct {
-	Repo              string    `json:"repo"`        // "org/repo"
-	Branch            string    `json:"branch"`      // "main"
-	Path              string    `json:"path"`        // Absolute path to worktree
-	ProjectRoot       string    `json:"projectRoot"` // Absolute path to project root (bare repo)
-	AddedAt           time.Time `json:"addedAt"`
-	LastSeen          time.Time `json:"lastSeen"`
-	EnvState          string    `json:"envState"` // "up", "down", "none"
-	HasDockerEnv      bool      `json:"hasDockerEnv"`
-	FollowsConvention bool      `json:"followsConvention"` // Whether worktree follows naming convention
+	Repo         string    `json:"repo"`        // "org/repo"
+	Branch       string    `json:"branch"`      // "main"
+	Path         string    `json:"path"`        // Absolute path to worktree
+	ProjectRoot  string    `json:"projectRoot"` // Absolute path to project root (bare repo)
+	AddedAt      time.Time `json:"addedAt"`
+	LastSeen     time.Time `json:"lastSeen"`
+	EnvState     string    `json:"envState"` // "up", "down", "none"
+	HasDockerEnv bool      `json:"hasDockerEnv"`
 }
 
 // GlobalConfig holds global preferences: scalars come from git config
@@ -155,7 +148,6 @@ type GlobalConfig struct {
 	PackageManagers     []PackageManagerConfig   `json:"packageManagers,omitempty"`
 	EnvironmentManagers []EnvManagerConfig       `json:"environmentManagers,omitempty"`
 	Backup              BackupSettings           `json:"backup,omitempty"`
-	Conversion          ConversionSettings       `json:"conversion,omitempty"`
 }
 
 // PackageManagerConfig represents a custom package manager configuration
@@ -186,13 +178,9 @@ type EnvCommands struct {
 
 // DefaultSettings represents global default settings
 type DefaultSettings struct {
-	AutoEnvStart              bool   `json:"autoEnvStart"`
-	ShowAllManagedRepos       bool   `json:"showAllManagedRepos"`
-	UnusedThresholdDays       int    `json:"unusedThresholdDays"`
-	EnforceCleanForConversion bool   `json:"enforceCleanForConversion"`
-	ConventionWarning         bool   `json:"conventionWarning"`
-	GitDomain                 string `json:"gitDomain"`
-	WorktreeLocation          string `json:"worktreeLocation,omitempty"`
+	AutoEnvStart     bool   `json:"autoEnvStart"`
+	GitDomain        string `json:"gitDomain"`
+	WorktreeLocation string `json:"worktreeLocation,omitempty"`
 	// DefaultStartPoint controls the start-point used by `git hop add` when
 	// creating a new branch. Allowed values: "default-branch" (default — tip
 	// of repo.defaultBranch), "initial" (root commit, legacy behavior), or
@@ -263,17 +251,9 @@ type ConversionResult struct {
 }
 
 type BackupSettings struct {
-	Enabled         bool `json:"enabled"`
-	KeepBackup      bool `json:"keepBackup"`
-	MaxBackups      int  `json:"maxBackups"`
-	CleanupAgeDays  int  `json:"cleanupAgeDays"`
-	PreserveStashes bool `json:"preserveStashes"`
-}
-
-type ConversionSettings struct {
-	EnforceClean    bool `json:"enforceClean"`
-	AllowDirtyForce bool `json:"allowDirtyForce"`
-	AutoRollback    bool `json:"autoRollback"`
+	KeepBackup     bool `json:"keepBackup"`
+	MaxBackups     int  `json:"maxBackups"`
+	CleanupAgeDays int  `json:"cleanupAgeDays"`
 }
 
 // ResolveWorktreePath resolves a worktree path that may be relative or absolute.
