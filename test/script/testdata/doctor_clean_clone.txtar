@@ -1,0 +1,29 @@
+# A freshly cloned hub is healthy: doctor reports nothing.
+#
+# The regression this pins: nothing created $GIT_HOP_DATA_HOME on a default
+# clone (only --global clones write there), so doctor's path check reported
+# "data directory does not exist" on every new hub.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- default clone ---
+! exists $WORK/data
+exec git-hop $WORK/org/repo.git hub
+exists $WORK/data
+cd $WORK/hub
+exec git-hop doctor --json
+decode json stdout '#' 0
+
+# --- --global clone of another repo ---
+cd $WORK
+exec git init --bare $WORK/org/other.git
+exec git -C $WORK/seed push $WORK/org/other.git main
+exec git-hop --global $WORK/org/other.git hubg
+cd $WORK/hubg
+exec git-hop doctor --json
+decode json stdout '#' 0
