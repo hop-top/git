@@ -36,7 +36,7 @@ stdout '"subject": "usb"'
 # --- ... and outside it, where only the state check sees it ---
 cd $WORK
 exec git-hop doctor --fix --dry-run --json
-stdout '"subject": "github.com/org/repo:usb"'
+stdout '"subject": ".*/hub/hops/usb"'
 stdout '"kind": "warning"'
 ! stdout 'prune worktree entry from state'
 cd $WORK/hub

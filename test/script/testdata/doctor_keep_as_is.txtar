@@ -27,7 +27,7 @@ exec git branch -D feat
 # outside the hub, where no hub check plans a recreate first ---
 cd $WORK
 ! exec git-hop doctor --fix --dry-run --json
-stdout '"subject": "github.com/org/repo:feat"'
+stdout '"subject": ".*/hub/hops/feat"'
 ! stdout 'prune worktree entry from state'
 cd $WORK/hub
 

@@ -21,7 +21,7 @@ exec git -C $WORK/hub/hops/main merge --no-ff feat -m 'merge feat'
 rm $WORK/hub/hops/feat
 
 # --- the preview: one state record per entry, besides the issue ---
-exec sh -c 'git-hop doctor --fix --dry-run --json | grep -c "\"subject\": \"github.com/org/repo:feat\""'
+exec sh -c 'git-hop doctor --fix --dry-run --format csv | grep -c "^[a-z-]*,state,[^,]*/hub/hops/feat,"'
 stdout '^2$'
 exec git-hop doctor --fix --dry-run
 stdout 'Would remove entry: branch .feat. is merged'

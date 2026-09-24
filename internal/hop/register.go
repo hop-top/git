@@ -38,12 +38,21 @@ type NewHub struct {
 	Global bool
 }
 
-// RegisterNewHub records a new hub everywhere git-hop looks for one: the
+// RegisterNewHub records a hub everywhere git-hop looks for one: the
 // data home exists, the hops registry lists the default branch, and state
 // holds the repository, the hub and its worktrees, which is what list,
-// status --all and prune read. Failures warn; the hub itself is
-// already on disk and usable.
-func RegisterNewHub(fs afero.Fs, h NewHub) {
+// status --all and prune read. Failures warn; the hub itself is already
+// on disk and usable.
+//
+// It merges with what is recorded and never overwrites it
+// (PlanHubRegistration): recording a hub again changes nothing, and a
+// repository state already knows from another hub keeps that hub and its
+// worktrees, including its worktrees of the same branches. A state file
+// that cannot be read is left alone.
+//
+// Returns what was added to state, and the error that kept it from
+// being saved.
+func RegisterNewHub(fs afero.Fs, h NewHub) (HubRegistration, error) {
 	// The data home is part of a working install (doctor checks it) even
 	// when this hub keeps its hopspace locally and writes nothing there.
 	if err := fs.MkdirAll(GetGitHopDataHome(), 0o755); err != nil {
@@ -58,52 +67,18 @@ func RegisterNewHub(fs afero.Fs, h NewHub) {
 
 	st, err := state.LoadState(fs)
 	if err != nil {
-		st = state.NewState()
+		output.Warn("state not updated: %v", err)
+		return HubRegistration{}, err
 	}
 
-	repoID := repoIDFor(h.Org, h.Repo)
-	if st.Repositories[repoID] == nil {
-		st.AddRepository(repoID, &state.RepositoryState{
-			URI:           h.URI,
-			Org:           h.Org,
-			Repo:          h.Repo,
-			DefaultBranch: h.DefaultBranch,
-			Worktrees:     make(map[string]*state.WorktreeState),
-			Hubs:          []*state.HubState{},
-		})
+	plan := PlanHubRegistration(st, h)
+	if plan.Empty() {
+		return plan, nil
 	}
-
-	mode := state.HubModeLocal
-	if h.Global {
-		mode = state.HubModeGlobal
-	}
-	now := time.Now()
-	if err := st.AddHub(repoID, &state.HubState{
-		Path:         h.HubPath,
-		Mode:         mode,
-		CreatedAt:    now,
-		LastAccessed: now,
-	}); err != nil {
-		output.Warn("failed to add hub to state: %v", err)
-	}
-
-	worktrees := map[string]*state.WorktreeState{}
-	for branch, path := range h.Linked {
-		worktrees[branch] = &state.WorktreeState{Path: path, Type: "linked"}
-	}
-	if h.WorktreePath != "" {
-		worktrees[h.DefaultBranch] = &state.WorktreeState{Path: h.WorktreePath, Type: h.WorktreeType}
-	}
-	for branch, wt := range worktrees {
-		wt.HubPath = h.HubPath
-		wt.CreatedAt = now
-		wt.LastAccessed = now
-		if err := st.AddWorktree(repoID, branch, wt); err != nil {
-			output.Warn("failed to add worktree to state: %v", err)
-			return
-		}
-	}
+	plan.apply(st, h, time.Now())
 	if err := state.SaveState(fs, st); err != nil {
 		output.Warn("failed to save state: %v", err)
+		return plan, err
 	}
+	return plan, nil
 }
