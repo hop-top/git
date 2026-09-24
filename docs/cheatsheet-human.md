@@ -9,7 +9,7 @@ Quick reference for daily worktree + env workflows. Scannable in 30 seconds.
 ```bash
 git hop init                          # convert existing repo → bare+worktree structure
 git hop init --enable-chdir           # also install shell wrapper for auto-cd
-git hop init --no-hooks               # skip creating .git-hop/hooks/ directory
+git hop init --no-hooks               # no .git-hop/hooks/ directory, no hook runs
 git hop init --no-prompt              # non-interactive: take the recommended (bare) layout
 git hop init --no-prompt --regular    # non-interactive: regular repo + worktrees
 ```

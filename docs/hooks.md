@@ -303,6 +303,7 @@ The dispatch follows the mirror for the reason given in [Why mirror-then-fire](#
 - Only the **bare** conversion fires it. A regular conversion (`--regular`) creates no worktree — the repo root stays the working tree — and fires nothing. Nor do register-as-is and a re-run on an already-initialized repo.
 - Like clone, init fires no `pre-worktree-add`. It fires no `pre-clone` / `post-clone` either: nothing is cloned.
 - `git hop init --dry-run` lists the `post-worktree-add` hook it would run (when one resolves) and runs none.
+- `git hop init --no-hooks` fires nothing: no hooks directory, no committed-hook mirror (unless `--hooks` names a mode), and no `post-worktree-add`. The `--dry-run` preview agrees and lists no hook.
 
 ## Repair hooks
 
@@ -793,11 +794,12 @@ fi
 ## Installing Hook Directories
 
 The `.git-hop/hooks` directory is created automatically by `git hop init`.
-To skip this, use `--no-hooks`:
+To skip this, use `--no-hooks`, which also stops init from dispatching
+lifecycle hooks (see [Init hooks](#init-hooks)):
 
 ```bash
 git hop init           # creates .git-hop/hooks/ automatically
-git hop init --no-hooks  # skip hook directory creation
+git hop init --no-hooks  # no hook directory, no hook runs
 ```
 
 Re-running `git hop init` on an already-initialized repo also ensures the

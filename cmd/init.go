@@ -212,7 +212,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 		fmt.Println("  3. Create hop.json configuration")
 		fmt.Println("  4. Register in global registry")
 
-		if useBare {
+		if useBare && !noHooks {
 			previewInitWorktreeAdd(fs, g, repoPath, branch)
 		}
 
@@ -325,7 +325,8 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 	// After the mirror, as clone does: a committed hook then applies to
 	// the worktree that carried it. A regular conversion creates no
 	// worktree (the repo root stays the working tree), so nothing fires.
-	if mainWorktreePath != "" && !isRegularRepo {
+	// --no-hooks turns dispatch off along with the hooks dir and mirror.
+	if mainWorktreePath != "" && !isRegularRepo && !noHooks {
 		dispatchInitWorktreeAdd(fs, g, repoPath, mainWorktreePath, currentBranchName)
 	}
 
@@ -642,7 +643,7 @@ func init() {
 	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Convert to a regular repo + worktrees instead of bare (with --no-prompt)")
 	initCmd.Flags().BoolVar(&noPromptFlag, "no-prompt", false, "Skip the interactive menu and convert non-interactively (bare unless --regular)")
 	initCmd.Flags().StringVar(&restorePath, "restore", "", "Restore repository from backup (manual rollback)")
-	initCmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "Skip automatic installation of .git-hop/hooks/ directory")
+	initCmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "Skip hooks: no .git-hop/hooks/ directory, no lifecycle hook runs")
 	initCmd.Flags().BoolVar(&enableChdirFlag, "enable-chdir", false, "Install shell integration for automatic directory switching after hop commands")
 	initCmd.Flags().StringVar(&initHooksMode, "hooks", "", "mirror committed .git-hop/hooks/ into hopspace: symlink|copy|prompt|none (overrides --no-hooks)")
 	initCmd.Flags().BoolVar(&initHooksOverwrite, "hooks-overwrite", false, "overwrite an existing hopspace hook with different content (symlink/copy modes)")

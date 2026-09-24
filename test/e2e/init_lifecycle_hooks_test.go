@@ -97,6 +97,43 @@ func TestInitLifecycleHooks_DryRunPreviewsWithoutRunning(t *testing.T) {
 	}
 }
 
+// --no-hooks turns off every hook init would touch: no hooks dir, no
+// committed-hook mirror, and no lifecycle dispatch.
+func TestInitLifecycleHooks_NoHooksSkipsDispatch(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+	env := SetupTestEnv(t)
+	repoPath := initWithLifecycleHooks(t, env)
+
+	env.RunGitHop(t, repoPath, "init", "--no-prompt", "--no-hooks")
+
+	if records := readLifecycleRecords(t, env); len(records) != 0 {
+		t.Fatalf("--no-hooks ran hooks: %v", hookSeq(records))
+	}
+}
+
+// The dry-run preview matches the real run: with --no-hooks it names no
+// hook, because none would run.
+func TestInitLifecycleHooks_NoHooksDryRunPreviewsNone(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+	env := SetupTestEnv(t)
+	repoPath := initWithLifecycleHooks(t, env)
+
+	out := env.RunGitHopCombined(t, repoPath, "init", "--no-prompt", "--no-hooks", "--dry-run")
+
+	if records := readLifecycleRecords(t, env); len(records) != 0 {
+		t.Fatalf("--dry-run ran hooks: %v", hookSeq(records))
+	}
+	if strings.Contains(out, "Would run hook") {
+		t.Errorf("--no-hooks dry-run previews a hook that will not run:\n%s", out)
+	}
+}
+
 func samePath(t *testing.T, a, b string) bool {
 	t.Helper()
 	ra, errA := filepath.EvalSymlinks(a)
