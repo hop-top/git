@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/afero"
 
 	"hop.top/git/internal/hop"
+	"hop.top/git/internal/output"
 )
 
 // Runner handles hook execution following the priority system
@@ -219,8 +220,13 @@ func (r *Runner) run(hookName string, worktreePath string, repoID string, branch
 	cmd.Env = append(os.Environ(), env...)
 	// Both streams stay wired straight to the terminal, including on the
 	// handled path below: a hook that took over navigation still gets to
-	// tell the user what it did.
+	// tell the user what it did. When the command is emitting a structured
+	// result, stdout belongs to that result alone, so the hook's stdout is
+	// sent to stderr instead (git does the same for its own hooks).
 	cmd.Stdout = os.Stdout
+	if output.IsStructured() {
+		cmd.Stdout = os.Stderr
+	}
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Run(); err != nil {

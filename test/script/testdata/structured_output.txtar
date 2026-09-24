@@ -1,0 +1,135 @@
+# add, status and list honour the structured output modes.
+#
+# --format json|yaml|csv|text render the command's result through the output
+# layer; --json is --format json; --porcelain is one tab-separated record per
+# line with no header. In every structured mode stdout carries the result and
+# nothing else: progress, hints and hook chatter go to stderr or nowhere.
+#
+# The regression this pins: add printed its human progress lines under
+# --format json|yaml, and printed NOTHING under --json / --porcelain while
+# still creating the worktree; status and list printed their human tables.
+
+# --- upstream repo with a second branch ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b remote-only
+exec git push origin remote-only
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# A global post-worktree-add hook that writes to stdout. In structured modes
+# its output must be diverted to stderr, never interleaved with the result.
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/post-worktree-add $WORK/.config/git-hop/hooks/post-worktree-add
+chmod 0755 $WORK/.config/git-hop/hooks/post-worktree-add
+
+# --- add --format json: one object, the documented fields ---
+exec git-hop add feat/json --from main --format json
+decode json stdout branch feat/json
+decode json stdout path '~/hops/feat/json$'
+decode json stdout base main
+decode json stdout upstream ''
+decode json stdout created true
+! stdout 'Adding branch'
+! stdout 'hook-says-hi'
+stderr 'hook-says-hi'
+exists $WORK/hub/hops/feat/json
+
+# --- add --format yaml ---
+exec git-hop add feat/yaml --format yaml
+decode yaml stdout branch feat/yaml
+decode yaml stdout base main
+decode yaml stdout upstream origin/main
+decode yaml stdout created true
+! stdout 'Adding branch'
+
+# --- --json is --format json (was: zero bytes on stdout) ---
+# The bare clone already carries refs/heads/remote-only, so add checks the
+# existing local branch out (created=false); a bare clone configures no
+# tracking, so it has no upstream.
+exec git-hop add remote-only --json
+decode json stdout branch remote-only
+decode json stdout upstream ''
+decode json stdout created false
+
+# --- --porcelain: a single headerless tab-separated record (was: nothing) ---
+exec git-hop add feat/porcelain --porcelain
+stdout '^feat/porcelain\t\S+/hops/feat/porcelain\tmain\torigin/main\ttrue$'
+! stdout 'branch\tpath'
+! stdout 'Adding branch'
+
+# --- human output is unchanged by default ---
+exec git-hop add feat/human
+stdout 'Created hopspace for ''feat/human'''
+stdout 'hook-says-hi'
+
+# --- status: one record per worktree, sorted by branch ---
+exec git-hop status --format json
+decode json stdout '#' 6
+decode json stdout 0.branch feat/human
+decode json stdout 0.base main
+decode json stdout 0.state Linked
+decode json stdout 0.status synced
+decode json stdout 0.path '~/hops/feat/human$'
+decode json stdout 5.branch remote-only
+! stdout 'Hub:'
+
+exec git-hop status --format yaml
+decode yaml stdout '#' 6
+decode yaml stdout 4.branch main
+decode yaml stdout 4.status default
+
+exec git-hop status --porcelain
+stdout '^main\tmain\tLinked\tdefault\t\S+/hops/main$'
+! stdout '^Branch'
+
+# --- list: one record per worktree, same shape in and out of a hub ---
+exec git-hop list --format json
+decode json stdout '#' 6
+decode json stdout 0.repository '~/repo$'
+decode json stdout 0.branch feat/human
+decode json stdout 0.type linked
+decode json stdout 0.state active
+decode json stdout 0.status synced
+decode json stdout 4.branch main
+decode json stdout 4.base main
+! stdout 'Repository:'
+! stdout 'Summary'
+
+exec git-hop list --json
+decode json stdout '#' 6
+
+exec git-hop list --format csv
+stdout '^repository,branch,base,type,path,state,status$'
+stdout ',feat/json,main,linked,'
+
+cd $WORK
+exec git-hop list --format json
+decode json stdout '#' 6
+decode json stdout 0.branch feat/human
+! stdout 'All Repositories'
+cd $WORK/hub
+
+# --- contradictory or unknown modes are rejected before anything mutates ---
+! exec git-hop add feat/both --json --porcelain
+stderr 'mutually exclusive'
+! exists $WORK/hub/hops/feat/both
+! exec git-hop add feat/clash --json --format yaml
+stderr 'mutually exclusive'
+! exists $WORK/hub/hops/feat/clash
+! exec git-hop add feat/xml --format xml
+stderr 'unknown output format'
+! exists $WORK/hub/hops/feat/xml
+
+# --- status views without a structured shape refuse instead of going silent ---
+! exec git-hop status --all --format json
+stderr 'not supported'
+! stdout .
+
+-- post-worktree-add --
+#!/bin/sh
+echo hook-says-hi

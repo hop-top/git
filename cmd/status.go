@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -46,11 +47,17 @@ configuration, and resource usage.`,
 
 		// If --all flag is set, show system-wide status
 		if statusAll {
+			if output.IsStructured() {
+				structuredStatusUnsupported("status --all")
+			}
 			showSystemStatus(fs, d)
 			return
 		}
 
 		if len(args) > 0 {
+			if output.IsStructured() {
+				structuredStatusUnsupported("status <branch>")
+			}
 			target := args[0]
 			hubPath, err := hop.FindHub(fs, cwd)
 			if err == nil {
@@ -63,8 +70,14 @@ configuration, and resource usage.`,
 		// Check context
 		hubPath, err := hop.FindHub(fs, cwd)
 		if err == nil {
-			showHubStatus(fs, g, hubPath)
+			showHubStatus(cmd, fs, g, hubPath)
 			return
+		}
+
+		// The worktree and no-hub views below have no structured shape.
+		// Refuse rather than exit 0 with an empty stdout.
+		if output.IsStructured() {
+			output.FatalCode(128, "not in a git-hop hub; structured status is only available inside one")
 		}
 
 		// Before falling through to a worktree probe or "Not in a hub or
@@ -93,28 +106,61 @@ configuration, and resource usage.`,
 	},
 }
 
-func showHubStatus(fs afero.Fs, g git.GitInterface, path string) {
+func showHubStatus(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, path string) {
 	hub, err := hop.LoadHub(fs, path)
 	if err != nil {
 		output.Fatal("Failed to load hub: %v", err)
+	}
+
+	records := hubStatusRecords(fs, g, hub)
+	if output.IsStructured() {
+		emitResult(cmd, records)
+		return
 	}
 
 	output.Info("Hub: %s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	output.Info("Location: %s", hub.Path)
 
 	t := tui.NewTable([]interface{}{"Branch", "Base", "State", "Status", "Path"})
-	for name, b := range hub.Config.Branches {
-		state := "Missing"
-		status := "-"
-		compare := resolveCompareBranch(hub.Config, b)
-		resolvedPath := config.ResolveWorktreePath(b.Path, hub.Path)
-		if _, err := fs.Stat(resolvedPath); err == nil {
-			state = "Linked"
-			status = getBranchSyncStatus(g, resolvedPath, name, compare)
-		}
-		t.AddRow(name, compare, state, status, resolvedPath)
+	for _, r := range records {
+		t.AddRow(r.Branch, r.Base, r.State, r.Status, r.Path)
 	}
 	t.Render()
+}
+
+// hubStatusRecords builds one status record per branch registered in hub,
+// sorted by branch so every output format lists them in a stable order.
+func hubStatusRecords(fs afero.Fs, g git.GitInterface, hub *hop.Hub) []statusRecord {
+	names := make([]string, 0, len(hub.Config.Branches))
+	for name := range hub.Config.Branches {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	records := make([]statusRecord, 0, len(names))
+	for _, name := range names {
+		b := hub.Config.Branches[name]
+		r := statusRecord{
+			Branch: name,
+			Base:   resolveCompareBranch(hub.Config, b),
+			State:  "Missing",
+			Status: "-",
+			Path:   config.ResolveWorktreePath(b.Path, hub.Path),
+		}
+		if _, err := fs.Stat(r.Path); err == nil {
+			r.State = "Linked"
+			r.Status = getBranchSyncStatus(g, r.Path, name, r.Base)
+		}
+		records = append(records, r)
+	}
+	return records
+}
+
+// structuredStatusUnsupported rejects a status view that has no structured
+// shape yet. Exiting 0 with an empty stdout would read as "nothing to
+// report" to a script, which is a lie.
+func structuredStatusUnsupported(view string) {
+	output.FatalCode(129, "structured output is not supported for 'git hop %s' yet", view)
 }
 
 // resolveCompareBranch picks the branch to use as the ahead/behind/merged
@@ -745,5 +791,6 @@ func composePsHasRunning(ps string) bool {
 
 func init() {
 	statusCmd.Flags().BoolVar(&statusAll, "all", false, "Show system-wide git-hop status")
+	declareOutputSchema(statusCmd, &[]statusRecord{})
 	cli.RootCmd.AddCommand(statusCmd)
 }
