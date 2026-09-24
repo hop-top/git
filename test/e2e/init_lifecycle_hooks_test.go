@@ -7,10 +7,11 @@ import (
 	"testing"
 )
 
-// `git hop init` creates the hub's initial worktree (hops/<branch>) the
-// same way clone does, so it dispatches the same worktree hook clone does:
-// post-worktree-add, for that worktree, after committed hooks are mirrored.
-// Clone fires no pre-worktree-add, and neither does init.
+// `git hop init` leaves the current branch in an initial worktree
+// (hops/<branch> for a bare conversion, the repo root for --regular), so it
+// dispatches the same worktree hook clone does: post-worktree-add, for that
+// worktree, after committed hooks are mirrored. Clone fires no
+// pre-worktree-add, and neither does init.
 
 // initWithLifecycleHooks seeds a plain repo, installs the recorder under
 // every lifecycle name at global level, and returns the repo path.
@@ -131,6 +132,94 @@ func TestInitLifecycleHooks_NoHooksDryRunPreviewsNone(t *testing.T) {
 	}
 	if strings.Contains(out, "Would run hook") {
 		t.Errorf("--no-hooks dry-run previews a hook that will not run:\n%s", out)
+	}
+}
+
+// A regular conversion keeps the repo root as the working tree of the
+// current branch. That root is the conversion's initial worktree, so it
+// gets the same post-worktree-add a bare conversion gives hops/<branch>,
+// with the same variables.
+func TestInitLifecycleHooks_RegularFiresPostWorktreeAddForRepoRoot(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+	env := SetupTestEnv(t)
+	repoPath := initWithLifecycleHooks(t, env)
+
+	env.RunGitHop(t, repoPath, "init", "--no-prompt", "--regular")
+
+	records := readLifecycleRecords(t, env)
+	assertHookSeq(t, records, []string{"post-worktree-add"})
+	rec := records[0]
+	if got := rec["branch"]; got != "main" {
+		t.Errorf("post-worktree-add branch = %q; want main", got)
+	}
+	if got := rec["worktree"]; got != repoPath && !samePath(t, got, repoPath) {
+		t.Errorf("post-worktree-add worktree = %q; want repo root %q", got, repoPath)
+	}
+	if got, want := rec["repo_id"], "github.com/"+filepath.Base(env.RootDir)+"/proj"; got != want {
+		t.Errorf("post-worktree-add repo ID = %q; want %q", got, want)
+	}
+}
+
+// A post-worktree-add committed to a repo converted with --regular sits
+// in the repo root's .git-hop/hooks/ and applies to that root.
+func TestInitLifecycleHooks_RegularCommittedRepoHookFires(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+	env := SetupTestEnv(t)
+	repoPath := seedPlainRepo(t, env, "proj", "main")
+
+	hook := filepath.Join(repoPath, ".git-hop", "hooks", "post-worktree-add")
+	if err := os.MkdirAll(filepath.Dir(hook), 0755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	WriteFile(t, hook, strings.Replace(recordLifecycleHook, "%s", "0", 1))
+	if err := os.Chmod(hook, 0755); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	env.RunCommand(t, repoPath, "git", "add", ".git-hop")
+	env.RunCommand(t, repoPath, "git", "commit", "-m", "add hook")
+
+	env.RunGitHop(t, repoPath, "init", "--no-prompt", "--regular", "--hooks", "none")
+
+	assertHookSeq(t, readLifecycleRecords(t, env), []string{"post-worktree-add"})
+}
+
+func TestInitLifecycleHooks_RegularNoHooksSkipsDispatch(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+	env := SetupTestEnv(t)
+	repoPath := initWithLifecycleHooks(t, env)
+
+	env.RunGitHop(t, repoPath, "init", "--no-prompt", "--regular", "--no-hooks")
+
+	if records := readLifecycleRecords(t, env); len(records) != 0 {
+		t.Fatalf("--regular --no-hooks ran hooks: %v", hookSeq(records))
+	}
+}
+
+func TestInitLifecycleHooks_RegularDryRunPreviewsWithoutRunning(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+	env := SetupTestEnv(t)
+	repoPath := initWithLifecycleHooks(t, env)
+
+	out := env.RunGitHopCombined(t, repoPath, "init", "--no-prompt", "--regular", "--dry-run")
+
+	if records := readLifecycleRecords(t, env); len(records) != 0 {
+		t.Fatalf("--dry-run ran hooks: %v", hookSeq(records))
+	}
+	want := "Would run hook post-worktree-add (" + filepath.Join(globalHooksDir(env), "post-worktree-add") + ")"
+	if !strings.Contains(out, want) {
+		t.Errorf("dry-run output missing %q:\n%s", want, out)
 	}
 }
 
