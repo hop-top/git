@@ -19,11 +19,14 @@ func TestGitDirWarning(t *testing.T) {
 		{"objects", ""},
 		{"index", ""},
 		{"sharedindex.0123abcd", ""},
-		{"BISECT_LOG", ""},
+		{"BISECT_EXPECTED_REV", ""},
 		{"ORIG_HEAD", ""},
-		{"BISECT_START", "bisect was in progress"},
-		{"rebase-merge", "rebase was in progress"},
-		{"MERGE_HEAD", "merge was in progress"},
+		// In-progress markers are refused before a conversion starts;
+		// one that shows up regardless is still named, never dropped.
+		{"BISECT_LOG", "in progress and is abandoned"},
+		{"BISECT_START", "in progress and is abandoned"},
+		{"rebase-merge", "in progress and is abandoned"},
+		{"MERGE_HEAD", "in progress and is abandoned"},
 		{"config.worktree", "per-worktree config"},
 		{"some-tool", ".git/some-tool: not carried over"},
 	} {
@@ -48,6 +51,11 @@ func TestGitDirRulesDisjoint(t *testing.T) {
 				t.Errorf(".git/%s is both %s and %s", name, prev, label)
 			}
 			seen[name] = label
+		}
+	}
+	for _, m := range gitDirInProgress {
+		if prev, ok := seen[m.entry]; ok {
+			t.Errorf(".git/%s is both %s and an in-progress marker", m.entry, prev)
 		}
 	}
 }
