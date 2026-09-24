@@ -22,7 +22,7 @@ rm $WORK/hub/hops/feat/gone
 
 # The XDG directories doctor's path check expects; without them every run
 # would also report them missing.
-mkdir $WORK/data/git-hop $WORK/.config/git-hop $WORK/.cache/git-hop
+mkdir $WORK/data $WORK/.config/git-hop $WORK/.cache/git-hop
 
 # --- repair -n: the plan as records ---
 exec git-hop repair -n --json

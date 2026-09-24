@@ -62,7 +62,7 @@ func TestDoctorDryRun_DoesNotCreateDirectories(t *testing.T) {
 
 	assert.True(t, r.issuesFound, "missing dirs are still reported as issues")
 	for _, dir := range []string{
-		filepath.Join(p.dataHome, "git-hop"),
+		p.dataHome,
 		filepath.Join(p.configHome, "git-hop"),
 		filepath.Join(p.cacheHome, "git-hop"),
 	} {
@@ -80,13 +80,38 @@ func TestDoctorFix_CreatesDirectories(t *testing.T) {
 	runDoctor(fs, mocks.NewMockGit(), "/nowhere", doctorOpts{fix: true})
 
 	for _, dir := range []string{
-		filepath.Join(p.dataHome, "git-hop"),
+		p.dataHome,
 		filepath.Join(p.configHome, "git-hop"),
 		filepath.Join(p.cacheHome, "git-hop"),
 	} {
 		exists, _ := afero.DirExists(fs, dir)
 		assert.True(t, exists, "--fix must create %s", dir)
 	}
+}
+
+// TestDoctorPaths_DataHomeIsTheToolDirectory pins the data directory the
+// path check probes. GIT_HOP_DATA_HOME (or $XDG_DATA_HOME/git-hop) is
+// already git-hop's own directory; the check used to append another
+// "git-hop", so an existing data home was still reported missing and
+// --fix created <data>/git-hop inside it.
+func TestDoctorPaths_DataHomeIsTheToolDirectory(t *testing.T) {
+	p := isolateDoctorPaths(t)
+	fs := afero.NewMemMapFs()
+	for _, dir := range []string{
+		p.dataHome,
+		filepath.Join(p.configHome, "git-hop"),
+		filepath.Join(p.cacheHome, "git-hop"),
+	} {
+		require.NoError(t, fs.MkdirAll(dir, 0o755))
+	}
+
+	r := runDoctor(fs, mocks.NewMockGit(), "/nowhere", doctorOpts{fix: true})
+
+	for _, rec := range r.records {
+		assert.NotEqual(t, doctorCheckPaths, rec.Check, "unexpected paths record: %+v", rec)
+	}
+	exists, _ := afero.DirExists(fs, filepath.Join(p.dataHome, "git-hop"))
+	assert.False(t, exists, "--fix must not nest git-hop inside the data home")
 }
 
 // doctorHub builds a hub whose hop.json lists branches but where only
