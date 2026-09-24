@@ -108,7 +108,7 @@ func runList(cmd *cobra.Command, args []string) {
 
 	if len(st.Repositories) == 0 {
 		output.Info("No worktrees found.")
-		output.Info("\nRun 'git hop migrate' if you have existing data to migrate.")
+		output.Info("\nA hub git-hop does not list can be registered with 'git hop doctor --fix', run inside it.")
 		return
 	}
 

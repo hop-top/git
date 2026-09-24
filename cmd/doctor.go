@@ -395,8 +395,8 @@ func inspectState(fs afero.Fs, g git.GitInterface, r *doctorReport) (*state.Stat
 	st, err := state.LoadState(fs)
 	if err != nil {
 		output.Warn("Could not load state: %v", err)
-		output.Info("Run 'git hop migrate' if you have legacy data to migrate.")
-		r.record(doctorKindWarning, doctorCheckState, "state", "could not load state: %v; run 'git hop migrate' if you have legacy data to migrate", err)
+		output.Info("git-hop leaves the file as it is and will not save over it; repair it or move it aside.")
+		r.record(doctorKindWarning, doctorCheckState, "state", "could not load state: %v; git-hop will not save over it: repair it or move it aside", err)
 		return nil, nil
 	}
 	if len(st.Repositories) == 0 {

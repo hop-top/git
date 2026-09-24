@@ -598,7 +598,8 @@ contacted (even with `--delete-remote`), and no prompt is shown.
 
 ## git hop prune
 
-Remove orphan state entries and aged-out repair and conversion backups. Aliased as
+Remove orphan state entries and aged-out repair, conversion and state
+backups. Aliased as
 `cleanup` and `clean` — `git hop prune`, `git hop cleanup`, and
 `git hop clean` are the same command.
 
@@ -658,7 +659,7 @@ as `repository not found`.
 ### What It Does
 
 For the repositories in scope, `prune` cleans up five classes of stale
-data:
+data, and with `--all` a sixth:
 
 - **Orphan worktrees** — state entries whose paths no longer exist on
   disk. Common when a worktree dir was `rm -rf`'d manually.
@@ -681,6 +682,12 @@ data:
   older than `hop.backup.cleanupAgeDays` (default 30). Backups of
   failed conversions are never removed; prune names them in a `hint:`.
   See [Conversion backups](./configuration.md#conversion-backups-hopbackup).
+- **State backups older than retention** (`--all` only) — the copies of
+  `state.json` git-hop takes before migrating it to the current format
+  (`$XDG_STATE_HOME/git-hop/backups/state-<timestamp>.json`, see
+  [State Tracking](./configuration.md#state-tracking)), older than
+  `hop.repair.backupRetention`. `0` or a negative value keeps them all.
+  They belong to no one repository, so a prune scoped to one leaves them.
 
 Rewriting `hop.json` goes through the same backup mechanism
 `git hop repair` uses: the pre-prune file is snapshotted to
@@ -752,6 +759,11 @@ git hop doctor --fix --dry-run
   (marked `repo.mode: "global"` in its `hop.json`); a data-home copy next
   to an unmarked hub is reported as a warning and left alone
 - Orphaned worktrees
+- The current hub's record in state: a hub with a `hop.json` that state
+  does not record (converted by a release that did not record
+  conversions), or records without some of its worktrees, is an issue:
+  `git hop list`, `git hop status --all` and `git hop prune --all` read
+  state and do not see it
 - Dependency health (symlinks, shared storage, orphaned deps)
 - Leftovers of the old `global.json` migration: `--global` `hop.*` keys it
   wrote as `false`/`0`/`""` although `global.json` never set them. They
@@ -829,6 +841,13 @@ The `--fix` flag will:
 - Set the current hub's `core.repositoryformatversion` to 1 when it has
   `extensions.worktreeConfig` on at version 0
 - Register branches from hub to hopspace
+- Record the current hub in state, with its worktrees whose directory
+  exists, as `init` and `clone` record a new hub. This merges with what
+  state holds and never overwrites it: another hub of the same repository
+  is kept with its worktrees, including its own worktrees of the same
+  branches, and so is every entry state already has. Running it again
+  changes nothing. `git hop init` in a hub that already exists stays a
+  no-op
 - Sync hub-hopspace configurations
 - Recreate or clean up worktrees missing on disk (see below)
 
