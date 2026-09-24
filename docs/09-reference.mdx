@@ -13,8 +13,11 @@ Complete reference for git-hop commands, configuration, and APIs.
 
 | Flag | Type | Description |
 |------|-------|-------------|
-| `--json` | bool | Output in JSON format (shorthand for `--format json`) |
-| `--format &lt;format&gt;` | string | Output format: `table`, `json`, `porcelain`, `raw` |
+| `--format &lt;format&gt;` | string | Result format: `table` or `human` (the default human view), `json`, `yaml`, `csv`, `text`. See [Structured Output](#structured-output) |
+| `--json` | bool | Same as `--format json` |
+| `--porcelain` | bool | One tab-separated record per line, no header. See [Structured Output](#structured-output) |
+| `--cols &lt;list&gt;` | string | Select and order the columns of `csv`, `text` and `--porcelain` output |
+| `--format-opt style=&lt;style&gt;` | string | Layout of `--format text`: `kv` (default), `lines` or `paragraph` |
 | `--quiet, -q` | bool | Suppress output |
 | `--verbose, -v` | bool | Enable verbose output |
 | `--force` | bool | Force operation (use with caution) |
@@ -93,40 +96,13 @@ git hop &lt;branch&gt; [flags]
 
 ### git hop
 
-List all hopspaces.
+Switch to (or list) worktrees. For machine-readable output use
+[`git hop list`](#structured-output) with `--json`, `--format` or
+`--porcelain`; bare `git hop` has no structured result.
 
 **Synopsis:**
 ```bash
 git hop [flags]
-```
-
-**Output Formats:**
-
-Table (default):
-```
-Branch        Path                Status    Ports        Services
-────────────────────────────────────────────────────────────────
-main          ./main              active    10100-10102  api, db
-feature-x     ./feature-x         active    11500-11503  api, db, cache
-```
-
-JSON:
-```json
-[
-  {
-    "branch": "main",
-    "path": "./main",
-    "status": "active",
-    "ports": ["10100", "10101", "10102"],
-    "services": ["api", "db"]
-  }
-]
-```
-
-Porcelain:
-```
-main	./main	active	10100-10102	api, db
-feature-x	./feature-x	active	11500-11503	api, db, cache
 ```
 
 ### git hop status
@@ -259,9 +235,163 @@ git hop doctor [flags]
 **Exit Codes:**
 | Code | Description |
 |------|-------------|
-| 0 | Healthy |
-| 1 | Issues found |
-| 2 | Fatal errors |
+| 0 | Checks ran, whatever they found; read the report (or the `kind` of each [structured record](#doctor)) for the verdict |
+| 1 | Fatal error (for example, the working directory cannot be read) |
+
+## Structured Output
+
+Commands that produce a result render it in the format chosen by
+`--format`, `--json` or `--porcelain`. In those modes stdout carries the
+result and nothing else: progress, hints, warnings and hook output go to
+stderr or are suppressed.
+
+| Mode | Output |
+|------|--------|
+| (default), `--format table`, `--format human` | Human view (tables, prose) |
+| `--format json`, `--json` | One JSON document |
+| `--format yaml` | One YAML document |
+| `--format csv` | Header row, then one row per record |
+| `--format text` | `key=value` lines per record; `--format-opt style=lines` or `style=paragraph` for the other layouts |
+| `--porcelain` | One tab-separated record per line, no header (`--format text` in `lines` style) |
+
+Rules:
+
+- `--json` with `--porcelain`, or `--json`/`--porcelain` with a different
+  `--format`, is refused with exit 129 before the command does anything.
+  So is an unknown format or an unknown `--cols` column.
+- Every result is a list of records, except `add`, which returns one
+  object. An empty result is `[]` (and no lines under `--porcelain`), never
+  empty stdout.
+- `csv`, `text` and `--porcelain` carry the columns listed for each shape
+  below, in that order. Fields marked *json/yaml only* appear in `json`
+  and `yaml` alone, so the columnar layouts stay stable.
+- Result shapes are versioned together (currently 1.1): a MINOR bump adds
+  fields, a MAJOR bump renames or removes them.
+- Commands not listed here have no structured result: the output flags
+  only switch their log format.
+
+### add
+
+One object.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `branch` | string | Branch checked out in the new worktree |
+| `path` | string | Absolute path of the new worktree |
+| `base` | string | Branch `status` and `list` compare this worktree against |
+| `upstream` | string | Upstream the branch tracks (for example `origin/main`); empty when none |
+| `created` | bool | `true` when this run created the local branch |
+| `ports` | map service → port | *json/yaml only*; present when the worktree has a Docker environment |
+
+Columns: `branch path base upstream created`.
+
+### status
+
+A list of worktree records. Which worktrees depends on the view:
+
+| Invocation | Records |
+|------------|---------|
+| `git hop status` (in a hub) | Every branch registered in the hub, sorted by branch |
+| `git hop status <branch>` | The one record for `<branch>` (a one-element list); exit 1 if the branch is not in the hub |
+| `git hop status --all` | Every worktree of every tracked repository, by repository then branch; works outside a hub |
+
+Outside a hub, plain `git hop status` in a structured mode exits 128. The
+human `--all` summary (paths, counts, disk use) is not part of the result.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `branch` | string | Branch name |
+| `base` | string | Branch the sync status is computed against |
+| `state` | string | `Linked` when the worktree directory exists, `Missing` otherwise |
+| `status` | string | Sync label: `default`, `synced`, `merged`, `merged (N behind)`, `behind (N)`, `N ahead`, `diverged (N ahead, M behind)`, `unknown`; a dirty suffix may follow; `-` when missing |
+| `path` | string | Absolute path of the worktree |
+| `repository` | string | *json/yaml only*; `status --all` only. Repository id (`host/org/repo`) |
+| `ports` | map service → port | *json/yaml only*; `status <branch>` only, when ports are allocated |
+| `services` | list of `{service, name, state}` | *json/yaml only*; `status <branch>` only, the worktree's Docker Compose containers |
+
+Columns: `branch base state status path`.
+
+### list
+
+A list of worktree records, sorted by repository then branch: the current
+repository's worktrees inside a hub, every tracked repository's outside
+one.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `repository` | string | Repository id (`host/org/repo`) |
+| `branch` | string | Branch name |
+| `base` | string | Branch the sync status is computed against |
+| `type` | string | Worktree type recorded in state (`bare` or `linked`) |
+| `path` | string | Absolute path of the worktree |
+| `state` | string | `active` when the worktree directory exists, `missing` otherwise |
+| `status` | string | Sync label, as in `status` |
+
+Columns: `repository branch base type path state status`.
+
+### doctor
+
+A list of findings and repairs, in the order the checks ran. A healthy run
+returns `[]`. The exit status does not change with the findings.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `kind` | string | `issue` (makes the installation unhealthy), `warning` (reported, harmless), `fixed` (repaired by `--fix`), `would-fix` (`--fix --dry-run` would repair it), `failed` (`--fix` could not repair it) |
+| `check` | string | `paths`, `hub`, `dependencies`, `worktrees` or `state` |
+| `subject` | string | What the record is about: a path, a branch, `repository:branch`, or a dependency directory |
+| `message` | string | Human-readable description; for repairs, the repair itself (`create data directory`) |
+
+Columns: `kind check subject message`.
+
+### prune
+
+A list of the entries removed, or with `--dry-run` the entries that would
+be, in the order the passes run: hop.json entries, state worktrees, state
+hubs, repair backups.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `action` | string | `pruned`, or `would-prune` under `--dry-run` |
+| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired backup directory) |
+| `repository` | string | Repository id the entry belongs to |
+| `branch` | string | Branch of a `worktree` or `hop-json-entry`; empty otherwise |
+| `path` | string | Worktree, hub or backup path the entry pointed at |
+
+Columns: `action kind repository branch path`.
+
+### env gc
+
+A list of orphaned dependency directories deleted, or with `--dry-run`
+that would be, sorted by key. Without `--no-prompt` (or `--force`) a
+structured run has no way to confirm and exits 129 instead of deleting.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `action` | string | `deleted`, or `would-delete` under `--dry-run` |
+| `key` | string | Dependency key (`<deps dir>.<lockfile hash>`) |
+| `size` | integer | Size in bytes |
+| `last_used` | string | When a worktree last used it (RFC 3339, UTC); empty when unknown |
+| `path` | string | Absolute path of the dependency directory |
+
+Columns: `action key size last_used path`.
+
+### repair
+
+The repair plan: one record per worktree action, in plan order. The plan
+is emitted before it is applied; the exit status says whether it was
+(`-n` never applies it). `--list-backups` and `--undo` have no structured
+result and exit 129 in the structured modes, before anything is restored.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `status` | string | `repaired` when the plan changes this worktree, `ok` when it needs nothing |
+| `path` | string | Absolute path of the worktree |
+| `kind` | string | `noop`, `rewrite-gitdir`, `register`, `unregister`, `update-hopjson`, `record-base`, `restore-fetch-refspec` |
+| `old` | string | Value before the action, when the kind has one |
+| `new` | string | Value after the action, when the kind has one |
+| `reason` | string | *json/yaml only*; why the planner chose the action |
+
+Columns: `status path kind old new` (the `repair --porcelain` line format).
 
 ## Configuration Reference
 

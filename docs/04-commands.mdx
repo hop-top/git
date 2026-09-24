@@ -212,13 +212,8 @@ git hop [flags]
 git hop
 ```
 
-```bash tab="JSON Format"
-git hop --format json
-```
-
-```bash tab="Raw Format"
-git hop --format raw
-```
+For machine-readable output use `git hop list --json` (or `--format`,
+`--porcelain`); see [Structured Output](./09-reference#structured-output).
 
 ### Output
 
@@ -841,9 +836,9 @@ git hop repair -n --porcelain
 | Flag | Description |
 |------|-------------|
 | `-n`, `--dry-run` | Preview the plan without mutating state |
-| `--porcelain` | Stable tab-separated output for scripts |
-| `--undo[=<id>]` | Restore from backup (most recent if no id) |
-| `--list-backups` | List available backups, one per line |
+| `--porcelain` | Stable tab-separated output for scripts (also `--json` and `--format`: `json`, `yaml`, `csv`, `text`) |
+| `--undo[=<id>]` | Restore from backup (most recent if no id). Refused with exit 129 under `--json`/`--format`/`--porcelain` |
+| `--list-backups` | List available backups, one per line (id, timestamp, action count; tab-separated). Refused with exit 129 under `--json`/`--format`/`--porcelain` |
 | `--no-backup` | Skip the safety backup (requires `-f`) |
 | `--force-dirty` | Allow repair when worktrees have uncommitted changes |
 | `-f`, `--force` | Bypass safety checks (combined with `--no-backup`) |
@@ -898,7 +893,10 @@ One tab-separated record per worktree:
 <status>\t<worktree-path>\t<action>\t<old-value>\t<new-value>
 ```
 
-`<status>` ∈ `ok | repaired | failed | skipped`. `<action>` ∈ `noop | rewrite-gitdir | register | unregister | update-hopjson`.
+`<status>` ∈ `ok | repaired`. `<action>` ∈ `noop | rewrite-gitdir | register | unregister | update-hopjson | record-base | restore-fetch-refspec`.
+`--json` and `--format json` / `--format yaml` carry the same records with the keys
+`status`, `path`, `kind`, `old`, `new`, plus `reason`; see
+[Structured Output](./09-reference#repair).
 
 ### Exit codes
 
@@ -979,14 +977,32 @@ git hop env start
 git hop env up
 ```
 
+## Structured Output
+
+`add`, `status` (including `status <branch>` and `status --all`), `list`,
+`doctor`, `prune`, `env gc` and `repair` render their result as JSON,
+YAML, CSV or text under `--format`, `--json` or `--porcelain`, with
+nothing but the result on stdout. Contradictory or unknown output options
+are refused with exit 129 before anything changes. Every shape is listed
+in the [reference](./09-reference#structured-output).
+
+```bash
+git hop status --json
+git hop prune --dry-run --porcelain
+git hop doctor --format yaml
+git hop list --format csv --cols repository,branch,status
+```
+
 ## Global Flags
 
 These flags work with all commands:
 
 | Flag | Description |
 |------|-------------|
-| `--json` | Output in JSON format (shorthand for `--format json`) |
-| `--format <format>` | Output format: `table`, `json`, `porcelain`, `raw` |
+| `--format <format>` | Result format: `table`/`human` (default human view), `json`, `yaml`, `csv`, `text` |
+| `--json` | Same as `--format json` |
+| `--porcelain` | One tab-separated record per line, no header |
+| `--cols <list>` | Select and order columns of `csv`, `text`, `--porcelain` output |
 | `--quiet, -q` | Suppress output |
 | `--verbose, -v` | Enable verbose output |
 | `--force` | Force operation (use with caution) |

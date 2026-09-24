@@ -59,23 +59,42 @@ error: failed to create worktree
 
 ### JSON Mode
 
-Structured JSON output for automation:
+`--json` (the same as `--format json`) switches the log lines on stderr to
+JSON:
 
-```bash
-git hop --json doctor
-```
-
-Output:
 ```json
 {"level":"error","msg":"failed to create worktree"}
 ```
 
-### Porcelain Mode
-
-Machine-readable, stable output format:
+For commands that have a result (`add`, `status`, `list`, `doctor`,
+`prune`, `env gc`, `repair`) it also renders that result as one JSON
+document on stdout, with nothing else mixed in:
 
 ```bash
-git hop --format porcelain status
+git hop doctor --json
+```
+
+```json
+[
+  {
+    "kind": "issue",
+    "check": "hub",
+    "subject": "feat/gone",
+    "message": "worktree directory missing: /work/hub/hops/feat/gone"
+  }
+]
+```
+
+See [Structured Output](./09-reference#structured-output) for every
+result shape and the other formats (`yaml`, `csv`, `text`).
+
+### Porcelain Mode
+
+Machine-readable, stable line format: one tab-separated record per line,
+no header, columns in the order the result shape lists them:
+
+```bash
+git hop status --porcelain
 ```
 
 ### Quiet Mode
@@ -140,13 +159,15 @@ GIT_HOP_LOG_LEVEL=debug git hop add feature-x
 ### JSON Output for CI/CD
 
 ```bash
-git hop --json status | jq .
+git hop status --json | jq .
 ```
 
-### Quiet Mode for Scripts
+### Health Check for Scripts
+
+doctor exits 0 whether or not it finds problems; read its result:
 
 ```bash
-if git hop --quiet doctor; then
+if [ "$(git hop doctor --json | jq '[.[] | select(.kind == "issue")] | length')" -eq 0 ]; then
     echo "Healthy"
 else
     echo "Issues found"
