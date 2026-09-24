@@ -1,0 +1,89 @@
+# git hop prune applies hop.backup.maxBackups and hop.backup.cleanupAgeDays
+# to init's conversion backups, per repository, under hop.backup.path and
+# the default cache root alike. Backups of failed conversions and backups
+# still being written are never removed.
+
+# --- a hub registered in state (org/repo from the remote path) ---
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+
+# --- backups: three far-future ones, one ancient, one failed, one partial;
+# one of the future ones sits under the configured root ---
+exec git config --global hop.backup.path '~/bk'
+mkdir $WORK/bk/org-repo/f3 $WORK/.cache/git-hop/org-repo/f2 $WORK/.cache/git-hop/org-repo/f1
+cp $WORK/meta-f3 $WORK/bk/org-repo/f3/backup-info.json
+cp $WORK/meta-f2 $WORK/.cache/git-hop/org-repo/f2/backup-info.json
+cp $WORK/meta-f1 $WORK/.cache/git-hop/org-repo/f1/backup-info.json
+mkdir $WORK/.cache/git-hop/org-repo/old $WORK/.cache/git-hop/org-repo/failed $WORK/.cache/git-hop/org-repo/partial/original
+cp $WORK/meta-old $WORK/.cache/git-hop/org-repo/old/backup-info.json
+cp $WORK/meta-old $WORK/.cache/git-hop/org-repo/failed/backup-info.json
+cp $WORK/failed-marker $WORK/.cache/git-hop/org-repo/failed/conversion-failed
+# A backup taken of this hub under another name: a bare conversion
+# re-points origin at the local path, so the hub's identity afterwards is
+# not the remote its backup directory was named after.
+mkdir $WORK/.cache/git-hop/acme-widget/renamed
+exec sh -c 'printf "{\"timestamp\":\"2000-01-01T00:00:00Z\",\"originalPath\":\"%s\"}" "$1" > "$2"' sh $WORK/hub $WORK/.cache/git-hop/acme-widget/renamed/backup-info.json
+# Another repository's backups are out of scope.
+mkdir $WORK/.cache/git-hop/org-other/o1
+cp $WORK/meta-old $WORK/.cache/git-hop/org-other/o1/backup-info.json
+
+# --- defaults (3 newest, 30 days): only the ancient ones go; dry run first ---
+exec git-hop prune -n --json
+decode json stdout '#' 2
+decode json stdout 0.kind conversion-backup
+decode json stdout 0.action would-prune
+decode json stdout 0.repository '~org/repo$'
+decode json stdout 1.kind conversion-backup
+stdout '/org-repo/old"'
+stdout '/acme-widget/renamed"'
+exists $WORK/.cache/git-hop/org-repo/old
+
+exec git-hop prune -n
+stdout 'Would prune conversion backup: .*org-repo/old'
+stderr '^hint: kept backup of a failed conversion: .*org-repo/failed$'
+stdout '0 repair backup\(s\), and 2 conversion backup\(s\)'
+exists $WORK/.cache/git-hop/org-repo/old
+
+exec git-hop prune
+stdout 'Pruning conversion backup: .*org-repo/old'
+! exists $WORK/.cache/git-hop/org-repo/old
+! exists $WORK/.cache/git-hop/acme-widget/renamed
+exists $WORK/.cache/git-hop/org-repo/failed
+exists $WORK/.cache/git-hop/org-repo/partial
+exists $WORK/.cache/git-hop/org-other/o1
+
+# --- maxBackups 1 (repo-local): the newest, under the configured root, stays ---
+exec git config hop.backup.maxBackups 1
+exec git-hop prune --json
+decode json stdout '#' 2
+stdout '/org-repo/f2"'
+stdout '/org-repo/f1"'
+exists $WORK/bk/org-repo/f3
+! exists $WORK/.cache/git-hop/org-repo/f2
+! exists $WORK/.cache/git-hop/org-repo/f1
+exists $WORK/.cache/git-hop/org-repo/failed
+exists $WORK/.cache/git-hop/org-repo/partial
+
+# --- 0 turns a limit off: nothing more goes ---
+exec git config hop.backup.maxBackups 0
+exec git config hop.backup.cleanupAgeDays 0
+exec git-hop prune --json
+decode json stdout '#' 0
+exists $WORK/bk/org-repo/f3
+
+-- meta-f3 --
+{"timestamp":"2999-01-03T00:00:00Z"}
+-- meta-f2 --
+{"timestamp":"2999-01-02T00:00:00Z"}
+-- meta-f1 --
+{"timestamp":"2999-01-01T00:00:00Z"}
+-- meta-old --
+{"timestamp":"2000-01-01T00:00:00Z"}
+-- failed-marker --
+conversion failed: test

@@ -14,7 +14,11 @@ git hop init --no-prompt              # non-interactive: take the recommended (b
 git hop init --no-prompt --regular    # non-interactive: regular repo + worktrees
 git hop init --force                  # convert despite uncommitted changes (backup still taken)
 git hop init --keep-backup            # keep the conversion backup (default: hop.backup.keepBackup)
+git config --global hop.backup.path ~/backups/git-hop   # where init's backups go
 ```
+
+Kept conversion backups are aged out by `git hop prune`
+(`hop.backup.maxBackups`, default 3 per repo; `hop.backup.cleanupAgeDays`, default 30).
 
 `init` asks which structure you want (`1/2/3/q`). In a script, CI job, or
 anywhere without a terminal, pass `--no-prompt` to answer from flags

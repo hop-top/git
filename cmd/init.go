@@ -160,11 +160,16 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 	converter := hop.NewConverter(fs, g)
 	converter.DryRun = dryRunFlag
 	converter.Force = forceFlag
-	converter.KeepBackup = resolveInitKeepBackup(
-		keepBackupFlag,
-		keepBackupFlagSet,
-		config.NewGitConfigIn(repoPath),
-	)
+	// Backup settings are read from the repository being converted, so
+	// its local config applies as well as the global one.
+	gc := config.NewGitConfigIn(repoPath)
+	converter.KeepBackup = resolveInitKeepBackup(keepBackupFlag, keepBackupFlagSet, gc)
+	backupRoot, err := conversionBackupRoot(gc)
+	if err != nil {
+		output.Error("%v", err)
+		os.Exit(1)
+	}
+	converter.BackupRoot = backupRoot
 
 	if !dryRunFlag && !forceFlag {
 		status, _ := g.RunInDir(repoPath, "git", "status", "--porcelain")
@@ -202,7 +207,7 @@ To convert anyway, carrying uncommitted files into the new worktree
 		}
 
 		fmt.Println("\nConversion plan:")
-		fmt.Println("  1. Create backup in $XDG_CACHE_HOME/git-hop/")
+		fmt.Printf("  1. Create backup in %s/\n", backupRoot)
 		fmt.Println("  2. Create worktree structure")
 
 		if useBare {

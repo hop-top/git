@@ -164,8 +164,6 @@ defaults are on record.
 | Key | Type | Default |
 |-----|------|---------|
 | `hop.autoEnvStart` | boolean | `true` |
-| `hop.backup.maxBackups` | number | `3` |
-| `hop.backup.cleanupAgeDays` | number | `30` |
 
 ### Package and Environment Managers
 
@@ -217,6 +215,9 @@ inside any hub for that repository.
 | `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of repair backup snapshots (`repair-*` directories under `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/`, or a legacy `<hub>/.hop/backups/`) before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
 | `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`, the `fetch` in `git hop add`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
 | `hop.backup.keepBackup` | boolean | `false` | Keep the conversion backup `git hop init` takes after a successful conversion, as if `--keep-backup` were passed. An explicit `--keep-backup` / `--keep-backup=false` overrides this. See [Conversion backups](#conversion-backups-hopbackup). |
+| `hop.backup.path` | path | `$XDG_CACHE_HOME/git-hop` | Directory `git hop init` puts conversion backups under (`<path>/<org>-<repo>/<timestamp>/`). `~/` is expanded the way git expands path values; a relative path is refused. See [Conversion backups](#conversion-backups-hopbackup). |
+| `hop.backup.maxBackups` | integer | `3` | Conversion backups `git hop prune` keeps per repository, newest first. `0` turns the count limit off. |
+| `hop.backup.cleanupAgeDays` | integer | `30` | Age in days past which `git hop prune` removes a conversion backup. `0` turns the age limit off. |
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
@@ -401,7 +402,19 @@ the value inside that repo's hub.
 converts it:
 
 ```
-$XDG_CACHE_HOME/git-hop/<org>-<repo>/<YYYY-MM-DD_HH-MM-SS>/
+<hop.backup.path>/<org>-<repo>/<YYYY-MM-DD_HH-MM-SS>/
+```
+
+`hop.backup.path` defaults to `$XDG_CACHE_HOME/git-hop` (`~/.cache/git-hop`
+on Linux, `~/Library/Caches/git-hop` on macOS). `~/` in the value expands
+the way git expands path values. A relative value is refused, and so is
+one inside the repository being converted: init runs inside the repository
+and prune runs from anywhere, so a relative root would name a different
+directory each time. `git hop init -n` prints the root it would use.
+
+```bash
+# Keep conversion backups on another disk
+git config --global hop.backup.path ~/backups/git-hop
 ```
 
 The backup is always taken, `--force` included: a failed conversion rolls
@@ -417,9 +430,57 @@ git config --global hop.backup.keepBackup true
 git hop init --no-prompt --keep-backup=false
 ```
 
-The flag wins over the key in both directions. The key is read from the
-repository being converted, so a repo-local `git config
+The flag wins over the key in both directions. The `hop.backup.*` keys
+are read from the repository being converted, so a repo-local `git config
 hop.backup.keepBackup true` applies to that repository alone.
+
+`git hop init --restore <backup-dir>` takes the backup's full path, so it
+works wherever the backup lives.
+
+#### Retention
+
+Kept backups accumulate. `git hop prune` removes a repository's
+conversion backups beyond the newest `hop.backup.maxBackups` (default 3)
+and those older than `hop.backup.cleanupAgeDays` (default 30); either
+limit is enough, and `0` turns a limit off. The count is per repository.
+The settings are read through the repository's hub, so a repo-local value
+overrides the global one; with no hub left on disk, global config
+applies.
+
+Prune looks under `hop.backup.path` and under the default cache root, so
+backups taken before the path changed are still aged out. A backup belongs
+to a repository when it sits in that repository's `<org>-<repo>`
+directory or when the path it copied (`originalPath` in its
+`backup-info.json`) is one of the repository's hubs; the second rule
+covers a hub whose `org/repo` no longer matches the name its backup
+directory was given, for example after its remote changed. Prune
+reports each backup it removes as a `conversion-backup` record, and
+`--dry-run` only lists them.
+
+Prune never removes:
+
+- the backup of a **failed** conversion: init marks it (a
+  `conversion-failed` file in the backup) because it is what the
+  automatic rollback restored from, and the only copy if that rollback
+  failed. Prune prints a `hint:` naming it; remove it by hand once the
+  repository is intact. Backups of conversions that failed before this
+  marker existed carry no mark and are treated like any other.
+- a backup still being written: init writes `backup-info.json` last, and
+  a backup without it is skipped. A conversion in progress is also the
+  newest backup, which `hop.backup.maxBackups` of 1 or more keeps.
+
+Only repositories prune can see are covered: those in git-hop's state,
+scoped like the rest of prune (the current one, or all with `--all`). A
+repository converted with `git hop init` enters state once a worktree
+command such as `git hop add` has run in it.
+
+```bash
+# Keep only the latest conversion backup of every repository
+git config --global hop.backup.maxBackups 1
+
+# Never age backups out of this repository
+git config hop.backup.cleanupAgeDays 0
+```
 
 ### `hop.events.sink`
 

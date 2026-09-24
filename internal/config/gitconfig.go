@@ -29,6 +29,7 @@ const (
 	KeyShellIntegrationStatus = "hop.shellIntegration.status"
 	KeyShellIntegrationShell  = "hop.shellIntegration.shell"
 	KeyBackupMaxBackups       = "hop.backup.maxBackups"
+	KeyBackupPath             = "hop.backup.path"
 	KeyHooksInstallMode       = "hop.hooks.installMode"
 	KeyEventsSink             = "hop.events.sink"
 	KeyEventsPath             = "hop.events.path"
@@ -64,6 +65,18 @@ func NewGitConfig() *GitConfig {
 func NewGitConfigIn(dir string) *GitConfig {
 	return &GitConfig{RunCmd: func(args ...string) (string, error) {
 		return execGitConfig(append([]string{"-C", dir}, args...)...)
+	}}
+}
+
+// NewGlobalGitConfig returns a GitConfig that reads --global scope only,
+// whatever repository the process runs in. Use it for a setting that
+// belongs to a repository no longer on disk.
+func NewGlobalGitConfig() *GitConfig {
+	return &GitConfig{RunCmd: func(args ...string) (string, error) {
+		if len(args) > 0 && args[0] == "config" {
+			args = append([]string{"config", "--global"}, args[1:]...)
+		}
+		return execGitConfig(args...)
 	}}
 }
 

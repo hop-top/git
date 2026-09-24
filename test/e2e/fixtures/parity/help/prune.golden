@@ -12,6 +12,9 @@ hub's hop.json, removing:
   - hop.json branch entries whose worktree directory is gone
     (the rows 'git hop status' reports as Missing)
   - Repair backups older than hop.repair.backupRetention
+  - Conversion backups 'git hop init' kept, beyond hop.backup.maxBackups
+    per repository or older than hop.backup.cleanupAgeDays (backups of
+    failed conversions are never removed)
 
 Every line naming a pruned entry is prefixed with the repository it
 belongs to, so a --all sweep shows exactly which repositories it touched.

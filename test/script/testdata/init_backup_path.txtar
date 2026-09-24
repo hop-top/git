@@ -1,0 +1,45 @@
+# git config hop.backup.path moves init's conversion backup. ~/ expands
+# the way git expands path values; a relative value, or one inside the
+# repository being converted, is refused before anything changes.
+
+exec git config --global hop.backup.path '~/bk'
+
+# --- dry run names the configured location ---
+exec git init $WORK/dry
+cd $WORK/dry
+exec git commit --allow-empty -m 'initial'
+exec git-hop init -n --no-prompt --no-hooks
+stdout '^  1\. Create backup in .*/bk/$'
+! stdout 'XDG_CACHE_HOME'
+
+# --- the backup lands under the configured root, not the cache ---
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git remote add origin https://github.com/acme/widget.git
+exec git-hop init --no-prompt --no-hooks --keep-backup
+stdout '^Backup preserved at: .*/bk/acme-widget/'
+exec find $WORK/bk/acme-widget -name backup-info.json
+stdout 'backup-info.json'
+! exists $WORK/.cache/git-hop/acme-widget
+
+# --- relative value: refused, repo untouched ---
+exec git init $WORK/rel
+cd $WORK/rel
+exec git commit --allow-empty -m 'initial'
+exec git config hop.backup.path rel/backups
+! exec git-hop init --no-prompt --no-hooks
+stderr 'hop.backup.path "rel/backups" is relative'
+exists $WORK/rel/.git
+! exists $WORK/rel/hop.json
+! exists $WORK/rel/rel
+
+# --- inside the repository: refused, nothing written there ---
+exec git init $WORK/inside
+cd $WORK/inside
+exec git commit --allow-empty -m 'initial'
+exec git config hop.backup.path $WORK/inside/.bk
+! exec git-hop init --no-prompt --no-hooks
+stderr 'inside the repository being converted'
+exists $WORK/inside/.git
+! exists $WORK/inside/.bk

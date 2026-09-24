@@ -18,6 +18,9 @@ type Converter struct {
 	DryRun     bool
 	Force      bool
 	KeepBackup bool
+	// BackupRoot is where the conversion backup is taken (hop.backup.path);
+	// empty means DefaultConversionBackupRoot().
+	BackupRoot string
 }
 
 func NewConverter(fs afero.Fs, g git.GitInterface) *Converter {
@@ -90,6 +93,7 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to create backup manager: %v", err))
 		return result, fmt.Errorf("failed to create backup manager: %w", err)
 	}
+	c.backupMgr.SetRoot(c.BackupRoot)
 
 	if err := c.backupMgr.CreateBackup(repoPath); err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to create backup: %v", err))
@@ -99,6 +103,9 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 	result.BackupPath = c.backupMgr.GetBackupPath()
 
 	if err := c.performConversion(repoPath, useBare, result); err != nil {
+		if markErr := c.backupMgr.MarkConversionFailed(err); markErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to mark backup of the failed conversion: %v", markErr))
+		}
 		if c.backupMgr != nil {
 			if rollbackErr := c.backupMgr.Restore(repoPath); rollbackErr != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("rollback failed: %v", rollbackErr))
