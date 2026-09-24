@@ -38,13 +38,29 @@ type addResult struct {
 	Task     string         `json:"task,omitempty" yaml:"task,omitempty" jsonschema:"description=Task id recorded for the worktree with --task; absent when none"`
 }
 
-// statusRecord is one worktree row of `git hop status` inside a hub.
+// statusRecord is one worktree row of `git hop status`. Every status view
+// renders a list of them: the hub's worktrees (default), the one named
+// branch (status <branch>), or every tracked repository's worktrees
+// (status --all). The fields without a table tag are view-specific and
+// json/yaml only, so the columnar formats keep the same columns in every
+// view.
 type statusRecord struct {
-	Branch string `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch name"`
-	Base   string `json:"base" yaml:"base" table:"base" jsonschema:"description=Branch the sync status is computed against"`
-	State  string `json:"state" yaml:"state" table:"state" jsonschema:"description=Linked when the worktree directory exists; Missing otherwise"`
-	Status string `json:"status" yaml:"status" table:"status" jsonschema:"description=Sync label relative to base (default/synced/N ahead/behind (N)/merged/diverged; optional dirty suffix); - when missing"`
-	Path   string `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the worktree"`
+	Branch     string          `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch name"`
+	Base       string          `json:"base" yaml:"base" table:"base" jsonschema:"description=Branch the sync status is computed against"`
+	State      string          `json:"state" yaml:"state" table:"state" jsonschema:"description=Linked when the worktree directory exists; Missing otherwise"`
+	Status     string          `json:"status" yaml:"status" table:"status" jsonschema:"description=Sync label relative to base (default/synced/N ahead/behind (N)/merged/diverged; optional dirty suffix); - when missing"`
+	Path       string          `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the worktree"`
+	Repository string          `json:"repository,omitempty" yaml:"repository,omitempty" jsonschema:"description=Repository id (host/org/repo); status --all only"`
+	Ports      map[string]int  `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service; status <branch> only when ports are allocated"`
+	Services   []statusService `json:"services,omitempty" yaml:"services,omitempty" jsonschema:"description=Docker Compose containers of the worktree; status <branch> only when it defines services"`
+}
+
+// statusService is one Docker Compose container of a worktree, as
+// reported by docker compose ps.
+type statusService struct {
+	Service string `json:"service" yaml:"service" jsonschema:"description=Compose service name"`
+	Name    string `json:"name" yaml:"name" jsonschema:"description=Container name"`
+	State   string `json:"state" yaml:"state" jsonschema:"description=Container state (running/exited/...)"`
 }
 
 // listRecord is one worktree row of `git hop list`. The repository column

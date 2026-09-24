@@ -48,19 +48,21 @@ configuration, and resource usage.`,
 		// If --all flag is set, show system-wide status
 		if statusAll {
 			if output.IsStructured() {
-				structuredStatusUnsupported("status --all")
+				emitResult(cmd, systemStatusRecords(fs, g))
+				return
 			}
 			showSystemStatus(fs, d)
 			return
 		}
 
 		if len(args) > 0 {
-			if output.IsStructured() {
-				structuredStatusUnsupported("status <branch>")
-			}
 			target := args[0]
 			hubPath, err := hop.FindHub(fs, cwd)
 			if err == nil {
+				if output.IsStructured() {
+					emitResult(cmd, targetStatusRecords(fs, g, d, hubPath, target))
+					return
+				}
 				showTargetStatus(fs, d, hubPath, target)
 				return
 			}
@@ -139,28 +141,27 @@ func hubStatusRecords(fs afero.Fs, g git.GitInterface, hub *hop.Hub) []statusRec
 
 	records := make([]statusRecord, 0, len(names))
 	for _, name := range names {
-		b := hub.Config.Branches[name]
-		r := statusRecord{
-			Branch: name,
-			Base:   resolveCompareBranch(hub.Config, b),
-			State:  "Missing",
-			Status: "-",
-			Path:   config.ResolveWorktreePath(b.Path, hub.Path),
-		}
-		if _, err := fs.Stat(r.Path); err == nil {
-			r.State = "Linked"
-			r.Status = getBranchSyncStatus(g, r.Path, name, r.Base)
-		}
-		records = append(records, r)
+		records = append(records, hubBranchStatusRecord(fs, g, hub, name))
 	}
 	return records
 }
 
-// structuredStatusUnsupported rejects a status view that has no structured
-// shape yet. Exiting 0 with an empty stdout would read as "nothing to
-// report" to a script, which is a lie.
-func structuredStatusUnsupported(view string) {
-	output.FatalCode(129, "structured output is not supported for 'git hop %s' yet", view)
+// hubBranchStatusRecord builds the status record of one branch registered
+// in hub.
+func hubBranchStatusRecord(fs afero.Fs, g git.GitInterface, hub *hop.Hub, name string) statusRecord {
+	b := hub.Config.Branches[name]
+	r := statusRecord{
+		Branch: name,
+		Base:   resolveCompareBranch(hub.Config, b),
+		State:  "Missing",
+		Status: "-",
+		Path:   config.ResolveWorktreePath(b.Path, hub.Path),
+	}
+	if _, err := fs.Stat(r.Path); err == nil {
+		r.State = "Linked"
+		r.Status = getBranchSyncStatus(g, r.Path, name, r.Base)
+	}
+	return r
 }
 
 // resolveCompareBranch picks the branch to use as the ahead/behind/merged
