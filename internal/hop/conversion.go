@@ -208,7 +208,7 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		if err != nil {
 			return fmt.Errorf("failed to locate the git dir of the %s worktree: %w", defaultBranch, err)
 		}
-		gitDirWarnings, err := c.carryOverGitDir(repoPath, bareRepoPath, worktreeGitDir)
+		gitDirWarnings, err := c.carryOverGitDir(repoPath, bareRepoPath, defaultPath, worktreeGitDir)
 		if err != nil {
 			return err
 		}

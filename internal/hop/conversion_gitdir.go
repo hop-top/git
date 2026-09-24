@@ -38,6 +38,8 @@ var gitDirCarried = map[string]string{
 		"and any other namespace; per-worktree and derived ones excepted " +
 		"(see carryOverExtraRefs)",
 	"packed-refs": "same as refs",
+	"modules": "the submodules' git dirs, moved to the default worktree's " +
+		"own git dir and reconnected (see carryOverSubmodules)",
 	"logs": "reflogs: every stash entry but the latest lives only in the " +
 		"stash reflog, and the others are the user's undo history. " +
 		"logs/HEAD belongs to the default worktree",
@@ -83,8 +85,6 @@ var gitDirLeftBehindPrefixes = map[string]string{
 var gitDirWarned = map[string]string{
 	"config.worktree": "per-worktree config (extensions.worktreeConfig) is not " +
 		"carried over; set its keys again with git config",
-	"modules": "submodule repositories are not carried over; run " +
-		"git submodule update --init in the new worktree",
 	// An operation stopped with a clean working tree (a rebase at an
 	// edit stop, a bisect) passes the clean check. Its state is
 	// per-worktree and names the old layout; it is abandoned.
@@ -110,9 +110,9 @@ type gitDirCarry struct {
 
 // carryOverGitDir moves the user state of repoPath's .git directory into
 // the hub at bareRepo, and returns a warning for each entry it leaves
-// behind that the user may miss. worktreeGitDir is the default
-// worktree's git dir (<hub>/worktrees/<name>).
-func (c *Converter) carryOverGitDir(repoPath, bareRepo, worktreeGitDir string) ([]string, error) {
+// behind that the user may miss. worktreePath is the default worktree's
+// checkout, worktreeGitDir its git dir (<hub>/worktrees/<name>).
+func (c *Converter) carryOverGitDir(repoPath, bareRepo, worktreePath, worktreeGitDir string) ([]string, error) {
 	gc := gitDirCarry{src: filepath.Join(repoPath, ".git"), hub: bareRepo, worktreeGit: worktreeGitDir}
 
 	entries, err := afero.ReadDir(c.fs, gc.src)
@@ -135,6 +135,9 @@ func (c *Converter) carryOverGitDir(repoPath, bareRepo, worktreeGitDir string) (
 		return nil, err
 	}
 	if err := c.carryOverHooks(gc); err != nil {
+		return nil, err
+	}
+	if err := c.carryOverSubmodules(repoPath, worktreePath, worktreeGitDir); err != nil {
 		return nil, err
 	}
 	if err := c.carryOverExtraRefs(repoPath, bareRepo); err != nil {
