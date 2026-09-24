@@ -32,17 +32,29 @@ const (
 	// fetchRequired: the user asked for it (--fetch, hop.add.fetch true);
 	// a failure is fatal.
 	fetchRequired
+	// fetchNoOrigin: the user asked for it, but the hub has no origin
+	// remote, so there is nothing to fetch from. Skipped with a hint: the
+	// fatal rule is for an origin that fails, not one that is absent.
+	fetchNoOrigin
 )
+
+// fetches reports whether m runs 'git fetch origin'.
+func (m fetchMode) fetches() bool {
+	return m == fetchAuto || m == fetchRequired
+}
 
 // decideFetch picks the fetchMode: --[no-]fetch (override) wins, then
 // hop.add.fetch, and with neither set add fetches only when the
 // start-point is an origin ref.
 func decideFetch(g git.GitInterface, gc *config.GitConfig, override *bool, hubPath, startPoint, defaultBranch string) fetchMode {
 	explicit := func(on bool) fetchMode {
-		if on {
-			return fetchRequired
+		switch {
+		case !on:
+			return fetchSkip
+		case !hasOrigin(g, hubPath):
+			return fetchNoOrigin
 		}
-		return fetchSkip
+		return fetchRequired
 	}
 	if override != nil {
 		return explicit(*override)
@@ -61,7 +73,7 @@ func decideFetch(g git.GitInterface, gc *config.GitConfig, override *bool, hubPa
 // WorktreeManager resolves via origin/<default>) or an explicit origin/<x>
 // that no local branch of the same name shadows.
 func startPointIsOriginRef(g git.GitInterface, hubPath, startPoint, defaultBranch string) bool {
-	if url, err := g.GetConfig(hubPath, "remote.origin.url"); err != nil || strings.TrimSpace(url) == "" {
+	if !hasOrigin(g, hubPath) {
 		return false
 	}
 	switch startPoint {
@@ -79,6 +91,20 @@ func startPointIsOriginRef(g git.GitInterface, hubPath, startPoint, defaultBranc
 		}
 	}
 	return false
+}
+
+// hasOrigin reports whether the hub has an origin remote with a URL.
+func hasOrigin(g git.GitInterface, hubPath string) bool {
+	url, err := g.GetConfig(hubPath, "remote.origin.url")
+	return err == nil && strings.TrimSpace(url) != ""
+}
+
+// hintNoOrigin says why a requested fetch did not happen. It runs before
+// the dry-run split so the preview and the real run agree.
+func hintNoOrigin(mode fetchMode) {
+	if mode == fetchNoOrigin {
+		output.Hint("no origin remote; skipping the requested fetch")
+	}
 }
 
 // fetchOrigin refreshes origin's remote-tracking branches, bounded by
