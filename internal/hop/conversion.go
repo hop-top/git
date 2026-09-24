@@ -55,7 +55,10 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		remoteURL = ""
 	}
 
-	if enforceClean && useBare {
+	// The clean check guards the bare layout, whose conversion moves the
+	// working tree; Force (init --force) is the caller's explicit consent
+	// to carry uncommitted changes across. The backup is taken either way.
+	if enforceClean && useBare && !c.Force {
 		status, err := c.git.RunInDir(repoPath, "git", "status", "--porcelain")
 		if err == nil && status != "" {
 			result.Errors = append(result.Errors, "repository has uncommitted changes (commit or stash before conversion)")

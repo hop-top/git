@@ -1,0 +1,35 @@
+# `git hop init --force` converts a repository with uncommitted changes,
+# for the bare layout as well as --regular. The dirty-tree refusal only
+# suggests ways out that actually get past it.
+
+# --- dirty repo: refused without --force, advice names only real exits ---
+exec git init $WORK/dirty
+cd $WORK/dirty
+exec git commit --allow-empty -m 'initial'
+cp $WORK/wip wip.txt
+! exec git-hop init --no-prompt --no-hooks
+stderr '^error: Repository has uncommitted changes$'
+stderr '^hint:   git hop init --force$'
+! stderr 'regular'
+exists $WORK/dirty/.git
+
+# --- --force: bare conversion goes through, the file moves to hops/main ---
+exec git-hop init --no-prompt --no-hooks --force
+stdout 'Conversion successful'
+! exists $WORK/dirty/.git
+exists $WORK/dirty/hops/main/wip.txt
+exec git -C $WORK/dirty rev-parse --is-bare-repository
+stdout '^true$'
+
+# --- --force --regular: same outcome for the regular layout ---
+exec git init $WORK/dirtyreg
+cd $WORK/dirtyreg
+exec git commit --allow-empty -m 'initial'
+cp $WORK/wip wip.txt
+exec git-hop init --no-prompt --no-hooks --regular --force
+stdout 'Conversion successful'
+exists $WORK/dirtyreg/wip.txt
+exists $WORK/dirtyreg/hop.json
+
+-- wip --
+work in progress

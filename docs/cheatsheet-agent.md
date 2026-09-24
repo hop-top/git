@@ -29,7 +29,12 @@ standard repo it normally prompts for a structure, so **always pass
 /usr/bin/git hop init --no-prompt --regular    # regular repo + worktrees
 /usr/bin/git hop init --no-prompt --dry-run    # preview the conversion plan
 /usr/bin/git hop init --no-prompt --hooks none # skip mirroring committed hooks
+/usr/bin/git hop init --no-prompt --force      # convert despite uncommitted changes (either layout)
 ```
+
+A dirty working tree is refused (exit 1) unless `--force` is given.
+`--force` carries uncommitted files into the new worktree but not what was
+staged; the conversion backup is taken either way.
 
 Without `--no-prompt` and with nothing readable on stdin, init exits
 **129** with `fatal: cannot prompt ...` rather than waiting. That is a
