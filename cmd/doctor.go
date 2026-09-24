@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
@@ -53,6 +54,8 @@ Checks:
 - Hopspace existence and consistency
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
+- --global hop.* keys the old global.json migration wrote but the user
+  never set (--fix unsets them)
 
 Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows
@@ -131,6 +134,7 @@ const (
 	doctorCheckWorktrees    = "worktrees"
 	doctorCheckState        = "state"
 	doctorCheckHopspace     = "hopspace" // stale data-home hopspace copies
+	doctorCheckConfig       = "config"   // global git config left by the legacy migration
 )
 
 // Kinds of doctor record; see doctorRecord.Kind.
@@ -210,6 +214,7 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	checkDependencies(fs, hubPath, opts, &r)
 	checkWorktreeState(fs, g, hubPath, opts, &r)
 	checkState(fs, g, hubPath, opts, &r)
+	checkConfig(config.NewGlobalLoader(), opts, &r)
 
 	summarizeDoctor(opts, r)
 	return r

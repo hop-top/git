@@ -117,6 +117,18 @@ func (gc *GitConfig) Set(key, value string) error {
 	return err
 }
 
+// GetGlobal reads a key from --global scope only.
+// Missing keys return ("", ErrKeyNotFound).
+func (gc *GitConfig) GetGlobal(key string) (string, error) {
+	return gc.get(key, "--global")
+}
+
+// UnsetGlobal removes a key from --global scope.
+func (gc *GitConfig) UnsetGlobal(key string) error {
+	_, err := gc.RunCmd("config", "--global", "--unset", key)
+	return err
+}
+
 // SetLocal writes a key to --local scope.
 func (gc *GitConfig) SetLocal(key, value string) error {
 	_, err := gc.RunCmd("config", "--local", key, value)

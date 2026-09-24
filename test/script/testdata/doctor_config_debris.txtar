@@ -1,0 +1,54 @@
+# doctor finds the --global hop.* keys the zero-value global.json migration
+# wrote and the user never set, and only doctor --fix unsets them.
+#
+# That migration wrote every scalar of GlobalConfig, so keys absent from
+# global.json landed as false/0/"" and shadow the compiled defaults (e.g.
+# hop.worktreeLocation "" selects the centralized layout). Evidence is
+# global.json.bak, the file it read, plus the hop.migrated sentinel; a key
+# is only touched while it still holds the value the migration wrote.
+# git's global config here is $WORK/gitconfig (see the script setup).
+
+mkdir $WORK/data $WORK/.config/git-hop $WORK/.cache/git-hop
+cp $WORK/bak.json $WORK/.config/git-hop/global.json.bak
+exec git config --global hop.migrated true
+exec git config --global hop.gitDomain example.com
+exec git config --global hop.backup.enabled false
+exec git config --global hop.worktreeLocation ''
+exec git config --global hop.shellIntegration.status ''
+exec git config --global hop.backup.keepBackup false
+exec git config --global hop.backup.maxBackups 5
+
+# --- nothing happens on its own ---
+exec git-hop list
+exec git config --global --get hop.shellIntegration.status
+
+# --- doctor reports each leftover as an issue with a fix hint ---
+exec sh -c 'git-hop doctor --json; echo "exit=$?"'
+stdout '^exit=1$'
+stdout '"check": "config"'
+stdout '"subject": "hop.shellIntegration.status"'
+stdout '"subject": "hop.backup.keepBackup"'
+stdout '"subject": "hop.worktreeLocation"'
+stdout 'run ''git hop doctor --fix'' to unset it'
+! stdout '"subject": "hop.gitDomain"'
+! stdout '"subject": "hop.backup.enabled"'
+! stdout '"subject": "hop.backup.maxBackups"'
+
+# --- the preview changes nothing ---
+exec git-hop doctor --fix --dry-run
+exec git config --global --get hop.backup.keepBackup
+
+# --- --fix unsets the leftovers and keeps the user's keys ---
+exec git-hop doctor --fix
+! exec git config --global --get hop.shellIntegration.status
+! exec git config --global --get hop.backup.keepBackup
+! exec git config --global --get hop.worktreeLocation
+exec git config --global --get hop.gitDomain
+stdout example.com
+exec git config --global --get hop.backup.enabled
+exec git config --global --get hop.backup.maxBackups
+exec git config --global --get hop.migrated
+exec git-hop doctor
+
+-- bak.json --
+{"defaults": {"gitDomain": "example.com"}, "backup": {"enabled": false}}
