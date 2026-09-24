@@ -69,7 +69,7 @@ exits 0 without prompting.
 # Create
 /usr/bin/git hop add <branch>                 # create worktree + env; auto-cd if
                                               #   shell integration active
-/usr/bin/git hop add <branch> --dry-run       # preview path + env without writing
+/usr/bin/git hop add <branch> --dry-run       # preview branch + path; no writes, no hooks
 /usr/bin/git hop add <branch> --no-copy-ignored # clean tree: skip copying ignored local
                                               #   files; `#-hop-#` above a .gitignore
                                               #   pattern excludes it permanently
