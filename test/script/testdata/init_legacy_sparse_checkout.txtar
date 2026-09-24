@@ -1,0 +1,65 @@
+# A sparse checkout set up without `git sparse-checkout` (older git, or
+# by hand): core.sparseCheckout=true in the shared .git/config, patterns
+# in .git/info/sparse-checkout, no extensions.worktreeConfig. A bare
+# conversion keeps the default worktree as sparse as the repository was,
+# and keeps core.sparseCheckout out of the hub's shared config, where it
+# would apply to every worktree: it goes to the default worktree's own
+# config.worktree, the hub getting extensions.worktreeConfig (core.bare
+# moved into its config.worktree) as for a `git sparse-checkout` repo.
+# Worktrees added afterwards are full.
+
+exec git init $WORK/proj
+cd $WORK/proj
+mkdir a b
+cp $WORK/a.txt a/x
+cp $WORK/b.txt b/y
+exec git add a b
+exec git commit -q -m 'files'
+exec git config core.sparseCheckout true
+cp $WORK/patterns .git/info/sparse-checkout
+exec git read-tree -mu HEAD
+! exists $WORK/proj/b
+
+# --- the plan: sparse keys go to the default worktree ---
+exec git-hop init --no-prompt --no-hooks --dry-run
+stdout 'Carry over 1 per-worktree config key\(s\) into hops/main:'
+stdout '^         core\.sparsecheckout$'
+stdout 'Move core\.bare into the hub''s config\.worktree'
+
+# --- the conversion ---
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+! stderr 'warning:'
+
+# --- the hub: no shared sparse setting ---
+cd $WORK/proj
+exec git rev-parse --is-bare-repository
+stdout '^true$'
+! exec git config --file config core.sparseCheckout
+exec git config --file config --type=bool extensions.worktreeConfig
+stdout '^true$'
+
+# --- the default worktree: sparse as before ---
+cd $WORK/proj/hops/main
+exec git config --worktree --type=bool core.sparseCheckout
+stdout '^true$'
+exists a/x
+! exists b
+exec git status --porcelain
+! stdout .
+
+# --- a new worktree is full and not sparse ---
+cd $WORK/proj
+exec git-hop add feat
+exists $WORK/proj/hops/feat/b/y
+cd $WORK/proj/hops/feat
+! exec git config core.sparseCheckout
+exec git status --porcelain
+! stdout .
+
+-- a.txt --
+a
+-- b.txt --
+b
+-- patterns --
+/a/

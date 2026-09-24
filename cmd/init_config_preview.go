@@ -31,7 +31,7 @@ func previewLocalConfig(g git.GitInterface, repoPath, branch string, useBare boo
 	for _, e := range excluded {
 		fmt.Printf("         %s: %s\n", e.Key, e.Reason)
 	}
-	if !plan.WorktreeConfig {
+	if !plan.HubWorktreeConfig() {
 		return
 	}
 	perWorktree := plan.PerWorktreeKeys()

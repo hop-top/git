@@ -1075,6 +1075,16 @@ is applied again, so the default worktree has the files it had before.
 Without the extension, git does not read `.git/config.worktree`; if the
 file exists it is left behind with a `warning:`.
 
+A sparse checkout set up without `git sparse-checkout` (older git, or by
+hand) keeps `core.sparseCheckout=true` in the shared `.git/config`, with
+no `extensions.worktreeConfig`. In the hub's shared config it would
+apply to every worktree, so a bare conversion treats it as the default
+worktree's own, as `git sparse-checkout` does: `core.sparseCheckout`,
+`core.sparseCheckoutCone` and `index.sparse` go to the default
+worktree's `config.worktree`, the hub gets the extension with
+`core.bare` moved as above, and the sparse checkout is applied again.
+Worktrees added later are full checkouts.
+
 `git hop init -n` lists the keys it would carry over and the ones it
 would leave out, with the reason. It prints key names only, never
 values, since those can hold credentials.
