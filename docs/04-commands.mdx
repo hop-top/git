@@ -743,7 +743,9 @@ git hop doctor --fix --dry-run
 
 ### What It Checks
 
-- Path configuration (data, config, cache directories)
+- Path configuration: the data directory. The config and cache
+  directories are shown but optional: whatever writes to them creates
+  them, and whatever reads them treats a missing one as empty
 - Hub configuration and symlinks
 - Hopspace consistency: the hub itself for a default clone, or
   `$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
@@ -1047,7 +1049,10 @@ git hop init [--no-prompt] [--regular] [-n|--dry-run] [--force] [--keep-backup]
 ```
 
 Run in a hub (a bare repository, a regular repository with `hop.json`,
-or one of their worktrees), `init` reports it as already initialized and
+or one of their worktrees), `init` reports it as already initialized.
+A bare repository git-hop did not create (made with `git clone --bare`,
+say) has no `hop.json` yet: `init` writes one listing its worktrees and
+records the hub in git-hop's state, as a conversion does. Otherwise it
 changes nothing. Any other repository is offered a conversion, including
 a regular one with linked worktrees from `git worktree add`: git does
 not consider it bare, so it is not a hub yet.
@@ -1061,9 +1066,10 @@ repository as a hub without converting it.
 Register as-is (menu option 3) changes nothing on disk: no `hop.json`,
 no `hops/`. It records the repository in git-hop's state, the repository
 root as its branch's worktree, so `git hop list`, `status --all` and
-`prune --all` see it. Commands that look for a hub from the current
-directory (`prune` without `--all`, for one) do not, since there is no
-`hop.json` to find.
+`prune --all` see it. Run from inside it, `list`, `status` and `prune`
+(without `--all`) recognise it from that record, as they recognise a
+hub by its `hop.json`. Commands that change a hub's worktrees (`add`,
+`remove`, `move`, `merge`, `repair`, `env gc`) still need a `hop.json`.
 
 A bare conversion refuses a repository that has linked worktrees: their
 admin directories live in the `.git` directory the conversion replaces,
