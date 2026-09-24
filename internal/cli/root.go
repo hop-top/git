@@ -375,7 +375,7 @@ Worktree Mode:
 		f.Shorthand = "q"
 	}
 	pf.BoolVar(&force, "force", false, "bypass safety checks")
-	pf.BoolVar(&dryRun, "dry-run", false, "preview changes without applying")
+	pf.BoolVarP(&dryRun, "dry-run", "n", false, "preview changes without applying")
 	pf.BoolVarP(&globalConfig, "global", "g", false, "use global hopspace in $GIT_HOP_DATA_HOME (default: local)")
 
 	RootCmd.Flags().StringVar(&gitDomain, "git-domain", "", "Git domain for shorthand notation (e.g., github.com, gitlab.com)")

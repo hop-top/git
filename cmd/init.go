@@ -649,7 +649,7 @@ func initHintedFlags() []string {
 
 func init() {
 	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Skip clean repo check and backup requirements (DANGEROUS)")
-	initCmd.Flags().BoolVar(&dryRunFlag, "dry-run", false, "Show conversion steps without executing")
+	initCmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "n", false, "Show conversion steps without executing")
 	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion")
 	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Convert to a regular repo + worktrees instead of bare (with --no-prompt)")
 	initCmd.Flags().BoolVar(&noPromptFlag, "no-prompt", false, "Skip the interactive menu and convert non-interactively (bare unless --regular)")
