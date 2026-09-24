@@ -144,6 +144,19 @@ const (
 	doctorCheckConfig       = "config"   // global git config left by the legacy migration or old releases
 )
 
+// doctorChecks lists every check above, in the order doctor runs them. It
+// is the check enum of doctor's output schema (doctorRecord.
+// JSONSchemaExtend); a test holds it to the constants.
+var doctorChecks = []string{
+	doctorCheckPaths,
+	doctorCheckHub,
+	doctorCheckHopspace,
+	doctorCheckDependencies,
+	doctorCheckWorktrees,
+	doctorCheckState,
+	doctorCheckConfig,
+}
+
 // Kinds of doctor record; see doctorRecord.Kind.
 const (
 	doctorKindIssue    = "issue"
