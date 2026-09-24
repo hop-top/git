@@ -233,14 +233,15 @@ func (l *GlobalLoader) maybeMigrate() error {
 		return fmt.Errorf("read legacy config: %w", err)
 	}
 
-	var legacy GlobalConfig
+	var legacy legacyGlobalConfig
 	if err := json.Unmarshal(content, &legacy); err != nil {
 		return fmt.Errorf("parse legacy config: %w", err)
 	}
 
-	// Write scalar fields to git config
-	if err := l.writeToGitConfig(&legacy); err != nil {
-		return fmt.Errorf("migrate scalars: %w", err)
+	for _, e := range legacy.gitConfigEntries() {
+		if err := l.gc.Set(e.key, e.val); err != nil {
+			return fmt.Errorf("migrate scalars: set %s: %w", e.key, err)
+		}
 	}
 
 	// Extract managers to sidecar file
