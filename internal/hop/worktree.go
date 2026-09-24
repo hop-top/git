@@ -242,30 +242,33 @@ func (m *WorktreeManager) resolveStartPoint(basePath, startPoint, defaultBranch 
 	}
 }
 
+// CheckMove reports why MoveWorktree would refuse to rename oldBranch to
+// newBranch in hub. It reads only the hub config, so callers can settle it
+// before running anything with side effects.
+func CheckMove(hub *Hub, oldBranch, newBranch string) error {
+	if oldBranch == "" || newBranch == "" {
+		return fmt.Errorf("branch names cannot be empty")
+	}
+	if oldBranch == hub.Config.Repo.DefaultBranch {
+		return fmt.Errorf("cannot move the default branch '%s'", oldBranch)
+	}
+	if _, exists := hub.Config.Branches[oldBranch]; !exists {
+		return fmt.Errorf("branch '%s' not found in hub", oldBranch)
+	}
+	if _, exists := hub.Config.Branches[newBranch]; exists {
+		return fmt.Errorf("branch '%s' already exists", newBranch)
+	}
+	return nil
+}
+
 // MoveWorktree renames a worktree: renames the git branch, moves the directory,
 // and updates hub and hopspace configs.
 // Returns (oldPath, newPath, error).
 func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, newBranch string, locationPattern, org, repo string) (string, string, error) {
-	if oldBranch == "" || newBranch == "" {
-		return "", "", fmt.Errorf("branch names cannot be empty")
+	if err := CheckMove(hub, oldBranch, newBranch); err != nil {
+		return "", "", err
 	}
-
-	// Guard: cannot move the default branch
-	if oldBranch == hub.Config.Repo.DefaultBranch {
-		return "", "", fmt.Errorf("cannot move the default branch '%s'", oldBranch)
-	}
-
-	// Resolve old path from hub config
-	branchCfg, exists := hub.Config.Branches[oldBranch]
-	if !exists {
-		return "", "", fmt.Errorf("branch '%s' not found in hub", oldBranch)
-	}
-	oldPath := config.ResolveWorktreePath(branchCfg.Path, hub.Path)
-
-	// Guard: new branch must not already exist
-	if _, exists := hub.Config.Branches[newBranch]; exists {
-		return oldPath, "", fmt.Errorf("branch '%s' already exists", newBranch)
-	}
+	oldPath := config.ResolveWorktreePath(hub.Config.Branches[oldBranch].Path, hub.Path)
 
 	// Compute new path from location pattern
 	dataHome := GetGitHopDataHome()

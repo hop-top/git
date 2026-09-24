@@ -16,7 +16,7 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | `post-worktree-add` | `git hop add`, after the worktree exists. Also fired during `git hop clone`, after the committed-hook mirror. Failure warns, does not roll back. | repo, hopspace, global |
 | `pre-worktree-remove` | `git hop remove`, before the worktree is deleted. Non-zero exit aborts the remove. | repo, hopspace, global |
 | `post-worktree-remove` | `git hop remove`, after the worktree is gone and state is updated. Failure warns. | hopspace, global (the repo-level file was inside the worktree that was just deleted) |
-| `pre-worktree-move` | `git hop move`, before the rename. Non-zero exit aborts the move. Path is the OLD worktree. | repo, hopspace, global |
+| `pre-worktree-move` | `git hop move`, before the rename and after the move's own refusals (target already registered, hopspace unreadable), so a move git-hop rejects never fires it. Non-zero exit aborts the move. Path is the OLD worktree. | repo, hopspace, global |
 | `post-worktree-move` | `git hop move`, after the rename, symlink, state, and port/volume rekey. Path is the NEW worktree. Failure warns. | repo, hopspace, global |
 | `pre-worktree-switch` | `git hop <branch>`, before the `current` symlink is rewritten. Non-zero exit aborts the switch. **Never fires for a plain `cd`** — see [Switch hooks](#switch-hooks). | repo, hopspace, global |
 | `post-worktree-switch` | `git hop <branch>` after the symlink is written, and on a plain `cd` into a registered worktree. Failure warns. The only hook that may exit [93](#the-navigation-handled-directive-exit-93). | repo, hopspace, global |
@@ -738,6 +738,7 @@ exit 0
 | `git hop remove feature/my-feature` | `git flow feature finish my-feature` | Removes worktree |
 | `git hop add release/v1.0.0` | `git flow release start v1.0.0` | Creates worktree |
 | `git hop remove release/v1.0.0` | `git flow release finish v1.0.0` | Removes worktree |
+| `git hop move feature/a feature/b` | None (type detected for `GIT_HOP_BRANCH_*` only) | Renames branch and worktree |
 
 #### Manual Hook Integration (Optional)
 
