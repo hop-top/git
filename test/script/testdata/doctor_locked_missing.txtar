@@ -1,8 +1,10 @@
 # A worktree git keeps locked (`git worktree lock`, e.g. one on a drive
 # that is not mounted) is kept for the whole doctor run when its
-# directory is missing: git refuses to prune it, and doctor must not
-# forget it either. No state entry or hop.json row is dropped, the lock
-# stays, and nobody is asked what to do with it.
+# directory is missing: git refuses to prune or recreate it, and doctor
+# must not forget it either. It is a warning, not an issue (exit 0),
+# naming git's lock reason and how to unlock it. No state entry or
+# hop.json row is dropped, nothing is recreated, the lock stays, and
+# nobody is asked what to do with it.
 
 exec git init --bare $WORK/org/repo.git
 exec git clone $WORK/org/repo.git $WORK/seed
@@ -17,19 +19,36 @@ exec git -C $WORK/hub/hops/usb commit --allow-empty -m 'work'
 exec git worktree lock --reason 'on the usb drive' $WORK/hub/hops/usb
 rm $WORK/hub/hops/usb
 
-# --- the preview keeps it too. Run from outside the hub, where no hub
-# check plans a recreate first ---
+# --- a plain check: a warning with the reason and the way out ---
+exec git-hop doctor
+stderr '^warning: worktree directory missing but locked in git \(on the usb drive\): .*/hub/hops/usb$'
+stderr '^hint: run ''git worktree unlock .*/hub/hops/usb'' if it is gone for good'
+! stdout 'Broken link'
+
+# --- the preview keeps it and plans nothing for it, in the hub ... ---
+exec git-hop doctor --fix --dry-run --json
+stdout '"kind": "warning"'
+stdout '"subject": "usb"'
+! stdout 'recreate worktree'
+! stdout 'would-fix'
+! stdout 'prune worktree entry from state'
+
+# --- ... and outside it, where only the state check sees it ---
 cd $WORK
-! exec git-hop doctor --fix --dry-run --json
+exec git-hop doctor --fix --dry-run --json
 stdout '"subject": "github.com/org/repo:usb"'
+stdout '"kind": "warning"'
 ! stdout 'prune worktree entry from state'
 cd $WORK/hub
 
 # --- the real run ---
-! exec git-hop doctor --fix
+exec git-hop doctor --fix
 ! stdout 'Select option'
+! stdout 'Attempting to fix'
 ! stdout 'Pruning orphaned worktree'
 ! stdout 'Pruning hop.json entry'
+! stderr 'error:'
+! exists $WORK/hub/hops/usb
 decode json $WORK/hub/hop.json branches.usb.hopspaceBranch usb
 grep '"usb": \{' $WORK/.local/state/git-hop/state.json
 exec git worktree list --porcelain

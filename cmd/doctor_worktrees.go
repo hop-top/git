@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
@@ -29,14 +28,27 @@ import (
 // still registers, and a registration left behind by cleanup would block
 // a later `git hop add` of the same branch.
 //
+// A worktree git has locked is none of these: it is reported as a
+// warning and left alone in every mode (warnLockedWorktree).
+//
 // The hub check runs before the state check on purpose: a worktree it
 // recreates is back on disk when the state check looks, so the state
 // check only sees what the hub check left for cleanup.
 func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath string, opts doctorOpts, r *doctorReport) {
+	var registry *string // git's worktree list, read once a worktree is missing
 	for _, name := range sortedBranchNames(hub) {
 		b := hub.Config.Branches[name]
 		linkPath := config.ResolveWorktreePath(b.Path, hub.Path)
 		if _, err := fs.Stat(linkPath); err == nil {
+			continue
+		}
+
+		if registry == nil {
+			list, _ := g.WorktreeListPorcelain(hub.Path)
+			registry = &list
+		}
+		if reason, locked := worktreeLock(*registry, linkPath); locked {
+			warnLockedWorktree(r, doctorCheckHub, name, linkPath, reason)
 			continue
 		}
 
@@ -53,6 +65,17 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 		}
 		recreateWorktree(fs, g, name, b.HopspaceBranch, linkPath, hopspacePath, opts, r)
 	}
+}
+
+// warnLockedWorktree reports a missing worktree git has locked: a
+// warning, not an issue, since git keeps the worktree on purpose and its
+// directory may only be unavailable. Nothing is repaired or previewed
+// for it; the hint says how to hand it back to doctor.
+func warnLockedWorktree(r *doctorReport, check, subject, path, reason string) {
+	msg := lockedMissingMessage(path, reason)
+	output.Warn("%s", msg)
+	output.Hint("%s", unlockHint(path))
+	r.record(doctorKindWarning, check, subject, "%s; %s", msg, unlockHint(path))
 }
 
 // mergedMissingBranch reports whether branch is merged into the hub's
@@ -181,41 +204,8 @@ func clearStaleRegistration(fs afero.Fs, g git.GitInterface, gitDir, path string
 // prunableWorktree reports whether porcelain, the output of `git worktree
 // list --porcelain`, marks the worktree at path prunable.
 func prunableWorktree(porcelain, path string) bool {
-	return worktreeMarked(porcelain, path, "prunable")
-}
-
-// lockedWorktree reports whether porcelain, the output of `git worktree
-// list --porcelain`, marks the worktree at path locked.
-func lockedWorktree(porcelain, path string) bool {
-	return worktreeMarked(porcelain, path, "locked")
-}
-
-// worktreeLocked reports whether the repository at gitDir has the
-// worktree at path locked. A registry that cannot be read answers false.
-func worktreeLocked(g git.GitInterface, gitDir, path string) bool {
-	list, err := g.WorktreeListPorcelain(gitDir)
-	return err == nil && lockedWorktree(list, path)
-}
-
-// worktreeMarked reports whether porcelain, the output of `git worktree
-// list --porcelain`, gives the worktree at path the attribute attr
-// ("prunable", "locked"), with or without a reason after it.
-func worktreeMarked(porcelain, path, attr string) bool {
-	want := resolvedPath(path)
-	var cur string
-	for _, line := range strings.Split(porcelain, "\n") {
-		switch {
-		case line == "":
-			cur = ""
-		case strings.HasPrefix(line, "worktree "):
-			cur = strings.TrimPrefix(line, "worktree ")
-		case line == attr || strings.HasPrefix(line, attr+" "):
-			if cur != "" && resolvedPath(cur) == want {
-				return true
-			}
-		}
-	}
-	return false
+	_, ok := worktreeAttr(porcelain, path, "prunable")
+	return ok
 }
 
 // resolvedPath resolves symlinks in the longest prefix of p that exists.

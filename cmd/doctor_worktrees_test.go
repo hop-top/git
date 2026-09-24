@@ -184,6 +184,8 @@ func TestDoctorFix_PresentWorktree_Untouched(t *testing.T) {
 // TestDoctorFix_MissingWorktree_LeavesRegistrationGitKeeps: only a record
 // git marks prunable for this very path is cleared. A locked worktree is
 // never prunable, and another path's stale record is not this repair's.
+// The locked worktree is not re-added either: git would refuse, and
+// doctor leaves it alone with a warning (doctor_locked_test.go).
 func TestDoctorFix_MissingWorktree_LeavesRegistrationGitKeeps(t *testing.T) {
 	isolateDoctorPaths(t)
 	fs := afero.NewMemMapFs()
@@ -198,8 +200,8 @@ func TestDoctorFix_MissingWorktree_LeavesRegistrationGitKeeps(t *testing.T) {
 	r := runDoctor(fs, g, hubPath, doctorOpts{fix: true})
 
 	assert.Empty(t, g.WorktreeRemoveCalls, "no registration may be removed")
-	assert.Equal(t, []string{"add " + gone}, g.calls)
-	assert.Error(t, doctorResult(r), "git's refusal is reported as a failed repair")
+	assert.Empty(t, g.calls, "a locked worktree is not re-added")
+	assert.Empty(t, recordMessages(r, doctorKindFailed, "feat/gone"), "nothing was attempted, so nothing failed")
 }
 
 // TestDoctorDryRun_MissingWorktree previews both repairs through the same
