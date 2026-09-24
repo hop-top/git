@@ -385,7 +385,7 @@ Worktree Mode:
 			// Emit worktree.switched event. Published next to, but
 			// independent of, hook dispatch: a failing post-hook only
 			// warns above, and a bus error never fails the switch.
-			publishWorktreeSwitched(EventBus, hub, hubPath, arg, worktreePath)
+			publishWorktreeSwitched(EventBus, fs, hub, hubPath, arg, worktreePath)
 
 			output.Success("Switched to worktree '%s'", arg)
 			output.Info("Path: %s", worktreePath)
@@ -477,16 +477,16 @@ func refreshRootsCacheAt(fs afero.Fs, hubPath string) {
 
 // publishWorktreeSwitched emits events.WorktreeSwitched after a successful
 // branch switch, mirroring the publish shape the move/remove/merge commands
-// use. HopspacePath is a pure path computation from the hub's org/repo — no
-// hopspace load — so the switch path never pays for I/O it does not need.
+// use. HopspacePath is the hopspace the hub resolves to, as in every other
+// worktree event; resolving it is a stat, not a hopspace load.
 //
 // Errors are swallowed and a nil bus is tolerated: the event is an
 // observability side channel, never a gate on the switch itself.
-func publishWorktreeSwitched(b bus.Bus, hub *hop.Hub, hubPath, branch, worktreePath string) {
+func publishWorktreeSwitched(b bus.Bus, fs afero.Fs, hub *hop.Hub, hubPath, branch, worktreePath string) {
 	if b == nil {
 		return
 	}
-	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	hopspacePath := hop.ResolveHopspacePath(fs, hubPath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	_ = b.Publish(context.Background(), bus.NewEvent(
 		events.WorktreeSwitched, events.Source,
 		events.WorktreeEvent{
