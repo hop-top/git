@@ -8,6 +8,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
+	"hop.top/git/internal/output"
 )
 
 // addFetchFlag / addNoFetchFlag hold the two halves of the --[no-]fetch
@@ -21,17 +22,40 @@ var (
 // remote-tracking branch of origin.
 var originRefPrefixes = []string{"refs/remotes/origin/", "remotes/origin/", "origin/"}
 
-// shouldFetchOrigin decides whether add refreshes origin before resolving
-// startPoint: --[no-]fetch (override) wins, then hop.add.fetch, and with
-// neither set add fetches only when the start-point is an origin ref.
-func shouldFetchOrigin(g git.GitInterface, gc *config.GitConfig, override *bool, hubPath, startPoint, defaultBranch string) bool {
+// fetchMode is how add treats origin before resolving the start-point.
+type fetchMode int
+
+const (
+	// fetchSkip: no fetch.
+	fetchSkip fetchMode = iota
+	// fetchAuto: fetched because the start-point is an origin ref; a
+	// failure only warns.
+	fetchAuto
+	// fetchRequired: the user asked for it (--fetch, hop.add.fetch true);
+	// a failure is fatal.
+	fetchRequired
+)
+
+// decideFetch picks the fetchMode: --[no-]fetch (override) wins, then
+// hop.add.fetch, and with neither set add fetches only when the
+// start-point is an origin ref.
+func decideFetch(g git.GitInterface, gc *config.GitConfig, override *bool, hubPath, startPoint, defaultBranch string) fetchMode {
+	explicit := func(on bool) fetchMode {
+		if on {
+			return fetchRequired
+		}
+		return fetchSkip
+	}
 	if override != nil {
-		return *override
+		return explicit(*override)
 	}
 	if v, err := gc.GetBool(config.KeyAddFetch); err == nil {
-		return v
+		return explicit(v)
 	}
-	return startPointIsOriginRef(g, hubPath, startPoint, defaultBranch)
+	if startPointIsOriginRef(g, hubPath, startPoint, defaultBranch) {
+		return fetchAuto
+	}
+	return fetchSkip
 }
 
 // startPointIsOriginRef reports whether startPoint resolves through a
@@ -60,12 +84,18 @@ func startPointIsOriginRef(g git.GitInterface, hubPath, startPoint, defaultBranc
 }
 
 // fetchOrigin refreshes origin's remote-tracking branches, bounded by
-// hop.remote.timeout. Failure is not fatal: the start-point still resolves
-// against the refs already present, so add warns that they may be stale
-// and carries on.
-func fetchOrigin(g git.GitInterface, hubPath string) {
-	if err := g.FetchRemote(hubPath, "origin"); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: could not fetch origin: %v\n"+
-			"hint: starting from the local refs, which may be stale\n", err)
+// hop.remote.timeout. A requested fetch that fails is fatal. An automatic
+// one only warns: the start-point still resolves against the refs already
+// present, so add carries on and says they may be stale.
+func fetchOrigin(g git.GitInterface, hubPath string, mode fetchMode) {
+	err := g.FetchRemote(hubPath, "origin")
+	if err == nil {
+		return
 	}
+	if mode == fetchRequired {
+		output.Fatal("could not fetch origin: %v\n"+
+			"hint: fix the origin remote, or pass --no-fetch to start from the local refs", err)
+	}
+	fmt.Fprintf(os.Stderr, "warning: could not fetch origin: %v\n"+
+		"hint: starting from the local refs, which may be stale\n", err)
 }

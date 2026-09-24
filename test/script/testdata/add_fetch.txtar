@@ -7,8 +7,10 @@
 #                            ref: the default branch (resolved through
 #                            origin/<default>) or an explicit origin/<x>
 #
-# A failed fetch (offline, origin gone) warns and carries on from the
-# refs already present. --dry-run says it would fetch but does not.
+# A failed fetch (offline, origin gone) is fatal when the fetch was asked
+# for (--fetch, hop.add.fetch true): nothing is created. Under the
+# automatic default it only warns and carries on from the refs already
+# present. --dry-run says it would fetch but does not.
 
 # --- origin + hub ---
 exec git init --bare $WORK/repo.git
@@ -102,8 +104,33 @@ exec git-hop add feat/auto
 exec git -C hops/feat/auto rev-parse HEAD
 cmp stdout $WORK/fresh-main-4
 
-# --- origin unreachable: warn, carry on from local refs ---
+# --- origin unreachable, --fetch given: fatal, nothing created ---
 exec git remote set-url origin $WORK/gone.git
+cp hop.json $WORK/hop.json.before-offline
+! exec git-hop add feat/offline-flag --fetch
+stderr '^fatal: could not fetch origin'
+stderr '^hint: .*--no-fetch'
+! stderr '^warning:'
+! stdout 'Created hopspace'
+! exists $WORK/hub/hops/feat/offline-flag
+exec git branch --list feat/offline-flag
+! stdout .
+cmp hop.json $WORK/hop.json.before-offline
+
+# --- origin unreachable, hop.add.fetch true: fatal, nothing created ---
+exec git config hop.add.fetch true
+! exec git-hop add feat/offline-cfg
+stderr '^fatal: could not fetch origin'
+stderr '^hint: .*--no-fetch'
+! exists $WORK/hub/hops/feat/offline-cfg
+cmp hop.json $WORK/hop.json.before-offline
+
+# ... and --no-fetch still gets past it
+exec git-hop add feat/offline-cfg --no-fetch
+exists $WORK/hub/hops/feat/offline-cfg
+exec git config --unset hop.add.fetch
+
+# --- origin unreachable, automatic default: warn, carry on from local refs ---
 exec git-hop add feat/offline
 stderr '^warning: could not fetch origin'
 stderr '^hint: starting from the local refs, which may be stale'
