@@ -1,0 +1,51 @@
+# `git hop init` in a bare repository git-hop did not create (the
+# already-initialized path, which back-fills hop.json instead of
+# converting) sets the hub up the way clone and conversion do: the data
+# home exists and state records the hub, so doctor finds a working
+# install and list/status --all see the repository.
+#
+# The regression this pins: that path wrote hop.json and nothing else,
+# so doctor exited 1 with "data directory does not exist" and "cache
+# directory does not exist" straight after init.
+
+exec git init --bare $WORK/remotes/acme/widget.git
+exec git clone $WORK/remotes/acme/widget.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- bare clone with no worktree yet ---
+exec git clone --bare $WORK/remotes/acme/widget.git $WORK/acme/widget.git
+cd $WORK/acme/widget.git
+! exists $WORK/data
+exec git-hop init --no-prompt --no-hooks
+stdout 'already initialized'
+exists $WORK/acme/widget.git/hop.json
+exists $WORK/data
+exec git-hop doctor
+! stderr 'data directory'
+! stderr 'cache directory'
+stdout 'No issues found'
+exec git-hop status --all
+stdout 'github.com/acme/widget'
+
+# --- bare repository with a worktree made by plain git ---
+cd $WORK
+exec git clone --bare $WORK/remotes/acme/widget.git $WORK/remotes/acme/gadget.git
+exec git clone --bare $WORK/remotes/acme/gadget.git $WORK/acme/gadget.git
+exec git -C $WORK/acme/gadget.git worktree add $WORK/acme/gadget.git/hops/main main
+cd $WORK/acme/gadget.git
+exec git-hop init --no-prompt --no-hooks
+stdout 'already initialized'
+exec git-hop doctor
+stdout 'No issues found'
+exec git-hop list --json
+stdout '"branch": "main"'
+stdout '"path": ".*/acme/gadget.git/hops/main"'
+
+# --- running init again leaves state as it was ---
+exec git-hop init --no-prompt --no-hooks
+! stderr 'warning:'
+exec git-hop list --json
+stdout -count=1 '"path": ".*/acme/gadget.git/hops/main"'

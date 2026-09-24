@@ -53,7 +53,7 @@ func isolateDoctorPaths(t *testing.T) doctorPaths {
 }
 
 // TestDoctorDryRun_DoesNotCreateDirectories covers mutation site 1:
-// fs.MkdirAll for the data/config/cache directories.
+// fs.MkdirAll for the data directory.
 func TestDoctorDryRun_DoesNotCreateDirectories(t *testing.T) {
 	p := isolateDoctorPaths(t)
 	fs := afero.NewMemMapFs()
@@ -74,24 +74,43 @@ func TestDoctorDryRun_DoesNotCreateDirectories(t *testing.T) {
 // TestDoctorFix_CreatesDirectories is the non-dry-run counterpart: the
 // guard must not turn doctor into a command that no longer repairs.
 //
-// The config directory is not among them: nothing requires it until
-// something is configured (TestDoctorPaths_ConfigHomeOptional), so --fix
-// leaves creating it to the first writer. This test used to demand it.
+// The config and cache directories are not among them: nothing requires
+// either until something is written there (TestDoctorPaths_ConfigHomeOptional,
+// TestDoctorPaths_CacheHomeOptional), so --fix leaves creating them to the
+// first writer. This test used to demand both.
 func TestDoctorFix_CreatesDirectories(t *testing.T) {
 	p := isolateDoctorPaths(t)
 	fs := afero.NewMemMapFs()
 
 	runDoctor(fs, mocks.NewMockGit(), "/nowhere", doctorOpts{fix: true})
 
+	exists, _ := afero.DirExists(fs, p.dataHome)
+	assert.True(t, exists, "--fix must create %s", p.dataHome)
 	for _, dir := range []string{
-		p.dataHome,
+		filepath.Join(p.configHome, "git-hop"),
 		filepath.Join(p.cacheHome, "git-hop"),
 	} {
 		exists, _ := afero.DirExists(fs, dir)
-		assert.True(t, exists, "--fix must create %s", dir)
+		assert.False(t, exists, "--fix must not create %s", dir)
 	}
-	exists, _ := afero.DirExists(fs, filepath.Join(p.configHome, "git-hop"))
-	assert.False(t, exists, "--fix must not create the config directory")
+}
+
+// TestDoctorPaths_CacheHomeOptional: a missing cache directory is not a
+// problem. Its writers (conversion backups, the worktree-roots file,
+// compose overrides) create it and its readers treat it as empty, so an
+// install that has not cached anything yet is healthy.
+func TestDoctorPaths_CacheHomeOptional(t *testing.T) {
+	p := isolateDoctorPaths(t)
+	fs := afero.NewMemMapFs()
+	require.NoError(t, fs.MkdirAll(p.dataHome, 0o755))
+
+	r := runDoctor(fs, mocks.NewMockGit(), "/nowhere", doctorOpts{})
+
+	assert.False(t, r.issuesFound, "records: %+v", r.records)
+	assert.NoError(t, doctorResult(r))
+	for _, rec := range r.records {
+		assert.NotEqual(t, doctorCheckPaths, rec.Check, "unexpected paths record: %+v", rec)
+	}
 }
 
 // TestDoctorPaths_ConfigHomeOptional: a missing config directory is not a
