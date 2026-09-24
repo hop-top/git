@@ -20,7 +20,7 @@ Aliases:
 Flags:
   -n, --dry-run           Show conversion steps without executing
       --enable-chdir      Install shell integration for automatic directory switching after hop commands
-      --force             Convert even with uncommitted changes (DANGEROUS; a backup is still taken); with --restore, replace what occupies the original location
+      --force             Convert even with uncommitted changes (DANGEROUS; a backup is still taken); with --restore, move what occupies the original location aside (never deleted)
   -h, --help              help for init
       --hooks string      mirror committed .git-hop/hooks/ into hopspace: symlink|copy|prompt|none (overrides --no-hooks)
       --hooks-overwrite   overwrite an existing hopspace hook with different content (symlink/copy modes)

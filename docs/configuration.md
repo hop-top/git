@@ -442,9 +442,15 @@ hop.backup.keepBackup true` applies to that repository alone.
 works wherever the backup lives, and restores to the location recorded in
 the backup's `backup-info.json`, not the current directory. When that
 location exists and is not empty (after a successful conversion it holds
-the new hub), restore refuses; add `--force` to delete what is there and
-put the backup in its place. When a backup is kept, init prints the
-restore command as a hint.
+the new hub), restore refuses. `--force` moves what is there aside to
+`<location>.pre-restore-<UTC time>` (for example
+`proj.pre-restore-20260924T101500Z`, with `-1`, `-2`, ... appended if
+that name is taken), then restores the backup into the freed location.
+Nothing is deleted; restore prints the moved-aside path with the commands
+to remove it or swap it back. If the move fails, restore stops without
+changing anything. A backup stored inside the location it restores to is
+refused even with `--force`; move the backup elsewhere first. When a
+backup is kept, init prints the restore command as a hint.
 
 #### Retention
 
