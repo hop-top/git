@@ -54,13 +54,6 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		}
 	}
 
-	currentBranch, err := c.git.GetCurrentBranch(repoPath)
-	if err != nil {
-		result.Errors = append(result.Errors, fmt.Sprintf("failed to get current branch: %v", err))
-		return result, fmt.Errorf("failed to get current branch: %w", err)
-	}
-	_ = currentBranch
-
 	// Ahead of the clean check, and not waived by Force: an operation in
 	// progress would be lost, not carried, whatever the working tree.
 	if useBare {
@@ -68,6 +61,13 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 			result.Errors = append(result.Errors, err.Error())
 			return result, err
 		}
+	}
+
+	// After the in-progress check: a paused rebase detaches HEAD, and
+	// concluding it is the advice that applies then.
+	if _, err := CurrentBranchForConversion(c.git, repoPath); err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result, err
 	}
 
 	// The clean check guards the bare layout, whose conversion moves the
@@ -83,6 +83,7 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 
 	// Resolved before anything moves: a bare conversion clones from the
 	// local folder, so origin read afterwards would name that folder.
+	var err error
 	c.identity, err = c.resolveRepoIdentity(repoPath)
 	if err != nil {
 		result.Errors = append(result.Errors, err.Error())
@@ -172,8 +173,8 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		// The default branch drives every name downstream: the worktree
 		// directory, hop.json's branches key and path, and the `current`
 		// symlink target. Resolve it once, here, so they cannot disagree.
-		defaultBranch, err := c.git.GetCurrentBranch(repoPath)
-		if err != nil || defaultBranch == "" {
+		defaultBranch, err := CurrentBranchForConversion(c.git, repoPath)
+		if err != nil {
 			return fmt.Errorf("failed to resolve current branch for worktree naming: %w", err)
 		}
 
