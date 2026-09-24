@@ -13,17 +13,17 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | Hook Name | When It Runs | Resolvable levels |
 |-----------|--------------|-------------------|
 | `pre-worktree-add` | `git hop add`, before the worktree is created. Non-zero exit aborts the add. | repo (via parent walk only — the worktree does not exist yet), hopspace, global |
-| `post-worktree-add` | `git hop add`, after the worktree exists. Also fired during `git hop clone`, after the committed-hook mirror. Failure warns, does not roll back. | repo, hopspace, global |
+| `post-worktree-add` | `git hop add`, after the worktree exists. Also fired by `git hop clone` and by `git hop init` (bare conversion) for the initial worktree, after the committed-hook mirror — see [Init hooks](#init-hooks). Failure warns, does not roll back. | repo, hopspace, global |
 | `pre-worktree-remove` | `git hop remove`, before the worktree is deleted. Non-zero exit aborts the remove. | repo, hopspace, global |
 | `post-worktree-remove` | `git hop remove`, after the worktree is gone and state is updated. Failure warns. | hopspace, global (the repo-level file was inside the worktree that was just deleted) |
 | `pre-worktree-move` | `git hop move`, before the rename and after the move's own refusals (target already registered, target an existing local branch the worktree does not have checked out, hopspace unreadable), so a move git-hop rejects never fires it. Non-zero exit aborts the move. Path is the OLD worktree. | repo, hopspace, global |
 | `post-worktree-move` | `git hop move`, after the rename, symlink, state, and port/volume rekey. Path is the NEW worktree. Failure warns. | repo, hopspace, global |
 | `pre-worktree-switch` | `git hop <branch>`, before the `current` symlink is rewritten. Non-zero exit aborts the switch. **Never fires for a plain `cd`** — see [Switch hooks](#switch-hooks). | repo, hopspace, global |
 | `post-worktree-switch` | `git hop <branch>` after the symlink is written, and on a plain `cd` into a registered worktree. Failure warns. The only hook that may exit [93](#the-navigation-handled-directive-exit-93). | repo, hopspace, global |
-| `pre-clone` | `git hop clone`, before any filesystem work. Non-zero exit aborts the clone. | hopspace, global **only** — see [Clone hooks](#clone-hooks) |
+| `pre-clone` | `git hop clone`, before any filesystem work. Non-zero exit aborts the clone. | hopspace, global **only** — no repo level and no parent walk; see [`pre-clone` has no repo level](#pre-clone-has-no-repo-level) |
 | `post-clone` | `git hop clone`, last of all, after state, symlink, mirror, and `post-worktree-add`. Failure warns. | repo, hopspace, global |
-| `pre-repair` | `git hop repair`, before mutations are applied. Non-zero exit aborts. **Resolved by a separate code path** — global only. See [The repair hooks are different](#the-repair-hooks-are-different). | global **only** |
-| `post-repair` | `git hop repair`, after mutations and post-verification. Exit status ignored entirely. **Global only**, same separate path. | global **only** |
+| `pre-repair` | `git hop repair`, before the backup and any mutation; only when the plan has mutations and `--dry-run` was not passed. Non-zero exit aborts. See [Repair hooks](#repair-hooks). | repo (anchored on the hub: `<hub>/.git-hop/hooks/`, plus parent walk), hopspace, global |
+| `post-repair` | `git hop repair`, after mutations and post-verification. Exit status ignored entirely. | repo (anchored on the hub), hopspace, global |
 | `pre-env-start` | **Never dispatched.** Accepted by `ValidateHookName` and mirrored by the installer, but no code fires it. | — |
 | `post-env-start` | **Never dispatched.** Same. | — |
 | `pre-env-stop` | **Never dispatched.** Same. | — |
@@ -38,6 +38,8 @@ When git-hop looks for a hook to execute, it searches in this order (first found
 1. **Repo-level override** — `.git-hop/hooks/<hook-name>` inside the worktree (the runner also walks parent directories so a hub-level `.git-hop/hooks/` is picked up)
 2. **Hopspace-level hook** — `$XDG_DATA_HOME/git-hop/<host>/<org>/<repo>/hooks/<hook-name>` (only matches when the repoID has 3 slash-separated parts; see [Repository identifier](#repository-identifier))
 3. **Global hook** — `$XDG_CONFIG_HOME/git-hop/hooks/<hook-name>`
+
+One exception: `pre-clone` skips tier 1 entirely (no repo-level lookup, no parent walk), because the repo is not on disk yet. See [`pre-clone` has no repo level](#pre-clone-has-no-repo-level).
 
 This allows you to:
 - Set global defaults for all repositories
@@ -119,7 +121,7 @@ git-hop has two mechanisms that both call themselves "hooks". They share vocabul
 | Where it lives | `.git-hop/hooks/<name>`, hopspace, or `~/.config/git-hop/hooks/<name>` | `hop.json` → `settings.environment.hooks.{preStart,postStart,preStop,postStop}` (arrays) |
 | Names | `pre-worktree-add`, `post-worktree-switch`, … | `preStart`, `postStart`, `preStop`, `postStop` |
 | Env var prefix | `GIT_HOP_*` (`GIT_HOP_WORKTREE_PATH`, `GIT_HOP_BRANCH`, …) | `HOP_*` (`HOP_WORKTREE_PATH`, `HOP_BRANCH`, `HOP_REPO_PATH`, `HOP_COMMAND`) |
-| Fired by | `add`, `remove`, `move`, `<branch>`, `clone`, `repair`, plain `cd` | `git hop env start` / `git hop env stop` only |
+| Fired by | `add`, `remove`, `move`, `<branch>`, `clone`, `init`, `repair`, plain `cd` | `git hop env start` / `git hop env stop` only |
 | Implementation | `internal/hooks/runner.go` | `internal/services/env_hooks.go`, driven from `internal/services/env_managers.go` |
 | Timeout | none | 5 minutes per hook list |
 
@@ -246,7 +248,7 @@ post-worktree-add
 post-clone
 ```
 
-Dispatched from `internal/hop/clone_worktree.go`. Because `internal/hooks` already imports `internal/hop` (for `LooksLikeGitCheckout`), `internal/hop` cannot import `internal/hooks` back without an import cycle — so the dispatch is injected as callbacks (`HookDispatchOptions`), built by `buildHookDispatch` in `internal/cli/root.go`.
+Dispatched from `internal/hop/clone_worktree.go`. Because `internal/hooks` already imports `internal/hop` (for `LooksLikeGitCheckout`), `internal/hop` cannot import `internal/hooks` back without an import cycle — so the dispatch is injected as callbacks (`HookDispatchOptions`), built by `BuildHookDispatch` in `internal/cli/root.go`. `git hop init` reuses the same builder — see [Init hooks](#init-hooks).
 
 ### Why mirror-then-fire
 
@@ -270,46 +272,57 @@ Controlled by flags on `clone` (and equivalents on `init`):
 
 Default is `prompt`. Only filenames in `ValidHookNames` are mirrored; anything else in `.git-hop/hooks/` is ignored. A repo with no `.git-hop/hooks/` directory is a silent no-op — most repos commit no hooks.
 
-### `pre-clone` cannot resolve at repo level
+### `pre-clone` has no repo level
 
-There is no worktree yet. Nothing has been cloned, nothing is on disk. So the repo-level tier of `FindHookFile` has nothing to match against, and `pre-clone` can only ever resolve at **hopspace** or **global** level.
+There is no worktree yet. Nothing has been cloned, nothing is on disk. So `FindHookFile` skips the repo tier for `pre-clone` altogether: no `<path>/.git-hop/hooks/pre-clone` lookup and no parent walk. `pre-clone` resolves at **hopspace** or **global** level only.
 
-Put a `pre-clone` in the repo you are about to clone and it will not fire — it does not exist locally until after the step it was meant to precede.
+Put a `pre-clone` in the repo you are about to clone and it will not fire — it does not exist locally until after the step it was meant to precede. Put one in the directory you run the clone from, or in any ancestor of it, and it will not fire either: those directories are not part of the repo being cloned.
 
 ### The parent-walk hazard
 
-`FindHookFile` does not stop at the worktree. When no hook is found at `<worktree>/.git-hop/hooks/<name>`, it walks *parent directories* looking for `.git-hop/hooks/<name>` — which is deliberate and useful (a hub-level `.git-hop/hooks/` covers all its worktrees), but the walk **climbs all the way to the filesystem root**. It does not stop at the hub, at a repository boundary, or at `$HOME`.
+For every other hook, `FindHookFile` does not stop at the worktree. When no hook is found at `<worktree>/.git-hop/hooks/<name>`, it walks *parent directories* looking for `.git-hop/hooks/<name>` — which is deliberate and useful (a hub-level `.git-hop/hooks/` covers all its worktrees), but the walk **climbs all the way to the filesystem root**. It does not stop at the hub, at a repository boundary, or at `$HOME`.
 
-For most hooks that is tolerable, because the anchor is a real worktree deep in a known tree. For `pre-clone` it would be actively dangerous: the natural anchor would be the caller's current directory, and a stray `.git-hop/hooks/pre-clone` in *any* ancestor of wherever the user happened to be standing would execute on every clone they run from that subtree.
+That is tolerable when the anchor is a real worktree deep in a known tree. For `pre-clone` it would be actively dangerous: the anchor sits in the directory the clone runs from, so a stray `.git-hop/hooks/pre-clone` in *any* ancestor of wherever the user happened to be standing would execute on every clone they run from that subtree. That is why `pre-clone` has no repo tier at all rather than a walk from a carefully chosen anchor.
 
-So `pre-clone` is deliberately anchored on the **intended project root** — the directory the clone is about to create — rather than on the cwd. That directory does not exist yet and has no `.git-hop` anywhere below it, which makes the walk deterministic: it can only ever fall through to hopspace or global. That is precisely the intended reach for a `pre-clone` hook.
+`pre-clone` still receives the **intended project root** — the directory the clone is about to create, which does not exist yet — as `GIT_HOP_WORKTREE_PATH`. `GIT_HOP_BRANCH` is empty: resolving the default branch requires talking to the remote, which has not happened yet at that point in the sequence.
 
-`GIT_HOP_BRANCH` is empty for `pre-clone`: resolving the default branch requires talking to the remote, which has not happened yet at that point in the sequence.
+## Init hooks
 
-## The repair hooks are different
+`git hop init` fires `post-worktree-add` for the worktree it creates, through the same dispatch as clone (`BuildHookDispatch`), so the hook sees the same variables: `GIT_HOP_WORKTREE_PATH` is the new `hops/<branch>` worktree, `GIT_HOP_BRANCH` its branch, `GIT_HOP_REPO_ID` `github.com/<org>/<repo>`.
 
-`pre-repair` and `post-repair` are dispatched (`cmd/repair.go`, in `runRepair` around the mutation-apply step) but they **do not go through `Runner` at all**. `runRepairHook` is a separate, hand-rolled path, and the differences are not cosmetic:
+```
+(conversion; hop.json; current symlink)
+  ↓
+committed-hook mirror
+  ↓
+post-worktree-add
+```
 
-| | Every other hook | `pre-repair` / `post-repair` |
-|---|---|---|
-| Discovery | `Runner.FindHookFile` — repo → hopspace → global | `filepath.Join(hop.GetHooksDir(), name)` — **global only** |
-| Repo-level hooks | honoured | **ignored** |
-| Hopspace-level hooks | honoured | **ignored** |
-| Parent-directory walk | yes | no |
-| Working directory | inherited from git-hop's cwd | **set to the hub path** |
-| Executable-bit check | enforced (non-Windows), error if missing | not checked — a non-executable file simply fails to run |
-| Hook name validation | `ValidateHookName` | none (name is a literal in the source) |
-| `stdout` | the process's stdout | **redirected to stderr** |
-| Env vars | full `GIT_HOP_*` set | **none** — the hook inherits the ambient environment only |
+The dispatch follows the mirror for the reason given in [Why mirror-then-fire](#why-mirror-then-fire): a `post-worktree-add` committed to the repo being converted applies to the worktree that carries it. A failing hook warns; the conversion stands.
+
+- Only the **bare** conversion fires it. A regular conversion (`--regular`) creates no worktree — the repo root stays the working tree — and fires nothing. Nor do register-as-is and a re-run on an already-initialized repo.
+- Like clone, init fires no `pre-worktree-add`. It fires no `pre-clone` / `post-clone` either: nothing is cloned.
+- `git hop init --dry-run` lists the `post-worktree-add` hook it would run (when one resolves) and runs none.
+
+## Repair hooks
+
+`pre-repair` and `post-repair` are dispatched from `runRepair` in `cmd/repair.go`, through the shared `Runner` like every other hook (`runRepairHook`). What is specific to them:
+
+| | `pre-repair` / `post-repair` |
+|---|---|
+| Discovery | `Runner.FindHookFile` — repo → hopspace → global |
+| Repo-level anchor | the **hub**: `<hub>/.git-hop/hooks/<name>`, then the parent walk above it. A hook inside a worktree's `.git-hop/hooks/` is not consulted. |
+| `GIT_HOP_WORKTREE_PATH` | the hub path |
+| `GIT_HOP_BRANCH` | set and **empty** — a repair spans every branch |
+| `GIT_HOP_REPO_ID` | `github.com/<org>/<repo>` from the hub's `hop.json`, read at dispatch time; empty when it cannot be read |
+| Working directory | inherited from git-hop's cwd, as for every hook; `cd "$GIT_HOP_WORKTREE_PATH"` to work in the hub |
+| Executable-bit check, name validation, output | same as every hook |
 
 Consequences worth internalising:
 
-- A `.git-hop/hooks/pre-repair` committed in your repo **will never run.** Neither will a hopspace one. Only `~/.config/git-hop/hooks/pre-repair` is consulted.
-- The hook receives **no** `GIT_HOP_WORKTREE_PATH`, `GIT_HOP_REPO_ID`, `GIT_HOP_BRANCH`, or `GIT_HOP_HOOK_NAME`. It gets `$PWD` set to the hub, and that is its entire context.
-- `pre-repair` is a real veto: a non-zero exit aborts the repair before any mutation or backup. It only runs when the plan actually has mutations and `--dry-run` was not passed.
-- `post-repair` is advisory in the strongest sense — its exit status is discarded (`_ = firePostRepairHook(hubPath)`).
-
-This asymmetry is documented because it is a trap, not because it is a design people should copy.
+- `pre-repair` is a real veto: a non-zero exit aborts the repair before any backup or mutation. It only runs when the plan actually has mutations and `--dry-run` was not passed.
+- `pre-repair` reads `hop.json` *before* the fix, when it may be as broken as the reason repair was invoked. An empty `GIT_HOP_REPO_ID` there is expected, and a hopspace-level `pre-repair` is then skipped (repo and global still resolve). `post-repair` reads the repaired config, so its repo ID resolves.
+- `post-repair` is advisory in the strongest sense — its exit status is discarded (`_ = firePostRepairHook(fs, hubPath)`), including a non-executable hook file.
 
 ## Shell integration and the chdir handler
 
@@ -424,7 +437,7 @@ All hooks receive these environment variables:
 Two exceptions:
 
 - **`pre-clone`** receives an empty `GIT_HOP_BRANCH` (the default branch is not known until the remote is queried, which happens later) and a `GIT_HOP_WORKTREE_PATH` naming the project root that is about to be created — a directory that does not exist yet.
-- **`pre-repair` / `post-repair`** receive **none** of these. See [The repair hooks are different](#the-repair-hooks-are-different).
+- **`pre-repair` / `post-repair`** receive the hub as `GIT_HOP_WORKTREE_PATH` and an empty `GIT_HOP_BRANCH`; `GIT_HOP_REPO_ID` may be empty for `pre-repair`. See [Repair hooks](#repair-hooks).
 
 ### Move Variables
 
@@ -509,7 +522,7 @@ What "failed" costs you depends on whether the hook is a `pre-` or a `post-`:
 | `post-worktree-add`, `post-worktree-remove`, `post-worktree-move`, `post-worktree-switch`, `post-clone` | Warning printed; the operation **stands**. There is no rollback — the worktree/clone/switch already happened. |
 | `post-repair` | Exit status **discarded entirely**. Not even a warning. |
 
-A missing hook is not a failure: `FindHookFile` returns empty and the run silently succeeds. A hook file that exists but is not executable **is** a failure on non-Windows (checked before execution) — except on the repair path, which does not check.
+A missing hook is not a failure: `FindHookFile` returns empty and the run silently succeeds. A hook file that exists but is not executable **is** a failure on non-Windows (checked before execution); for `post-repair` that failure is discarded like any other.
 
 Example blocking hook:
 
@@ -790,6 +803,11 @@ git hop init --no-hooks  # skip hook directory creation
 Re-running `git hop init` on an already-initialized repo also ensures the
 hooks directory exists (unless `--no-hooks` is passed).
 
+After creating the directory, `init` lists the hooks a script there can
+implement. The list comes from `RepoLevelHookNames()`, so it names only
+hooks that are dispatched and resolve at repo level: no `env-*` names and
+no `pre-clone`.
+
 ## Debugging Hooks
 
 ### Verbose Output
@@ -847,8 +865,11 @@ unset GIT_HOP_FROM_BRANCH GIT_HOP_FROM_WORKTREE_PATH
 **Hook named `pre-env-start` / `post-env-start` / `pre-env-stop` / `post-env-stop` never runs:**
 Expected. Nothing dispatches those names — see [Two different hook systems](#two-different-hook-systems).
 
-**`pre-repair` / `post-repair` in the repo or hopspace never runs:**
-Expected. Those two resolve at the global level only — see [The repair hooks are different](#the-repair-hooks-are-different).
+**`pre-repair` / `post-repair` in a worktree's `.git-hop/hooks/` never runs:**
+Expected. Repair anchors its repo-level lookup on the hub, not on a worktree. Put the hook in `<hub>/.git-hop/hooks/`, or at hopspace or global level — see [Repair hooks](#repair-hooks).
+
+**`pre-clone` in the current directory never runs:**
+Expected. `pre-clone` resolves at hopspace and global level only — see [`pre-clone` has no repo level](#pre-clone-has-no-repo-level).
 
 **`post-worktree-switch` does not fire on a plain `cd`:**
 The shell integration is what detects that. Confirm it is installed (`git hop init --enable-chdir`), that `GIT_HOP_NO_CHDIR_HOOK` is unset, and that you have run `git hop <branch>` at least once so the worktree-roots cache exists. Moving between subdirectories of the same worktree is deliberately silent.
@@ -919,12 +940,13 @@ published under `--dry-run`, and a failing sink never fails the command.
 ## Known limitations
 
 - **`pre-env-start` / `post-env-start` / `pre-env-stop` / `post-env-stop` are accepted but never dispatched.** They validate, install, and mirror; nothing fires them. See [Two different hook systems](#two-different-hook-systems).
-- **`pre-clone` cannot resolve from the repo being cloned**, since that repo is not on disk when it runs. The parent walk still applies: it starts at the intended project root and climbs through the directory the clone runs from and every ancestor, so a `.git-hop/hooks/pre-clone` anywhere above the target fires.
-- **`FindHookFile`'s parent walk climbs to the filesystem root** — it does not stop at the hub or at `$HOME`. See [The parent-walk hazard](#the-parent-walk-hazard).
+- **`FindHookFile`'s parent walk climbs to the filesystem root** for every hook except `pre-clone` — it does not stop at the hub or at `$HOME`. See [The parent-walk hazard](#the-parent-walk-hazard).
 - **Repo-level `post-worktree-remove` cannot fire from the removed worktree**, because the file lived inside the worktree that was just deleted. A hub-level `.git-hop/hooks/post-worktree-remove` still fires through the parent walk; otherwise install it at hopspace or global level.
-- **`git hop init` dispatches no lifecycle hooks.** It mirrors committed `.git-hop/hooks/` into the hopspace, but `post-worktree-add` does not fire for the worktree it creates.
 
 Resolved, previously listed here:
+
+- ~~`git hop init` dispatches no lifecycle hooks.~~ A bare conversion now fires `post-worktree-add` for the worktree it creates, after the committed-hook mirror, as clone does. See [Init hooks](#init-hooks).
+- ~~A `.git-hop/hooks/pre-clone` in the directory a clone runs from, or any ancestor of it, fires.~~ `pre-clone` now has no repo level: hopspace and global only.
 
 - ~~`git hop add --dry-run` still creates the worktree.~~ `add --dry-run` now previews the branch, worktree path, hooks it would run, and `hop.json` registration, then exits without writing anything: no worktree, branch, port allocation, or hook run.
 - ~~`pre-repair` / `post-repair` resolve at the global level only and receive no `GIT_HOP_*` variables.~~ Repair hooks now go through the shared runner: repo level (anchored on the hub), hopspace, then global, with the standard `GIT_HOP_*` variables. `GIT_HOP_WORKTREE_PATH` is the hub and `GIT_HOP_BRANCH` is empty.
@@ -938,16 +960,18 @@ For developers interested in the implementation:
 |---|---|
 | Hook name list (the authority) | `ValidHookNames`, `internal/hooks/runner.go` |
 | Name validation | `ValidateHookName()`, same file |
-| Discovery / priority | `FindHookFile()`, plus `findHookInParentDirs()` for the parent walk |
+| Discovery / priority | `FindHookFile()`, plus `findHookInParentDirs()` for the parent walk; `hasRepoLevel()` exempts `pre-clone` from both |
+| Dispatched vs reserved names | `IsDispatched()`, `RepoLevelHookNames()` (the list `git hop init` prints), same file |
 | Execution, env, exit-code handling | `Runner.run()`, behind `ExecuteHook` / `ExecuteHookWithDetector` |
 | Navigation directive | `ExitNavigationHandled`, `RunResult`, `navigationHandledFor()` |
 | Switch env vars | `SwitchEnvVars()` — omits empty fields rather than exporting them empty |
 | Hooks-dir creation | `InstallHooks()`; `git hop init` calls it unless `--no-hooks` |
 | Committed-hook mirror | `MirrorCommittedHooks()`, `internal/hooks/install.go` |
-| Clone dispatch (callback injection) | `HookDispatchOptions`, `internal/hop/clone_worktree.go`; wired by `buildHookDispatch()` in `internal/cli/root.go` |
+| Clone dispatch (callback injection) | `HookDispatchOptions`, `internal/hop/clone_worktree.go`; wired by `BuildHookDispatch()` in `internal/cli/root.go` |
+| Init dispatch | `dispatchInitWorktreeAdd()` / `previewInitWorktreeAdd()`, `cmd/init_dispatch.go`, via `BuildHookDispatch()` |
 | Switch dispatch (`git hop <branch>`) | `internal/cli/root.go` |
 | Switch dispatch (plain `cd`) | `cmd/notify_chdir.go` |
-| Repair dispatch (separate path) | `runRepairHook()`, `cmd/repair.go` |
+| Repair dispatch | `runRepairHook()`, `cmd/repair.go`, via the shared runner |
 | Shell wrapper + chdir handler | `internal/shell/wrapper.go`, `internal/shell/chpwd.go` |
 | Worktree-roots cache | `internal/shell/roots.go` |
 | Config-declared env hooks (the *other* system) | `internal/services/env_hooks.go`, `internal/services/env_managers.go` |
