@@ -1,0 +1,55 @@
+# A requested fetch (--fetch, hop.add.fetch true) in a hub with no origin
+# remote has nothing to fetch from. add skips it with a hint and carries
+# on from the local refs: the fatal rule covers an origin that fails, not
+# one that is absent. A global hop.add.fetch true must not lock every
+# remote-less hub out of add.
+
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks
+exec git remote
+! stdout .
+
+# --- --fetch: hint, no fatal, worktree created ---
+exec git-hop add feat/flag --fetch
+stderr '^hint: no origin remote; skipping the requested fetch$'
+! stderr 'fatal'
+! stderr 'could not fetch'
+exists $WORK/proj/hops/feat/flag
+exec git -C hops/feat/flag rev-parse --abbrev-ref HEAD
+stdout '^feat/flag$'
+
+# --- hop.add.fetch true (global): same ---
+exec git config --global hop.add.fetch true
+exec git-hop add feat/cfg
+stderr '^hint: no origin remote; skipping the requested fetch$'
+! stderr 'fatal'
+exists $WORK/proj/hops/feat/cfg
+
+# --- dry-run: no fetch promised, same hint, nothing created ---
+exec git-hop add feat/dry --dry-run
+! stdout 'Would fetch'
+stderr '^hint: no origin remote; skipping the requested fetch$'
+! exists $WORK/proj/hops/feat/dry
+exec git-hop add feat/dryflag --dry-run --fetch
+! stdout 'Would fetch'
+stderr '^hint: no origin remote; skipping the requested fetch$'
+
+# --- --no-fetch: silent skip, no hint ---
+exec git-hop add feat/nofetch --no-fetch
+! stderr 'origin'
+exists $WORK/proj/hops/feat/nofetch
+exec git config --global --unset hop.add.fetch
+
+# --- automatic default: no fetch, no hint ---
+exec git-hop add feat/auto
+! stderr 'fetch'
+! stderr 'origin'
+
+# --- origin configured but unreachable: a requested fetch stays fatal ---
+exec git remote add origin $WORK/gone.git
+! exec git-hop add feat/gone --fetch
+stderr '^fatal: could not fetch origin'
+! stderr 'skipping the requested fetch'
+! exists $WORK/proj/hops/feat/gone

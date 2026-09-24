@@ -55,6 +55,10 @@ func TestDecideFetch(t *testing.T) {
 		{name: "config true on the default branch is required", originURL: "u", cfg: map[string]string{"hop.add.fetch": "true"}, startPoint: "", want: fetchRequired},
 		{name: "--no-fetch beats config true", originURL: "u", cfg: map[string]string{"hop.add.fetch": "true"}, override: &off, startPoint: "", want: fetchSkip},
 		{name: "invalid config falls back to auto", originURL: "u", cfg: map[string]string{"hop.add.fetch": "maybe"}, startPoint: "", want: fetchAuto},
+		{name: "--fetch without origin has nothing to fetch", override: &on, startPoint: "main", want: fetchNoOrigin},
+		{name: "config true without origin has nothing to fetch", cfg: map[string]string{"hop.add.fetch": "true"}, startPoint: "", want: fetchNoOrigin},
+		{name: "--no-fetch without origin skips silently", cfg: map[string]string{"hop.add.fetch": "true"}, override: &off, startPoint: "", want: fetchSkip},
+		{name: "config false without origin skips silently", cfg: map[string]string{"hop.add.fetch": "false"}, startPoint: "", want: fetchSkip},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

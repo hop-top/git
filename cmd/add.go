@@ -87,6 +87,8 @@ explicit origin/<branch>. 'git config hop.add.fetch true|false' makes that
 a standing choice; --fetch / --no-fetch decide for one run. When the
 fetch was asked for (--fetch, hop.add.fetch true) a failure is fatal; the
 automatic one only warns and carries on from the refs already present.
+A hub with no origin remote has nothing to fetch: a requested fetch is
+skipped with a hint.
 
 With --dry-run, add reports the fetch, branch, start-point, worktree path,
 hooks and environment start it would run, then stops: nothing is fetched,
@@ -154,6 +156,7 @@ created or written and no hook runs.`,
 		fetch := decideFetch(g, config.NewGitConfig(),
 			cli.NegatableFlag(cmd, "fetch", addFetchFlag, addNoFetchFlag),
 			hubPath, startPoint, hub.Config.Repo.DefaultBranch)
+		hintNoOrigin(fetch)
 		envStart := cli.DecideAutoEnvStart(
 			cli.NegatableFlag(cmd, "env-start", addEnvStartFlag, addNoEnvStartFlag), globalConfig)
 
@@ -163,7 +166,7 @@ created or written and no hook runs.`,
 				cwd:           cwd,
 				hubPath:       hubPath,
 				hopspace:      hopspace,
-				fetch:         fetch != fetchSkip,
+				fetch:         fetch.fetches(),
 				repoID:        repoID,
 				branch:        branch,
 				worktreePath:  worktreePath,
@@ -177,7 +180,7 @@ created or written and no hook runs.`,
 
 		output.Info("Adding branch %s...", branch)
 
-		if fetch != fetchSkip {
+		if fetch.fetches() {
 			fetchOrigin(g, hubPath, fetch)
 		}
 

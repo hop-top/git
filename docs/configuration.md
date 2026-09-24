@@ -226,7 +226,7 @@ inside any hub for that repository.
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
-| `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, it fetches only when the start-point is an origin ref: the default branch or an explicit `origin/<branch>`. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. |
+| `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, it fetches only when the start-point is an origin ref: the default branch or an explicit `origin/<branch>`. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. In a hub with no `origin` remote a requested fetch is skipped with a hint. |
 | `hop.gitflow.enabled` | boolean | `false` | Let `git hop add` / `git hop remove` run `git flow <type> start` / `git flow <type> finish` for branches whose prefix matches a git-flow-next type. Off, git-hop only detects the branch type (for the `GIT_HOP_BRANCH_*` hook variables) and runs no git-flow command. See [`hop.gitflow.enabled`](#hopgitflowenabled). |
 | `hop.events.sink` | `jsonl` \| `none` | `none` | Append every lifecycle event (worktree created/removed/merged/moved/switched, env started/stopped, ...) to a JSONL file, so external tools can react without file hooks. See [`hop.events.sink`](#hopeventssink). |
 | `hop.events.path` | path | `$XDG_STATE_HOME/git-hop/events.jsonl` | File `hop.events.sink=jsonl` appends to. `~/` is expanded the way git expands path values. |
@@ -313,6 +313,13 @@ origin unreachable) does depends on who asked for the fetch:
   remote, or pass `--no-fetch` to start from the local refs.
 - the automatic default: `add` prints a warning and carries on from the
   refs already present.
+
+A hub with no `origin` remote at all (a converted local-only repo) has
+nothing to fetch from, which is not a failure: a requested fetch is skipped
+with `hint: no origin remote; skipping the requested fetch` and `add`
+carries on from the local refs. A global `hop.add.fetch true` therefore
+still works in remote-less hubs. An `origin` that is configured but
+unreachable stays fatal.
 
 `--dry-run` reports that it would fetch but does not.
 
