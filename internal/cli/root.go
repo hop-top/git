@@ -183,8 +183,7 @@ Git worktrees, Docker environments, and structured workspaces.
 
 Clone Mode:
   git-hop <uri> [path]
-  Clones a repository using bare repo + worktree structure (recommended)
-  Configure default behavior via global config: bareRepo setting
+  Clones a repository into a bare hub + worktree structure
 
 Worktree Mode:
   git-hop <branch>
@@ -260,18 +259,13 @@ Worktree Mode:
 				projectPath = args[1]
 			}
 
-			useBare := true
-			if err == nil {
-				useBare = globalCfg.Defaults.BareRepo
-			}
-
 			hookOpts := hop.HookMirrorOptions{
 				Mode:      hooksMode,
 				Overwrite: hooksOverwrite,
 				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite),
 			}
 			dispatch := buildHookDispatch(fs)
-			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, useBare, globalConfig, hookOpts, dispatch); err != nil {
+			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, globalConfig, hookOpts, dispatch); err != nil {
 				output.Fatal("Clone failed: %v", err)
 			}
 
