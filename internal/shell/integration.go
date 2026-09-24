@@ -89,7 +89,7 @@ func InstallIntegration(fs afero.Fs) (*IntegrationResult, error) {
 	cfg.ShellIntegration.InstalledPath = rcPath
 	cfg.ShellIntegration.InstalledAt = time.Now()
 
-	if err := loader.Write(cfg); err != nil {
+	if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
 		return nil, fmt.Errorf("failed to update config: %w", err)
 	}
 
@@ -132,7 +132,7 @@ func UninstallIntegration(fs afero.Fs) error {
 	// Update config status
 	cfg.ShellIntegration.Status = "declined"
 
-	if err := loader.Write(cfg); err != nil {
+	if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
 		return fmt.Errorf("failed to update config: %w", err)
 	}
 
@@ -149,7 +149,7 @@ func SetIntegrationStatus(status string) error {
 
 	cfg.ShellIntegration.Status = status
 
-	if err := loader.Write(cfg); err != nil {
+	if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
 		return fmt.Errorf("failed to update config: %w", err)
 	}
 

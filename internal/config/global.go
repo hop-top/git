@@ -134,26 +134,36 @@ func (l *GlobalLoader) writeToGitConfig(cfg *GlobalConfig) error {
 		{KeyAddDefaultStartPoint, cfg.Defaults.DefaultStartPoint},
 		{KeyHooksInstallMode, cfg.Defaults.HooksInstallMode},
 
-		{KeyShellIntegrationStatus, cfg.ShellIntegration.Status},
-		{KeyShellIntegrationShell, cfg.ShellIntegration.InstalledShell},
-		{KeyShellIntegrationPath, cfg.ShellIntegration.InstalledPath},
-
 		{KeyBackupKeepBackup, strconv.FormatBool(cfg.Backup.KeepBackup)},
 		{KeyBackupMaxBackups, strconv.Itoa(cfg.Backup.MaxBackups)},
 		{KeyBackupCleanupAgeDays, strconv.Itoa(cfg.Backup.CleanupAgeDays)},
 	}
 
-	// Write installedAt only if non-zero
-	if !cfg.ShellIntegration.InstalledAt.IsZero() {
-		sets = append(sets, struct {
-			key string
-			val string
-		}{KeyShellIntegrationAt, cfg.ShellIntegration.InstalledAt.Format(time.RFC3339)})
-	}
-
 	for _, s := range sets {
 		if err := gc.Set(s.key, s.val); err != nil {
 			return fmt.Errorf("set %s: %w", s.key, err)
+		}
+	}
+	return l.WriteShellIntegration(cfg.ShellIntegration)
+}
+
+// WriteShellIntegration persists the shell integration state, and only
+// that, to git config --global. Shell integration install, uninstall and
+// status changes use it rather than Write: writing every scalar pinned
+// each hop.* default in --global, where it shadowed later default changes
+// and read as the user's own choice.
+func (l *GlobalLoader) WriteShellIntegration(s ShellIntegrationSettings) error {
+	sets := []configEntry{
+		{KeyShellIntegrationStatus, s.Status},
+		{KeyShellIntegrationShell, s.InstalledShell},
+		{KeyShellIntegrationPath, s.InstalledPath},
+	}
+	if !s.InstalledAt.IsZero() {
+		sets = append(sets, configEntry{KeyShellIntegrationAt, s.InstalledAt.Format(time.RFC3339)})
+	}
+	for _, e := range sets {
+		if err := l.gc.Set(e.key, e.val); err != nil {
+			return fmt.Errorf("set %s: %w", e.key, err)
 		}
 	}
 	return nil
