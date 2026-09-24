@@ -16,6 +16,10 @@ hub's hop.json, removing:
     per repository or older than hop.backup.cleanupAgeDays (backups of
     failed conversions are never removed)
 
+A worktree git has locked ('git worktree lock') is kept even when its
+directory is missing, as 'git worktree prune' keeps it: prune reports
+its state entry and hop.json row as skipped and names the lock reason.
+
 Every line naming a pruned entry is prefixed with the repository it
 belongs to, so a --all sweep shows exactly which repositories it touched.
 
