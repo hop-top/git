@@ -212,8 +212,8 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 		fmt.Println("  3. Create hop.json configuration")
 		fmt.Println("  4. Register in global registry")
 
-		if useBare && !noHooks {
-			previewInitWorktreeAdd(fs, g, repoPath, branch)
+		if !noHooks {
+			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)
 		}
 
 		fmt.Println("\nTo proceed with conversion, run:")
@@ -323,10 +323,10 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 	mirrorInitHooks(fs, g, hookInstallPath, repoPath, initHooksMode, initHooksOverwrite, noHooks)
 
 	// After the mirror, as clone does: a committed hook then applies to
-	// the worktree that carried it. A regular conversion creates no
-	// worktree (the repo root stays the working tree), so nothing fires.
+	// the worktree that carried it. The initial worktree is hops/<branch>
+	// for a bare conversion and the repo root for a regular one.
 	// --no-hooks turns dispatch off along with the hooks dir and mirror.
-	if mainWorktreePath != "" && !isRegularRepo && !noHooks {
+	if mainWorktreePath != "" && !noHooks {
 		dispatchInitWorktreeAdd(fs, g, repoPath, mainWorktreePath, currentBranchName)
 	}
 

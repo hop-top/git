@@ -37,9 +37,10 @@ func initRepoID(g git.GitInterface, repoPath string) string {
 	return fmt.Sprintf("github.com/%s/%s", org, repo)
 }
 
-// dispatchInitWorktreeAdd fires post-worktree-add for the initial worktree
-// init created, through the same dispatch clone uses. A failing hook warns
-// and does not undo the conversion, matching clone.
+// dispatchInitWorktreeAdd fires post-worktree-add for the conversion's
+// initial worktree (see initWorktreePath), through the same dispatch clone
+// uses. A failing hook warns and does not undo the conversion, matching
+// clone.
 func dispatchInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, worktreePath, branch string) {
 	repoID := initRepoID(g, repoPath)
 	if err := cli.BuildHookDispatch(fs).PostWorktreeAdd(worktreePath, repoID, branch); err != nil {
@@ -47,13 +48,23 @@ func dispatchInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, worktree
 	}
 }
 
-// previewInitWorktreeAdd reports the post-worktree-add hook a bare
-// conversion would dispatch for hops/<branch>, without running it.
-func previewInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, branch string) {
+// initWorktreePath is the working tree a conversion leaves the current
+// branch in: hops/<branch> for a bare conversion, the repo root itself for
+// a regular one.
+func initWorktreePath(repoPath, branch string, useBare bool) string {
+	if !useBare {
+		return repoPath
+	}
+	return filepath.Join(repoPath, "hops", branch)
+}
+
+// previewInitWorktreeAdd reports the post-worktree-add hook a conversion
+// would dispatch for its initial worktree, without running it.
+func previewInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, branch string, useBare bool) {
 	if branch == "" {
 		return
 	}
-	worktreePath := filepath.Join(repoPath, "hops", branch)
+	worktreePath := initWorktreePath(repoPath, branch, useBare)
 	cli.PreviewHook(hooks.NewRunner(fs), "post-worktree-add", worktreePath, initRepoID(g, repoPath))
 }
 

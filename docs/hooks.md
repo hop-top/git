@@ -13,7 +13,7 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | Hook Name | When It Runs | Resolvable levels |
 |-----------|--------------|-------------------|
 | `pre-worktree-add` | `git hop add`, before the worktree is created. Non-zero exit aborts the add. | repo (via parent walk only — the worktree does not exist yet), hopspace, global |
-| `post-worktree-add` | `git hop add`, after the worktree exists. Also fired by `git hop clone` and by `git hop init` (bare conversion) for the initial worktree, after the committed-hook mirror — see [Init hooks](#init-hooks). Failure warns, does not roll back. | repo, hopspace, global |
+| `post-worktree-add` | `git hop add`, after the worktree exists. Also fired by `git hop clone` and by `git hop init` (bare or regular conversion) for the initial worktree, after the committed-hook mirror — see [Init hooks](#init-hooks). Failure warns, does not roll back. | repo, hopspace, global |
 | `pre-worktree-remove` | `git hop remove`, before the worktree is deleted. Non-zero exit aborts the remove. | repo, hopspace, global |
 | `post-worktree-remove` | `git hop remove`, after the worktree is gone and state is updated. Failure warns. | hopspace, global (the repo-level file was inside the worktree that was just deleted) |
 | `pre-worktree-move` | `git hop move`, before the rename and after the move's own refusals (target already registered, target an existing local branch the worktree does not have checked out, hopspace unreadable), so a move git-hop rejects never fires it. Non-zero exit aborts the move. Path is the OLD worktree. | repo, hopspace, global |
@@ -288,10 +288,15 @@ That is tolerable when the anchor is a real worktree deep in a known tree. For `
 
 ## Init hooks
 
-`git hop init` fires `post-worktree-add` for the worktree it creates, through the same dispatch as clone (`BuildHookDispatch`), so the hook sees the same variables: `GIT_HOP_WORKTREE_PATH` is the new `hops/<branch>` worktree, `GIT_HOP_BRANCH` its branch, `GIT_HOP_REPO_ID` `github.com/<org>/<repo>`.
+`git hop init` fires `post-worktree-add` for the conversion's initial worktree, through the same dispatch as clone (`BuildHookDispatch`), so the hook sees the same variables: `GIT_HOP_WORKTREE_PATH` is the initial worktree, `GIT_HOP_BRANCH` its branch, `GIT_HOP_REPO_ID` `github.com/<org>/<repo>`.
+
+| Conversion | Initial worktree (`GIT_HOP_WORKTREE_PATH`) |
+|---|---|
+| bare (default) | the new `<repo>/hops/<branch>` worktree |
+| regular (`--regular`) | the repo root, which stays the current branch's working tree |
 
 ```
-(conversion; hop.json; current symlink)
+(conversion; hop.json; current symlink when bare)
   ↓
 committed-hook mirror
   ↓
@@ -300,7 +305,7 @@ post-worktree-add
 
 The dispatch follows the mirror for the reason given in [Why mirror-then-fire](#why-mirror-then-fire): a `post-worktree-add` committed to the repo being converted applies to the worktree that carries it. A failing hook warns; the conversion stands.
 
-- Only the **bare** conversion fires it. A regular conversion (`--regular`) creates no worktree — the repo root stays the working tree — and fires nothing. Nor do register-as-is and a re-run on an already-initialized repo.
+- Both conversions fire it. Register-as-is and a re-run on an already-initialized repo convert nothing and fire nothing.
 - Like clone, init fires no `pre-worktree-add`. It fires no `pre-clone` / `post-clone` either: nothing is cloned.
 - `git hop init --dry-run` lists the `post-worktree-add` hook it would run (when one resolves) and runs none.
 - `git hop init --no-hooks` fires nothing: no hooks directory, no committed-hook mirror (unless `--hooks` names a mode), and no `post-worktree-add`. The `--dry-run` preview agrees and lists no hook.
@@ -947,7 +952,7 @@ published under `--dry-run`, and a failing sink never fails the command.
 
 Resolved, previously listed here:
 
-- ~~`git hop init` dispatches no lifecycle hooks.~~ A bare conversion now fires `post-worktree-add` for the worktree it creates, after the committed-hook mirror, as clone does. See [Init hooks](#init-hooks).
+- ~~`git hop init` dispatches no lifecycle hooks.~~ A conversion now fires `post-worktree-add` for its initial worktree (`hops/<branch>`, or the repo root with `--regular`), after the committed-hook mirror, as clone does. See [Init hooks](#init-hooks).
 - ~~A `.git-hop/hooks/pre-clone` in the directory a clone runs from, or any ancestor of it, fires.~~ `pre-clone` now has no repo level: hopspace and global only.
 
 - ~~`git hop add --dry-run` still creates the worktree.~~ `add --dry-run` now previews the branch, worktree path, hooks it would run, and `hop.json` registration, then exits without writing anything: no worktree, branch, port allocation, or hook run.
