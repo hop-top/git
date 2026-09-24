@@ -3,6 +3,8 @@ package e2e
 import (
 	"os"
 	"testing"
+
+	"hop.top/git/internal/testenv"
 )
 
 // TestMain sweeps docker networks orphaned by a previous run before any test
@@ -18,7 +20,18 @@ import (
 // TestMain also runs strictly before the first test, which is what makes a
 // global sweep safe: the suite runs tests in parallel, so sweeping at any
 // later point could delete a network belonging to a test still using it.
+//
+// testenv.Run keeps the in-process parts of these tests (the go build of the
+// shared binary, docker cleanup, state reads) off the developer's real
+// homes; the binary under test gets its own env from SetupTestEnv.
+//
+// The shell-generation helper child (see chdir_chain_test.go) is exempt: it
+// is launched with one test's environment on purpose, and isolating it
+// would replace the cache path it exists to bake into the block.
 func TestMain(m *testing.M) {
+	if os.Getenv(genEnvVar) != "" {
+		os.Exit(m.Run())
+	}
 	SweepStaleNetworks()
-	os.Exit(m.Run())
+	os.Exit(testenv.Run(m))
 }

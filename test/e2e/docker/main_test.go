@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"hop.top/git/internal/testenv"
 	"hop.top/git/test/e2e"
 )
 
@@ -22,5 +23,5 @@ import (
 // one in package e2e does not run here.
 func TestMain(m *testing.M) {
 	e2e.SweepStaleNetworks()
-	os.Exit(m.Run())
+	os.Exit(testenv.Run(m))
 }

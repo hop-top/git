@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/testenv"
 )
 
 // resolveConfirmation calls os.Exit, so its exit status and stderr are
@@ -64,7 +65,9 @@ func TestMain(m *testing.M) {
 		fmt.Printf("chose:%s\n", choice)
 		os.Exit(0)
 	}
-	os.Exit(m.Run())
+	// Scenario children exit above and inherit this process's isolated
+	// environment through os.Environ, so only the top-level run isolates.
+	os.Exit(testenv.Run(m))
 }
 
 // runPromptScenario re-executes the test binary in the given scenario
