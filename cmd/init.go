@@ -186,8 +186,8 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 
 Then run: git hop init
 
-To convert anyway, carrying uncommitted files into the new worktree
-(staged-but-uncommitted state is not preserved):
+To convert anyway, carrying uncommitted changes into the new worktree,
+staged and unstaged as they are:
   git hop init --force`)
 			os.Exit(1)
 		}

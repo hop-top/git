@@ -53,7 +53,7 @@ var gitDirLeftBehind = map[string]string{
 	"HEAD":                  "the clone's HEAD names the same branch",
 	"config":                "carried key by key (conversion_config.go, conversion_remotes.go)",
 	"shallow":               "the clone of a shallow repository writes its own",
-	"index":                 "per-worktree; the default worktree's checkout builds its own",
+	"index":                 "per-worktree; rebuilt in the default worktree from the staged diff (conversion_index.go)",
 	"FETCH_HEAD":            "rewritten by the next fetch",
 	"ORIG_HEAD":             "left by the last reset, merge or rebase",
 	"AUTO_MERGE":            "operation state",

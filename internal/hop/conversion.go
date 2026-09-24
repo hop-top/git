@@ -198,9 +198,20 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 			return fmt.Errorf("failed to create %s worktree: %w", defaultBranch, err)
 		}
 
+		worktreeGitDir, err := c.git.Run("git", "-C", defaultPath, "rev-parse", "--absolute-git-dir")
+		if err != nil {
+			return fmt.Errorf("failed to locate the git dir of the %s worktree: %w", defaultBranch, err)
+		}
+
+		// Before the move, which hides what the old working tree lacked.
+		index, err := c.planIndexCarry(repoPath, worktreeGitDir)
+		if err != nil {
+			return err
+		}
 		if err := c.moveFilesToWorktree(repoPath, defaultPath); err != nil {
 			return fmt.Errorf("failed to move files to worktree: %w", err)
 		}
+		result.Warnings = append(result.Warnings, c.restoreIndex(index, defaultPath, worktreeGitDir)...)
 
 		// Written after the checkout, so the carried hooks path, filters
 		// and the like take effect for the user's next command, not in
@@ -213,10 +224,6 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		// Last before the swap deletes the old .git: same reason as the
 		// config above, and the carried hooks must not run on the
 		// conversion's own git commands.
-		worktreeGitDir, err := c.git.Run("git", "-C", defaultPath, "rev-parse", "--absolute-git-dir")
-		if err != nil {
-			return fmt.Errorf("failed to locate the git dir of the %s worktree: %w", defaultBranch, err)
-		}
 		gitDirWarnings, err := c.carryOverGitDir(repoPath, bareRepoPath, defaultPath, worktreeGitDir)
 		if err != nil {
 			return err
