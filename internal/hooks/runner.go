@@ -62,23 +62,35 @@ func ValidateHookName(hookName string) error {
 	return fmt.Errorf("invalid hook name: %s (valid hooks: %s)", hookName, strings.Join(ValidHookNames, ", "))
 }
 
+// hasRepoLevel reports whether hookName may resolve at repo level.
+//
+// pre-clone fires before the repo exists locally, so there is no repo
+// tier to consult; walking up from its anchor would only reach the
+// directory the clone runs from and its ancestors, none of which belong
+// to the repo being cloned.
+func hasRepoLevel(hookName string) bool {
+	return hookName != "pre-clone"
+}
+
 // FindHookFile finds the hook file following the priority system:
 // 1. Repo override (.git-hop/hooks/<hook-name>)
-// 2. Hopspace hook ($XDG_DATA_HOME/git-hop/<org>/<repo>/hooks/<hook-name>)
+// 2. Hopspace hook ($GIT_HOP_DATA_HOME/<host>/<org>/<repo>/hooks/<hook-name>)
 // 3. Global hook ($XDG_CONFIG_HOME/git-hop/hooks/<hook-name>)
 //
 // For repo-level hooks, we also search parent directories to find hooks
-// at the hub level (useful for sharing hooks across worktrees)
+// at the hub level (useful for sharing hooks across worktrees). Hooks
+// without a repo level (see hasRepoLevel) skip tier 1 entirely.
 func (r *Runner) FindHookFile(hookName string, worktreePath string, repoID string) string {
-	// Priority 1: Repo-level override (also check parent dirs for hub-level hooks)
-	repoHook := filepath.Join(worktreePath, ".git-hop", "hooks", hookName)
-	if exists, _ := afero.Exists(r.fs, repoHook); exists {
-		return repoHook
-	}
+	if hasRepoLevel(hookName) {
+		// Priority 1: Repo-level override (also check parent dirs for hub-level hooks)
+		repoHook := filepath.Join(worktreePath, ".git-hop", "hooks", hookName)
+		if exists, _ := afero.Exists(r.fs, repoHook); exists {
+			return repoHook
+		}
 
-	// Also check parent directories for repo-level hooks at hub level
-	if hook := r.findHookInParentDirs(hookName, worktreePath); hook != "" {
-		return hook
+		if hook := r.findHookInParentDirs(hookName, worktreePath); hook != "" {
+			return hook
+		}
 	}
 
 	parts := strings.Split(repoID, "/")
