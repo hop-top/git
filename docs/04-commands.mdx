@@ -547,6 +547,28 @@ Piping an answer works as expected, so `yes | git hop remove …` and
 The branch on `origin` is **not** touched. Removal is a local
 operation and never contacts the network unless you ask it to.
 
+### Removing a hub
+
+`git hop remove <hub-path>` deletes the hub's worktrees, the hub
+directory and the hub's state entry; the repository's other hubs stay
+in state. A default hub keeps its hopspace in itself, so that goes with
+it. A `--global` hub's hopspace lives in
+`$GIT_HOP_DATA_HOME/<org>/<repo>` and may be shared by other hubs of
+the same repository, so it is deleted only when no other hub state
+records still uses it: one whose `hop.json` marks it global
+(`repo.mode: global`) and so resolves to that hopspace. Otherwise it is
+kept, with a `hint:`, and goes with the last hub that uses it.
+
+- A hub state records whose directory is gone does not count as using
+  it.
+- A hub whose `hop.json` cannot be read counts when state recorded it
+  as global, so a hub that may still be repaired keeps its hopspace.
+- When state itself cannot be read, which hubs use the hopspace is
+  unknown and it is kept.
+
+`--dry-run` says whether the hopspace would be kept or deleted, and
+why.
+
 ### `--delete-remote`
 
 Also delete the branch on `origin`, after the local removal:

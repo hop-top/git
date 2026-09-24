@@ -180,58 +180,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				}
 			}
 
-			output.Info("Removing hub at %s...", targetPath)
-
-			// Load hub to get repo info
-			hub, err := hop.LoadHub(fs, targetPath)
-			if err != nil {
-				output.Fatal("Failed to load hub: %v", err)
-			}
-
-			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
-
-			// Remove all worktrees
-			for branchName, branchConfig := range hub.Config.Branches {
-				worktreePath := config.ResolveWorktreePath(branchConfig.Path, targetPath)
-				output.Info("Removing worktree for branch %s...", branchName)
-
-				if err := fs.RemoveAll(worktreePath); err != nil {
-					output.Warn("Failed to remove worktree %s: %v", branchName, err)
-				}
-			}
-
-			// Remove hub directory
-			output.Info("Removing hub directory...")
-			if err := fs.RemoveAll(targetPath); err != nil {
-				output.Fatal("Failed to remove hub directory: %v", err)
-			}
-
-			// Remove from global state: this hub and its worktrees. The
-			// repository's other hubs, and their worktrees, stay.
-			st, err := state.LoadState(fs)
-			if err == nil {
-				if err := st.RemoveHub(repoID, targetPath); err != nil {
-					output.Warn("Failed to update state: %v", err)
-				} else {
-					if err := state.SaveState(fs, st); err != nil {
-						output.Warn("Failed to save state: %v", err)
-					}
-				}
-			}
-
-			// Clean up data-home storage for the repo. A default hub's
-			// hopspace is the hub directory removed above; a --global
-			// hub's lives here.
-			dataHome := hop.GetGitHopDataHome()
-			hopspacePath := hop.GetHopspacePath(dataHome, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-			if exists, _ := afero.DirExists(fs, hopspacePath); exists {
-				output.Info("Cleaning up hopspace data...")
-				if err := fs.RemoveAll(hopspacePath); err != nil {
-					output.Warn("Failed to remove hopspace data: %v", err)
-				}
-			}
-
-			output.Success("Successfully removed hub: %s", targetPath)
+			removeHub(fs, targetPath)
 			return
 		}
 

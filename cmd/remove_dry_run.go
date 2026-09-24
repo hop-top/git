@@ -13,6 +13,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/state"
 )
 
 // previewRemoveBranch reports what `git hop remove <branch>` would do
@@ -127,8 +128,13 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) {
 
 	output.Info("[dry-run] Would remove hub directory %s", hubPath)
 	output.Info("[dry-run] Would remove 'github.com/%s/%s' from state", hub.Config.Repo.Org, hub.Config.Repo.Repo)
-	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), hub.Config.Repo.Org, hub.Config.Repo.Repo)
-	if exists, _ := afero.DirExists(fs, hopspacePath); exists {
-		output.Info("[dry-run] Would remove hopspace data at %s", hopspacePath)
+	st, stErr := state.LoadState(fs)
+	d := dataHomeHopspaceFor(fs, st, stErr, hub, hubPath)
+	switch {
+	case !d.exists:
+	case d.remove():
+		output.Info("[dry-run] Would remove hopspace data at %s: %s", d.path, d.reason())
+	default:
+		output.Info("[dry-run] Would keep hopspace data at %s: %s", d.path, d.reason())
 	}
 }
