@@ -21,7 +21,7 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | `pre-worktree-switch` | `git hop <branch>`, before the `current` symlink is rewritten. Non-zero exit aborts the switch. **Never fires for a plain `cd`** — see [Switch hooks](#switch-hooks). | repo, hopspace, global |
 | `post-worktree-switch` | `git hop <branch>` after the symlink is written, and on a plain `cd` into a registered worktree. Failure warns. The only hook that may exit [93](#the-navigation-handled-directive-exit-93). | repo, hopspace, global |
 | `pre-clone` | `git hop clone`, before any filesystem work. Non-zero exit aborts the clone. | hopspace, global **only** — no repo level and no parent walk; see [`pre-clone` has no repo level](#pre-clone-has-no-repo-level) |
-| `post-clone` | `git hop clone`, last of all, after state, symlink, mirror, and `post-worktree-add`. Failure warns. | repo, hopspace, global |
+| `post-clone` | `git hop clone`, after state, symlink, mirror, `post-worktree-add`, and the initial worktree's environment generation: its `.env` and compose override exist when the hook runs. The optional environment start (`--env-start`, `hop.env.autoStart`) comes after it. Failure warns. | repo, hopspace, global |
 | `pre-repair` | `git hop repair`, before the backup and any mutation; only when the plan has mutations and `--dry-run` was not passed. Non-zero exit aborts. See [Repair hooks](#repair-hooks). | repo (anchored on the hub: `<hub>/.git-hop/hooks/`, plus parent walk), hopspace, global |
 | `post-repair` | `git hop repair`, after mutations and post-verification. Exit status ignored entirely. | repo (anchored on the hub), hopspace, global |
 | `pre-env-start` | **Never dispatched.** Accepted by `ValidateHookName` and mirrored by the installer, but no code fires it. | — |
@@ -244,11 +244,14 @@ pre-clone
 committed-hook mirror
   ↓
 post-worktree-add
-  ↓
+  ↓  (environment generation: ports, volumes, .env, compose override)
 post-clone
+  ↓  (environment start, only with --env-start / hop.env.autoStart)
 ```
 
 Dispatched from `internal/hop/clone_worktree.go`. Because `internal/hooks` already imports `internal/hop` (for `LooksLikeGitCheckout`), `internal/hop` cannot import `internal/hooks` back without an import cycle — so the dispatch is injected as callbacks (`HookDispatchOptions`), built by `BuildHookDispatch` in `internal/cli/root.go`. `git hop init` reuses the same builder — see [Init hooks](#init-hooks).
+
+The environment is generated after `post-worktree-add`, as `git hop add` generates after its own `post-worktree-add`, and before `post-clone`, so a `post-clone` hook can read the allocated ports from the worktree's `.env`. A generation failure is reported and the clone continues; `post-clone` still fires. The generation is injected like the hooks (`HookDispatchOptions.SetUpEnv`) and is not itself a hook.
 
 ### Why mirror-then-fire
 

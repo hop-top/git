@@ -46,31 +46,46 @@ func DecideAutoEnvStart(override *bool, globalCfg *config.GlobalConfig) bool {
 	return on
 }
 
-// setUpClonedEnv prepares the environment of the worktree a clone just
-// checked out at the hub at hubPath, through the same path as add
-// (services.GenerateWorktreeEnv): ports, volumes, .env and compose
-// override. With start it then starts it. Like add, it never fails the
-// clone.
-func setUpClonedEnv(fs afero.Fs, hubPath string, globalCfg *config.GlobalConfig, start bool) {
+// clonedEnvTarget resolves the default-branch worktree of the hub a
+// clone just wrote at hubPath.
+func clonedEnvTarget(fs afero.Fs, hubPath string) (services.EnvTarget, error) {
 	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
-		output.Warn("failed to prepare environment: %v", err)
-		if start {
-			services.WarnEnvNotStarted(err, hubPath)
-		}
-		return
+		return services.EnvTarget{}, err
 	}
 	branch := hub.Config.Repo.DefaultBranch
-	target := services.EnvTarget{
+	return services.EnvTarget{
 		Root:         resolveSwitchWorktreePath(hub.Config.Branches[branch], hubPath),
 		Branch:       branch,
 		HopspacePath: hop.ResolveHopspacePath(hubPath, hub.Config.Repo),
 		Hub:          hub.Config,
+	}, nil
+}
+
+// generateClonedEnv prepares the environment of the worktree a clone
+// just checked out at the hub at hubPath, through the same path as add
+// (services.GenerateWorktreeEnv): ports, volumes, .env and compose
+// override. Clone runs it before post-clone. Like add, it never fails
+// the clone.
+func generateClonedEnv(fs afero.Fs, hubPath string) {
+	target, err := clonedEnvTarget(fs, hubPath)
+	if err != nil {
+		output.Warn("failed to prepare environment: %v", err)
+		return
 	}
-	if _, err := services.GenerateWorktreeEnv(fs, docker.New(), target.HopspacePath, target.Root, branch, hub.Config.Repo.Org, hub.Config.Repo.Repo); err != nil {
+	repo := target.Hub.Repo
+	if _, err := services.GenerateWorktreeEnv(fs, docker.New(), target.HopspacePath, target.Root, target.Branch, repo.Org, repo.Repo); err != nil {
 		output.Error("Failed to generate environment: %v", err)
 	}
-	if start {
-		services.StartNewWorktreeEnv(fs, target, globalCfg, EventBus)
+}
+
+// startClonedEnv starts the environment generateClonedEnv prepared, once
+// the clone is complete. A failed start only warns.
+func startClonedEnv(fs afero.Fs, hubPath string, globalCfg *config.GlobalConfig) {
+	target, err := clonedEnvTarget(fs, hubPath)
+	if err != nil {
+		services.WarnEnvNotStarted(err, hubPath)
+		return
 	}
+	services.StartNewWorktreeEnv(fs, target, globalCfg, EventBus)
 }
