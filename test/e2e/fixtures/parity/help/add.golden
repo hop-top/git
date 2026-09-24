@@ -9,6 +9,13 @@ An existing branch is checked out as-is unless --from is given. With
 behind it, and add refuses when it is ahead or has diverged, so no local
 commit is lost.
 
+With --task <id>, the task id is recorded as branches.<branch>.task in
+hop.json and exported to the add hooks as GIT_HOP_TASK. The id is never
+part of the branch name. Without a <branch>, one is derived from the task
+as <type>/<slug> (type from its type:<x> tag, slug from its title) via
+'tlc task show <id> --format json'. A branch that exists only as
+origin/<branch> is checked out tracking it.
+
 The new worktree is also seeded with the git-ignored local files (.env,
 tool config, small caches) present in the worktree it forks from. Nothing
 is overwritten, dependency directories are left to the deps layer, and
@@ -50,6 +57,7 @@ Flags:
   -h, --help              help for add
       --no-copy-ignored   do not copy git-ignored files into the new worktree
       --no-fetch          do not fetch origin before resolving the start-point
+      --task string       record a task id for the worktree (metadata only); without <branch>, derive the branch from the task via tlc
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)

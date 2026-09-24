@@ -525,6 +525,7 @@ Example: `~/projects/myrepo/hop.json`
 | `branches[].path` | string | Full path to the worktree directory |
 | `branches[].hopspaceBranch` | string | Corresponding branch name in hopspace |
 | `branches[].fork` | string | Fork URI if this is a fork branch |
+| `branches[].task` | string | Task id recorded by `git hop add --task`; omitted when none |
 | `settings.compareBranch` | string | Default branch for comparisons |
 | `settings.envPatterns` | array | Glob patterns for environment files |
 | `migrated` | boolean | Whether this hub has been migrated to the registry system |

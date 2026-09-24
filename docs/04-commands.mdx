@@ -59,6 +59,7 @@ Aliases: `create`, `new`.
 
 ```bash
 git hop add &lt;branch&gt; [flags]
+git hop add [&lt;branch&gt;] --task &lt;id&gt; [flags]
 ```
 
 ### Flags
@@ -67,7 +68,8 @@ git hop add &lt;branch&gt; [flags]
 |------|-------------|
 | `--from <ref>` | Start-point for a new branch: branch name, ref, SHA, or `initial` for the root commit. Defaults to the tip of the repo's default branch (or `hop.add.defaultStartPoint`). If the branch already exists locally, an explicit `--from` fast-forwards it to `<ref>` (setting the upstream when `<ref>` is a remote-tracking branch) and refuses when the local branch is ahead of or has diverged from `<ref>`; without `--from` the existing branch is used as-is. |
 | `--copy-ignored` / `--no-copy-ignored` | Copy the git-ignored local files from the fork-source worktree into the new one. Default follows `hop.add.copyIgnored` (`true`). |
-| `--dry-run` | Preview the branch, start-point, worktree path and hooks without writing anything or running any hook. |
+| `--task <id>` | Record a task id for the worktree as `branches.<branch>.task` in `hop.json`, export it to the add hooks as `GIT_HOP_TASK`, and include it as `task` in the `--format json` result. Metadata only: the id is never part of the branch name. Without `<branch>`, the branch is derived as `<type>/<slug>` from the task (see [Branch from a task](#branch-from-a-task)). |
+| `--dry-run` | Preview the branch, start-point, worktree path, task and hooks without writing anything or running any hook. |
 
 ### Examples
 
@@ -83,15 +85,43 @@ git hop add hotfix-1 --from v2.3.0
 git hop add feature-x --no-copy-ignored
 ```
 
+```bash tab="For a Task"
+git hop add feat/login-redirect --task T-42   # explicit branch, task recorded
+git hop add --task T-42                       # branch derived from the task
+```
+
 ### What Happens
 
 1. Validates current directory is a hub
-2. Creates the branch from the start-point if it does not exist
+2. Creates the branch from the start-point if it does not exist; a branch
+   that exists only as `origin/<branch>` is created from it and tracks it
 3. Creates the worktree at `hops/&lt;branch&gt;`
 4. Copies git-ignored local files from the fork-source worktree (see below)
 5. Links shared dependencies and generates deterministic ports and volumes
 6. Auto-starts environment (if configured)
 7. Points the `current` symlink at the new worktree
+
+### Branch from a task
+
+`git hop add --task <id>` with no `<branch>` names the branch
+`<type>/<slug>`:
+
+- **type** comes from the task's first `type:<x>` tag that maps to a
+  Conventional Commits type (`feat`, `fix`, `docs`, `style`, `refactor`,
+  `perf`, `test`, `build`, `ci`, `chore`, `revert`; aliases such as
+  `bug` → `fix` and `feature` → `feat`). Defaults to `feat`.
+- **slug** is the task title in lowercase ASCII words joined by hyphens,
+  at most 48 characters, cut on a word boundary.
+
+The task is looked up with [tlc](https://github.com/hop-top/tlc):
+`tlc task show <id> --format json`, run from the current directory with a
+5-second timeout. When tlc is not on `PATH` or the lookup fails, add stops
+and asks for the branch name: `git hop add <branch> --task <id>`.
+
+If the branch already exists on `origin` but not locally (a collaborator
+joining a task someone else started), it is checked out tracking
+`origin/<branch>` rather than created fresh. This uses the remote-tracking
+refs already present; run `git fetch` first to see new remote branches.
 
 ### Ignored Files
 

@@ -130,6 +130,19 @@ func (h *Hub) SetBranchBase(branchName, base string) error {
 	return h.Save()
 }
 
+// SetBranchTask records the task a worktree was added for. task=""
+// clears it. Returns an error if the branch is not registered in this
+// hub. Persists immediately.
+func (h *Hub) SetBranchTask(branchName, task string) error {
+	b, ok := h.Config.Branches[branchName]
+	if !ok {
+		return fmt.Errorf("branch %q not in hub", branchName)
+	}
+	b.Task = task
+	h.Config.Branches[branchName] = b
+	return h.Save()
+}
+
 // RemoveBranch removes a branch from the hub
 func (h *Hub) RemoveBranch(branchName string) error {
 	// Update config - no symlinks to remove

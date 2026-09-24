@@ -25,7 +25,7 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.0"
+const resultSchemaVersion = "1.1"
 
 // addResult is the result of `git hop add`.
 type addResult struct {
@@ -35,6 +35,7 @@ type addResult struct {
 	Upstream string         `json:"upstream" yaml:"upstream" table:"upstream" jsonschema:"description=Upstream the branch tracks (for example origin/main); empty when it tracks none"`
 	Created  bool           `json:"created" yaml:"created" table:"created" jsonschema:"description=True when this run created the local branch; false when an existing local branch was checked out"`
 	Ports    map[string]int `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service when the worktree has a Docker environment"`
+	Task     string         `json:"task,omitempty" yaml:"task,omitempty" jsonschema:"description=Task id recorded for the worktree with --task; absent when none"`
 }
 
 // statusRecord is one worktree row of `git hop status` inside a hub.
@@ -110,6 +111,7 @@ func newAddResult(g git.GitInterface, hub *hop.Hub, branch, worktreePath string,
 	}
 	if b, ok := hub.Config.Branches[branch]; ok {
 		res.Base = resolveCompareBranch(hub.Config, b)
+		res.Task = b.Task
 	}
 	if ports != nil && len(ports.Ports) > 0 {
 		res.Ports = ports.Ports

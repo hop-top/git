@@ -439,6 +439,13 @@ Two exceptions:
 
 `GIT_HOP_WORKTREE_PATH` and `GIT_HOP_BRANCH` track the *current* state: the old worktree for `pre-worktree-move`, the new one for `post-worktree-move`.
 
+### Add Variables
+
+`pre-worktree-add` and `post-worktree-add` additionally receive
+`GIT_HOP_TASK` when the worktree is added with `--task <id>`: the task id,
+as recorded in `hop.json` under `branches.<branch>.task`. It is **absent**
+(not empty) without `--task`.
+
 ### Switch Variables
 
 `pre-worktree-switch` and `post-worktree-switch` additionally receive `GIT_HOP_FROM_BRANCH`, `GIT_HOP_FROM_WORKTREE_PATH`, and `GIT_HOP_TRIGGER`. The from-state pair is **absent rather than empty** when there is no previous worktree — see [From-state variables](#from-state-variables).
