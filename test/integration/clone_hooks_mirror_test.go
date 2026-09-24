@@ -147,6 +147,10 @@ func (c *cloneRecorder) dispatch() hop.HookDispatchOptions {
 		PreClone:        c.record("pre-clone"),
 		PostWorktreeAdd: c.record("post-worktree-add"),
 		PostClone:       c.record("post-clone"),
+		SetUpEnv: func(hubPath string) {
+			c.seq = append(c.seq, "env")
+			c.paths["env"] = hubPath
+		},
 	}
 }
 
@@ -185,20 +189,28 @@ func assertSeq(t *testing.T, got, want []string) {
 }
 
 // TestCloneDispatchesHooksInOrder pins the EXACT clone lifecycle
-// sequence, mirror included. Set membership is not enough: the ordering
-// is the behavior, and it is what regresses silently.
+// sequence, mirror and environment set-up included. Set membership is not
+// enough: the ordering is the behavior, and it is what regresses silently.
 //
 // Specifically, "mirror" must sit BETWEEN the initial worktree existing
 // and post-worktree-add firing. That is what makes a repo-level hook
 // committed in the cloned repo apply to the very worktree that carried
 // it — mirror it into the hopspace first, then fire.
+//
+// "env" sits after post-worktree-add, as add generates after its own
+// post-worktree-add, and before post-clone, so post-clone sees the
+// worktree's .env and compose override.
 func TestCloneDispatchesHooksInOrder(t *testing.T) {
 	c := newCloneRecorder()
 	projectRoot := runRecordedClone(t, c)
 
 	assertSeq(t, c.seq, []string{
-		"pre-clone", "mirror", "post-worktree-add", "post-clone",
+		"pre-clone", "mirror", "post-worktree-add", "env", "post-clone",
 	})
+
+	if got := c.paths["env"]; got != projectRoot {
+		t.Errorf("env set-up hub path = %q; want %q", got, projectRoot)
+	}
 
 	initialWorktree := filepath.Join(projectRoot, "hops", "main")
 

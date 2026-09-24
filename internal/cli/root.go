@@ -309,6 +309,7 @@ Worktree Mode:
 				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite),
 			}
 			dispatch := BuildHookDispatch(fs)
+			dispatch.SetUpEnv = func(hubPath string) { generateClonedEnv(fs, hubPath) }
 			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, globalConfig, hookOpts, dispatch); err != nil {
 				output.Fatal("Clone failed: %v", err)
 			}
@@ -321,7 +322,9 @@ Worktree Mode:
 			// imports internal/hop; the reverse import would cycle.
 			clonedHub := cloneHubPath(expandedArg, projectPath)
 			refreshRootsCacheAt(fs, clonedHub)
-			setUpClonedEnv(fs, clonedHub, globalCfg, startEnv)
+			if startEnv {
+				startClonedEnv(fs, clonedHub, globalCfg)
+			}
 			return
 		}
 

@@ -1,0 +1,73 @@
+# clone generates the environment of the worktree it creates before it
+# fires post-clone, so the hook sees the worktree's .env with the
+# allocated ports and the compose override. The optional start runs
+# after the hook. A generation failure is reported; post-clone still
+# fires and the clone succeeds.
+#
+# A global post-clone hook and a stub docker on PATH both log to
+# events.log: the hook what it found, the stub each `up`.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/post-clone $WORK/.config/git-hop/hooks/post-clone
+chmod 755 $WORK/.config/git-hop/hooks/post-clone
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+cd $WORK
+
+# --- generate, then post-clone, then the start ---
+exec git-hop $WORK/org/repo.git hub --env-start --hooks=none
+grep '\Apost-clone HOP_PORT_WEB=[0-9]+ override\nup\n\z' $WORK/events.log
+! grep 'HOP_PORT_WEB=8080 ' $WORK/events.log
+
+# --- a generation failure still clones, and post-clone still fires ---
+# A file where the override's cache directory belongs fails generation.
+rm $WORK/events.log
+env XDG_CACHE_HOME=$WORK/broken-cache
+mkdir $WORK/broken-cache/git-hop
+cp $WORK/compose.yml $WORK/broken-cache/git-hop/org
+exec git-hop $WORK/org/repo.git hub-broken --hooks=none
+stderr 'Failed to generate environment'
+grep -count=1 '^post-clone ' $WORK/events.log
+exists $WORK/hub-broken/hop.json
+exists $WORK/hub-broken/hops/main/docker-compose.yml
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- post-clone --
+#!/bin/sh
+env=no-env
+override=no-override
+if [ -f "$GIT_HOP_WORKTREE_PATH/.env" ]; then
+	env=$(grep '^HOP_PORT_WEB=' "$GIT_HOP_WORKTREE_PATH/.env")
+fi
+if [ -f "$XDG_CACHE_HOME/git-hop/org/repo/main/docker-compose.override.yml" ]; then
+	override=override
+fi
+echo "post-clone $env $override" >> "$WORK/events.log"
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" up "*)
+	echo "up" >> "$WORK/events.log"
+	exit 0
+	;;
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

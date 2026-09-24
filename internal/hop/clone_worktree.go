@@ -54,8 +54,15 @@ type HookDispatchOptions struct {
 	// path argument is the initial worktree, never the hub root.
 	PostWorktreeAdd func(path, repoID, branch string) error
 	// PostClone fires last, after the initial worktree is fully
-	// registered. Its path argument is the initial worktree.
+	// registered and SetUpEnv has run. Its path argument is the initial
+	// worktree.
 	PostClone func(path, repoID, branch string) error
+	// SetUpEnv is not a hook: it prepares the initial worktree's
+	// environment (ports, volumes, .env, compose override) for the hub at
+	// hubPath. It runs after PostWorktreeAdd, as add generates after its
+	// own post-worktree-add, and before PostClone, so post-clone sees the
+	// environment. It reports its own failures and never fails the clone.
+	SetUpEnv func(hubPath string)
 }
 
 // CloneWorktree clones uri into a hub at projectPath. The hub is always a
@@ -183,8 +190,13 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		}
 	}
 
+	if dispatch.SetUpEnv != nil {
+		dispatch.SetUpEnv(projectRoot)
+	}
+
 	// post-clone fires last, once the initial worktree is fully
-	// registered (state, symlink, mirror, post-worktree-add all done).
+	// registered (state, symlink, mirror, post-worktree-add, environment
+	// all done).
 	if dispatch.PostClone != nil {
 		if err := dispatch.PostClone(absMainWorktreePath, repoID, defaultBranch); err != nil {
 			output.Warn("post-clone hook failed: %v", err)
