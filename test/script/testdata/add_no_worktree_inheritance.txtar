@@ -1,0 +1,68 @@
+# `git hop add` runs `git worktree add` from the hub's repository, not from
+# one of its worktrees. Since git 2.36, `git worktree add` copies the
+# sparse-checkout patterns and config.worktree of the worktree it runs in
+# into the new one; run from a worktree, every new worktree would inherit
+# that worktree's sparse checkout and per-worktree keys. Start-points
+# that only mean something in a worktree (HEAD, @{-1}) still resolve
+# there.
+
+# --- upstream with two directories ---
+exec git init --bare $WORK/repo.git
+exec git clone -q $WORK/repo.git $WORK/seed
+cd $WORK/seed
+mkdir a b
+cp $WORK/a.txt a/x
+cp $WORK/b.txt b/y
+exec git add a b
+exec git commit -q -m 'first'
+exec git commit -q --allow-empty -m 'second'
+exec git push -q origin main
+cd $WORK
+
+# --- a plain hub whose main worktree is sparse, with a per-worktree key ---
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git config extensions.worktreeConfig true
+exec git config --unset core.bare
+exec git config --file config.worktree core.bare true
+cd $WORK/hub/hops/main
+exec git sparse-checkout set --cone a
+exec git config --worktree hop.test.key v1
+! exists b
+
+# --- a new worktree is a full checkout with no per-worktree keys ---
+cd $WORK/hub
+exec git-hop add feat
+exists $WORK/hub/hops/feat/a/x
+exists $WORK/hub/hops/feat/b/y
+cd $WORK/hub/hops/feat
+! exec git config --worktree --get hop.test.key
+! exec git config core.sparseCheckout
+exec git status --porcelain
+! stdout .
+
+# --- the sparse worktree is untouched ---
+cd $WORK/hub/hops/main
+exec git config --worktree --get hop.test.key
+stdout '^v1$'
+! exists b
+
+# --- HEAD in --from still means the source worktree's HEAD ---
+# A second hub, so hops/main is its only worktree and the source.
+cd $WORK
+exec git-hop $WORK/repo.git hub2
+cd $WORK/hub2/hops/main
+exec git checkout -q --detach HEAD~1
+exec git rev-parse HEAD
+cp stdout $WORK/main-head
+exec git -C $WORK/hub2 rev-parse HEAD
+! cmp stdout $WORK/main-head
+cd $WORK/hub2
+exec git-hop add older --from HEAD
+exec git -C $WORK/hub2/hops/older rev-parse HEAD
+cmp stdout $WORK/main-head
+
+-- a.txt --
+a
+-- b.txt --
+b

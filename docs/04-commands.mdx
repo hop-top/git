@@ -58,6 +58,12 @@ Services: api, db
 Inside a hub: create a worktree (and branch, if needed) for a branch.
 Aliases: `create`, `new`.
 
+The new worktree starts clean: `git worktree add` runs in the hub's
+repository, not in another worktree, so it does not copy that worktree's
+sparse checkout or `config.worktree` keys (git copies them from the
+worktree it runs in). A `--from` that only means something in a worktree,
+such as `HEAD`, still names that worktree's commit.
+
 ### Usage
 
 ```bash
