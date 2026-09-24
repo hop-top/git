@@ -34,6 +34,10 @@ type HubBranch struct {
 	// time and back-filled for legacy worktrees by `git hop repair
 	// --base`.
 	Base *string `json:"base,omitempty"`
+	// Task is the id of the task this worktree was added for (`git hop
+	// add --task`). Metadata only: it never shapes the branch name.
+	// Exported to add hooks as GIT_HOP_TASK.
+	Task string `json:"task,omitempty"`
 }
 
 // EnvHooks defines lifecycle hooks for an environment manager

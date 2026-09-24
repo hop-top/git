@@ -53,6 +53,13 @@ An existing branch is checked out as-is unless --from is given. With
 behind it, and add refuses when it is ahead or has diverged, so no local
 commit is lost.
 
+With --task <id>, the task id is recorded as branches.<branch>.task in
+hop.json and exported to the add hooks as GIT_HOP_TASK. The id is never
+part of the branch name. Without a <branch>, one is derived from the task
+as <type>/<slug> (type from its type:<x> tag, slug from its title) via
+'tlc task show <id> --format json'. A branch that exists only as
+origin/<branch> is checked out tracking it.
+
 The new worktree is also seeded with the git-ignored local files (.env,
 tool config, small caches) present in the worktree it forks from. Nothing
 is overwritten, dependency directories are left to the deps layer, and
@@ -80,9 +87,8 @@ automatic one only warns and carries on from the refs already present.
 With --dry-run, add reports the fetch, branch, start-point, worktree path
 and hooks it would run, then stops: nothing is fetched, created or written
 and no hook runs.`,
-	Args: cobra.ExactArgs(1),
+	Args: addArgs,
 	Run: func(cmd *cobra.Command, args []string) {
-		branch := args[0]
 		fs := afero.NewOsFs()
 		g := git.New()
 		d := docker.New()
@@ -130,6 +136,8 @@ and no hook runs.`,
 			globalConfig = globalLoader.GetDefaults()
 		}
 
+		branch, taskID := mustResolveAddTarget(args)
+
 		// Calculate worktree path (needed for pre-worktree-add hook)
 		dataHome := hop.GetGitHopDataHome()
 		ctx := hop.WorktreeLocationContext{
@@ -169,6 +177,7 @@ and no hook runs.`,
 				worktreePath:  worktreePath,
 				startPoint:    startPoint,
 				defaultBranch: hub.Config.Repo.DefaultBranch,
+				task:          taskID,
 			})
 			return
 		}
@@ -193,6 +202,7 @@ and no hook runs.`,
 
 		// Execute pre-worktree-add hook with detector env vars
 		detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
+		addTaskEnv(detectorEnv, taskID)
 		if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
 			output.Fatal("Hook pre-worktree-add failed: %v", err)
 		}
@@ -247,6 +257,7 @@ and no hook runs.`,
 				output.Warn("Failed to record branch base: %v", err)
 			}
 		}
+		recordAddTask(hub, branch, taskID)
 
 		// Update global state
 		st, err := state.LoadState(fs)
@@ -547,6 +558,8 @@ func init() {
 		"fetch origin before resolving the start-point (default: when it is an origin ref)")
 	addCmd.Flags().BoolVar(&addNoFetchFlag, "no-fetch", false,
 		"do not fetch origin before resolving the start-point")
+	addCmd.Flags().StringVar(&addTaskFlag, "task", "",
+		"record a task id for the worktree (metadata only); without <branch>, derive the branch from the task via tlc")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames
 	declareOutputSchema(addCmd, &addResult{})
 }

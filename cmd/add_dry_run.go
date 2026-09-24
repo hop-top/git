@@ -21,6 +21,7 @@ type addPlan struct {
 	startPoint    string
 	defaultBranch string
 	fetch         bool
+	task          string
 }
 
 // addHooks are the lifecycle hooks add dispatches, in order.
@@ -41,6 +42,9 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	}
 
 	output.Info("[dry-run] Would create worktree at %s", displayPath(p.cwd, p.worktreePath))
+	if p.task != "" {
+		output.Info("[dry-run] Would record task '%s' for '%s'", p.task, p.branch)
+	}
 
 	for _, name := range addHooks {
 		if f := hookRunner.FindHookFile(name, p.worktreePath, p.repoID); f != "" {

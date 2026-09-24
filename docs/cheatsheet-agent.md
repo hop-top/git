@@ -70,6 +70,12 @@ exits 0 without prompting.
 /usr/bin/git hop add <branch>                 # create worktree + env; auto-cd if
                                               #   shell integration active
 /usr/bin/git hop add <branch> --dry-run       # preview branch + path; no writes, no hooks
+/usr/bin/git hop add <branch> --task <id>     # record task id: hop.json branches.<b>.task,
+                                              #   GIT_HOP_TASK in add hooks; id never in name
+/usr/bin/git hop add --task <id>              # derive <type>/<slug> branch from the task via
+                                              #   `tlc task show <id> --format json`; errors
+                                              #   (asks for <branch>) when tlc missing/fails;
+                                              #   existing origin/<b> is tracked, not forked
 /usr/bin/git hop add <branch> --no-copy-ignored # clean tree: skip copying ignored local
                                               #   files; `#-hop-#` above a .gitignore
                                               #   pattern excludes it permanently

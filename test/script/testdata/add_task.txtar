@@ -1,0 +1,138 @@
+# `git hop add --task <id>` records a task id against the new worktree.
+#
+#   - the id is metadata only: stored as branches.<branch>.task in hop.json
+#     and exported to the add hooks as GIT_HOP_TASK; it never becomes part
+#     of the branch name
+#   - with an explicit <branch>, that name is used and tlc is never called
+#   - without one, the branch is derived as <type>/<slug> from the task's
+#     type:<x> tag and title, looked up with `tlc task show <id> --format
+#     json`; no tlc (or a failed lookup) is an error asking for the branch
+#   - a branch that exists only as origin/<branch> is checked out tracking
+#     it (a collaborator joining the task), even when another remote also
+#     carries that name and git's own guess gives up
+
+# --- origin, and a hub cloned from it ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# --- hooks record the task they were given ---
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/task-hook $WORK/.config/git-hop/hooks/pre-worktree-add
+cp $WORK/task-hook $WORK/.config/git-hop/hooks/post-worktree-add
+chmod 0755 $WORK/.config/git-hop/hooks/pre-worktree-add
+chmod 0755 $WORK/.config/git-hop/hooks/post-worktree-add
+
+# --- a stub tlc ahead of any real one; logs every call ---
+mkdir $WORK/bin
+cp $WORK/tlc-stub $WORK/bin/tlc
+chmod 0755 $WORK/bin/tlc
+env PATH=$WORK/bin${:}$PATH
+
+# --- neither a branch nor --task: usage error, nothing created ---
+! exec git-hop add
+stderr 'branch name'
+stderr '--task'
+
+# --- explicit branch: used verbatim, task recorded, tlc not consulted ---
+exec git-hop add feat/explicit --task T-1
+exists $WORK/hub/hops/feat/explicit
+decode json hop.json branches.feat/explicit.task T-1
+grep '^pre-worktree-add feat/explicit T-1$' $WORK/hook-log
+grep '^post-worktree-add feat/explicit T-1$' $WORK/hook-log
+! exists $WORK/tlc-calls
+
+# --- no --task: nothing recorded, hooks see no task ---
+exec git-hop add feat/plain
+! decode json hop.json branches.feat/plain.task
+grep '^pre-worktree-add feat/plain <unset>$' $WORK/hook-log
+
+# --- derived branch: <type>/<slug> from tlc, id kept out of the name ---
+exec git-hop add --task T-2
+grep '^task show T-2 --format json$' $WORK/tlc-calls
+exists $WORK/hub/hops/fix/login-redirect-loops-on-expired-session
+decode json hop.json branches.fix/login-redirect-loops-on-expired-session.task T-2
+grep '^post-worktree-add fix/login-redirect-loops-on-expired-session T-2$' $WORK/hook-log
+exec git branch --list '*T-2*'
+! stdout .
+
+# --- tlc lookup fails: error names the task and asks for a branch ---
+! exec git-hop add --task T-404
+stderr 'T-404'
+stderr 'task not found'
+stderr 'git hop add <branch> --task T-404'
+! exists $WORK/hub/hops/feat/t-404
+
+# --- no tlc on PATH (only git and git-hop): same guidance, nothing created ---
+mkdir $WORK/gitonly
+exec sh -c 'ln -s "$(command -v git)" "$WORK/gitonly/git" && ln -s "$(command -v git-hop)" "$WORK/gitonly/git-hop"'
+env PATH_SAVED=$PATH
+env PATH=$WORK/gitonly
+! exec git-hop add --task T-3
+stderr 'tlc'
+stderr 'git hop add <branch> --task T-3'
+env PATH=$PATH_SAVED
+
+# --- --dry-run: shows the derived branch and the task, writes nothing ---
+cp hop.json $WORK/hop.json.before
+exec git-hop add --task T-5 --dry-run
+stdout '\[dry-run\] Would create branch ''docs/document-the-task-flag'''
+stdout '\[dry-run\] Would record task ''T-5'''
+! exists $WORK/hub/hops/docs
+cmp hop.json $WORK/hop.json.before
+
+# --- --format json: result carries the task ---
+exec git-hop add feat/json --task T-6 --format json
+decode json stdout branch feat/json
+decode json stdout task T-6
+exec git-hop add feat/json-plain --format json
+! decode json stdout task
+
+# --- collaborator join: origin/<branch> exists, no local branch ---
+# Pushed after the clone, so the hub only has it as a remote-tracking ref.
+# A second remote carrying the same name makes git's implicit guess fail;
+# add must still track origin/<branch> rather than fork a fresh branch.
+cd $WORK/seed
+exec git checkout -b feat/shared-work main
+exec git commit --allow-empty -m 'collaborator commit'
+exec git push origin feat/shared-work
+exec git clone --bare $WORK/repo.git $WORK/fork.git
+cd $WORK/hub
+exec git remote add fork $WORK/fork.git
+exec git fetch origin
+exec git fetch fork
+exec git branch --list feat/shared-work
+! stdout .
+exec git rev-parse origin/feat/shared-work
+cp stdout $WORK/want-shared
+
+exec git-hop add --task T-4
+cd $WORK/hub/hops/feat/shared-work
+exec git rev-parse HEAD
+cmp stdout $WORK/want-shared
+exec git rev-parse --abbrev-ref '@{u}'
+stdout '^origin/feat/shared-work$'
+cd $WORK/hub
+decode json hop.json branches.feat/shared-work.task T-4
+
+-- task-hook --
+#!/bin/sh
+echo "$GIT_HOP_HOOK_NAME $GIT_HOP_BRANCH ${GIT_HOP_TASK-<unset>}" >> "$HOME/hook-log"
+-- tlc-stub --
+#!/bin/sh
+echo "$*" >> "$HOME/tlc-calls"
+if [ "$1 $2 $4 $5" != "task show --format json" ]; then
+  echo "unexpected invocation: $*" >&2
+  exit 2
+fi
+case "$3" in
+T-2) echo '{"task":{"title":"Login redirect loops on expired session","tags":["area:auth","type:bug"]}}' ;;
+T-4) echo '{"task":{"title":"Shared work","tags":["type:feat"]}}' ;;
+T-5) echo '{"task":{"title":"Document the --task flag","tags":["type:docs"]}}' ;;
+*) echo "task not found: $3" >&2; exit 1 ;;
+esac
