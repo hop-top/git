@@ -7,8 +7,7 @@ The `current` symlink is a convenience feature that makes it easy to navigate to
 Every git-hop repository maintains a `current` symlink in the hub root that points to the last worktree you navigated to:
 
 ```
-my-repo/
-├── .git/                  (bare repository)
+my-repo/                   (bare repository: HEAD, objects/, refs/, ...)
 ├── hop.json
 ├── current -> hops/main   (← symlink)
 └── hops/

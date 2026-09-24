@@ -53,8 +53,7 @@ Regular `git hop` (with space) still works but won't change directories.
 git-hop maintains a `current` symlink in each repository hub that always points to the last worktree you navigated to:
 
 ```
-my-repo/
-├── .git/                  (bare repository)
+my-repo/                   (bare repository: HEAD, objects/, refs/, ...)
 ├── hop.json
 ├── current -> hops/main   (symlink - always points to last hop)
 └── hops/
