@@ -1,0 +1,33 @@
+# `git hop move` rekeys the branch's hop.json entry without losing what was
+# recorded about it: the base it was forked from survives, and
+# hopspaceBranch follows the git branch rename instead of naming a branch
+# that no longer exists.
+
+# --- upstream repo with a non-default base ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b develop
+exec git commit --allow-empty -m 'develop 1'
+exec git push origin develop
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/x --from develop
+grep '"base": "develop"' hop.json
+
+exec git-hop move feat/x feat/y
+stdout 'Moved ''feat/x'' '
+
+# --- the entry moved whole ---
+! grep '"feat/x"' hop.json
+grep '"hopspaceBranch": "feat/y"' hop.json
+grep '"base": "develop"' hop.json
+
+# --- status still compares against the recorded base ---
+cd $WORK/hub/hops/feat/y
+exec git-hop status
+stdout 'feat/y +develop '
