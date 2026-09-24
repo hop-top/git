@@ -107,7 +107,7 @@ func (s *Spinner) Start() {
 
 	go func() {
 		if _, err := s.program.Run(); err != nil {
-			Error("Error running spinner: %v", err)
+			Error("spinner: %v", err)
 		}
 	}()
 

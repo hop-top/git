@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
 )
 
@@ -141,7 +142,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	}
 
 	if err := registerProject(fs, org, repo, defaultBranch, absMainWorktreePath); err != nil {
-		fmt.Printf("Warning: failed to register in global registry: %v\n", err)
+		output.Warn("failed to register in global registry: %v", err)
 	}
 
 	// Update global state
@@ -180,16 +181,16 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		CreatedAt:    time.Now(),
 		LastAccessed: time.Now(),
 	}); err != nil {
-		fmt.Printf("Warning: failed to add worktree to state: %v\n", err)
+		output.Warn("failed to add worktree to state: %v", err)
 	} else {
 		if err := state.SaveState(fs, st); err != nil {
-			fmt.Printf("Warning: failed to save state: %v\n", err)
+			output.Warn("failed to save state: %v", err)
 		}
 	}
 
 	// Update current symlink to point to main worktree
 	if err := UpdateCurrentSymlink(fs, projectRoot, absMainWorktreePath); err != nil {
-		fmt.Printf("Warning: failed to create current symlink: %v\n", err)
+		output.Warn("failed to create current symlink: %v", err)
 	}
 
 	// Mirror committed .git-hop/hooks/ scripts into the user's hopspace
@@ -197,7 +198,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	// Caller wires HookMirrorOptions.Run; we just invoke it here.
 	if hookOpts.Run != nil {
 		if err := hookOpts.Run(absMainWorktreePath, repoID); err != nil {
-			fmt.Printf("Warning: failed to mirror committed hooks: %v\n", err)
+			output.Warn("failed to mirror committed hooks: %v", err)
 		}
 	}
 
@@ -208,7 +209,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	// the initial worktree, never the hub root.
 	if dispatch.PostWorktreeAdd != nil {
 		if err := dispatch.PostWorktreeAdd(absMainWorktreePath, repoID, defaultBranch); err != nil {
-			fmt.Printf("Warning: post-worktree-add hook failed: %v\n", err)
+			output.Warn("post-worktree-add hook failed: %v", err)
 		}
 	}
 
@@ -216,7 +217,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	// registered (state, symlink, mirror, post-worktree-add all done).
 	if dispatch.PostClone != nil {
 		if err := dispatch.PostClone(absMainWorktreePath, repoID, defaultBranch); err != nil {
-			fmt.Printf("Warning: post-clone hook failed: %v\n", err)
+			output.Warn("post-clone hook failed: %v", err)
 		}
 	}
 
