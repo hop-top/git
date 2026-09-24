@@ -98,6 +98,32 @@ func (m *WorktreeManager) reconcileExistingBranch(dir, branch, startPoint string
 	return true, nil
 }
 
+// remoteOnlyBranch returns refs/remotes/origin/<branch> when that ref
+// exists and refs/heads/<branch> does not, and "" otherwise.
+//
+// Such a branch is someone else's work to join, not a name to start
+// fresh under, so the caller creates the local branch from it; git's
+// usual tracking rules (branch.autoSetupMerge) then make it track
+// origin/<branch>, as with an explicit --from. Left to itself, `git
+// worktree add <path> <branch>` only guesses the remote branch when
+// exactly one remote carries that name, and otherwise fails through to
+// a fresh branch off the default start-point.
+func (m *WorktreeManager) remoteOnlyBranch(dir, branch string) string {
+	if refResolves(m.git, dir, "refs/heads/"+branch) {
+		return ""
+	}
+	remote := "refs/remotes/origin/" + branch
+	if !refResolves(m.git, dir, remote) {
+		return ""
+	}
+	return remote
+}
+
+func refResolves(g git.GitInterface, dir, ref string) bool {
+	out, err := g.RevParse(dir, "--verify", "--quiet", ref)
+	return err == nil && strings.TrimSpace(out) != ""
+}
+
 // AbbrevSHA shortens a commit ID the way git displays it by default.
 func AbbrevSHA(sha string) string {
 	if len(sha) > shortSHALen {

@@ -102,6 +102,8 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 // the positional <commit-ish> for `git worktree add -b`. Existing branches
 // (already present in the repo) are linked rather than re-created, and
 // startPoint is irrelevant for that path unless EnforceStartPoint is set.
+// A branch that exists only as origin/<branch> counts as existing: it is
+// created from, and tracks, the origin branch (see remoteOnlyBranch).
 func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string, startPoint string) (string, error) {
 	// Validate inputs
 	if hubPath == "" {
@@ -156,6 +158,8 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 			return "", err
 		}
 		forceCreate = !branchExists
+	} else if remote := m.remoteOnlyBranch(baseWorktreePath, branch); remote != "" {
+		resolvedBase, forceCreate = remote, true
 	}
 	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, resolvedBase, forceCreate, trackBranch); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)
