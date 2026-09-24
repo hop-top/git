@@ -48,29 +48,43 @@ type configEntry struct {
 	val string
 }
 
-// gitConfigEntries returns the hop.* entries for the keys present in the
-// legacy file.
-//
-// An empty string is skipped for every key but worktreeLocation: legacy
-// git-hop wrote "gitDomain": "" by default and read "" as github.com, and no
-// other string key gives "" a meaning, so writing it would only shadow the
-// default. worktreeLocation "" selects the centralized layout and is kept.
-func (lc *legacyGlobalConfig) gitConfigEntries() []configEntry {
-	var out []configEntry
+// legacyScalar is one scalar key of the legacy file.
+type legacyScalar struct {
+	key string
+	// set reports whether the file has the key; val is its value rendered
+	// for git config when set.
+	set bool
+	val string
+	// zero is what the zero-value migration wrote when the key was absent
+	// ("false", "0" or ""); isString marks string keys.
+	zero     string
+	isString bool
+}
+
+// scalars lists every scalar key of the legacy file except installedAt,
+// which both migrations wrote only when non-zero.
+func (lc *legacyGlobalConfig) scalars() []legacyScalar {
+	var out []legacyScalar
 	addBool := func(key string, v *bool) {
+		e := legacyScalar{key: key, zero: "false"}
 		if v != nil {
-			out = append(out, configEntry{key, strconv.FormatBool(*v)})
+			e.set, e.val = true, strconv.FormatBool(*v)
 		}
+		out = append(out, e)
 	}
 	addInt := func(key string, v *int) {
+		e := legacyScalar{key: key, zero: "0"}
 		if v != nil {
-			out = append(out, configEntry{key, strconv.Itoa(*v)})
+			e.set, e.val = true, strconv.Itoa(*v)
 		}
+		out = append(out, e)
 	}
 	addString := func(key string, v *string) {
-		if v != nil && *v != "" {
-			out = append(out, configEntry{key, *v})
+		e := legacyScalar{key: key, isString: true}
+		if v != nil {
+			e.set, e.val = true, *v
 		}
+		out = append(out, e)
 	}
 
 	d := &lc.Defaults
@@ -80,9 +94,7 @@ func (lc *legacyGlobalConfig) gitConfigEntries() []configEntry {
 	addBool(KeyEnforceCleanForConversion, d.EnforceCleanForConversion)
 	addBool(KeyConventionWarning, d.ConventionWarning)
 	addString(KeyGitDomain, d.GitDomain)
-	if d.WorktreeLocation != nil {
-		out = append(out, configEntry{KeyWorktreeLocation, *d.WorktreeLocation})
-	}
+	addString(KeyWorktreeLocation, d.WorktreeLocation)
 	addString(KeyAddDefaultStartPoint, d.DefaultStartPoint)
 	addString(KeyHooksInstallMode, d.HooksInstallMode)
 
@@ -90,9 +102,6 @@ func (lc *legacyGlobalConfig) gitConfigEntries() []configEntry {
 	addString(KeyShellIntegrationStatus, s.Status)
 	addString(KeyShellIntegrationShell, s.InstalledShell)
 	addString(KeyShellIntegrationPath, s.InstalledPath)
-	if s.InstalledAt != nil && !s.InstalledAt.IsZero() {
-		out = append(out, configEntry{KeyShellIntegrationAt, s.InstalledAt.Format(time.RFC3339)})
-	}
 
 	b := &lc.Backup
 	addBool(KeyBackupEnabled, b.Enabled)
@@ -106,5 +115,34 @@ func (lc *legacyGlobalConfig) gitConfigEntries() []configEntry {
 	addBool(KeyConversionAllowDirtyForce, c.AllowDirtyForce)
 	addBool(KeyConversionAutoRollback, c.AutoRollback)
 
+	return out
+}
+
+// migrates reports whether the migration carries the scalar into git
+// config. An empty string is skipped for every key but worktreeLocation:
+// legacy git-hop wrote "gitDomain": "" by default and read "" as
+// github.com, and no other string key gives "" a meaning, so writing it
+// would only shadow the default. worktreeLocation "" selects the
+// centralized layout and is kept.
+func (e legacyScalar) migrates() bool {
+	if !e.set {
+		return false
+	}
+	return !e.isString || e.val != "" || e.key == KeyWorktreeLocation
+}
+
+// gitConfigEntries returns the hop.* entries for the keys present in the
+// legacy file.
+func (lc *legacyGlobalConfig) gitConfigEntries() []configEntry {
+	var out []configEntry
+	for _, e := range lc.scalars() {
+		if e.migrates() {
+			out = append(out, configEntry{e.key, e.val})
+		}
+	}
+	s := &lc.ShellIntegration
+	if s.InstalledAt != nil && !s.InstalledAt.IsZero() {
+		out = append(out, configEntry{KeyShellIntegrationAt, s.InstalledAt.Format(time.RFC3339)})
+	}
 	return out
 }

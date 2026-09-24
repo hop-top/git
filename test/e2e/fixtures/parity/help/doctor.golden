@@ -6,6 +6,8 @@ Checks:
 - Hopspace existence and consistency
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
+- --global hop.* keys the old global.json migration wrote but the user
+  never set (--fix unsets them)
 
 Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows
