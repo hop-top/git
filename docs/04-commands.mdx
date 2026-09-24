@@ -1048,13 +1048,33 @@ means something in a bare hub:
 | `rr-cache/`, `lfs/`, `description`, `branches/`, `remotes/` | Moved into the hub. |
 
 Nothing else is kept. The objects and the shallow boundary come with the
-clone. The index and editor scratch files are rebuilt. For each of these,
-`init` prints a `warning:`:
+clone. The index is rebuilt in the default worktree with the same
+staged changes (see below); editor scratch files are dropped. `init`
+prints a `warning:` for each of these:
 
 - `config.worktree` (per-worktree config from
   `extensions.worktreeConfig`): not carried over. Set its keys again
   with `git config`.
 - Any entry git-hop does not recognise.
+
+### Uncommitted changes and `--force`
+
+`init` refuses to convert a repository with uncommitted changes. With
+`--force` it converts anyway (the backup is still taken) and carries
+them into the default worktree as they were: `git status`, `git diff
+--cached` and `git diff` show the same staged and unstaged changes
+after the conversion as before. That covers files partially staged
+with `git add -p`, staged additions, deletions, renames, mode changes
+and binary files, intent-to-add files (`git add -N`), files deleted
+without `git rm`, and untracked files.
+
+Two things cannot be carried exactly, and `init` prints a `warning:`
+for each while keeping the content in the worktree, unstaged:
+
+- An unmerged path, such as a conflicted `git stash pop`: its content,
+  conflict markers included, is kept, but not the conflict's stages.
+- Staged changes the new index does not accept: the conversion goes
+  ahead with all of them in the working tree, unstaged.
 
 ### Operations in progress
 
