@@ -1,0 +1,34 @@
+# A hub cloned with --global keeps its hopspace in
+# $GIT_HOP_DATA_HOME/<org>/<repo>, and add, move and remove keep that
+# hopspace current.
+#
+# The regression this pins: add and move tried the hub's own hop.json as
+# the hopspace first. Any hub has one, so they always wrote there and the
+# data-home hopspace stayed frozen at clone time, listing only the default
+# branch.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop --global $WORK/org/repo.git hub
+exists $WORK/data/org/repo/hop.json
+cd $WORK/hub
+
+# --- add registers the branch in the data-home hopspace ---
+exec git-hop add feat/x
+decode json $WORK/data/org/repo/hop.json branches.feat/x.exists true
+decode json $WORK/data/org/repo/hop.json branches.feat/x.path '~/hops/feat/x$'
+
+# --- move rekeys it there ---
+exec git-hop move feat/x feat/y
+! decode json $WORK/data/org/repo/hop.json branches.feat/x
+decode json $WORK/data/org/repo/hop.json branches.feat/y.path '~/hops/feat/y$'
+
+# --- remove unregisters it there ---
+exec git-hop remove feat/y --no-prompt
+! decode json $WORK/data/org/repo/hop.json branches.feat/y
+decode json $WORK/data/org/repo/hop.json branches.main.exists true
