@@ -33,7 +33,7 @@ func TestDoctorFix_KeepsLockedWorktreeHopJSONRow(t *testing.T) {
 		porcelainEntry(filepath.Join(hubPath, config.MakeWorktreePath("gone")), "gone", "prunable")
 
 	var r doctorReport
-	fixed := fixStateIssues(fs, g, stateWithHub(hubPath), hubPath, doctorOpts{fix: true}, &r)
+	fixed := fixStateIssues(fs, g, stateWithHub(hubPath), hubPath, nil, doctorOpts{fix: true}, &r)
 
 	assert.Equal(t, 1, fixed, "only the unlocked row is pruned: %+v", r.records)
 	assert.ElementsMatch(t, []string{"main", "usb"}, hubBranchKeys(t, fs, hubPath))
@@ -62,7 +62,7 @@ func TestDoctorFix_KeepsLockedWorktreeStateEntry(t *testing.T) {
 
 	for _, opts := range []doctorOpts{{fix: true, dryRun: true}, {fix: true}} {
 		var r doctorReport
-		fixed := fixStateIssues(fs, g, st, hubPath, opts, &r)
+		fixed := fixStateIssues(fs, g, st, hubPath, nil, opts, &r)
 		assert.Zero(t, fixed, "dry-run=%v: nothing to fix: %+v", opts.dryRun, r.records)
 		assert.Contains(t, st.Repositories["github.com/test/repo"].Worktrees, "usb")
 		assert.ElementsMatch(t, []string{"main", "usb"}, hubBranchKeys(t, fs, hubPath))
@@ -89,7 +89,7 @@ func TestFixMissingWorktrees_ReportsKept(t *testing.T) {
 	g.Runner.Responses = map[string]string{hubPath + ":git branch --merged main": "  merged\n* main\n"}
 
 	var r doctorReport
-	resolved, kept := fixMissingWorktrees(fs, g, st, doctorOpts{fix: true, dryRun: true}, &r)
+	resolved, kept := fixMissingWorktrees(fs, g, st, nil, doctorOpts{fix: true, dryRun: true}, &r)
 
 	assert.Equal(t, 1, resolved, "the merged entry would be removed")
 	assert.True(t, kept.has(path("usb")), "a locked worktree is kept")

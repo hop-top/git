@@ -27,7 +27,7 @@ func TestDoctorDryRun_StateEntryRepairedOnce(t *testing.T) {
 	g.Runner.Responses = map[string]string{hubPath + ":git branch --merged main": "  feat/gone\n* main\n"}
 
 	var r doctorReport
-	fixed := fixStateIssues(fs, g, st, hubPath, doctorOpts{fix: true, dryRun: true}, &r)
+	fixed := fixStateIssues(fs, g, st, hubPath, nil, doctorOpts{fix: true, dryRun: true}, &r)
 
 	assert.Equal(t, 1, fixed)
 	assert.Equal(t, []string{"remove entry: branch is merged into main"},

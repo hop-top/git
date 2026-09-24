@@ -1,0 +1,65 @@
+# A missing worktree doctor cannot recreate keeps its hop.json row, and
+# --dry-run says the recreate would fail instead of promising it: the
+# preview checks what makes `git worktree add` refuse before it plans the
+# repair, so the preview and the real run report the same failure.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add feat
+exec git -C $WORK/hub/hops/feat commit --allow-empty -m 'work'
+
+# The worktree is gone and so is its branch: nothing to recreate it from.
+rm $WORK/hub/hops/feat
+exec git worktree prune
+exec git branch -D feat
+
+# --- the preview reports the failure the real run would hit ---
+! exec git-hop doctor --fix --dry-run --json
+stdout '"kind": "failed"'
+stdout 'cannot recreate worktree: branch feat does not exist'
+! stdout 'recreate worktree at'
+! stdout 'prune hop.json entry'
+
+# --- drop the state entry from outside the hub (no hop.json pass there),
+# so no prompt protects the row in the hub run below ---
+cd $WORK
+stdin $WORK/delete.txt
+exec git-hop doctor --fix
+stdout 'Deleted entry'
+! grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+cd $WORK/hub
+
+# --- the real run fails the same way and keeps the row ---
+! exec git-hop doctor --fix
+stderr '^error: Cannot fix: branch feat does not exist'
+! stdout 'Pruning hop.json entry'
+decode json $WORK/hub/hop.json branches.feat.hopspaceBranch feat
+
+# --- something in the way of the path: a dangling symlink ---
+# An unmerged feat again, so the only obstacle left is the path.
+exec git -C $WORK/hub/hops/main switch -c feat
+exec git -C $WORK/hub/hops/main commit --allow-empty -m 'more work'
+exec git -C $WORK/hub/hops/main switch main
+symlink $WORK/hub/hops/feat -> $WORK/nowhere
+! exec git-hop doctor --fix --dry-run --json
+stdout 'cannot recreate worktree: .*/hub/hops/feat is in the way'
+! stdout 'recreate worktree at'
+! exec git-hop doctor --fix
+stderr 'Cannot fix: .*/hub/hops/feat is in the way'
+decode json $WORK/hub/hop.json branches.feat.hopspaceBranch feat
+
+# --- with the way clear, both recreate it ---
+rm $WORK/hub/hops/feat
+exec git-hop doctor --fix --dry-run --json
+stdout 'recreate worktree at .*/hub/hops/feat'
+exec git-hop doctor --fix
+exists $WORK/hub/hops/feat/.git
+
+-- delete.txt --
+2

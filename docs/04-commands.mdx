@@ -876,9 +876,21 @@ This applies **only** to worktrees that are missing on disk. Doctor
 does not bulk-remove existing-but-merged worktrees — for that, use
 [`git hop remove --merged`](#--merged).
 
-If a missing worktree cannot be recreated and its state entry remains,
-doctor prompts for one of: provide a new path, delete the entry, or
-skip.
+Before recreating a worktree, doctor checks for the conditions that
+make `git worktree add` refuse. These are: git still registers the path
+and will not prune it (for example it is locked), the branch is checked
+out in another worktree, something is in the way of the path (a
+dangling symlink, or a parent that is not a directory), or the branch
+no longer exists, either locally or as `origin/<branch>`. If any of
+these applies, the repair is reported as `failed` with the reason, and
+`--dry-run` reports the same failure rather than a `would-fix`. The
+preview and the real run always give the same verdict.
+
+A worktree doctor cannot recreate keeps its `hop.json` row, since that
+row may be the only record of an unmerged branch. If its state entry
+remains, doctor prompts for one of: provide a new path, delete the
+entry, or skip. Deleting or relocating the entry at the prompt also
+releases the row.
 
 ### Flags
 

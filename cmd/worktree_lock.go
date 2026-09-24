@@ -66,18 +66,47 @@ func unlockHint(path string) string {
 // ("prunable", "locked"), and the text after it (git's reason), if any.
 func worktreeAttr(porcelain, path, attr string) (value string, ok bool) {
 	want := resolvedPath(path)
-	var cur string
-	for _, line := range strings.Split(porcelain, "\n") {
-		switch {
-		case line == "":
-			cur = ""
-		case strings.HasPrefix(line, "worktree "):
-			cur = strings.TrimPrefix(line, "worktree ")
-		case line == attr || strings.HasPrefix(line, attr+" "):
-			if cur != "" && resolvedPath(cur) == want {
-				return strings.TrimSpace(strings.TrimPrefix(line, attr)), true
-			}
+	for _, wt := range parseWorktreeList(porcelain) {
+		if resolvedPath(wt.path) != want {
+			continue
+		}
+		if value, ok := wt.attrs[attr]; ok {
+			return value, true
 		}
 	}
 	return "", false
+}
+
+// registeredWorktree is one record of `git worktree list --porcelain`.
+type registeredWorktree struct {
+	path string
+	// attrs maps each attribute line's first word ("HEAD", "branch",
+	// "locked", "prunable", ...) to the rest of the line, "" when there
+	// is none.
+	attrs map[string]string
+}
+
+// branch is the branch checked out in the worktree, "" when none.
+func (w registeredWorktree) branch() string {
+	return strings.TrimPrefix(w.attrs["branch"], "refs/heads/")
+}
+
+// parseWorktreeList splits porcelain, the output of `git worktree list
+// --porcelain`, into its records.
+func parseWorktreeList(porcelain string) []registeredWorktree {
+	var list []registeredWorktree
+	var cur *registeredWorktree
+	for _, line := range strings.Split(porcelain, "\n") {
+		switch {
+		case line == "":
+			cur = nil
+		case strings.HasPrefix(line, "worktree "):
+			list = append(list, registeredWorktree{path: strings.TrimPrefix(line, "worktree "), attrs: map[string]string{}})
+			cur = &list[len(list)-1]
+		case cur != nil:
+			key, value, _ := strings.Cut(line, " ")
+			cur.attrs[key] = strings.TrimSpace(value)
+		}
+	}
+	return list
 }
