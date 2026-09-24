@@ -1,0 +1,62 @@
+# `git hop init` prints advice the way git does: "hint:" lines on stderr.
+# Results stay on stdout; no "Note:" lines on stdout.
+
+# --- a repo with no remote, registered as-is (menu choice 3) ---
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+stdin $WORK/choose-register
+exec git-hop init --no-hooks
+stdout 'Repository registered successfully'
+! stdout 'Note:'
+! stdout 'Consider converting'
+stderr '^hint: Repository has no remote configured\.$'
+stderr '^hint: Some git-hop features are limited with this structure\.$'
+stderr '^hint:   git hop init --no-prompt$'
+
+# --- dry run: the next-step advice is a hint ---
+exec git init $WORK/dry
+cd $WORK/dry
+exec git commit --allow-empty -m 'initial'
+exec git-hop init -n --no-prompt
+stdout 'Conversion plan'
+! stdout 'To proceed'
+stderr '^hint: To proceed with conversion, run:$'
+stderr '^hint:   git hop init$'
+
+# --- conversion: backup, hook and next-step advice are hints ---
+exec git init $WORK/conv
+cd $WORK/conv
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --keep-backup
+stdout 'Conversion successful'
+stdout '^Backup preserved at: '
+! stdout 'To remove backup'
+stderr '^hint: To remove backup manually:$'
+stderr '^hint:   rm -rf '
+stdout '^Hooks directory created: '
+! stdout 'Place executable scripts'
+! stdout 'You can now'
+stderr '^hint: Place executable scripts there'
+stderr '^hint: You can now:$'
+stderr '^hint:   git hop add <branch> '
+
+# --- re-run on the converted hub: next steps are a hint ---
+cd $WORK/conv
+exec git-hop init --no-hooks
+stdout 'already initialized'
+! stdout 'You can use'
+stderr '^hint: You can use git-hop normally:$'
+
+# --- dirty repo: the refusal's advice is a hint ---
+exec git init $WORK/dirty
+cd $WORK/dirty
+exec git commit --allow-empty -m 'initial'
+cp $WORK/choose-register untracked.txt
+! exec git-hop init --no-prompt
+stderr '^error: Repository has uncommitted changes$'
+stderr '^hint: Please commit or stash changes before converting:$'
+! stdout 'Please commit'
+
+-- choose-register --
+3

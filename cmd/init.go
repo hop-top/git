@@ -164,10 +164,7 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 		status, _ := g.RunInDir(repoPath, "git", "status", "--porcelain")
 		if status != "" {
 			output.Error("Repository has uncommitted changes")
-			fmt.Println(`
-Bare repository conversion requires clean repository.
-
-Please commit or stash changes before converting:
+			output.Hint(`Please commit or stash changes before converting:
   git commit -m "WIP: Save work"
   # OR
   git stash push -m "WIP: Save work"
@@ -216,8 +213,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)
 		}
 
-		fmt.Println("\nTo proceed with conversion, run:")
-		fmt.Println("  git hop init")
+		output.Hint("To proceed with conversion, run:\n  git hop init")
 		return
 	}
 
@@ -298,8 +294,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 
 	if keepBackupFlag || len(result.Warnings) > 0 {
 		fmt.Printf("\nBackup preserved at: %s\n", result.BackupPath)
-		fmt.Println("To remove backup manually:")
-		fmt.Printf("  rm -rf %s\n", result.BackupPath)
+		output.Hint("To remove backup manually:\n  rm -rf %s", result.BackupPath)
 	}
 
 	if !noHooks {
@@ -336,14 +331,17 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 		}
 	}
 
-	output.Info("\nYou can now:")
+	next := "You can now:\n"
 	if !isRegularRepo {
-		fmt.Printf("  cd %s   # Work on %s branch\n", mainWorktreePath, currentBranchName)
+		next += fmt.Sprintf("  cd %s   # Work on %s branch\n", mainWorktreePath, currentBranchName)
 	}
-	fmt.Println("  git hop add <branch>       # Add new branch")
-	fmt.Println("  git hop <branch>           # Jump to worktree")
-	fmt.Println("  git hop                    # List all worktrees")
+	output.Hint("%s", next+initNextSteps)
 }
+
+// initNextSteps is the command list init's closing hint suggests.
+const initNextSteps = `  git hop add <branch>       # Add new branch
+  git hop <branch>           # Jump to worktree
+  git hop                    # List all worktrees`
 
 func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, enableChdir bool) {
 	output.Info("Registering repository as-is...")
@@ -399,11 +397,11 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 	fmt.Printf("  Path: %s\n", repoPath)
 
 	if remoteURL == "" {
-		fmt.Println("\nNote: Repository has no remote configured.")
+		output.Hint("Repository has no remote configured.")
 	}
-	fmt.Println("\nNote: Some git-hop features are limited with this structure.")
-	fmt.Println("Consider converting to worktree structure for full functionality:")
-	fmt.Println("  git hop init --no-prompt")
+	output.Hint("Some git-hop features are limited with this structure.\n" +
+		"Consider converting to worktree structure for full functionality:\n" +
+		"  git hop init --no-prompt")
 
 	if !noHooks {
 		if err := installInitHooks(fs, repoPath, "", false); err != nil {
@@ -469,10 +467,7 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 		}
 	}
 
-	fmt.Println("\nYou can use git-hop normally:")
-	fmt.Println("  git hop add <branch>   # Add new branch")
-	fmt.Println("  git hop <branch>       # Jump to worktree")
-	fmt.Println("  git hop               # List all worktrees")
+	output.Hint("%s", "You can use git-hop normally:\n"+initNextSteps)
 }
 
 // installInitHooks installs the .git-hop/hooks directory after init.

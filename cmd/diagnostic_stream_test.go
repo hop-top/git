@@ -11,19 +11,20 @@ import (
 )
 
 // diagnosticPrefix matches a message that announces itself as a
-// warning, error, hint or fatal: "Warning: ...", "\nwarning: ...",
-// "Warnings:", "Rollback error:" and the like.
-var diagnosticPrefix = regexp.MustCompile(`(?i)^\s*(\w+ )?(warnings?|errors?|hints?|fatal)\s*:`)
+// warning, error, hint, note or fatal: "Warning: ...", "\nwarning: ...",
+// "Warnings:", "Rollback error:", "\nNote: ..." and the like. A note is
+// advice, which git prints as hint: on stderr.
+var diagnosticPrefix = regexp.MustCompile(`(?i)^\s*(\w+ )?(warnings?|errors?|hints?|notes?|fatal)\s*:`)
 
 // TestDiagnostics_NotPrintedToStdout keeps git's stream split: results on
-// stdout, warnings/errors/hints on stderr via output.Warn / output.Error
-// (lowercase prefix, quiet- and JSON-aware). A fmt.Print* call, or an
+// stdout, warnings/errors/hints on stderr via output.Warn / output.Error /
+// output.Hint (lowercase prefix, quiet- and JSON-aware). A fmt.Print* call, or an
 // Fprint* to os.Stdout, whose message opens with such a prefix is the
 // defect this guards against.
 func TestDiagnostics_NotPrintedToStdout(t *testing.T) {
 	forEachSourceFile(t, func(path, rel string) {
 		for _, o := range stdoutDiagnostics(t, path, rel) {
-			t.Errorf("diagnostic printed to stdout (use output.Warn/Error): %s", o)
+			t.Errorf("diagnostic printed to stdout (use output.Warn/Error/Hint): %s", o)
 		}
 	})
 }
