@@ -9,8 +9,8 @@ Scannable in 30 seconds.
 
 ```bash
 /usr/bin/git hop list --json          # verify git-hop is working; lists worktrees
-/usr/bin/git hop status --json        # current worktree context
-/usr/bin/git hop status --all --json  # full system snapshot (all repos + config)
+/usr/bin/git hop status --json        # this hub's worktrees (exit 128 outside a hub)
+/usr/bin/git hop status --all --json  # every tracked repo's worktrees (works anywhere)
 ```
 
 Config: `$XDG_CONFIG_HOME/git-hop/config.json`
@@ -81,8 +81,9 @@ exits 0 without prompting.
                                               #   pattern excludes it permanently
 
 # Inspect
-/usr/bin/git hop list --json                  # [{branch, path, type, last_access}]
-/usr/bin/git hop status --json                # current worktree metadata
+/usr/bin/git hop list --json                  # [{repository, branch, base, type, path, state, status}]
+/usr/bin/git hop status --json                # [{branch, base, state, status, path}]
+/usr/bin/git hop status <branch> --json       # one-element list; + ports, services
 
 # Rename
 /usr/bin/git hop move <old-branch> <new-branch>
@@ -124,6 +125,7 @@ exits 0 without prompting.
 /usr/bin/git hop env stop             # stop services (aliases: down)
 /usr/bin/git hop env gc --dry-run     # list orphaned deps + disk to reclaim
 /usr/bin/git hop env gc --no-prompt   # delete orphaned deps, no prompt (--force equivalent)
+/usr/bin/git hop env gc --dry-run --json  # [{action, key, size, last_used, path}]
 ```
 
 ---
@@ -131,12 +133,15 @@ exits 0 without prompting.
 ## Diagnostics + Repair
 
 ```bash
-/usr/bin/git hop doctor --json        # structured diagnostics: paths, hubs, orphans
+/usr/bin/git hop doctor --json        # [{kind, check, subject, message}]; [] = healthy
+                                      #   (exit 0 either way: test for kind == "issue")
 /usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json)
 /usr/bin/git hop doctor --fix --dry-run  # preview those repairs; writes nothing, no backups
 /usr/bin/git hop prune --dry-run      # list this repo's orphaned state + hop.json entries
 /usr/bin/git hop prune                # remove them (clears status Missing rows); current repo only
 /usr/bin/git hop prune --all          # sweep every registered repo; state removals are not undoable
+/usr/bin/git hop prune --dry-run --json  # [{action, kind, repository, branch, path}]
+/usr/bin/git hop repair -n --json     # plan: [{status, path, kind, old, new, reason}]
 ```
 
 ---
@@ -145,12 +150,25 @@ exits 0 without prompting.
 
 | Flag           | Notes                                           |
 |----------------|-------------------------------------------------|
-| `--json`       | structured JSON; parse with `jq`                |
-| `--porcelain`  | stable line-format; safer for scripting         |
+| `--json`       | = `--format json`; one document on stdout, nothing else; parse with `jq` |
+| `--format`     | `json`, `yaml`, `csv`, `text`; `table`/`human` = default human view |
+| `--porcelain`  | one tab-separated record per line, no header; stable columns |
+| `--cols a,b`   | pick/order columns (csv, text, porcelain); unknown column = exit 129 |
 | `-n, --dry-run` | preview only; no filesystem or state changes; a command with no preview refuses it (exit 129) |
 | `--force`      | bypass confirmations + safety checks            |
 | `-q`           | suppress non-error output                       |
 | `-g, --global` | target global hopspace (`$GIT_HOP_DATA_HOME`)   |
+
+Structured output rules:
+
+- Only `add`, `status`, `list`, `doctor`, `prune`, `env gc`, `repair` have
+  a result; other commands ignore the format for stdout.
+- Every result is a list (`add`: one object). Empty = `[]`, never empty stdout.
+- `--json` + `--porcelain`, `--json` + another `--format`, an unknown format
+  or column: exit 129 before anything changes.
+- `repair --list-backups` / `--undo` in a structured mode: exit 129.
+- Structured `env gc` without `--no-prompt`: exit 129 (cannot confirm).
+- Full field reference: `docs/09-reference.mdx#structured-output`.
 
 ---
 
@@ -166,8 +184,11 @@ cd <path from list>
 # Non-interactive remove (post-merge by script)
 /usr/bin/git hop remove feat/foo --no-prompt
 
-# Full system snapshot for context
+# Every tracked worktree, all repos
 /usr/bin/git hop status --all --json | jq .
+
+# Healthy?
+/usr/bin/git hop doctor --json | jq -e 'map(select(.kind == "issue")) | length == 0'
 
 # Dry-run everything before committing to a destructive step
 /usr/bin/git hop remove feat/foo --dry-run

@@ -114,13 +114,19 @@ Rich, colorful output with emojis and styled sections.
 ```bash
 git hop status --all --json
 ```
-Machine-readable JSON output for scripting.
+One status record per worktree of every tracked repository, sorted by
+repository then branch: `branch`, `base`, `state`, `status`, `path` and
+`repository`. The summary sections above (configuration, resources,
+environment) are human-only. `--format yaml|csv|text` work the same way;
+`repository` appears in `json` and `yaml` only. See
+[Structured Output](./09-reference.mdx#status).
 
 ### Porcelain Mode
 ```bash
 git hop status --all --porcelain
 ```
-Simple, parseable text output.
+One tab-separated line per worktree, no header:
+`<branch>\t<base>\t<state>\t<status>\t<path>`.
 
 ### Quiet Mode
 ```bash
