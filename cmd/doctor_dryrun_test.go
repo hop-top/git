@@ -187,7 +187,7 @@ func TestDoctorDryRun_DoesNotRewriteHopJSONOrBackup(t *testing.T) {
 	st := stateWithHub(hubPath)
 
 	fixed := fixStateIssues(fs, mocks.NewMockGit(), st, hubPath,
-		doctorOpts{fix: true, dryRun: true})
+		doctorOpts{fix: true, dryRun: true}, &doctorReport{})
 
 	assert.Equal(t, 1, fixed, "dry-run still reports what would be pruned")
 	assert.ElementsMatch(t, []string{"main", "feat/gone"},
@@ -218,7 +218,7 @@ func TestDoctorDryRun_DoesNotWriteState(t *testing.T) {
 	loaded, err := state.LoadState(fs)
 	require.NoError(t, err)
 	fixStateIssues(fs, mocks.NewMockGit(), loaded, hubPath,
-		doctorOpts{fix: true, dryRun: true})
+		doctorOpts{fix: true, dryRun: true}, &doctorReport{})
 
 	after, err := afero.ReadFile(fs, filepath.Join(p.stateHome, "state.json"))
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestDoctorFix_WritesState(t *testing.T) {
 
 	loaded, err := state.LoadState(fs)
 	require.NoError(t, err)
-	fixStateIssues(fs, mocks.NewMockGit(), loaded, hubPath, doctorOpts{fix: true})
+	fixStateIssues(fs, mocks.NewMockGit(), loaded, hubPath, doctorOpts{fix: true}, &doctorReport{})
 
 	reloaded, err := state.LoadState(fs)
 	require.NoError(t, err)

@@ -56,6 +56,7 @@ making changes.
 
 func init() {
 	pruneCmd.Flags().Bool("all", false, "prune every repository in state, not just the current one")
+	declareOutputSchema(pruneCmd, &[]pruneRecord{})
 	cli.RootCmd.AddCommand(pruneCmd)
 }
 
@@ -69,6 +70,10 @@ func runPrune(cmd *cobra.Command, args []string) {
 	}
 
 	if len(st.Repositories) == 0 {
+		if output.IsStructured() {
+			emitResult(cmd, []pruneRecord{})
+			return
+		}
 		output.Info("No repositories in state. Nothing to prune.")
 		return
 	}
@@ -85,6 +90,10 @@ func runPrune(cmd *cobra.Command, args []string) {
 	}
 
 	if len(scoped.Repositories) == 0 {
+		if output.IsStructured() {
+			emitResult(cmd, []pruneRecord{})
+			return
+		}
 		output.Info("Nothing in scope to prune.")
 		return
 	}
@@ -105,6 +114,11 @@ func runPrune(cmd *cobra.Command, args []string) {
 		if err := state.SaveState(fs, st); err != nil {
 			output.Fatal("Failed to save state: %v", err)
 		}
+	}
+
+	if output.IsStructured() {
+		emitResult(cmd, counts.records)
+		return
 	}
 
 	switch {
@@ -186,12 +200,14 @@ func scopeRepoIDs(st *state.State) []string {
 // pruneCounts tallies each class of stale data prune reclaims. Every
 // field is what genuinely landed (or, under dry-run, what would land) —
 // the summary line is rendered straight from it, so an over-reported
-// count here is a lie to the user.
+// count here is a lie to the user. records lists the same entries, in the
+// order the passes ran, as the command's structured result.
 type pruneCounts struct {
 	worktrees      int
 	hubs           int
 	hopJSONEntries int
 	repairBackups  int
+	records        []pruneRecord
 }
 
 func (c pruneCounts) total() int {
@@ -206,11 +222,39 @@ func (c pruneCounts) total() int {
 // pruneOrphanedHubs drops those same entries from st in the pass right
 // after.
 func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) pruneCounts {
-	var c pruneCounts
-	c.hopJSONEntries = pruneOrphanedHubBranches(fs, g, st, dryRun)
-	c.worktrees, c.hubs = runPruneFS(fs, st, dryRun)
-	c.repairBackups = pruneRepairBackups(fs, g, st, dryRun)
-	return c
+	hopJSON := pruneOrphanedHubBranches(fs, g, st, dryRun)
+	worktrees, hubs := runPruneFS(fs, st, dryRun)
+	backups := pruneRepairBackups(fs, g, st, dryRun)
+
+	records := make([]pruneRecord, 0, len(hopJSON)+len(worktrees)+len(hubs)+len(backups))
+	for _, pass := range [][]pruneRecord{hopJSON, worktrees, hubs, backups} {
+		records = append(records, pass...)
+	}
+	return pruneCounts{
+		worktrees:      len(worktrees),
+		hubs:           len(hubs),
+		hopJSONEntries: len(hopJSON),
+		repairBackups:  len(backups),
+		records:        records,
+	}
+}
+
+// Kinds of entry prune removes, as reported in pruneRecord.Kind.
+const (
+	pruneKindWorktree     = "worktree"
+	pruneKindHub          = "hub"
+	pruneKindHopJSONEntry = "hop-json-entry"
+	pruneKindRepairBackup = "repair-backup"
+)
+
+// newPruneRecord describes one entry a pass removed, or would remove
+// under dryRun.
+func newPruneRecord(kind, repoID, branch, path string, dryRun bool) pruneRecord {
+	action := "pruned"
+	if dryRun {
+		action = "would-prune"
+	}
+	return pruneRecord{Action: action, Kind: kind, Repository: repoID, Branch: branch, Path: path}
 }
 
 // repairBackupRetention reads hop.repair.backupRetention from the first
@@ -236,19 +280,20 @@ func repairBackupRetention(g git.GitInterface, st *state.State) time.Duration {
 	return fallback
 }
 
-// runPruneFS scans st for orphaned worktrees and hubs and returns the counts.
+// runPruneFS scans st for orphaned worktrees and hubs and returns them.
 // When dryRun is false the orphans are removed from st in place; the caller
 // is responsible for persisting. When dryRun is true st is left untouched.
-func runPruneFS(fs afero.Fs, st *state.State, dryRun bool) (worktrees, hubs int) {
+func runPruneFS(fs afero.Fs, st *state.State, dryRun bool) (worktrees, hubs []pruneRecord) {
 	worktrees = pruneOrphanedWorktrees(fs, st, dryRun)
 	hubs = pruneOrphanedHubs(fs, st, dryRun)
 	return
 }
 
-// pruneOrphanedWorktrees reports worktrees whose paths no longer exist.
-// When dryRun is false it also removes them from st.
-func pruneOrphanedWorktrees(fs afero.Fs, st *state.State, dryRun bool) int {
-	pruned := 0
+// pruneOrphanedWorktrees reports worktrees whose paths no longer exist,
+// in repository then branch order. When dryRun is false it also removes
+// them from st.
+func pruneOrphanedWorktrees(fs afero.Fs, st *state.State, dryRun bool) []pruneRecord {
+	var pruned []pruneRecord
 	prefix := "Pruning"
 	if dryRun {
 		prefix = "[dry-run] Would prune"
@@ -256,13 +301,20 @@ func pruneOrphanedWorktrees(fs afero.Fs, st *state.State, dryRun bool) int {
 
 	for _, repoID := range scopeRepoIDs(st) {
 		repo := st.Repositories[repoID]
-		for branch, wt := range repo.Worktrees {
+		branches := make([]string, 0, len(repo.Worktrees))
+		for branch := range repo.Worktrees {
+			branches = append(branches, branch)
+		}
+		sort.Strings(branches)
+
+		for _, branch := range branches {
+			wt := repo.Worktrees[branch]
 			if exists, _ := afero.DirExists(fs, wt.Path); !exists {
 				output.Info("%s orphaned worktree: %s:%s (%s)", prefix, repoID, branch, wt.Path)
 				if !dryRun {
 					delete(repo.Worktrees, branch)
 				}
-				pruned++
+				pruned = append(pruned, newPruneRecord(pruneKindWorktree, repoID, branch, wt.Path, dryRun))
 			}
 		}
 	}
@@ -272,8 +324,8 @@ func pruneOrphanedWorktrees(fs afero.Fs, st *state.State, dryRun bool) int {
 
 // pruneOrphanedHubs reports hubs whose directories no longer exist.
 // When dryRun is false it also removes them from st.
-func pruneOrphanedHubs(fs afero.Fs, st *state.State, dryRun bool) int {
-	pruned := 0
+func pruneOrphanedHubs(fs afero.Fs, st *state.State, dryRun bool) []pruneRecord {
+	var pruned []pruneRecord
 	prefix := "Pruning"
 	if dryRun {
 		prefix = "[dry-run] Would prune"
@@ -288,7 +340,7 @@ func pruneOrphanedHubs(fs afero.Fs, st *state.State, dryRun bool) int {
 				validHubs = append(validHubs, hub)
 			} else {
 				output.Info("%s orphaned hub: %s (%s)", prefix, repoID, hub.Path)
-				pruned++
+				pruned = append(pruned, newPruneRecord(pruneKindHub, repoID, "", hub.Path, dryRun))
 			}
 		}
 

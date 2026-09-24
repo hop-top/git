@@ -55,7 +55,7 @@ func TestPruneOrphanedWorktrees(t *testing.T) {
 	require.NoError(t, fs.MkdirAll("/path/to/existing", 0755))
 
 	// Prune orphaned entries
-	pruned := pruneOrphanedWorktrees(fs, st, false)
+	pruned := len(pruneOrphanedWorktrees(fs, st, false))
 
 	assert.Equal(t, 1, pruned)
 	assert.Len(t, st.Repositories["github.com/test/repo"].Worktrees, 1)
@@ -96,8 +96,8 @@ func TestRunPrune_DryRun(t *testing.T) {
 	require.NoError(t, err)
 
 	wt, hubs := runPruneFS(fs, loaded, true /* dryRun */)
-	assert.Equal(t, 1, wt, "should report 1 worktree as orphaned")
-	assert.Equal(t, 0, hubs)
+	assert.Len(t, wt, 1, "should report 1 worktree as orphaned")
+	assert.Empty(t, hubs)
 
 	// Persisted state must be unchanged on disk.
 	disk, err := state.LoadState(fs)
@@ -133,7 +133,7 @@ func TestRunPrune_Apply(t *testing.T) {
 	require.NoError(t, err)
 
 	wt, _ := runPruneFS(fs, loaded, false /* dryRun */)
-	assert.Equal(t, 1, wt)
+	assert.Len(t, wt, 1)
 
 	// runPruneFS mutates in-memory state but does not persist; verify
 	// the in-memory map reflects the prune. Persistence is covered by
@@ -182,7 +182,7 @@ func TestPruneOrphanedHubs(t *testing.T) {
 	require.NoError(t, fs.MkdirAll("/path/to/existing/hub", 0755))
 
 	// Prune orphaned hubs
-	pruned := pruneOrphanedHubs(fs, st, false)
+	pruned := len(pruneOrphanedHubs(fs, st, false))
 
 	assert.Equal(t, 1, pruned)
 	assert.Len(t, st.Repositories["github.com/test/repo"].Hubs, 1)
@@ -221,7 +221,7 @@ func TestPruneRepairBackups_RemovesOldRepairBackups(t *testing.T) {
 		},
 	}
 
-	pruned := pruneRepairBackups(fs, mocks.NewMockGit(), st, false)
+	pruned := len(pruneRepairBackups(fs, mocks.NewMockGit(), st, false))
 
 	assert.Equal(t, 1, pruned, "expected only the old repair- backup pruned")
 	exists, _ := afero.DirExists(fs, old)
@@ -247,7 +247,7 @@ func TestPruneRepairBackups_DryRun(t *testing.T) {
 		},
 	}
 
-	pruned := pruneRepairBackups(fs, mocks.NewMockGit(), st, true)
+	pruned := len(pruneRepairBackups(fs, mocks.NewMockGit(), st, true))
 
 	assert.Equal(t, 1, pruned)
 	exists, _ := afero.DirExists(fs, old)

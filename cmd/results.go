@@ -60,6 +60,48 @@ type listRecord struct {
 	Status     string `json:"status" yaml:"status" table:"status" jsonschema:"description=Sync label relative to base (default/synced/N ahead/behind (N)/merged/diverged; optional dirty suffix); - when missing"`
 }
 
+// doctorRecord is one line of the `git hop doctor` report: a problem a
+// check found, or what --fix did (or, with --dry-run, would do) about one.
+// A healthy run reports no records.
+type doctorRecord struct {
+	Kind    string `json:"kind" yaml:"kind" table:"kind" jsonschema:"enum=issue,enum=warning,enum=fixed,enum=would-fix,enum=failed,description=issue: a problem that makes the installation unhealthy; warning: reported but harmless; fixed: repaired by --fix; would-fix: --fix --dry-run would repair it; failed: --fix could not repair it"`
+	Check   string `json:"check" yaml:"check" table:"check" jsonschema:"enum=paths,enum=hub,enum=dependencies,enum=worktrees,enum=state,description=Check that produced the record"`
+	Subject string `json:"subject" yaml:"subject" table:"subject" jsonschema:"description=What the record is about: a path / branch / repository:branch / dependency key"`
+	Message string `json:"message" yaml:"message" table:"message" jsonschema:"description=Human-readable description"`
+}
+
+// pruneRecord is one entry `git hop prune` removed or, with --dry-run,
+// would remove.
+type pruneRecord struct {
+	Action     string `json:"action" yaml:"action" table:"action" jsonschema:"enum=pruned,enum=would-prune,description=pruned; would-prune under --dry-run"`
+	Kind       string `json:"kind" yaml:"kind" table:"kind" jsonschema:"enum=worktree,enum=hub,enum=hop-json-entry,enum=repair-backup,description=worktree and hub: entries in the state file; hop-json-entry: a hub's hop.json branch entry; repair-backup: an expired repair backup directory"`
+	Repository string `json:"repository" yaml:"repository" table:"repository" jsonschema:"description=Repository id (host/org/repo) the entry belongs to"`
+	Branch     string `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch of a worktree or hop-json-entry; empty for hub and repair-backup"`
+	Path       string `json:"path" yaml:"path" table:"path" jsonschema:"description=Worktree or hub or backup path the entry pointed at"`
+}
+
+// envGCRecord is one orphaned dependency directory `git hop env gc`
+// deleted or, with --dry-run, would delete.
+type envGCRecord struct {
+	Action   string `json:"action" yaml:"action" table:"action" jsonschema:"enum=deleted,enum=would-delete,description=deleted; would-delete under --dry-run"`
+	Key      string `json:"key" yaml:"key" table:"key" jsonschema:"description=Dependency key (<deps dir>.<lockfile hash>)"`
+	Size     int64  `json:"size" yaml:"size" table:"size" jsonschema:"description=Size in bytes"`
+	LastUsed string `json:"last_used" yaml:"last_used" table:"last_used" jsonschema:"description=When a worktree last used it (RFC 3339 in UTC); empty when unknown"`
+	Path     string `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the dependency directory"`
+}
+
+// repairRecord is one action of the `git hop repair` plan. The columnar
+// formats (--porcelain included) carry status, path, kind, old and new in
+// that order, the line format repair --porcelain has always printed.
+type repairRecord struct {
+	Status string `json:"status" yaml:"status" table:"status" jsonschema:"enum=ok,enum=repaired,description=repaired when the plan changes this worktree (applied unless --dry-run); ok when it needs nothing"`
+	Path   string `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the worktree"`
+	Kind   string `json:"kind" yaml:"kind" table:"kind" jsonschema:"description=Action kind: noop/rewrite-gitdir/register/unregister/update-hopjson/record-base/restore-fetch-refspec"`
+	Old    string `json:"old" yaml:"old" table:"old" jsonschema:"description=Value before the action when the kind has one"`
+	New    string `json:"new" yaml:"new" table:"new" jsonschema:"description=Value after the action when the kind has one"`
+	Reason string `json:"reason" yaml:"reason" jsonschema:"description=Why the planner chose this action"`
+}
+
 // declareOutputSchema publishes shape as cmd's output schema. The
 // declaration is also what opts cmd into structured output: the root only
 // honours --format/--json/--porcelain for commands that declare one.

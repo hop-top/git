@@ -31,45 +31,78 @@ import (
 // state.json save is skipped, and pruneOrphanedHubBranches is handed
 // dryRun so it neither rewrites hop.json nor takes a backup snapshot — a
 // backup is itself a write, and a preview must leave no trace.
-func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath string, opts doctorOpts) int {
+//
+// Each repair is recorded in r as it lands (or would); the returned count
+// is what the caller adds to r.fixed.
+func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath string, opts doctorOpts, r *doctorReport) int {
 	dryRun := !opts.mutating()
+	// The repairs are recorded on a scratch report and folded into r
+	// below, once their outcome is known: a state save that fails turns
+	// every state repair into a failure.
+	var fixes doctorReport
 
 	output.Info("\nFixing missing worktrees...")
-	missingFixed := fixMissingWorktrees(fs, g, st, dryRun)
+	missingFixed := fixMissingWorktrees(fs, g, st, opts, &fixes)
 
 	output.Info("\nPruning remaining orphaned entries from state...")
 	worktreesPruned := pruneOrphanedWorktrees(fs, st, dryRun)
 	hubsPruned := pruneOrphanedHubs(fs, st, dryRun)
+	for _, p := range append(worktreesPruned, hubsPruned...) {
+		recordStatePrune(&fixes, opts, p)
+	}
 
 	fixed := missingFixed
-	if missingFixed > 0 || worktreesPruned > 0 || hubsPruned > 0 {
+	if missingFixed > 0 || len(worktreesPruned) > 0 || len(hubsPruned) > 0 {
 		switch {
 		case dryRun:
 			output.Info("[dry-run] Would prune %d worktree(s) and %d hub(s) from state",
-				worktreesPruned, hubsPruned)
-			fixed += worktreesPruned + hubsPruned
+				len(worktreesPruned), len(hubsPruned))
+			fixed += len(worktreesPruned) + len(hubsPruned)
 		default:
 			if err := state.SaveState(fs, st); err != nil {
 				output.Error("Failed to save state: %v", err)
+				for i := range fixes.records {
+					fixes.records[i].Kind = doctorKindFailed
+					fixes.records[i].Message += ": save state: " + err.Error()
+				}
 			} else {
-				output.Info("✓ Pruned %d worktree(s) and %d hub(s) from state", worktreesPruned, hubsPruned)
-				fixed += worktreesPruned + hubsPruned
+				output.Info("✓ Pruned %d worktree(s) and %d hub(s) from state", len(worktreesPruned), len(hubsPruned))
+				fixed += len(worktreesPruned) + len(hubsPruned)
 			}
 		}
 	}
 
 	if scoped := stateScopedToHub(hubPath); scoped != nil {
-		if rows := pruneOrphanedHubBranches(fs, g, scoped, dryRun); rows > 0 {
+		if rows := pruneOrphanedHubBranches(fs, g, scoped, dryRun); len(rows) > 0 {
 			if dryRun {
-				output.Info("[dry-run] Would prune %d hop.json entry(ies) from %s", rows, hubPath)
+				output.Info("[dry-run] Would prune %d hop.json entry(ies) from %s", len(rows), hubPath)
 			} else {
-				output.Info("✓ Pruned %d hop.json entry(ies) from %s", rows, hubPath)
+				output.Info("✓ Pruned %d hop.json entry(ies) from %s", len(rows), hubPath)
 			}
-			fixed += rows
+			for _, p := range rows {
+				recordStatePrune(&fixes, opts, p)
+			}
+			fixed += len(rows)
 		}
 	}
 
+	r.records = append(r.records, fixes.records...)
 	return fixed
+}
+
+// recordStatePrune records one entry doctor's state repair prunes. The
+// subject names the entry the way the state check reported it:
+// repository:branch for a worktree, the path for a hub, the branch for a
+// hop.json entry.
+func recordStatePrune(r *doctorReport, opts doctorOpts, p pruneRecord) {
+	switch p.Kind {
+	case pruneKindWorktree:
+		r.repaired(opts, doctorCheckState, p.Repository+":"+p.Branch, "prune worktree entry from state")
+	case pruneKindHub:
+		r.repaired(opts, doctorCheckState, p.Path, "prune hub entry from state")
+	case pruneKindHopJSONEntry:
+		r.repaired(opts, doctorCheckState, p.Branch, "prune hop.json entry")
+	}
 }
 
 // fixMissingWorktrees handles worktrees whose paths no longer exist on disk.
@@ -81,7 +114,10 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 // Under dryRun the entry is reported but st is left untouched, and the
 // user is never prompted: a preview must not ask for decisions it will
 // then discard.
-func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) int {
+//
+// Each resolved entry is recorded in r.
+func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts doctorOpts, r *doctorReport) int {
+	dryRun := !opts.mutating()
 	resolved := 0
 
 	for repoID, repo := range st.Repositories {
@@ -101,6 +137,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dryRu
 				if merged {
 					output.Info("  [dry-run] Would remove entry: branch '%s' is merged into '%s'",
 						branch, repo.DefaultBranch)
+					r.repaired(opts, doctorCheckState, repoID+":"+branch, "remove entry: branch is merged into %s", repo.DefaultBranch)
 					resolved++
 				} else {
 					output.Info("  [dry-run] Would prompt to relocate, delete, or keep entry for '%s'", branch)
@@ -111,6 +148,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dryRu
 			if merged {
 				output.Info("  Branch '%s' is merged into '%s' — auto-removing entry.", branch, repo.DefaultBranch)
 				delete(repo.Worktrees, branch)
+				r.repaired(opts, doctorCheckState, repoID+":"+branch, "remove entry: branch is merged into %s", repo.DefaultBranch)
 				resolved++
 				continue
 			}
@@ -140,11 +178,13 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dryRu
 				wt.Path = newPath
 				repo.Worktrees[branch] = wt
 				output.Info("  ✓ Updated path to %s", newPath)
+				r.repaired(opts, doctorCheckState, repoID+":"+branch, "relocate entry to %s", newPath)
 				resolved++
 
 			case 1: // delete
 				delete(repo.Worktrees, branch)
 				output.Info("  ✓ Deleted entry for '%s'", branch)
+				r.repaired(opts, doctorCheckState, repoID+":"+branch, "delete entry")
 				resolved++
 
 			default: // skip / invalid

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
 
 	"github.com/spf13/afero"
@@ -88,7 +89,15 @@ silently cancelling.`,
 			output.Fatal("Failed to run garbage collection: %v", err)
 		}
 
+		// Sizes and last use are read now: once deleted, neither is left
+		// to read.
+		records := envGCRecords(fs, depsManager.Registry, hopspacePath, orphaned)
+
 		if len(orphaned) == 0 {
+			if output.IsStructured() {
+				emitResult(cmd, records)
+				return
+			}
 			output.Info("\n✓ No orphaned dependencies found. Everything is clean!")
 			return
 		}
@@ -124,6 +133,10 @@ silently cancelling.`,
 		output.Info("\nTotal reclaimable: %.1fMB", totalSizeMB)
 
 		if gcDryRun {
+			if output.IsStructured() {
+				emitResult(cmd, records)
+				return
+			}
 			output.Info("\n(Dry run - no changes made)")
 			return
 		}
@@ -139,10 +152,62 @@ silently cancelling.`,
 			output.Fatal("Failed to delete orphaned dependencies: %v", err)
 		}
 
+		if output.IsStructured() {
+			emitResult(cmd, deletedEnvGCRecords(records, orphaned, hopspacePath))
+			return
+		}
+
 		totalSizeMB = float64(totalSize) / 1024 / 1024
 		output.Info("✓ Deleted %d orphaned dependencies", len(orphaned))
 		output.Info("✓ Reclaimed %.1fMB", totalSizeMB)
 	},
+}
+
+// envGCRecords describes the orphaned dependency directories as the
+// would-delete records of a preview, sorted by key. The slice is never
+// nil, so an empty result renders as [] rather than null.
+func envGCRecords(fs afero.Fs, registry *services.DepsRegistry, hopspacePath string, orphaned []string) []envGCRecord {
+	keys := append([]string(nil), orphaned...)
+	sort.Strings(keys)
+
+	records := make([]envGCRecord, 0, len(keys))
+	for _, key := range keys {
+		path := filepath.Join(hopspacePath, "deps", key)
+		r := envGCRecord{
+			Action: "would-delete",
+			Key:    key,
+			Size:   getDirSize(fs, path),
+			Path:   path,
+		}
+		if entry, ok := registry.Entries[key]; ok && !entry.LastUsed.IsZero() {
+			r.LastUsed = entry.LastUsed.UTC().Format(time.RFC3339)
+		}
+		records = append(records, r)
+	}
+	return records
+}
+
+// deletedEnvGCRecords marks the deleted keys' records as deleted, sorted
+// by key. Size and last use come from the preview taken before deletion;
+// a key that only became orphaned after the preview has neither.
+func deletedEnvGCRecords(preview []envGCRecord, deleted []string, hopspacePath string) []envGCRecord {
+	byKey := make(map[string]envGCRecord, len(preview))
+	for _, r := range preview {
+		byKey[r.Key] = r
+	}
+	keys := append([]string(nil), deleted...)
+	sort.Strings(keys)
+
+	records := make([]envGCRecord, 0, len(keys))
+	for _, key := range keys {
+		r, ok := byKey[key]
+		if !ok {
+			r = envGCRecord{Key: key, Path: filepath.Join(hopspacePath, "deps", key)}
+		}
+		r.Action = "deleted"
+		records = append(records, r)
+	}
+	return records
 }
 
 // confirmEnvGC gates the destructive half of `env gc`.
@@ -168,4 +233,5 @@ func init() {
 	envGcCmd.Flags().BoolVar(&gcForce, "force", false, "Skip confirmation prompt")
 	envGcCmd.Flags().BoolVar(&gcNoPrompt, "no-prompt", false, "Skip the confirmation prompt (non-interactive callers)")
 	envGcCmd.Flags().BoolVarP(&gcDryRun, "dry-run", "n", false, "Show what would be deleted without deleting")
+	declareOutputSchema(envGcCmd, &[]envGCRecord{})
 }

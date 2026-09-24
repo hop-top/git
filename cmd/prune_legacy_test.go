@@ -57,7 +57,7 @@ func TestPruneRepairBackups_RemovesOldBackupsInStateDir(t *testing.T) {
 	require.NoError(t, fs.MkdirAll(recent, 0755))
 	ageDir(t, fs, old)
 
-	pruned := pruneRepairBackups(fs, mocks.NewMockGit(), singleHubState(hubPath), false)
+	pruned := len(pruneRepairBackups(fs, mocks.NewMockGit(), singleHubState(hubPath), false))
 
 	assert.Equal(t, 1, pruned)
 	exists, _ := afero.DirExists(fs, old)
@@ -78,7 +78,7 @@ func TestPruneRepairBackups_RemovesStaleLegacyLockAndEmptyDotHop(t *testing.T) {
 	ageDir(t, fs, legacyOld)
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(hubPath, ".hop", "repair.lock"), nil, 0644))
 
-	pruned := pruneRepairBackups(fs, mocks.NewMockGit(), singleHubState(hubPath), false)
+	pruned := len(pruneRepairBackups(fs, mocks.NewMockGit(), singleHubState(hubPath), false))
 
 	assert.Equal(t, 1, pruned)
 	exists, _ := afero.Exists(fs, filepath.Join(hubPath, ".hop"))
@@ -124,7 +124,7 @@ func TestPruneRepairBackups_MigratesUnexpiredLegacyBackups(t *testing.T) {
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(legacy, "hop.json"), []byte(`{"branches":{}}`), 0644))
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(legacy, "manifest.json"), []byte(`{"version":1,"id":"`+id+`","hubPath":"`+hubPath+`","files":{}}`), 0644))
 
-	pruned := pruneRepairBackups(fs, mocks.NewMockGit(), singleHubState(hubPath), false)
+	pruned := len(pruneRepairBackups(fs, mocks.NewMockGit(), singleHubState(hubPath), false))
 
 	assert.Equal(t, 0, pruned, "migration is not a prune")
 	exists, _ := afero.Exists(fs, filepath.Join(hubPath, ".hop"))

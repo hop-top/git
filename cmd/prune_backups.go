@@ -16,20 +16,20 @@ import (
 
 // pruneRepairBackups removes repair backup directories older than the
 // configured retention and retires the legacy <hub>/.hop/ footprint.
-// Returns the count of backups removed (or that would be removed when
-// dryRun is true); legacy tidying is reported but not counted.
+// Returns the backups removed (or that would be removed when dryRun is
+// true); legacy tidying is reported on stderr but not returned.
 //
 // Retention is read from `git config --get hop.repair.backupRetention`
 // from any in-scope hub; falls back to 30 days when unconfigured. The
 // value uses Go duration syntax (e.g. "720h" for 30 days, "168h" for 7).
-func pruneRepairBackups(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) int {
+func pruneRepairBackups(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
 	retention := repairBackupRetention(g, st)
 	cutoff := time.Now().Add(-retention)
-	pruned := 0
+	var pruned []pruneRecord
 	for _, repoID := range scopeRepoIDs(st) {
 		repo := st.Repositories[repoID]
 		for _, hub := range repo.Hubs {
-			pruned += pruneHubRepairBackups(fs, hub.Path, repoID, cutoff, dryRun)
+			pruned = append(pruned, pruneHubRepairBackups(fs, hub.Path, repoID, cutoff, dryRun)...)
 			retireLegacyRepairDir(fs, hub.Path, dryRun)
 		}
 	}
@@ -39,12 +39,12 @@ func pruneRepairBackups(fs afero.Fs, g git.GitInterface, st *state.State, dryRun
 // pruneHubRepairBackups applies retention to every backup root of one
 // hub: the state-dir root new snapshots go to and the legacy hub-local
 // root earlier releases wrote.
-func pruneHubRepairBackups(fs afero.Fs, hubPath, repoID string, cutoff time.Time, dryRun bool) int {
+func pruneHubRepairBackups(fs afero.Fs, hubPath, repoID string, cutoff time.Time, dryRun bool) []pruneRecord {
 	prefix := "Pruning"
 	if dryRun {
 		prefix = "[dry-run] Would prune"
 	}
-	pruned := 0
+	var pruned []pruneRecord
 	for _, root := range hop.RepairBackupRoots(hubPath) {
 		entries, err := afero.ReadDir(fs, root)
 		if err != nil {
@@ -62,7 +62,7 @@ func pruneHubRepairBackups(fs afero.Fs, hubPath, repoID string, cutoff time.Time
 			if !dryRun {
 				_ = fs.RemoveAll(path)
 			}
-			pruned++
+			pruned = append(pruned, newPruneRecord(pruneKindRepairBackup, repoID, "", path, dryRun))
 		}
 	}
 	return pruned

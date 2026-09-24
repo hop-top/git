@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -67,23 +69,84 @@ touched, no state or hop.json rewritten, and no backup snapshot taken.`,
 		}
 
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
-		runDoctor(fs, git.New(), cwd, doctorOpts{fix: doctorFix, dryRun: dryRun})
+		r := runDoctor(fs, git.New(), cwd, doctorOpts{fix: doctorFix, dryRun: dryRun})
+		if output.IsStructured() {
+			emitResult(cmd, r.records)
+		}
 	},
 }
 
 func init() {
 	cli.RootCmd.AddCommand(doctorCmd)
 	doctorCmd.Flags().BoolVar(&doctorFix, "fix", false, "Automatically fix issues")
+	declareOutputSchema(doctorCmd, &[]doctorRecord{})
 }
+
+// Checks doctor runs, as reported in doctorRecord.Check.
+const (
+	doctorCheckPaths        = "paths"
+	doctorCheckHub          = "hub"
+	doctorCheckDependencies = "dependencies"
+	doctorCheckWorktrees    = "worktrees"
+	doctorCheckState        = "state"
+)
+
+// Kinds of doctor record; see doctorRecord.Kind.
+const (
+	doctorKindIssue    = "issue"
+	doctorKindWarning  = "warning"
+	doctorKindFixed    = "fixed"
+	doctorKindWouldFix = "would-fix"
+	doctorKindFailed   = "failed"
+)
 
 // doctorReport accumulates the verdict across every check.
 //
 // fixed counts repairs that genuinely landed; under --dry-run it counts
 // repairs that would land. The summary distinguishes the two so a preview
 // never claims to have fixed anything.
+//
+// records is the structured result: every problem found and every repair
+// attempted, in the order the checks ran. The human report is printed as
+// the checks go; records carry the same findings for --format/--json/
+// --porcelain, where that report is suppressed.
 type doctorReport struct {
 	issuesFound bool
 	fixed       int
+	records     []doctorRecord
+}
+
+// record appends one record to the structured result.
+func (r *doctorReport) record(kind, check, subject, format string, args ...any) {
+	r.records = append(r.records, doctorRecord{
+		Kind:    kind,
+		Check:   check,
+		Subject: subject,
+		Message: fmt.Sprintf(format, args...),
+	})
+}
+
+// issue records a problem that makes the installation unhealthy.
+func (r *doctorReport) issue(check, subject, format string, args ...any) {
+	r.issuesFound = true
+	r.record(doctorKindIssue, check, subject, format, args...)
+}
+
+// repaired records and counts a repair that landed, or under --dry-run
+// would land. format names the repair itself ("create data directory");
+// the kind says whether it happened.
+func (r *doctorReport) repaired(opts doctorOpts, check, subject, format string, args ...any) {
+	kind := doctorKindFixed
+	if opts.planning() {
+		kind = doctorKindWouldFix
+	}
+	r.record(kind, check, subject, format, args...)
+	r.fixed++
+}
+
+// failed records a repair --fix attempted and could not make.
+func (r *doctorReport) failed(check, subject, format string, args ...any) {
+	r.record(doctorKindFailed, check, subject, format, args...)
 }
 
 // runDoctor executes every diagnostic and, when opts.fix is set, the
@@ -92,7 +155,8 @@ type doctorReport struct {
 // runDoctor exercises the same path a user gets — including whether each
 // call site honours --dry-run.
 func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doctorReport {
-	var r doctorReport
+	// Never nil, so a healthy run renders as [] rather than null.
+	r := doctorReport{records: []doctorRecord{}}
 
 	output.Info("Running git-hop diagnostics...")
 	if opts.planning() {
@@ -132,7 +196,7 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 		if exists, _ := afero.DirExists(fs, dir.path); exists {
 			continue
 		}
-		r.issuesFound = true
+		r.issue(doctorCheckPaths, dir.path, "%s directory does not exist", dir.name)
 
 		if !opts.fix {
 			output.Error("%s directory does not exist: %s", dir.name, dir.path)
@@ -140,14 +204,15 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 		}
 		if !opts.mutating() {
 			output.Info("[dry-run] Would create %s directory: %s", dir.name, dir.path)
-			r.fixed++
+			r.repaired(opts, doctorCheckPaths, dir.path, "create %s directory", dir.name)
 			continue
 		}
 		if err := fs.MkdirAll(dir.path, 0755); err != nil {
 			output.Error("Failed to create %s directory: %v", dir.name, err)
+			r.failed(doctorCheckPaths, dir.path, "create %s directory: %v", dir.name, err)
 		} else {
 			output.Info("✓ Created %s directory", dir.name)
-			r.fixed++
+			r.repaired(opts, doctorCheckPaths, dir.path, "create %s directory", dir.name)
 		}
 	}
 }
@@ -172,7 +237,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err != nil {
 		output.Error("Failed to load hopspace: %v", err)
-		r.issuesFound = true
+		r.issue(doctorCheckWorktrees, hopspacePath, "failed to load hopspace: %v", err)
 		return
 	}
 
@@ -182,6 +247,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 	orphanedDirs, err := validator.DetectOrphanedDirectories(hopspace)
 	if err != nil {
 		output.Error("Failed to detect orphaned directories: %v", err)
+		r.record(doctorKindIssue, doctorCheckWorktrees, hopspacePath, "failed to detect orphaned directories: %v", err)
 		return
 	}
 	if len(orphanedDirs) == 0 {
@@ -189,25 +255,26 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 		return
 	}
 
-	r.issuesFound = true
 	output.Error("Found %d orphaned directories", len(orphanedDirs))
 	for _, dir := range orphanedDirs {
 		output.Error("  - %s", dir)
+		fullPath := filepath.Join(hopspacePath, "hops", dir)
+		r.issue(doctorCheckWorktrees, fullPath, "orphaned directory")
 		if !opts.fix {
 			continue
 		}
-		fullPath := filepath.Join(hopspacePath, "hops", dir)
 		if !opts.mutating() {
 			output.Info("    [dry-run] Would remove %s", fullPath)
-			r.fixed++
+			r.repaired(opts, doctorCheckWorktrees, fullPath, "remove orphaned directory")
 			continue
 		}
 		output.Info("    Cleaning up...")
 		if err := cleanup.CleanupOrphanedDirectory(fullPath); err != nil {
 			output.Error("    Failed to remove: %v", err)
+			r.failed(doctorCheckWorktrees, fullPath, "remove orphaned directory: %v", err)
 		} else {
 			output.Info("    ✓ Removed")
-			r.fixed++
+			r.repaired(opts, doctorCheckWorktrees, fullPath, "remove orphaned directory")
 		}
 	}
 	if !opts.fix {
@@ -223,6 +290,7 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts
 	if err != nil {
 		output.Warn("Could not load state: %v", err)
 		output.Info("Run 'git hop migrate' if you have legacy data to migrate.")
+		r.record(doctorKindWarning, doctorCheckState, "state", "could not load state: %v; run 'git hop migrate' if you have legacy data to migrate", err)
 		return
 	}
 	if len(st.Repositories) == 0 {
@@ -230,20 +298,20 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts
 		return
 	}
 
-	stateIssues := checkStateConsistency(fs, st)
+	stateIssues := missingStateWorktrees(fs, st)
 	if len(stateIssues) == 0 {
 		output.Info("✓ State is consistent")
 		return
 	}
 
-	r.issuesFound = true
 	output.Info("Found %d state consistency issue(s):", len(stateIssues))
 	for _, issue := range stateIssues {
 		output.Error("  %s", issue)
+		r.issue(doctorCheckState, issue.repoID+":"+issue.branch, "worktree missing: %s", issue.path)
 	}
 
 	if opts.fix {
-		r.fixed += fixStateIssues(fs, g, st, hubPath, opts)
+		r.fixed += fixStateIssues(fs, g, st, hubPath, opts, r)
 	} else {
 		output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
 	}
@@ -307,15 +375,37 @@ func getDirSize(fs afero.Fs, path string) int64 {
 // checkStateConsistency verifies all worktrees in state exist on filesystem
 func checkStateConsistency(fs afero.Fs, st *state.State) []string {
 	var issues []string
+	for _, issue := range missingStateWorktrees(fs, st) {
+		issues = append(issues, issue.String())
+	}
+	return issues
+}
 
-	for repoID, repo := range st.Repositories {
-		for branch, wt := range repo.Worktrees {
+// stateIssue is a worktree recorded in state whose directory is gone.
+type stateIssue struct {
+	repoID, branch, path string
+}
+
+func (i stateIssue) String() string {
+	return "Worktree missing: " + i.repoID + ":" + i.branch + " at " + i.path
+}
+
+// missingStateWorktrees returns every worktree in st whose directory does
+// not exist, in repository then branch order.
+func missingStateWorktrees(fs afero.Fs, st *state.State) []stateIssue {
+	var issues []stateIssue
+	for _, repoID := range scopeRepoIDs(st) {
+		for branch, wt := range st.Repositories[repoID].Worktrees {
 			if exists, _ := afero.DirExists(fs, wt.Path); !exists {
-				issues = append(issues,
-					"Worktree missing: "+repoID+":"+branch+" at "+wt.Path)
+				issues = append(issues, stateIssue{repoID: repoID, branch: branch, path: wt.Path})
 			}
 		}
 	}
-
+	sort.SliceStable(issues, func(i, j int) bool {
+		if issues[i].repoID != issues[j].repoID {
+			return issues[i].repoID < issues[j].repoID
+		}
+		return issues[i].branch < issues[j].branch
+	})
 	return issues
 }
