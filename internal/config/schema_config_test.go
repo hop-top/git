@@ -18,7 +18,6 @@ func TestSchemaConfig_Defaults(t *testing.T) {
 
 	// Check defaults
 	assert.Equal(t, "github.com", cfg.Defaults.GitDomain)
-	assert.False(t, cfg.Defaults.AutoEnvStart)
 	assert.Equal(t, "${EDITOR}", cfg.Defaults.Editor)
 	assert.Equal(t, "${SHELL}", cfg.Defaults.Shell)
 
@@ -59,10 +58,9 @@ func TestLoadSchemaConfig_ExistingFile(t *testing.T) {
 	hookPath := "/path/to/hook.sh"
 	configData := SchemaConfig{
 		Defaults: DefaultsSchema{
-			GitDomain:    "gitlab.com",
-			AutoEnvStart: true,
-			Editor:       "vim",
-			Shell:        "/bin/zsh",
+			GitDomain: "gitlab.com",
+			Editor:    "vim",
+			Shell:     "/bin/zsh",
 		},
 		Output: OutputSchema{
 			Format:      "json",

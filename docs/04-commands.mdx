@@ -38,7 +38,10 @@ git hop file:///path/to/local/repo
 3. Creates hopspace under `$GIT_HOP_DATA_HOME/org/repo`
 4. Clones repo into hopspace (default branch only)
 5. Symlinks worktree back into hub
-6. Auto-starts environment if services defined
+6. Starts the new worktree's environment only when asked: `--env-start`,
+   `GIT_HOP_AUTO_ENV_START=true`, or `hop.autoEnvStart` (default `false`).
+   `--no-env-start` skips it for one clone. A failed start warns; the clone
+   still succeeds
 
 ### Output
 
@@ -69,7 +72,8 @@ git hop add [&lt;branch&gt;] --task &lt;id&gt; [flags]
 | `--from <ref>` | Start-point for a new branch: branch name, ref, SHA, or `initial` for the root commit. Defaults to the tip of the repo's default branch (or `hop.add.defaultStartPoint`). If the branch already exists locally, an explicit `--from` fast-forwards it to `<ref>` (setting the upstream when `<ref>` is a remote-tracking branch) and refuses when the local branch is ahead of or has diverged from `<ref>`; without `--from` the existing branch is used as-is. |
 | `--copy-ignored` / `--no-copy-ignored` | Copy the git-ignored local files from the fork-source worktree into the new one. Default follows `hop.add.copyIgnored` (`true`). |
 | `--task <id>` | Record a task id for the worktree as `branches.<branch>.task` in `hop.json`, export it to the add hooks as `GIT_HOP_TASK`, and include it as `task` in the `--format json` result. Metadata only: the id is never part of the branch name. Without `<branch>`, the branch is derived as `<type>/<slug>` from the task (see [Branch from a task](#branch-from-a-task)). |
-| `--dry-run` | Preview the branch, start-point, worktree path, task and hooks without writing anything or running any hook. |
+| `--env-start` / `--no-env-start` | Start the new worktree's environment once it exists, through the same code as `git hop env start`. Default follows `GIT_HOP_AUTO_ENV_START`, then `hop.autoEnvStart` (`false`). Skipped silently when the worktree has no environment; a failed start prints a warning and a hint, and add still exits 0. |
+| `--dry-run` | Preview the branch, start-point, worktree path, task, hooks and environment start without writing anything or running any hook. |
 
 ### Examples
 
@@ -98,8 +102,9 @@ git hop add --task T-42                       # branch derived from the task
 3. Creates the worktree at `hops/&lt;branch&gt;`
 4. Copies git-ignored local files from the fork-source worktree (see below)
 5. Links shared dependencies and generates deterministic ports and volumes
-6. Auto-starts environment (if configured)
-7. Points the `current` symlink at the new worktree
+6. Points the `current` symlink at the new worktree
+7. Starts the environment, when asked (`--env-start` or `hop.autoEnvStart`)
+   and the worktree has one
 
 ### Branch from a task
 
@@ -185,7 +190,7 @@ git hop my-local-branch
 2. Creates hopspace (if missing) under `$GIT_HOP_DATA_HOME/org/repo`
 3. Creates worktree for specified branch
 4. Generates deterministic ports and volumes
-5. Auto-starts environment (if configured)
+5. Leaves the environment alone; start it with `git hop env start`
 
 ### Output
 

@@ -22,7 +22,8 @@ git-hop will:
 3. Create a hopspace under `$GIT_HOP_DATA_HOME/org/repo`
 4. Clone the repo into the hopspace (default branch only)
 5. Symlink the worktree back into the hub
-6. Auto-start the environment if services are defined
+6. Start the environment, if services are defined and you asked for it
+   (`--env-start`, or `git config --global hop.autoEnvStart true`; off by default)
 
 You'll see output like:
 

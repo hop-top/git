@@ -1,8 +1,13 @@
 Add a new worktree and environment for a branch.
 
 Creates the branch (if missing) from the start-point, checks it out under
-hops/<branch>, sets up shared dependencies, and starts the environment if
-configured.
+hops/<branch>, and sets up shared dependencies.
+
+The environment is not started unless asked: --env-start starts it once
+the worktree exists, through the same code as 'git hop env start'. 'git
+config hop.autoEnvStart true' (or GIT_HOP_AUTO_ENV_START=true) makes that
+the default; --no-env-start skips it for one run. A worktree without an
+environment is skipped, and a failed start only warns: add still succeeds.
 
 An existing branch is checked out as-is unless --from is given. With
 --from it must end up at that start-point: it is fast-forwarded when at or
@@ -40,9 +45,9 @@ a standing choice; --fetch / --no-fetch decide for one run. When the
 fetch was asked for (--fetch, hop.add.fetch true) a failure is fatal; the
 automatic one only warns and carries on from the refs already present.
 
-With --dry-run, add reports the fetch, branch, start-point, worktree path
-and hooks it would run, then stops: nothing is fetched, created or written
-and no hook runs.
+With --dry-run, add reports the fetch, branch, start-point, worktree path,
+hooks and environment start it would run, then stops: nothing is fetched,
+created or written and no hook runs.
 
 Usage:
   git-hop add [branch] [flags]
@@ -52,10 +57,12 @@ Aliases:
 
 Flags:
       --copy-ignored      copy git-ignored files from the source worktree into the new one (default true)
+      --env-start         start the new worktree's environment (default: hop.autoEnvStart)
       --fetch             fetch origin before resolving the start-point (default: when it is an origin ref)
       --from string       start-point: branch name, ref, SHA, or 'initial' for the root commit; an existing branch is fast-forwarded to it
   -h, --help              help for add
       --no-copy-ignored   do not copy git-ignored files into the new worktree
+      --no-env-start      do not start the new worktree's environment
       --no-fetch          do not fetch origin before resolving the start-point
       --task string       record a task id for the worktree (metadata only); without <branch>, derive the branch from the task via tlc
 

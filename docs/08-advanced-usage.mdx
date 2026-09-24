@@ -277,12 +277,11 @@ git hop feature-x
 
 1. **Use Docker volumes**: Avoid rebuilding images
 2. **Pre-build images**: Build images once, reuse across branches
-3. **Disable auto-start**: Start services only when needed
+3. **Leave auto-start off**: Start services only when needed. It is off
+   by default; if you turned it on, turn it off again with
 
 ```bash tab="Config"
-{
-  "auto_env_start": false
-}
+git config --global hop.autoEnvStart false
 ```
 
 ### Reduce Disk Usage

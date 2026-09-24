@@ -27,7 +27,7 @@ Then git-hop is exactly the tool built for you.
 - **Git-native**: `git hop` behaves like standard Git commands
 - **Isolated environments**: Each branch gets its own ports, volumes, and networks
 - **Deterministic allocation**: Same branch = same ports (reproducible anywhere)
-- **Service orchestration**: Auto-start Docker services when definitions exist
+- **Service orchestration**: Start a worktree's Docker services with `git hop env start`, or automatically on add/clone with `hop.autoEnvStart`
 - **Zero config needed**: Works out of the box for most use cases
 - **Self-healing**: `git hop doctor` detects and fixes inconsistencies
 

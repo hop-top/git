@@ -298,6 +298,11 @@ Worktree Mode:
 				projectPath = args[1]
 			}
 
+			if err != nil {
+				globalCfg = globalLoader.GetDefaults()
+			}
+			startEnv := DecideAutoEnvStart(NegatableFlag(cmd, "env-start", cloneEnvStartFlag, cloneNoEnvStartFlag), globalCfg)
+
 			hookOpts := hop.HookMirrorOptions{
 				Mode:      hooksMode,
 				Overwrite: hooksOverwrite,
@@ -314,7 +319,11 @@ Worktree Mode:
 			// feature read as inert on a fresh install. The refresh lives
 			// here rather than inside CloneWorktree because internal/shell
 			// imports internal/hop; the reverse import would cycle.
-			refreshRootsCacheAt(fs, cloneHubPath(expandedArg, projectPath))
+			clonedHub := cloneHubPath(expandedArg, projectPath)
+			refreshRootsCacheAt(fs, clonedHub)
+			if startEnv {
+				startClonedEnv(fs, clonedHub, globalCfg)
+			}
 			return
 		}
 
@@ -421,6 +430,7 @@ Worktree Mode:
 	RootCmd.Flags().String("branch", "", "branch name for fork-attach mode")
 	RootCmd.Flags().StringVar(&hooksMode, "hooks", "", "mirror committed .git-hop/hooks/ on clone: symlink|copy|prompt|none (default: prompt)")
 	RootCmd.Flags().BoolVar(&hooksOverwrite, "hooks-overwrite", false, "overwrite an existing hopspace hook with different content (symlink/copy modes)")
+	AddEnvStartFlags(RootCmd.Flags(), &cloneEnvStartFlag, &cloneNoEnvStartFlag)
 
 	RootCmd.Flags().BoolVar(&adminMode, "admin", false, "")
 	RootCmd.Flags().MarkHidden("admin")

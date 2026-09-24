@@ -25,17 +25,18 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.2"
+const resultSchemaVersion = "1.3"
 
 // addResult is the result of `git hop add`.
 type addResult struct {
-	Branch   string         `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch checked out in the new worktree"`
-	Path     string         `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the new worktree"`
-	Base     string         `json:"base" yaml:"base" table:"base" jsonschema:"description=Branch that status and list compare this worktree against"`
-	Upstream string         `json:"upstream" yaml:"upstream" table:"upstream" jsonschema:"description=Upstream the branch tracks (for example origin/main); empty when it tracks none"`
-	Created  bool           `json:"created" yaml:"created" table:"created" jsonschema:"description=True when this run created the local branch; false when an existing local branch was checked out"`
-	Ports    map[string]int `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service when the worktree has a Docker environment"`
-	Task     string         `json:"task,omitempty" yaml:"task,omitempty" jsonschema:"description=Task id recorded for the worktree with --task; absent when none"`
+	Branch     string         `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch checked out in the new worktree"`
+	Path       string         `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the new worktree"`
+	Base       string         `json:"base" yaml:"base" table:"base" jsonschema:"description=Branch that status and list compare this worktree against"`
+	Upstream   string         `json:"upstream" yaml:"upstream" table:"upstream" jsonschema:"description=Upstream the branch tracks (for example origin/main); empty when it tracks none"`
+	Created    bool           `json:"created" yaml:"created" table:"created" jsonschema:"description=True when this run created the local branch; false when an existing local branch was checked out"`
+	Ports      map[string]int `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service when the worktree has a Docker environment"`
+	Task       string         `json:"task,omitempty" yaml:"task,omitempty" jsonschema:"description=Task id recorded for the worktree with --task; absent when none"`
+	EnvStarted bool           `json:"env_started,omitempty" yaml:"env_started,omitempty" jsonschema:"description=True when add started the worktree's environment (--env-start or hop.autoEnvStart); absent otherwise"`
 }
 
 // statusRecord is one worktree row of `git hop status`. Every status view
@@ -159,13 +160,14 @@ func branchUpstream(g git.GitInterface, dir string) string {
 
 // newAddResult assembles the add result once the worktree is registered
 // in the hub, so base reflects what status and list will report for it.
-func newAddResult(g git.GitInterface, hub *hop.Hub, branch, worktreePath string, created bool, ports *config.BranchPorts) addResult {
+func newAddResult(g git.GitInterface, hub *hop.Hub, branch, worktreePath string, created bool, ports *config.BranchPorts, envStarted bool) addResult {
 	res := addResult{
-		Branch:   branch,
-		Path:     worktreePath,
-		Base:     hub.Config.Repo.DefaultBranch,
-		Upstream: branchUpstream(g, worktreePath),
-		Created:  created,
+		Branch:     branch,
+		Path:       worktreePath,
+		Base:       hub.Config.Repo.DefaultBranch,
+		Upstream:   branchUpstream(g, worktreePath),
+		Created:    created,
+		EnvStarted: envStarted,
 	}
 	if b, ok := hub.Config.Branches[branch]; ok {
 		res.Base = resolveCompareBranch(hub.Config, b)

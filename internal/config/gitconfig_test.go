@@ -180,9 +180,10 @@ func TestOrDefaultFallbacks(t *testing.T) {
 
 	gc := &GitConfig{RunCmd: runCmd}
 
-	// Bool default
-	if v := gc.GetBoolOrDefault(KeyAutoEnvStart); !v {
-		t.Fatal("expected default true for autoEnvStart")
+	// Bool default: a key whose default is true, so the fallback is
+	// distinguishable from the zero value.
+	if v := gc.GetBoolOrDefault(KeyConventionWarning); !v {
+		t.Fatal("expected default true for conventionWarning")
 	}
 
 	// String default

@@ -392,9 +392,6 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 				"exists": true,
 			},
 		},
-		"settings": map[string]interface{}{
-			"autoEnvStart": true,
-		},
 	}
 
 	content, err := json.MarshalIndent(hopConfig, "", "  ")

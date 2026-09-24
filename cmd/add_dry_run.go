@@ -23,6 +23,7 @@ type addPlan struct {
 	defaultBranch string
 	fetch         bool
 	task          string
+	envStart      bool
 }
 
 // addHooks are the lifecycle hooks add dispatches, in order.
@@ -57,6 +58,9 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	}
 
 	output.Info("[dry-run] Would register '%s' in hop.json and point 'current' at it", p.branch)
+	if p.envStart {
+		output.Info("[dry-run] Would start environment (when the worktree has one)")
+	}
 }
 
 // previewBranch reports how add links or creates the branch when the

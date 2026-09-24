@@ -41,7 +41,7 @@ const (
 // is derived from it. A key missing here defaults to its zero value.
 var defaults = map[string]string{
 	KeyGitDomain:              "github.com",
-	KeyAutoEnvStart:           "true",
+	KeyAutoEnvStart:           "false",
 	KeyWorktreeLocation:       "{hubPath}/hops/{branch}",
 	KeyAddDefaultStartPoint:   "default-branch",
 	KeyAddCopyIgnored:         "true",

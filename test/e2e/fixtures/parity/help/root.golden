@@ -33,6 +33,7 @@ Flags:
       --branch string       branch name for fork-attach mode
       --config string       config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
   -n, --dry-run             preview changes without applying
+      --env-start           start the new worktree's environment (default: hop.autoEnvStart)
       --force               bypass safety checks
       --format string       Output format (csv, human, json, table, text, yaml) (default "table")
       --git-domain string   Git domain for shorthand notation (e.g., github.com, gitlab.com)
@@ -44,6 +45,7 @@ Flags:
       --hooks-overwrite     overwrite an existing hopspace hook with different content (symlink/copy modes)
       --json                output in JSON format
       --no-color            Disable ANSI color
+      --no-env-start        do not start the new worktree's environment
       --no-hints            Suppress next-step hints after command output
       --offline             Disable network access. Highest-precedence override: flips off per-command network opt-ins (peer discovery, sync, GitHub, push). Enforced beneath net/http and any client routed through netpolicy.GuardDial; loopback and diagnostics stay exempt.
       --porcelain           machine-readable output

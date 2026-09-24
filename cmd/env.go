@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 
@@ -69,83 +70,43 @@ func runEnvCommand(action string) {
 		globalConfig = globalLoader.GetDefaults()
 	}
 
-	// Load environment managers
-	managers, err := services.LoadEnvManagers(globalConfig)
-	if err != nil {
-		output.Fatal("Failed to load environment managers: %v", err)
-	}
-
-	// Try to find hub and get repo config
-	var hubConfig *config.HubConfig
-	var repoPath string
-	var branch string
-	var org, repo string
-	hubPath, err := hop.FindHub(fs, cwd)
-	if err == nil {
-		hub, err := hop.LoadHub(fs, hubPath)
-		if err == nil {
-			hubConfig = hub.Config
-			org = hub.Config.Repo.Org
-			repo = hub.Config.Repo.Repo
-			repoPath = hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
-			// Get branch name from git
-			branch, _ = g.GetCurrentBranch(root)
-		}
-	}
-
-	// Detect which environment manager to use
-	manager, err := services.DetectEnvManager(root, hubConfig, managers)
-	if err != nil {
-		output.Fatal("Failed to detect environment manager: %v", err)
-	}
-
-	if manager == nil {
-		output.Info("No environment manager detected, skipping")
-		return
-	}
-
-	output.Info("Environment Manager: %s", manager.Name)
-
-	// Compute override path from cache (if it exists)
-	var overridePath string
-	if org != "" && repo != "" && branch != "" {
-		candidate := hop.GetComposeOverrideCachePath(org, repo, branch)
-		if _, err := os.Stat(candidate); err == nil {
-			overridePath = candidate
+	// Hub context is optional: outside a hub the worktree's own files
+	// still select a manager.
+	target := services.EnvTarget{Root: root}
+	if hubPath, err := hop.FindHub(fs, cwd); err == nil {
+		if hub, err := hop.LoadHub(fs, hubPath); err == nil {
+			target.Hub = hub.Config
+			target.HopspacePath = hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
+			target.Branch, _ = g.GetCurrentBranch(root)
 		}
 	}
 
 	switch action {
 	case "start":
-		// Setup dependencies before starting services
-		if repoPath != "" && branch != "" {
-			output.Info("Ensuring dependencies...")
-			depsManager, err := services.NewDepsManager(fs, repoPath, globalConfig)
-			if err != nil {
-				output.Warn("Failed to initialize dependency manager: %v", err)
-			} else {
-				if err := depsManager.EnsureDeps(root, branch); err != nil {
-					output.Warn("Failed to ensure dependencies: %v", err)
-				} else {
-					output.Info("Dependencies ready.")
-				}
-			}
+		err := services.StartEnv(fs, target, globalConfig, cli.EventBus)
+		if errors.Is(err, services.ErrNoEnvironment) {
+			output.Info("No environment manager detected, skipping")
+			return
 		}
-
-		if err := manager.Start(root, branch, repoPath, hubConfig, overridePath); err != nil {
+		if err != nil {
 			output.Fatal("Failed to start environment: %v", err)
 		}
-		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
-			events.EnvStarted, events.Source,
-			events.EnvEvent{Action: "start", Root: root, Branch: branch},
-		))
 	case "stop":
-		if err := manager.Stop(root, branch, repoPath, hubConfig, overridePath); err != nil {
+		manager, overridePath, err := services.ResolveEnv(target, globalConfig)
+		if err != nil {
+			output.Fatal("Failed to detect environment manager: %v", err)
+		}
+		if manager == nil {
+			output.Info("No environment manager detected, skipping")
+			return
+		}
+		output.Info("Environment Manager: %s", manager.Name)
+		if err := manager.Stop(root, target.Branch, target.HopspacePath, target.Hub, overridePath); err != nil {
 			output.Fatal("Failed to stop environment: %v", err)
 		}
 		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
 			events.EnvStopped, events.Source,
-			events.EnvEvent{Action: "stop", Root: root, Branch: branch},
+			events.EnvEvent{Action: "stop", Root: root, Branch: target.Branch},
 		))
 	}
 }
