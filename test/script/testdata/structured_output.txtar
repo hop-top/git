@@ -131,10 +131,61 @@ stderr 'unknown column .{0,2}"nope'
 stderr 'unknown column .{0,2}"nope'
 ! exists $WORK/hub/hops/feat/porcelain-cols
 
-# --- status views without a structured shape refuse instead of going silent ---
-! exec git-hop status --all --format json
-stderr 'not supported'
+# --- status <branch>: the one matching record, same fields as status ---
+exec git-hop status feat/json --format json
+decode json stdout '#' 1
+decode json stdout 0.branch feat/json
+decode json stdout 0.base main
+decode json stdout 0.state Linked
+decode json stdout 0.status synced
+decode json stdout 0.path '~/hops/feat/json$'
+! decode json stdout 0.repository
+! stdout 'Environment:'
+
+exec git-hop status main --porcelain
+stdout '^main\tmain\tLinked\tdefault\t\S+/hops/main$'
+! stdout 'Environment:'
+
+! exec git-hop status nope --json
+stderr 'nope not found'
 ! stdout .
+
+# --- status --all: every tracked repository's worktrees, with repository ---
+exec git init --bare $WORK/repo2.git
+exec git clone $WORK/repo2.git $WORK/seed2
+cd $WORK/seed2
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo2.git hub2
+cd $WORK/hub
+
+exec git-hop status --all --format json
+decode json stdout '#' 7
+decode json stdout 0.repository '~/repo$'
+decode json stdout 0.branch feat/human
+decode json stdout 0.state Linked
+decode json stdout 0.status synced
+decode json stdout 6.repository '~/repo2$'
+decode json stdout 6.branch main
+decode json stdout 6.status default
+! stdout 'System Status'
+! stdout 'Data Home'
+
+exec git-hop status --all --format yaml
+decode yaml stdout 6.repository '~/repo2$'
+
+# repository is json/yaml only: the columnar formats keep status's columns.
+exec git-hop status --all --format csv
+stdout '^branch,base,state,status,path$'
+exec git-hop status --all --porcelain
+stdout '^main\tmain\tLinked\tdefault\t\S+/hub2/hops/main$'
+
+# Outside any hub --all still answers: it is the system-wide view.
+cd $WORK
+exec git-hop status --all --json
+decode json stdout '#' 7
+cd $WORK/hub
 
 -- post-worktree-add --
 #!/bin/sh
