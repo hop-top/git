@@ -211,6 +211,10 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 		fmt.Println("  3. Create hop.json configuration")
 		fmt.Println("  4. Register in global registry")
 
+		if useBare {
+			previewInitWorktreeAdd(fs, g, repoPath, branch)
+		}
+
 		fmt.Println("\nTo proceed with conversion, run:")
 		fmt.Println("  git hop init")
 		return
@@ -321,6 +325,13 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 		hookInstallPath = mainWorktreePath
 	}
 	mirrorInitHooks(fs, g, hookInstallPath, repoPath, initHooksMode, initHooksOverwrite, noHooks)
+
+	// After the mirror, as clone does: a committed hook then applies to
+	// the worktree that carried it. A regular conversion creates no
+	// worktree (the repo root stays the working tree), so nothing fires.
+	if mainWorktreePath != "" && !isRegularRepo {
+		dispatchInitWorktreeAdd(fs, g, repoPath, mainWorktreePath, currentBranchName)
+	}
 
 	if enableChdir {
 		if err := maybeInstallShellIntegration(fs, true); err != nil {
@@ -498,26 +509,11 @@ func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath str
 	}
 	resolved := hooks.ResolveMode(mode, envMode, configured)
 
-	// Resolve org/repo from remote URL to build the 3-part repoID.
-	org, repo := "", ""
-	if g != nil {
-		if remoteURL, err := g.GetRemoteURL(repoPath); err == nil && remoteURL != "" {
-			org, repo = hop.ParseRepoFromURL(remoteURL)
-		}
-	}
-	if org == "" || repo == "" {
-		// Fall back to local path naming (matches registerAsIs behaviour).
-		abs, err := filepath.Abs(repoPath)
-		if err == nil {
-			repo = filepath.Base(abs)
-			org = filepath.Base(filepath.Dir(abs))
-		}
-	}
-	if org == "" || repo == "" {
+	repoID := initRepoID(g, repoPath)
+	if repoID == "" {
 		fmt.Fprintln(os.Stderr, "warning: could not determine org/repo for hook mirror; skipping")
 		return
 	}
-	repoID := fmt.Sprintf("github.com/%s/%s", org, repo)
 
 	mopts := hooks.MirrorOpts{
 		WorktreePath: worktreePath,
