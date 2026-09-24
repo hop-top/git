@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/pflag"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/docker"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/services"
@@ -45,19 +46,31 @@ func DecideAutoEnvStart(override *bool, globalCfg *config.GlobalConfig) bool {
 	return on
 }
 
-// startClonedEnv starts the environment of the worktree a clone just
-// checked out at the hub at hubPath. Like add, it never fails the clone.
-func startClonedEnv(fs afero.Fs, hubPath string, globalCfg *config.GlobalConfig) {
+// setUpClonedEnv prepares the environment of the worktree a clone just
+// checked out at the hub at hubPath, through the same path as add
+// (services.GenerateWorktreeEnv): ports, volumes, .env and compose
+// override. With start it then starts it. Like add, it never fails the
+// clone.
+func setUpClonedEnv(fs afero.Fs, hubPath string, globalCfg *config.GlobalConfig, start bool) {
 	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
-		services.WarnEnvNotStarted(err, hubPath)
+		output.Warn("failed to prepare environment: %v", err)
+		if start {
+			services.WarnEnvNotStarted(err, hubPath)
+		}
 		return
 	}
 	branch := hub.Config.Repo.DefaultBranch
-	services.StartNewWorktreeEnv(fs, services.EnvTarget{
+	target := services.EnvTarget{
 		Root:         resolveSwitchWorktreePath(hub.Config.Branches[branch], hubPath),
 		Branch:       branch,
 		HopspacePath: hop.ResolveHopspacePath(hubPath, hub.Config.Repo),
 		Hub:          hub.Config,
-	}, globalCfg, EventBus)
+	}
+	if _, err := services.GenerateWorktreeEnv(fs, docker.New(), target.HopspacePath, target.Root, branch, hub.Config.Repo.Org, hub.Config.Repo.Repo); err != nil {
+		output.Error("Failed to generate environment: %v", err)
+	}
+	if start {
+		services.StartNewWorktreeEnv(fs, target, globalCfg, EventBus)
+	}
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"path/filepath"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -155,52 +154,18 @@ var envGenerateCmd = &cobra.Command{
 			output.Fatal("Failed to load hopspace at %s: %v", hopspacePath, err)
 		}
 
-		// Load ports and volumes config
-		portsLoader := config.NewLoader(fs)
-		portsCfg, err := portsLoader.LoadPortsConfig(hopspacePath)
+		env, err := services.GenerateWorktreeEnv(fs, d, hopspacePath, root, branch, org, repo)
 		if err != nil {
-			portsCfg = &config.PortsConfig{
-				AllocationMode: "incremental",
-				BaseRange:      config.PortRange{Start: 10000, End: 20000},
-				Branches:       make(map[string]config.BranchPorts),
-			}
+			output.Fatal("Failed to generate environment: %v", err)
 		}
-
-		volsLoader := config.NewLoader(fs)
-		volsCfg, err := volsLoader.LoadVolumesConfig(hopspacePath)
-		if err != nil {
-			volsCfg = &config.VolumesConfig{
-				BasePath: filepath.Join(hopspacePath, "volumes"),
-				Branches: make(map[string]config.BranchVolumes),
-			}
-		}
-
-		if !d.HasDockerEnv(root) {
+		if env == nil {
 			output.Info("No Docker environment detected, skipping")
 			return
 		}
 
-		envMgr := services.NewEnvManager(fs, portsCfg, volsCfg, d)
-		branchPorts, branchVols, overridePath, err := envMgr.Generate(branch, root, org, repo)
-		if err != nil {
-			output.Fatal("Failed to generate environment: %v", err)
-		}
-
-		// Update configs
-		portsCfg.Branches[branch] = *branchPorts
-		volsCfg.Branches[branch] = *branchVols
-
-		writer := config.NewWriter(fs)
-		if err := writer.WritePortsConfig(hopspacePath, portsCfg); err != nil {
-			output.Error("Failed to save ports config: %v", err)
-		}
-		if err := writer.WriteVolumesConfig(hopspacePath, volsCfg); err != nil {
-			output.Error("Failed to save volumes config: %v", err)
-		}
-
 		output.Info("Environment generated for '%s'", branch)
-		if overridePath != "" {
-			output.Info("Override: %s", overridePath)
+		if env.OverridePath != "" {
+			output.Info("Override: %s", env.OverridePath)
 		}
 	},
 }

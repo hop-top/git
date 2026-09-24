@@ -321,9 +321,7 @@ Worktree Mode:
 			// imports internal/hop; the reverse import would cycle.
 			clonedHub := cloneHubPath(expandedArg, projectPath)
 			refreshRootsCacheAt(fs, clonedHub)
-			if startEnv {
-				startClonedEnv(fs, clonedHub, globalCfg)
-			}
+			setUpClonedEnv(fs, clonedHub, globalCfg, startEnv)
 			return
 		}
 
