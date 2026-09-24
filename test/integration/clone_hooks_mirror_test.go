@@ -228,14 +228,11 @@ func TestCloneDispatchesHooksInOrder(t *testing.T) {
 // TestClonePreCloneAnchoredOnProjectRoot covers the deliberate decision
 // about which path pre-clone receives.
 //
-// pre-clone fires before any worktree exists, and FindHookFile's
-// parent-directory walk climbs all the way to the filesystem root. Handing
-// the dispatch "" (or the caller's cwd) would let a stray
-// .git-hop/hooks/pre-clone in ANY ancestor of wherever the user happens to
-// be standing hijack the clone. Anchoring on the intended project root
-// keeps resolution deterministic — the walk starts at a directory that
-// does not yet exist, so pre-clone can only ever resolve at hopspace or
-// global level, which is the intended reach.
+// pre-clone fires before any worktree exists. Its GIT_HOP_WORKTREE_PATH
+// names the intended project root -- the directory the clone is about to
+// create -- rather than "" or the caller's cwd. Resolution does not depend
+// on it: pre-clone has no repo level, so only hopspace and global hooks
+// are consulted.
 func TestClonePreCloneAnchoredOnProjectRoot(t *testing.T) {
 	c := newCloneRecorder()
 	projectRoot := runRecordedClone(t, c)
@@ -257,9 +254,9 @@ func TestClonePreCloneAnchoredOnProjectRoot(t *testing.T) {
 }
 
 // TestClonePreCloneWalkCannotEscapeToAncestors is the concrete hazard
-// fixture: a pre-clone hook planted in an ancestor of the *process cwd*
-// but NOT an ancestor of the project root must never resolve. This is what
-// would break if the dispatch passed "" instead of the project root.
+// fixture: a stray .git-hop/hooks/pre-clone must never resolve, whether it
+// sits outside the project root's ancestry or directly above the anchor.
+// pre-clone has no repo level, so the parent walk is skipped entirely.
 func TestClonePreCloneWalkCannotEscapeToAncestors(t *testing.T) {
 	fs := afero.NewMemMapFs()
 
@@ -288,12 +285,21 @@ func TestClonePreCloneWalkCannotEscapeToAncestors(t *testing.T) {
 			found, projectRoot)
 	}
 
-	// Demonstrate the hazard is real rather than hypothetical: anchoring
-	// anywhere under /stray DOES reach it. This is why the anchor choice
-	// matters and is asserted above.
+	// Anchoring under /stray (a clone run from inside that tree) must not
+	// reach it either: the walk is skipped for pre-clone, not just aimed
+	// elsewhere.
 	inStray := filepath.Join("/stray", "somewhere", "deep")
-	if found := runner.FindHookFile("pre-clone", inStray, repoID); found != stray {
-		t.Errorf("sanity: walk from %q found %q; want %q", inStray, found, stray)
+	if found := runner.FindHookFile("pre-clone", inStray, repoID); found != "" {
+		t.Errorf("pre-clone resolved to %q from %q; expected no match", found, inStray)
+	}
+
+	// The walk itself is still live for hooks that have a repo level.
+	sibling := filepath.Join("/stray", ".git-hop", "hooks", "post-clone")
+	if err := afero.WriteFile(fs, sibling, []byte("#!/bin/sh\nexit 0\n"), 0755); err != nil {
+		t.Fatalf("write sibling: %v", err)
+	}
+	if found := runner.FindHookFile("post-clone", inStray, repoID); found != sibling {
+		t.Errorf("sanity: post-clone walk from %q found %q; want %q", inStray, found, sibling)
 	}
 }
 

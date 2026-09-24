@@ -44,13 +44,9 @@ type HookMirrorOptions struct {
 type HookDispatchOptions struct {
 	// PreClone fires before any filesystem work. A non-nil error aborts
 	// the clone. It receives the intended project root (not "" and not
-	// the caller's cwd) as its path argument: no worktree exists yet, and
-	// FindHookFile's parent walk climbs to the filesystem root, so an
-	// unanchored path would let a stray .git-hop/hooks/pre-clone in any
-	// ancestor of the user's cwd hijack the clone. Anchoring on the
-	// project root — a directory that does not yet exist — keeps the walk
-	// deterministic: it can only ever resolve at hopspace or global
-	// level, which is the intended reach for a pre-clone hook.
+	// the caller's cwd) as its path argument, a directory that does not
+	// exist yet. The hook runner resolves pre-clone at hopspace and
+	// global level only, since there is no repo on disk to hold one.
 	PreClone func(path, repoID, branch string) error
 	// PostWorktreeAdd fires after the initial worktree exists AND after
 	// the committed-hook mirror has run, so a repo-level hook carried by
@@ -91,8 +87,8 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	// pre-clone fires before any filesystem work, so a non-zero exit
 	// aborts before the directory-exists probe and the clone itself. The
 	// branch is not known yet (resolving it requires talking to the
-	// remote), so the hook sees an empty GIT_HOP_BRANCH. Anchored on
-	// projectRoot — see HookDispatchOptions.PreClone.
+	// remote), so the hook sees an empty GIT_HOP_BRANCH. See
+	// HookDispatchOptions.PreClone for the path it receives.
 	if dispatch.PreClone != nil {
 		if err := dispatch.PreClone(projectRoot, repoIDFor(org, repo), ""); err != nil {
 			return fmt.Errorf("pre-clone hook aborted clone: %w", err)
