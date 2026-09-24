@@ -201,6 +201,19 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		}
 		result.Warnings = append(result.Warnings, localConfig.relativeIncludeWarnings()...)
 
+		// Last before the swap deletes the old .git: same reason as the
+		// config above, and the carried hooks must not run on the
+		// conversion's own git commands.
+		worktreeGitDir, err := c.git.Run("git", "-C", defaultPath, "rev-parse", "--absolute-git-dir")
+		if err != nil {
+			return fmt.Errorf("failed to locate the git dir of the %s worktree: %w", defaultBranch, err)
+		}
+		gitDirWarnings, err := c.carryOverGitDir(repoPath, bareRepoPath, worktreeGitDir)
+		if err != nil {
+			return err
+		}
+		result.Warnings = append(result.Warnings, gitDirWarnings...)
+
 		if err := c.swapDirectories(parentDir, projectName, bareRepoPath); err != nil {
 			return fmt.Errorf("failed to swap directories: %w", err)
 		}
