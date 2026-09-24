@@ -904,16 +904,17 @@ published under `--dry-run`, and a failing sink never fails the command.
 
 ## Known limitations
 
-- **`git hop add --dry-run` still creates the worktree.** `cmd/add.go` does not read the flag at all — the worktree, port allocation, and both `worktree-add` hooks run as if `--dry-run` were not passed. Treat the flag as a no-op on `add`.
 - **`pre-env-start` / `post-env-start` / `pre-env-stop` / `post-env-stop` are accepted but never dispatched.** They validate, install, and mirror; nothing fires them. See [Two different hook systems](#two-different-hook-systems).
-- **`pre-repair` / `post-repair` resolve at the global level only** and receive no `GIT_HOP_*` variables, unlike every other hook. See [The repair hooks are different](#the-repair-hooks-are-different).
-- **`pre-clone` cannot resolve at repo level**, since no worktree exists when it runs. Hopspace and global only.
+- **`pre-clone` cannot resolve from the repo being cloned**, since that repo is not on disk when it runs. The parent walk still applies: it starts at the intended project root and climbs through the directory the clone runs from and every ancestor, so a `.git-hop/hooks/pre-clone` anywhere above the target fires.
 - **`FindHookFile`'s parent walk climbs to the filesystem root** — it does not stop at the hub or at `$HOME`. See [The parent-walk hazard](#the-parent-walk-hazard).
-- **Repo-level `post-worktree-remove` cannot fire**, because the file lived inside the worktree that was just deleted. Install it at hopspace or global level.
+- **Repo-level `post-worktree-remove` cannot fire from the removed worktree**, because the file lived inside the worktree that was just deleted. A hub-level `.git-hop/hooks/post-worktree-remove` still fires through the parent walk; otherwise install it at hopspace or global level.
+- **`git hop init` dispatches no lifecycle hooks.** It mirrors committed `.git-hop/hooks/` into the hopspace, but `post-worktree-add` does not fire for the worktree it creates.
 
-Resolved by the committed-hook mirror, previously listed here:
+Resolved, previously listed here:
 
-- ~~Repo-level `post-worktree-add` does not fire on the bootstrap worktree.~~ `git hop clone` and `git hop init` now mirror committed `.git-hop/hooks/` into the hopspace *before* dispatching `post-worktree-add`, so a hook carried by the clone applies to the worktree that carried it. The manual symlink is now `--hooks=symlink`. See [Committed-hook mirroring](#committed-hook-mirroring). The chicken-and-egg trap still applies to `git hop add <old-branch>` if you never mirrored — [Choosing a hook level](#choosing-a-hook-level) still stands as guidance.
+- ~~`git hop add --dry-run` still creates the worktree.~~ `add --dry-run` now previews the branch, worktree path, hooks it would run, and `hop.json` registration, then exits without writing anything: no worktree, branch, port allocation, or hook run.
+- ~~`pre-repair` / `post-repair` resolve at the global level only and receive no `GIT_HOP_*` variables.~~ Repair hooks now go through the shared runner: repo level (anchored on the hub), hopspace, then global, with the standard `GIT_HOP_*` variables. `GIT_HOP_WORKTREE_PATH` is the hub and `GIT_HOP_BRANCH` is empty.
+- ~~Repo-level `post-worktree-add` does not fire on the bootstrap worktree.~~ `git hop clone` now mirrors committed `.git-hop/hooks/` into the hopspace *before* dispatching `post-worktree-add`, so a hook carried by the clone applies to the worktree that carried it. The manual symlink is now `--hooks=symlink`. See [Committed-hook mirroring](#committed-hook-mirroring). The chicken-and-egg trap still applies to `git hop add <old-branch>` if you never mirrored — [Choosing a hook level](#choosing-a-hook-level) still stands as guidance.
 
 ## Implementation Details
 
