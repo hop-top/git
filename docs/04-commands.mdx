@@ -1001,16 +1001,19 @@ These flags work with all commands:
 |------|-------------|
 | `--format <format>` | Result format: `table`/`human` (default human view), `json`, `yaml`, `csv`, `text` |
 | `--json` | Same as `--format json` |
-| `--porcelain` | One tab-separated record per line, no header |
+| `--porcelain` | One tab-separated record per line, no header; cannot combine with `--json` or `--format` |
 | `--cols <list>` | Select and order columns of `csv`, `text`, `--porcelain` output |
-| `--quiet, -q` | Suppress output |
-| `--verbose, -v` | Enable verbose output |
-| `--force` | Force operation (use with caution) |
-| `--hub &lt;name|path&gt;` | Specify hub name or path |
-| `--hopspace &lt;name|path&gt;` | Specify hopspace name or path |
+| `--quiet, -q` | Suppress non-essential output |
+| `--verbose, -V` | Increase log verbosity; repeatable (`-V` debug, `-VV` trace) |
+| `--force` | Bypass safety checks (use with caution) |
+| `--global, -g` | Use the global hopspace in `$GIT_HOP_DATA_HOME` (default: local) |
+| `--config <file>` | Config file (default: `$XDG_CONFIG_HOME/git-hop/config.json`) |
 | `--dry-run, -n` | Show what would happen without making changes. A command that cannot preview itself (`env start`, `env stop`, `env generate`, clone) refuses the flag with exit 129 instead of running |
+| `--no-color` | Disable ANSI color |
+| `--no-hints` | Suppress next-step hints after command output |
+| `--offline` | Disable network access |
 | `--help, -h` | Show help for command |
-| `--version` | Show git-hop version |
+| `--version, -v` | Show git-hop version (top-level `git hop` only) |
 
 ## What's Next?
 

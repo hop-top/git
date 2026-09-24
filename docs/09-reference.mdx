@@ -18,14 +18,17 @@ Complete reference for git-hop commands, configuration, and APIs.
 | `--porcelain` | bool | One tab-separated record per line, no header. See [Structured Output](#structured-output) |
 | `--cols &lt;list&gt;` | string | Select and order the columns of `csv`, `text` and `--porcelain` output |
 | `--format-opt style=&lt;style&gt;` | string | Layout of `--format text`: `kv` (default), `lines` or `paragraph` |
-| `--quiet, -q` | bool | Suppress output |
-| `--verbose, -v` | bool | Enable verbose output |
-| `--force` | bool | Force operation (use with caution) |
-| `--hub &lt;name|path&gt;` | string | Specify hub name or path |
-| `--hopspace &lt;name|path&gt;` | string | Specify hopspace name or path |
-| `--dry-run` | bool | Show what would happen without making changes |
+| `--quiet, -q` | bool | Suppress non-essential output |
+| `--verbose, -V` | count | Increase log verbosity; repeatable (`-V` debug, `-VV` trace) |
+| `--force` | bool | Bypass safety checks (use with caution) |
+| `--global, -g` | bool | Use the global hopspace in `$GIT_HOP_DATA_HOME` (default: local) |
+| `--config &lt;file&gt;` | string | Config file (default: `$XDG_CONFIG_HOME/git-hop/config.json`) |
+| `--dry-run, -n` | bool | Show what would happen without making changes |
+| `--no-color` | bool | Disable ANSI color |
+| `--no-hints` | bool | Suppress next-step hints after command output |
+| `--offline` | bool | Disable network access |
 | `--help, -h` | bool | Show help for command |
-| `--version` | bool | Show git-hop version |
+| `--version, -v` | bool | Show git-hop version (top-level `git hop` only) |
 
 ### git hop `&lt;uri&gt;`
 
