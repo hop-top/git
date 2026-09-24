@@ -116,8 +116,9 @@ just like a single-target remove would.
 They sound similar but solve different problems:
 
 - **`git hop prune`** — removes orphan **state entries** (worktrees
-  and hubs whose paths are gone) and repair backups older than
-  `hop.repair.backupRetention`. It does not touch existing worktrees.
+  and hubs whose paths are gone), repair backups older than
+  `hop.repair.backupRetention`, and `git hop init` conversion backups
+  beyond `hop.backup.maxBackups` / `hop.backup.cleanupAgeDays`. It does not touch existing worktrees.
 - **`git hop remove`** — removes a specific worktree (or all merged
   ones with `--merged`). Touches the worktree on disk plus its state.
 - **`git hop env gc`** — reclaims orphaned dependency directories

@@ -32,6 +32,9 @@ type BackupManager struct {
 	metadata  *BackupMetadata
 	org       string
 	repo      string
+	// root is the directory conversion backups are kept under; empty
+	// means DefaultConversionBackupRoot().
+	root string
 }
 
 func NewBackupManager(fs afero.Fs, g git.GitInterface, org, repo string) (*BackupManager, error) {
@@ -49,8 +52,14 @@ func NewBackupManager(fs afero.Fs, g git.GitInterface, org, repo string) (*Backu
 
 func (b *BackupManager) CreateBackup(repoPath string) error {
 	timestamp := time.Now().Format("2006-01-02_15-04-05")
-	repoName := sanitizePath(b.org + "-" + b.repo)
-	b.backupDir = filepath.Join(GetCacheHome(), "git-hop", repoName, timestamp)
+	b.backupDir = filepath.Join(ConversionBackupDir(b.root, b.org, b.repo), timestamp)
+
+	// A backup inside the tree it copies would copy itself, and a bare
+	// conversion would then move it into the new worktree.
+	if pathWithin(b.backupDir, repoPath) {
+		return fmt.Errorf("backup location %s is inside the repository being converted (%s); set %s outside it",
+			b.backupDir, repoPath, "hop.backup.path")
+	}
 
 	if err := b.fs.MkdirAll(b.backupDir, 0755); err != nil {
 		return fmt.Errorf("failed to create backup directory: %w", err)
@@ -369,11 +378,14 @@ func LoadBackupManager(fs afero.Fs, g git.GitInterface, backupPath string) (*Bac
 	}, nil
 }
 
+// GetCacheBackupPath is the per-repository conversion backup directory
+// under the default root.
 func GetCacheBackupPath(org, repo string) string {
-	repoName := sanitizePath(org + "-" + repo)
-	return filepath.Join(GetCacheHome(), "git-hop", repoName)
+	return ConversionBackupDir("", org, repo)
 }
 
+// ListBackups lists the conversion backup directories of org/repo under
+// the default root.
 func ListBackups(fs afero.Fs, org, repo string) ([]string, error) {
 	backupBase := GetCacheBackupPath(org, repo)
 	entries, err := afero.ReadDir(fs, backupBase)

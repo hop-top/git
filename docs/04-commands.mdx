@@ -380,7 +380,7 @@ successful collection.
 > resolves to [`git hop prune`](#git-hop-prune), while
 > `git hop env cleanup` (under `env`) resolves to `git hop env gc`.
 > They sit at different levels of the command tree and do different
-> things — prune cleans state entries and repair backups, env gc
+> things — prune cleans state entries and aged-out backups, env gc
 > reclaims unused dependency directories.
 
 **Output:**
@@ -577,7 +577,7 @@ contacted (even with `--delete-remote`), and no prompt is shown.
 
 ## git hop prune
 
-Remove orphan state entries and aged-out repair backups. Aliased as
+Remove orphan state entries and aged-out repair and conversion backups. Aliased as
 `cleanup` and `clean` — `git hop prune`, `git hop cleanup`, and
 `git hop clean` are the same command.
 
@@ -636,7 +636,7 @@ as `repository not found`.
 
 ### What It Does
 
-For the repositories in scope, `prune` cleans up four classes of stale
+For the repositories in scope, `prune` cleans up five classes of stale
 data:
 
 - **Orphan worktrees** — state entries whose paths no longer exist on
@@ -653,6 +653,13 @@ data:
   repair state dir and in any legacy `<hub>/.hop/backups/`. See
   [git config Settings](./configuration.md#git-config-settings) for
   how to tune retention.
+- **Conversion backups beyond retention** — the backups
+  `git hop init` keeps (`--keep-backup`, `hop.backup.keepBackup`)
+  under `hop.backup.path` and the default cache root: those beyond the
+  newest `hop.backup.maxBackups` (default 3) of the repository, or
+  older than `hop.backup.cleanupAgeDays` (default 30). Backups of
+  failed conversions are never removed; prune names them in a `hint:`.
+  See [Conversion backups](./configuration.md#conversion-backups-hopbackup).
 
 Rewriting `hop.json` goes through the same backup mechanism
 `git hop repair` uses: the pre-prune file is snapshotted to

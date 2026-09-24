@@ -211,7 +211,7 @@ git hop remove &lt;target&gt; [flags]
 ### git hop prune
 
 Remove orphaned state entries, `hop.json` rows, and aged-out repair
-backups. Scoped to the current repository unless `--all` is given.
+and conversion backups. Scoped to the current repository unless `--all` is given.
 
 **Synopsis:**
 ```bash
@@ -367,12 +367,12 @@ Columns: `kind check subject message`.
 
 A list of the entries removed, or with `--dry-run` the entries that would
 be, in the order the passes run: hop.json entries, state worktrees, state
-hubs, repair backups.
+hubs, repair backups, conversion backups.
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `action` | string | `pruned`, or `would-prune` under `--dry-run` |
-| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired backup directory) |
+| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup) |
 | `repository` | string | Repository id the entry belongs to |
 | `branch` | string | Branch of a `worktree` or `hop-json-entry`; empty otherwise |
 | `path` | string | Worktree, hub or backup path the entry pointed at |

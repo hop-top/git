@@ -35,6 +35,9 @@ hub's hop.json, removing:
   - hop.json branch entries whose worktree directory is gone
     (the rows 'git hop status' reports as Missing)
   - Repair backups older than hop.repair.backupRetention
+  - Conversion backups 'git hop init' kept, beyond hop.backup.maxBackups
+    per repository or older than hop.backup.cleanupAgeDays (backups of
+    failed conversions are never removed)
 
 Every line naming a pruned entry is prefixed with the repository it
 belongs to, so a --all sweep shows exactly which repositories it touched.
@@ -126,11 +129,11 @@ func runPrune(cmd *cobra.Command, args []string) {
 	case counts.total() == 0:
 		output.Success("No orphaned entries found.")
 	case dryRun:
-		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), and %d repair backup(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups)
+		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), and %d conversion backup(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups)
 	default:
-		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), and %d repair backup(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups)
+		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), and %d conversion backup(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups)
 	}
 }
 
@@ -208,11 +211,13 @@ type pruneCounts struct {
 	hubs           int
 	hopJSONEntries int
 	repairBackups  int
-	records        []pruneRecord
+	// conversionBackups counts init's conversion backups aged out.
+	conversionBackups int
+	records           []pruneRecord
 }
 
 func (c pruneCounts) total() int {
-	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups
+	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups + c.conversionBackups
 }
 
 // runPruneAll performs every prune pass against st and returns the
@@ -226,17 +231,19 @@ func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) 
 	hopJSON := pruneOrphanedHubBranches(fs, g, st, dryRun)
 	worktrees, hubs := runPruneFS(fs, st, dryRun)
 	backups := pruneRepairBackups(fs, g, st, dryRun)
+	conversions := pruneConversionBackups(fs, st, dryRun)
 
-	records := make([]pruneRecord, 0, len(hopJSON)+len(worktrees)+len(hubs)+len(backups))
-	for _, pass := range [][]pruneRecord{hopJSON, worktrees, hubs, backups} {
+	records := make([]pruneRecord, 0, len(hopJSON)+len(worktrees)+len(hubs)+len(backups)+len(conversions))
+	for _, pass := range [][]pruneRecord{hopJSON, worktrees, hubs, backups, conversions} {
 		records = append(records, pass...)
 	}
 	return pruneCounts{
-		worktrees:      len(worktrees),
-		hubs:           len(hubs),
-		hopJSONEntries: len(hopJSON),
-		repairBackups:  len(backups),
-		records:        records,
+		worktrees:         len(worktrees),
+		hubs:              len(hubs),
+		hopJSONEntries:    len(hopJSON),
+		repairBackups:     len(backups),
+		conversionBackups: len(conversions),
+		records:           records,
 	}
 }
 
@@ -246,6 +253,9 @@ const (
 	pruneKindHub          = "hub"
 	pruneKindHopJSONEntry = "hop-json-entry"
 	pruneKindRepairBackup = "repair-backup"
+	// pruneKindConversionBackup is a backup 'git hop init' took before
+	// converting a repository.
+	pruneKindConversionBackup = "conversion-backup"
 )
 
 // newPruneRecord describes one entry a pass removed, or would remove
