@@ -1044,6 +1044,7 @@ means something in a bare hub:
 | `hooks/` | Your hooks move to the hub's `hooks/`, which every worktree runs. The `*.sample` files are the clone's. |
 | `refs/notes`, `refs/replace`, `refs/stash` and other ref namespaces | Copied into the hub. Branches and tags come with the clone. `refs/bisect`, `refs/worktree`, `refs/rewritten` and `refs/prefetch` are left out. |
 | `logs/` | Reflogs carry over, including every stash entry. The old `HEAD` reflog goes before the default worktree's own. A shallow repository keeps only its latest stash: its hub may lack the commits older reflog entries name. |
+| `modules/` (submodule repositories) | Moved to the default worktree's own git dir (`<hub>/worktrees/<name>/modules/`), which is where git keeps a linked worktree's submodules. Each checked-out submodule is reconnected, so `git submodule status`, `update` and `git -C <path> log` work without cloning again. Nested submodules at any depth are reconnected the same way. Other worktrees start without submodules; run `git submodule update --init` in each one, as git requires for any linked worktree. |
 | `rr-cache/`, `lfs/`, `description`, `branches/`, `remotes/` | Moved into the hub. |
 
 Nothing else is kept. The objects and the shallow boundary come with the
