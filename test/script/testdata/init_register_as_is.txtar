@@ -1,0 +1,48 @@
+# Register as-is (menu option 3) leaves the repository's structure alone
+# (no hop.json, no hops/) and records it in git-hop's state as the other
+# init paths do, so list, status --all and prune --all see it: the
+# repository root is its default branch's worktree.
+
+exec git init $WORK/local/plain
+cd $WORK/local/plain
+exec git commit -q --allow-empty -m 'initial'
+
+stdin $WORK/choice3.txt
+exec git-hop init --no-hooks
+stdout 'Repository registered successfully'
+! exists $WORK/local/plain/hop.json
+! exists $WORK/local/plain/hops
+exists $WORK/.local/state/git-hop/state.json
+
+# --- list and status --all see it ---
+exec git-hop list --json
+stdout '"repository": "github.com/local/plain"'
+stdout '"branch": "main"'
+stdout '"path": ".*/local/plain"'
+exec git-hop status --all
+stdout 'github.com/local/plain'
+
+# --- registering again changes nothing ---
+stdin $WORK/choice3.txt
+exec git-hop init --no-hooks
+stdout 'Repository registered successfully'
+! stderr 'warning:'
+exec git-hop list --json
+stdout -count=1 '"repository": "github.com/local/plain"'
+
+# --- prune --all keeps it while it exists, and prunes it once gone ---
+cd $WORK
+exec git-hop prune --all -n
+! stdout 'local/plain'
+exec git-hop prune --all
+exec git-hop list --json
+stdout '"repository": "github.com/local/plain"'
+mv $WORK/local/plain $WORK/local/gone
+exec git-hop prune --all
+stdout 'orphaned worktree: github.com/local/plain:main'
+stdout 'orphaned hub: github.com/local/plain'
+exec git-hop list --json
+! stdout 'github.com/local/plain'
+
+-- choice3.txt --
+3

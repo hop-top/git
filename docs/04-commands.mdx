@@ -1027,6 +1027,13 @@ says so on stderr and offers that repository the conversion. It never
 writes `hop.json` into the linked worktree, and does not mark the
 repository as a hub without converting it.
 
+Register as-is (menu option 3) changes nothing on disk: no `hop.json`,
+no `hops/`. It records the repository in git-hop's state, the repository
+root as its branch's worktree, so `git hop list`, `status --all` and
+`prune --all` see it. Commands that look for a hub from the current
+directory (`prune` without `--all`, for one) do not, since there is no
+`hop.json` to find.
+
 A bare conversion refuses a repository that has linked worktrees: their
 admin directories live in the `.git` directory the conversion replaces,
 so they would be disconnected. Remove them with `git worktree remove`
