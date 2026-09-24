@@ -10,7 +10,7 @@ Git Hop allows you to customize package manager install commands at multiple lev
 
 ### 1. Global Configuration
 
-Define default package managers in `~/.config/git-hop/global.json`:
+Define default package managers in `~/.config/git-hop/managers.json`:
 
 ```json
 {
@@ -167,7 +167,7 @@ Development branches with dev dependencies:
 
 Add a custom package manager globally and override per repo:
 
-**Global** (`~/.config/git-hop/global.json`):
+**Global** (`~/.config/git-hop/managers.json`):
 ```json
 {
   "packageManagers": [
@@ -319,7 +319,7 @@ type PackageManagerOverride struct {
 ### Configuration Locations
 
 ```
-~/.config/git-hop/global.json          # Global config
+~/.config/git-hop/managers.json        # Global package / environment managers
 $GIT_HOP_DATA_HOME/<org>/<repo>/hop.json   # Hopspace config
 ```
 

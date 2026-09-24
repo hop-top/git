@@ -139,7 +139,9 @@ type HopEntry struct {
 	FollowsConvention bool      `json:"followsConvention"` // Whether worktree follows naming convention
 }
 
-// GlobalConfig represents $XDG_CONFIG_HOME/git-hop/global.json
+// GlobalConfig holds global preferences: scalars come from git config
+// hop.* keys, manager lists from managers.json. Its JSON shape is the legacy
+// global.json format.
 type GlobalConfig struct {
 	Defaults            DefaultSettings          `json:"defaults"`
 	ShellIntegration    ShellIntegrationSettings `json:"shellIntegration,omitempty"`

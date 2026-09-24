@@ -13,9 +13,8 @@ Configuration is loaded from multiple sources, with higher-priority sources over
 
 ```mermaid
 graph TD
-    A[Environment Variables] --> B[Global git config]
-    B --> C[global.json]
-    C --> D[Hub hop.json]
+    A[Environment Variables] --> B[git config hop.* keys]
+    B --> D[Hub hop.json]
     D --> E[Hopspace hop.json]
     
     style A fill:#c8e6c9
@@ -25,10 +24,12 @@ graph TD
 Priority (highest to lowest):
 
 1. **Environment variables**
-2. **Global git config**
-3. `$GIT_HOP_CONFIG_HOME/global.json`
-4. Hub-level `hop.json`
-5. Hopspace-level `hop.json`
+2. **git config** `hop.*` keys (repo-local, then `--global`)
+3. Hub-level `hop.json`
+4. Hopspace-level `hop.json`
+
+Custom package and environment managers are lists and live in
+`$XDG_CONFIG_HOME/git-hop/managers.json`.
 
 ## Environment Variables
 
@@ -42,29 +43,21 @@ export GIT_HOP_CONFIG_HOME="$HOME/.config/git-hop"
 export GIT_HOP_CACHE_DIR="$HOME/.cache/git-hop"
 ```
 
-### Service Control
-
-```bash
-export GIT_HOP_AUTO_ENV_START="detect"  # true, false, detect
-```
-
 For logging configuration, see [Logging](./05b-logging).
 
 ## Global Configuration
 
-Create a global configuration file at `$GIT_HOP_CONFIG_HOME/global.json`:
+Preferences are `hop.*` keys in git config:
 
-```json
-{
-  "auto_env_start": "detect",
-  "port_base": 10000,
-  "port_limit": 5000,
-  "docker": {
-    "compose": "docker-compose",
-    "network": "git-hop"
-  }
-}
+```bash
+git config --global hop.worktreeLocation '{hubPath}/hops/{branch}'
+git config --global hop.add.fetch true
 ```
+
+An unset key uses its built-in default. See
+[Configuration](configuration.md#settings-reference) for every key and its
+default. Older releases read `global.json`; it is migrated into git config
+once and then ignored.
 
 ## Hub Configuration
 
