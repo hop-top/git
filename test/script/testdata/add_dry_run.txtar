@@ -77,6 +77,68 @@ exec git branch --list remote-only
 ! stdout .
 cmp hop.json $WORK/hop.json.before
 
+# --- remote-only branch with --from: created from --from, not tracking ---
+exec git-hop add remote-only --from main --dry-run
+stdout '\[dry-run\] Would create branch ''remote-only'' from ''main'''
+! stdout 'tracking'
+exec git branch --list remote-only
+! stdout .
+
+# --- --from on an existing local branch follows the real add's rules ---
+# (see add_from_existing_branch.txtar): fast-forward when at/behind the
+# start-point, refuse when ahead/diverged. The preview must say so and
+# still move nothing.
+cd $WORK/seed
+exec git checkout -b stale main
+exec git push origin stale
+exec git checkout -b ahead main
+exec git commit --allow-empty -m 'ahead 1'
+exec git push origin ahead
+exec git checkout -b ahead-local ahead
+exec git commit --allow-empty -m 'ahead 2 (local only)'
+exec git push origin ahead-local
+cd $WORK/hub
+exec git fetch origin
+exec git update-ref refs/heads/stale refs/remotes/origin/stale
+exec git update-ref refs/heads/ahead refs/remotes/origin/ahead-local
+cd $WORK/seed
+exec git checkout stale
+exec git commit --allow-empty -m 'stale 2'
+exec git push origin stale
+cd $WORK/hub
+exec git fetch origin
+
+# local behind --from: would fast-forward, naming both commits
+exec git rev-parse refs/heads/stale
+cp stdout $WORK/before-stale
+exec git-hop add stale --from origin/stale --dry-run
+stdout '\[dry-run\] Would fast-forward existing branch ''stale'' from [0-9a-f]{7} to ''origin/stale'' \([0-9a-f]{7}\)'
+! stdout 'Would check out existing branch'
+! exists $WORK/hub/hops/stale
+exec git rev-parse refs/heads/stale
+cmp stdout $WORK/before-stale
+
+# local equal to --from: linked as-is
+exec git-hop add existing --from main --dry-run
+stdout '\[dry-run\] Would check out existing branch ''existing'' \(already at ''main'', [0-9a-f]{7}\)'
+! exists $WORK/hub/hops/existing
+
+# local ahead of --from: refused exactly like the real add, nothing moved
+exec git rev-parse refs/heads/ahead
+cp stdout $WORK/before-ahead
+! exec git-hop add ahead --from origin/ahead --dry-run
+stderr '^fatal: .*branch ''ahead'' already exists at [0-9a-f]{7}.*ahead of ''origin/ahead'' \([0-9a-f]{7}\)'
+stderr 'git branch -f ahead origin/ahead'
+! stdout 'Would create worktree'
+! exists $WORK/hub/hops/ahead
+exec git rev-parse refs/heads/ahead
+cmp stdout $WORK/before-ahead
+cmp hop.json $WORK/hop.json.before
+
+# without --from the existing branch is still checked out as-is
+exec git-hop add ahead --dry-run
+stdout '\[dry-run\] Would check out existing branch ''ahead''$'
+
 # --- control: without --dry-run the same add really happens ---
 exec git-hop add feat/new --from main
 stdout 'Created hopspace for ''feat/new'''

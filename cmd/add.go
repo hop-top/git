@@ -48,6 +48,11 @@ Creates the branch (if missing) from the start-point, checks it out under
 hops/<branch>, sets up shared dependencies, and starts the environment if
 configured.
 
+An existing branch is checked out as-is unless --from is given. With
+--from it must end up at that start-point: it is fast-forwarded when at or
+behind it, and add refuses when it is ahead or has diverged, so no local
+commit is lost.
+
 The new worktree is also seeded with the git-ignored local files (.env,
 tool config, small caches) present in the worktree it forks from. Nothing
 is overwritten, dependency directories are left to the deps layer, and
@@ -137,11 +142,15 @@ runs.`,
 
 		hookRunner := hooks.NewRunner(fs)
 
+		wm := hop.NewWorktreeManager(fs, g)
+		wm.EnforceStartPoint = addFromFlag != ""
+
 		// Everything below writes; the preview must stop before any of it.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-			previewAdd(g, hookRunner, addPlan{
+			previewAdd(g, wm, hookRunner, addPlan{
 				cwd:           cwd,
 				hubPath:       hubPath,
+				hopspace:      hopspace,
 				repoID:        repoID,
 				branch:        branch,
 				worktreePath:  worktreePath,
@@ -175,8 +184,6 @@ runs.`,
 		branchExisted := localBranchExists(g, hubPath, branch)
 
 		// Create Worktree in the current hub
-		wm := hop.NewWorktreeManager(fs, g)
-		wm.EnforceStartPoint = addFromFlag != ""
 		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, hub.Config.Repo.DefaultBranch, startPoint)
 		if err != nil {
 			// Check if it's a state error
@@ -510,7 +517,7 @@ func resolveAddStartPoint(flagVal, envVal, configVal string) string {
 func init() {
 	cli.RootCmd.AddCommand(addCmd)
 	addCmd.Flags().StringVar(&addFromFlag, "from", "",
-		"start-point for the new branch (branch name, ref, SHA, or 'initial' for the root commit)")
+		"start-point: branch name, ref, SHA, or 'initial' for the root commit; an existing branch is fast-forwarded to it")
 	// pflag has no auto-negation, so both halves of the --[no-]copy-ignored
 	// pair are registered explicitly (same shape as --no-prompt /
 	// --no-verify elsewhere). Neither flag set leaves the decision to
