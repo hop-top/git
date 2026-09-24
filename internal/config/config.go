@@ -245,6 +245,7 @@ type ConversionResult struct {
 	ProjectPath  string          `json:"projectPath"`
 	Errors       []string        `json:"errors,omitempty"`
 	Warnings     []string        `json:"warnings,omitempty"`
+	Hints        []string        `json:"hints,omitempty"`
 	Metadata     *BackupMetadata `json:"metadata,omitempty"`
 	CreatedFiles []string        `json:"createdFiles"`
 	ModifiedDirs []string        `json:"modifiedDirs"`

@@ -142,16 +142,16 @@ func TestE2E_InitConvertWithoutRemote(t *testing.T) {
 		t.Errorf("Expected main branch path to be '.', got: %v", path)
 	}
 
-	// Verify warnings about no remote
+	// The folder-name fallback is reported as a hint
 	foundWarning := false
-	for _, warning := range result.Warnings {
+	for _, warning := range result.Hints {
 		if strings.Contains(warning, "No remote configured") {
 			foundWarning = true
 			break
 		}
 	}
 	if !foundWarning {
-		t.Errorf("Expected warning about no remote")
+		t.Errorf("Expected hint about no remote, hints: %v", result.Hints)
 	}
 
 	t.Log("Conversion test successful!")

@@ -91,16 +91,16 @@ func TestConvertToBareWorktree_NoRemote(t *testing.T) {
 		t.Errorf("README.md not in repo root")
 	}
 
-	// Verify warnings about no remote
+	// The folder-name fallback is reported as a hint
 	foundWarning := false
-	for _, warning := range result.Warnings {
+	for _, warning := range result.Hints {
 		if strings.Contains(warning, "No remote configured") {
 			foundWarning = true
 			break
 		}
 	}
 	if !foundWarning {
-		t.Errorf("Expected warning about no remote, warnings: %v", result.Warnings)
+		t.Errorf("Expected hint about no remote, hints: %v", result.Hints)
 	}
 
 	t.Logf("Conversion successful!")
@@ -184,16 +184,16 @@ func TestConvertToBareWorktree_BareNoRemote(t *testing.T) {
 		t.Errorf("worktrees directory not created")
 	}
 
-	// Verify warnings about no remote
+	// The folder-name fallback is reported as a hint
 	foundWarning := false
-	for _, warning := range result.Warnings {
-		if warning == "No remote configured - using local path for backup organization" {
+	for _, warning := range result.Hints {
+		if strings.HasPrefix(warning, "No remote configured - using the folder names ") {
 			foundWarning = true
 			break
 		}
 	}
 	if !foundWarning {
-		t.Errorf("Expected warning about no remote, warnings: %v", result.Warnings)
+		t.Errorf("Expected hint about no remote, hints: %v", result.Hints)
 	}
 
 	t.Logf("Conversion successful!")
