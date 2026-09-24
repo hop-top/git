@@ -66,9 +66,6 @@ func TestMigration_WritesOnlyKeysPresentInLegacyFile(t *testing.T) {
 	if cfg.Backup != wantCfg.Backup {
 		t.Errorf("Backup after migration = %+v, want %+v", cfg.Backup, wantCfg.Backup)
 	}
-	if cfg.Conversion != wantCfg.Conversion {
-		t.Errorf("Conversion after migration = %+v, want %+v", cfg.Conversion, wantCfg.Conversion)
-	}
 	if cfg.ShellIntegration.Status != "unknown" {
 		t.Errorf("ShellIntegration.Status = %q, want unknown", cfg.ShellIntegration.Status)
 	}
@@ -78,9 +75,8 @@ func TestMigration_WritesOnlyKeysPresentInLegacyFile(t *testing.T) {
 // choice and must survive migration.
 func TestMigration_KeepsExplicitZeroValues(t *testing.T) {
 	writeLegacyGlobalJSON(t, `{
-		"defaults": {"autoEnvStart": false, "conventionWarning": false},
-		"backup": {"enabled": false, "maxBackups": 0},
-		"conversion": {"autoRollback": false}
+		"defaults": {"autoEnvStart": false},
+		"backup": {"maxBackups": 0}
 	}`)
 
 	store := map[string]string{}
@@ -91,21 +87,18 @@ func TestMigration_KeepsExplicitZeroValues(t *testing.T) {
 	}
 
 	for key, want := range map[string]string{
-		"hop.autoEnvStart":            "false",
-		"hop.conventionWarning":       "false",
-		"hop.backup.enabled":          "false",
-		"hop.backup.maxBackups":       "0",
-		"hop.conversion.autoRollback": "false",
-		"hop.migrated":                "true",
+		"hop.autoEnvStart":      "false",
+		"hop.backup.maxBackups": "0",
+		"hop.migrated":          "true",
 	} {
 		if got, ok := store[key]; !ok || got != want {
 			t.Errorf("store[%s] = %q (present=%v), want %q", key, got, ok, want)
 		}
 	}
-	if n := len(hopKeys(store)); n != 6 {
-		t.Errorf("git config holds %d hop.* keys, want 6: %v", n, hopKeys(store))
+	if n := len(hopKeys(store)); n != 3 {
+		t.Errorf("git config holds %d hop.* keys, want 3: %v", n, hopKeys(store))
 	}
-	if cfg.Backup.Enabled || cfg.Backup.MaxBackups != 0 || cfg.Defaults.AutoEnvStart {
+	if cfg.Backup.MaxBackups != 0 || cfg.Defaults.AutoEnvStart {
 		t.Errorf("explicit zero values lost: %+v %+v", cfg.Backup, cfg.Defaults)
 	}
 }

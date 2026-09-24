@@ -147,6 +147,14 @@ The former `bareRepo` setting is gone: clones always create a bare hub (see
 [story 015](stories/015-hopspace-shape-contract.md)). A leftover `bareRepo`
 in an old config file, or `hop.bareRepo` in git config, is ignored.
 
+These settings were never acted on and are gone too: `hop.showAllManagedRepos`,
+`hop.unusedThresholdDays`, `hop.conventionWarning`,
+`hop.enforceCleanForConversion`, `hop.conversion.enforceClean`,
+`hop.conversion.allowDirtyForce`, `hop.conversion.autoRollback`,
+`hop.backup.enabled` and `hop.backup.preserveStashes`. Old config files and
+git config that still carry them load as before; the keys are ignored, and
+`git hop doctor --fix` unsets the ones the `global.json` migration wrote.
+
 ### Stored Settings Not Yet Acted On
 
 These keys are read into the global configuration with the defaults below,
@@ -156,18 +164,9 @@ defaults are on record.
 | Key | Type | Default |
 |-----|------|---------|
 | `hop.autoEnvStart` | boolean | `true` |
-| `hop.showAllManagedRepos` | boolean | `false` |
-| `hop.unusedThresholdDays` | number | `30` |
-| `hop.enforceCleanForConversion` | boolean | `true` |
-| `hop.conventionWarning` | boolean | `true` |
-| `hop.backup.enabled` | boolean | `true` |
 | `hop.backup.keepBackup` | boolean | `false` |
 | `hop.backup.maxBackups` | number | `3` |
 | `hop.backup.cleanupAgeDays` | number | `30` |
-| `hop.backup.preserveStashes` | boolean | `true` |
-| `hop.conversion.enforceClean` | boolean | `true` |
-| `hop.conversion.allowDirtyForce` | boolean | `false` |
-| `hop.conversion.autoRollback` | boolean | `true` |
 
 ### Package and Environment Managers
 
@@ -675,10 +674,6 @@ Port and volume configurations are stored per repository for deterministic alloc
         "redis_data": "main_redis_data"
       }
     }
-  },
-  "cleanup": {
-    "orphaned": "manual",
-    "unusedThresholdDays": 30
   }
 }
 ```

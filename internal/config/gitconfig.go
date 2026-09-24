@@ -20,7 +20,6 @@ type GitConfig struct {
 const (
 	KeyGitDomain              = "hop.gitDomain"
 	KeyAutoEnvStart           = "hop.autoEnvStart"
-	KeyConventionWarning      = "hop.conventionWarning"
 	KeyWorktreeLocation       = "hop.worktreeLocation"
 	KeyAddDefaultStartPoint   = "hop.add.defaultStartPoint"
 	KeyAddCopyIgnored         = "hop.add.copyIgnored"
@@ -29,7 +28,6 @@ const (
 	KeyMergeDeleteRemote      = "hop.merge.deleteRemote"
 	KeyShellIntegrationStatus = "hop.shellIntegration.status"
 	KeyShellIntegrationShell  = "hop.shellIntegration.shell"
-	KeyBackupEnabled          = "hop.backup.enabled"
 	KeyBackupMaxBackups       = "hop.backup.maxBackups"
 	KeyHooksInstallMode       = "hop.hooks.installMode"
 	KeyEventsSink             = "hop.events.sink"
@@ -41,27 +39,18 @@ const (
 // Every *OrDefault accessor falls back to it, and GlobalLoader.GetDefaults
 // is derived from it. A key missing here defaults to its zero value.
 var defaults = map[string]string{
-	KeyGitDomain:                 "github.com",
-	KeyAutoEnvStart:              "true",
-	KeyShowAllManagedRepos:       "false",
-	KeyUnusedThresholdDays:       "30",
-	KeyEnforceCleanForConversion: "true",
-	KeyConventionWarning:         "true",
-	KeyWorktreeLocation:          "{hubPath}/hops/{branch}",
-	KeyAddDefaultStartPoint:      "default-branch",
-	KeyAddCopyIgnored:            "true",
-	KeyAddCopyIgnoredMaxSize:     "10m",
-	KeyShellIntegrationStatus:    "unknown",
-	KeyBackupEnabled:             "true",
-	KeyBackupKeepBackup:          "false",
-	KeyBackupMaxBackups:          "3",
-	KeyBackupCleanupAgeDays:      "30",
-	KeyBackupPreserveStashes:     "true",
-	KeyConversionEnforceClean:    "true",
-	KeyConversionAllowDirtyForce: "false",
-	KeyConversionAutoRollback:    "true",
-	KeyHooksInstallMode:          "prompt",
-	KeyGitflowEnabled:            "false",
+	KeyGitDomain:              "github.com",
+	KeyAutoEnvStart:           "true",
+	KeyWorktreeLocation:       "{hubPath}/hops/{branch}",
+	KeyAddDefaultStartPoint:   "default-branch",
+	KeyAddCopyIgnored:         "true",
+	KeyAddCopyIgnoredMaxSize:  "10m",
+	KeyShellIntegrationStatus: "unknown",
+	KeyBackupKeepBackup:       "false",
+	KeyBackupMaxBackups:       "3",
+	KeyBackupCleanupAgeDays:   "30",
+	KeyHooksInstallMode:       "prompt",
+	KeyGitflowEnabled:         "false",
 }
 
 // NewGitConfig returns a GitConfig that shells out to git.

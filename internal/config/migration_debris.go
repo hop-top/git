@@ -45,7 +45,8 @@ func (l *GlobalLoader) MigrationDebris() ([]DebrisEntry, error) {
 
 	var out []DebrisEntry
 	for _, e := range legacy.scalars() {
-		if e.migrates() {
+		// Retired settings included: the zero-value migration wrote them too.
+		if e.userSet() {
 			continue
 		}
 		written := e.zero

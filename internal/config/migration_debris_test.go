@@ -51,27 +51,27 @@ func setGlobal(t *testing.T, kv map[string]string) {
 // other scalar, and the sentinel.
 func buggyMigration() map[string]string {
 	return map[string]string{
-		config.KeyAutoEnvStart:              "false",
-		config.KeyShowAllManagedRepos:       "false",
-		config.KeyUnusedThresholdDays:       "0",
-		config.KeyEnforceCleanForConversion: "false",
-		config.KeyConventionWarning:         "false",
-		config.KeyGitDomain:                 "example.com",
-		config.KeyWorktreeLocation:          "",
-		config.KeyAddDefaultStartPoint:      "",
-		config.KeyHooksInstallMode:          "",
-		config.KeyShellIntegrationStatus:    "",
-		config.KeyShellIntegrationShell:     "",
-		config.KeyShellIntegrationPath:      "",
-		config.KeyBackupEnabled:             "false",
-		config.KeyBackupKeepBackup:          "false",
-		config.KeyBackupMaxBackups:          "0",
-		config.KeyBackupCleanupAgeDays:      "0",
-		config.KeyBackupPreserveStashes:     "false",
-		config.KeyConversionEnforceClean:    "false",
-		config.KeyConversionAllowDirtyForce: "false",
-		config.KeyConversionAutoRollback:    "false",
-		"hop.migrated":                      "true",
+		config.KeyAutoEnvStart:           "false",
+		"hop.showAllManagedRepos":        "false",
+		"hop.unusedThresholdDays":        "0",
+		"hop.enforceCleanForConversion":  "false",
+		"hop.conventionWarning":          "false",
+		config.KeyGitDomain:              "example.com",
+		config.KeyWorktreeLocation:       "",
+		config.KeyAddDefaultStartPoint:   "",
+		config.KeyHooksInstallMode:       "",
+		config.KeyShellIntegrationStatus: "",
+		config.KeyShellIntegrationShell:  "",
+		config.KeyShellIntegrationPath:   "",
+		"hop.backup.enabled":             "false",
+		config.KeyBackupKeepBackup:       "false",
+		config.KeyBackupMaxBackups:       "0",
+		config.KeyBackupCleanupAgeDays:   "0",
+		"hop.backup.preserveStashes":     "false",
+		"hop.conversion.enforceClean":    "false",
+		"hop.conversion.allowDirtyForce": "false",
+		"hop.conversion.autoRollback":    "false",
+		"hop.migrated":                   "true",
 	}
 }
 
@@ -105,22 +105,24 @@ func TestMigrationDebris(t *testing.T) {
 	setGlobal(t, map[string]string{config.KeyAutoEnvStart: "true", config.KeyBackupMaxBackups: "5"})
 
 	l := config.NewGlobalLoaderWithGitConfig(config.NewGitConfig())
+	// The quoted keys are retired settings git-hop no longer has; the
+	// migration wrote them all the same, so they are debris too.
 	want := []string{
 		config.KeyAddDefaultStartPoint,
 		config.KeyBackupCleanupAgeDays,
 		config.KeyBackupKeepBackup,
-		config.KeyBackupPreserveStashes,
-		config.KeyConventionWarning,
-		config.KeyConversionAllowDirtyForce,
-		config.KeyConversionAutoRollback,
-		config.KeyConversionEnforceClean,
-		config.KeyEnforceCleanForConversion,
+		"hop.backup.preserveStashes",
+		"hop.conventionWarning",
+		"hop.conversion.allowDirtyForce",
+		"hop.conversion.autoRollback",
+		"hop.conversion.enforceClean",
+		"hop.enforceCleanForConversion",
 		config.KeyHooksInstallMode,
 		config.KeyShellIntegrationPath,
 		config.KeyShellIntegrationShell,
 		config.KeyShellIntegrationStatus,
-		config.KeyShowAllManagedRepos,
-		config.KeyUnusedThresholdDays,
+		"hop.showAllManagedRepos",
+		"hop.unusedThresholdDays",
 	}
 	sort.Strings(want)
 	got := debrisKeys(t, l)
@@ -144,7 +146,7 @@ func TestMigrationDebris(t *testing.T) {
 	}
 	for _, k := range []string{
 		config.KeyAutoEnvStart, config.KeyGitDomain, config.KeyWorktreeLocation,
-		config.KeyBackupEnabled, config.KeyBackupMaxBackups, "hop.migrated",
+		"hop.backup.enabled", config.KeyBackupMaxBackups, "hop.migrated",
 	} {
 		if _, ok := gitGlobal(t, "--get", k); !ok {
 			t.Errorf("%s was removed; it is the user's", k)
