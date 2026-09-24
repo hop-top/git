@@ -1034,6 +1034,30 @@ them yourself.
 would leave out, with the reason. It prints key names only, never
 values, since those can hold credentials.
 
+The rest of the old `.git` directory is carried over too, where it still
+means something in a bare hub:
+
+| In the old `.git` | After a bare conversion |
+|-------------------|-------------------------|
+| `info/exclude`, `info/attributes` and the other `info/` files | In the hub's `info/`, which applies to every worktree, so ignored files stay ignored. `info/refs` is left out; `git update-server-info` regenerates it. |
+| `info/sparse-checkout` | In the default worktree's own git dir, where git reads it for that worktree. |
+| `hooks/` | Your hooks move to the hub's `hooks/`, which every worktree runs. The `*.sample` files are the clone's. |
+| `refs/notes`, `refs/replace`, `refs/stash` and other ref namespaces | Copied into the hub. Branches and tags come with the clone. `refs/bisect`, `refs/worktree`, `refs/rewritten` and `refs/prefetch` are left out. |
+| `logs/` | Reflogs carry over, including every stash entry. The old `HEAD` reflog goes before the default worktree's own. A shallow repository keeps only its latest stash: its hub may lack the commits older reflog entries name. |
+| `rr-cache/`, `lfs/`, `description`, `branches/`, `remotes/` | Moved into the hub. |
+
+Nothing else is kept. The objects and the shallow boundary come with the
+clone. The index and editor scratch files are rebuilt. For each of these,
+`init` prints a `warning:`:
+
+- `config.worktree` (per-worktree config from
+  `extensions.worktreeConfig`): not carried over. Set its keys again
+  with `git config`.
+- The state of a merge, rebase, cherry-pick, revert or bisect in
+  progress: that operation is abandoned. Finish it before running
+  `init`.
+- Any entry git-hop does not recognise.
+
 ## Command Aliases
 
 Many commands have shorter aliases for convenience:
