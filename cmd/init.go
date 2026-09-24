@@ -23,6 +23,7 @@ var (
 	forceFlag          bool
 	dryRunFlag         bool
 	keepBackupFlag     bool
+	keepBackupFlagSet  bool // --keep-backup typed, either way
 	regularFlag        bool
 	restorePath        string
 	noHooksFlag        bool
@@ -56,6 +57,7 @@ See docs/hooks.md for details.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		g := git.New()
+		keepBackupFlagSet = cmd.Flags().Changed("keep-backup")
 
 		if restorePath != "" {
 			handleRestore(fs, g, restorePath)
@@ -158,7 +160,11 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 	converter := hop.NewConverter(fs, g)
 	converter.DryRun = dryRunFlag
 	converter.Force = forceFlag
-	converter.KeepBackup = keepBackupFlag
+	converter.KeepBackup = resolveInitKeepBackup(
+		keepBackupFlag,
+		keepBackupFlagSet,
+		config.NewGitConfigIn(repoPath),
+	)
 
 	if !dryRunFlag && !forceFlag {
 		status, _ := g.RunInDir(repoPath, "git", "status", "--porcelain")
@@ -337,6 +343,21 @@ To convert anyway, carrying uncommitted files into the new worktree
 		next += fmt.Sprintf("  cd %s   # Work on %s branch\n", mainWorktreePath, currentBranchName)
 	}
 	output.Hint("%s", next+initNextSteps)
+}
+
+// resolveInitKeepBackup decides whether the conversion backup outlives a
+// successful conversion. A typed --keep-backup or --keep-backup=false is
+// a decision about this run and wins; otherwise hop.backup.keepBackup,
+// read from the repository being converted (so local and global config
+// both apply), supplies the default, falling back to false.
+func resolveInitKeepBackup(flagValue, flagSet bool, gc *config.GitConfig) bool {
+	if flagSet {
+		return flagValue
+	}
+	if gc == nil {
+		return false
+	}
+	return gc.GetBoolOrDefault(config.KeyBackupKeepBackup)
 }
 
 // reportPreservedBackup tells the user where the conversion backup is,
@@ -650,7 +671,7 @@ func initHintedFlags() []string {
 func init() {
 	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Convert even with uncommitted changes (DANGEROUS; a backup is still taken)")
 	initCmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "n", false, "Show conversion steps without executing")
-	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion")
+	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion (default: hop.backup.keepBackup)")
 	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Convert to a regular repo + worktrees instead of bare (with --no-prompt)")
 	initCmd.Flags().BoolVar(&noPromptFlag, "no-prompt", false, "Skip the interactive menu and convert non-interactively (bare unless --regular)")
 	initCmd.Flags().StringVar(&restorePath, "restore", "", "Restore repository from backup (manual rollback)")

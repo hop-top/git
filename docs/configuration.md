@@ -164,7 +164,6 @@ defaults are on record.
 | Key | Type | Default |
 |-----|------|---------|
 | `hop.autoEnvStart` | boolean | `true` |
-| `hop.backup.keepBackup` | boolean | `false` |
 | `hop.backup.maxBackups` | number | `3` |
 | `hop.backup.cleanupAgeDays` | number | `30` |
 
@@ -217,6 +216,7 @@ inside any hub for that repository.
 |-----|------|---------|-------------|
 | `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of repair backup snapshots (`repair-*` directories under `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/`, or a legacy `<hub>/.hop/backups/`) before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
 | `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`, the `fetch` in `git hop add`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
+| `hop.backup.keepBackup` | boolean | `false` | Keep the conversion backup `git hop init` takes after a successful conversion, as if `--keep-backup` were passed. An explicit `--keep-backup` / `--keep-backup=false` overrides this. See [Conversion backups](#conversion-backups-hopbackup). |
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
@@ -394,6 +394,32 @@ recorded in state and reads `hop.repair.backupRetention` from the
 first hub that has it set, falling back to the 720h default if none
 do. There is no separate per-repo override mechanism beyond setting
 the value inside that repo's hub.
+
+### Conversion backups (`hop.backup.*`)
+
+`git hop init` copies the repository to a backup directory before it
+converts it:
+
+```
+$XDG_CACHE_HOME/git-hop/<org>-<repo>/<YYYY-MM-DD_HH-MM-SS>/
+```
+
+The backup is always taken, `--force` included: a failed conversion rolls
+back from it. After a successful conversion it is deleted unless it is
+kept, and init prints `Backup preserved at: <path>` only when it is still
+on disk (kept, or the conversion failed).
+
+```bash
+# Keep every conversion backup by default
+git config --global hop.backup.keepBackup true
+
+# ...but not for this one conversion
+git hop init --no-prompt --keep-backup=false
+```
+
+The flag wins over the key in both directions. The key is read from the
+repository being converted, so a repo-local `git config
+hop.backup.keepBackup true` applies to that repository alone.
 
 ### `hop.events.sink`
 
