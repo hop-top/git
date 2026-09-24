@@ -293,7 +293,7 @@ Rules:
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.3): a MINOR bump adds
+- Result shapes are versioned together (currently 1.4): a MINOR bump adds
   fields, a MAJOR bump renames or removes them.
 - Commands not listed here have no structured result: the output flags
   only switch their log format.
@@ -379,15 +379,18 @@ Columns: `kind check subject message`.
 
 A list of the entries removed, or with `--dry-run` the entries that would
 be, in the order the passes run: hop.json entries, state worktrees, state
-hubs, repair backups, conversion backups.
+hubs, repair backups, conversion backups. Entries left in place although
+their path is missing (a worktree git has locked) are listed as `skipped`,
+with or without `--dry-run`.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `action` | string | `pruned`, or `would-prune` under `--dry-run` |
+| `action` | string | `pruned`, or `would-prune` under `--dry-run`; `skipped` for an entry left in place (see `reason`) |
 | `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup) |
 | `repository` | string | Repository id the entry belongs to |
 | `branch` | string | Branch of a `worktree` or `hop-json-entry`; empty otherwise |
 | `path` | string | Worktree, hub or backup path the entry pointed at |
+| `reason` | string | *json/yaml only*, `skipped` entries only: why it was left in place, e.g. `locked in git: on the usb drive` |
 
 Columns: `action kind repository branch path`.
 

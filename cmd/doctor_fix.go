@@ -117,18 +117,21 @@ func dedupeRepairs(records []doctorRecord) ([]doctorRecord, int) {
 // A row is kept when its worktree is in kept (the state repair kept it)
 // or git has the worktree locked: `git worktree prune` leaves a locked
 // worktree whose directory is gone alone, since the directory may only
-// be unavailable (a drive that is not mounted), and so does doctor.
+// be unavailable (a drive that is not mounted), and so do prune and
+// doctor. The lock is prune's own check (pruneHubBranchesKeeping); the
+// hub check has already warned about the locked rows it skips.
 func pruneMissingHubRows(fs afero.Fs, g git.GitInterface, hubPath string, kept keptWorktrees, opts doctorOpts, r *doctorReport) int {
 	scoped := stateScopedToHub(hubPath)
 	if scoped == nil {
 		return 0
 	}
 	dryRun := !opts.mutating()
-	registry, _ := g.WorktreeListPorcelain(hubPath)
-	keep := func(path string) bool {
-		return kept.has(path) || lockedWorktree(registry, path)
+	var rows []pruneRecord
+	for _, rec := range pruneHubBranchesKeeping(fs, g, scoped, dryRun, kept.has) {
+		if rec.Action != pruneActionSkipped {
+			rows = append(rows, rec)
+		}
 	}
-	rows := pruneHubBranchesKeeping(fs, g, scoped, dryRun, keep)
 	if len(rows) == 0 {
 		return 0
 	}

@@ -99,8 +99,12 @@ func TestFixMissingWorktrees_ReportsKept(t *testing.T) {
 
 func TestLockedWorktree(t *testing.T) {
 	p := "/hubs/repo/hops/usb"
-	assert.True(t, lockedWorktree(porcelainEntry(p, "usb", "locked"), p))
-	assert.True(t, lockedWorktree(porcelainEntry(p, "usb", "locked on the usb drive"), p))
-	assert.False(t, lockedWorktree(porcelainEntry(p, "usb", "prunable"), p), "prunable, not locked")
-	assert.False(t, lockedWorktree(porcelainEntry("/hubs/repo/hops/other", "other", "locked"), p), "another path's lock")
+	locked := func(porcelain string) bool {
+		_, ok := worktreeLock(porcelain, p)
+		return ok
+	}
+	assert.True(t, locked(porcelainEntry(p, "usb", "locked")))
+	assert.True(t, locked(porcelainEntry(p, "usb", "locked on the usb drive")))
+	assert.False(t, locked(porcelainEntry(p, "usb", "prunable")), "prunable, not locked")
+	assert.False(t, locked(porcelainEntry("/hubs/repo/hops/other", "other", "locked")), "another path's lock")
 }

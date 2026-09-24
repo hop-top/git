@@ -55,7 +55,7 @@ func TestPruneOrphanedWorktrees(t *testing.T) {
 	require.NoError(t, fs.MkdirAll("/path/to/existing", 0755))
 
 	// Prune orphaned entries
-	pruned := len(pruneOrphanedWorktrees(fs, st, false))
+	pruned := len(pruneOrphanedWorktrees(fs, mocks.NewMockGit(), st, false))
 
 	assert.Equal(t, 1, pruned)
 	assert.Len(t, st.Repositories["github.com/test/repo"].Worktrees, 1)
@@ -95,7 +95,7 @@ func TestRunPrune_DryRun(t *testing.T) {
 	loaded, err := state.LoadState(fs)
 	require.NoError(t, err)
 
-	wt, hubs := runPruneFS(fs, loaded, true /* dryRun */)
+	wt, hubs := runPruneFS(fs, mocks.NewMockGit(), loaded, true /* dryRun */)
 	assert.Len(t, wt, 1, "should report 1 worktree as orphaned")
 	assert.Empty(t, hubs)
 
@@ -132,7 +132,7 @@ func TestRunPrune_Apply(t *testing.T) {
 	loaded, err := state.LoadState(fs)
 	require.NoError(t, err)
 
-	wt, _ := runPruneFS(fs, loaded, false /* dryRun */)
+	wt, _ := runPruneFS(fs, mocks.NewMockGit(), loaded, false /* dryRun */)
 	assert.Len(t, wt, 1)
 
 	// runPruneFS mutates in-memory state but does not persist; verify

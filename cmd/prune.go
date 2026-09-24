@@ -39,6 +39,10 @@ hub's hop.json, removing:
     per repository or older than hop.backup.cleanupAgeDays (backups of
     failed conversions are never removed)
 
+A worktree git has locked ('git worktree lock') is kept even when its
+directory is missing, as 'git worktree prune' keeps it: prune reports
+its state entry and hop.json row as skipped and names the lock reason.
+
 Every line naming a pruned entry is prefixed with the repository it
 belongs to, so a --all sweep shows exactly which repositories it touched.
 
@@ -229,7 +233,7 @@ func (c pruneCounts) total() int {
 // after.
 func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) pruneCounts {
 	hopJSON := pruneOrphanedHubBranches(fs, g, st, dryRun)
-	worktrees, hubs := runPruneFS(fs, st, dryRun)
+	worktrees, hubs := runPruneFS(fs, g, st, dryRun)
 	backups := pruneRepairBackups(fs, g, st, dryRun)
 	conversions := pruneConversionBackups(fs, st, dryRun)
 
@@ -238,9 +242,9 @@ func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) 
 		records = append(records, pass...)
 	}
 	return pruneCounts{
-		worktrees:         len(worktrees),
+		worktrees:         prunedCount(worktrees),
 		hubs:              len(hubs),
-		hopJSONEntries:    len(hopJSON),
+		hopJSONEntries:    prunedCount(hopJSON),
 		repairBackups:     len(backups),
 		conversionBackups: len(conversions),
 		records:           records,
@@ -258,6 +262,10 @@ const (
 	pruneKindConversionBackup = "conversion-backup"
 )
 
+// pruneActionSkipped is the action of an entry prune left in place
+// although its path is missing; pruneRecord.Reason says why.
+const pruneActionSkipped = "skipped"
+
 // newPruneRecord describes one entry a pass removed, or would remove
 // under dryRun.
 func newPruneRecord(kind, repoID, branch, path string, dryRun bool) pruneRecord {
@@ -266,6 +274,33 @@ func newPruneRecord(kind, repoID, branch, path string, dryRun bool) pruneRecord 
 		action = "would-prune"
 	}
 	return pruneRecord{Action: action, Kind: kind, Repository: repoID, Branch: branch, Path: path}
+}
+
+// skipLockedEntry reports an entry prune leaves in place because git has
+// its worktree locked (lockReason is git's reason, "" when none), and
+// returns its record. label names the entry ("hop.json entry", "orphaned
+// worktree") in the human line. The same happens under --dry-run: a
+// preview skips it too.
+func skipLockedEntry(kind, label, repoID, branch, path, lockReason string) pruneRecord {
+	reason := "locked in git"
+	if lockReason != "" {
+		reason += ": " + lockReason
+	}
+	output.Info("Skipping %s: %s:%s (%s): %s", label, repoID, branch, path, reason)
+	output.Hint("%s", unlockHint(path))
+	return pruneRecord{Action: pruneActionSkipped, Kind: kind, Repository: repoID, Branch: branch, Path: path, Reason: reason}
+}
+
+// prunedCount is how many of records a pass removed (or would remove),
+// leaving out the entries it skipped.
+func prunedCount(records []pruneRecord) int {
+	n := 0
+	for _, rec := range records {
+		if rec.Action != pruneActionSkipped {
+			n++
+		}
+	}
+	return n
 }
 
 // repairBackupRetention reads hop.repair.backupRetention from the first
@@ -296,8 +331,8 @@ func repairBackupRetention(g git.GitInterface, st *state.State) time.Duration {
 // runPruneFS scans st for orphaned worktrees and hubs and returns them.
 // When dryRun is false the orphans are removed from st in place; the caller
 // is responsible for persisting. When dryRun is true st is left untouched.
-func runPruneFS(fs afero.Fs, st *state.State, dryRun bool) (worktrees, hubs []pruneRecord) {
-	worktrees = pruneOrphanedWorktrees(fs, st, dryRun)
+func runPruneFS(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) (worktrees, hubs []pruneRecord) {
+	worktrees = pruneOrphanedWorktrees(fs, g, st, dryRun)
 	hubs = pruneOrphanedHubs(fs, st, dryRun)
 	return
 }
@@ -305,7 +340,11 @@ func runPruneFS(fs afero.Fs, st *state.State, dryRun bool) (worktrees, hubs []pr
 // pruneOrphanedWorktrees reports worktrees whose paths no longer exist,
 // in repository then branch order. When dryRun is false it also removes
 // them from st.
-func pruneOrphanedWorktrees(fs afero.Fs, st *state.State, dryRun bool) []pruneRecord {
+//
+// A worktree git has locked is kept and reported skipped
+// (skipLockedEntry): like `git worktree prune`, prune leaves it for the
+// user to unlock.
+func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
 	var pruned []pruneRecord
 	prefix := "Pruning"
 	if dryRun {
@@ -323,6 +362,10 @@ func pruneOrphanedWorktrees(fs afero.Fs, st *state.State, dryRun bool) []pruneRe
 		for _, branch := range branches {
 			wt := repo.Worktrees[branch]
 			if exists, _ := afero.DirExists(fs, wt.Path); !exists {
+				if reason, locked := stateWorktreeLock(fs, g, repoID, wt); locked {
+					pruned = append(pruned, skipLockedEntry(pruneKindWorktree, "orphaned worktree", repoID, branch, wt.Path, reason))
+					continue
+				}
 				output.Info("%s orphaned worktree: %s:%s (%s)", prefix, repoID, branch, wt.Path)
 				if !dryRun {
 					delete(repo.Worktrees, branch)
