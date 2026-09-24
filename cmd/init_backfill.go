@@ -158,17 +158,23 @@ func backfillHubConfigIfMissing(fs afero.Fs, g git.GitInterface, hubPath string)
 //
 //   - BareWorktreeRoot, WorktreeRoot → cwd is the hub root.
 //   - WorktreeChild → the repository the worktree belongs to, from git's
-//     common dir (hop.RepoRootOfWorktree): the bare hub itself, or the
-//     directory holding a regular hub's .git.
+//     common dir (hop.RepoRootOfWorktree), when that repository is a hub:
+//     a bare one, or a regular one a --regular conversion left hop.json
+//     in. A plain regular repository is not back-filled: that would
+//     register it without converting it (see resolveInitTarget).
 //
 // Other structures (StandardRepo, NotGit, UnknownStructure) are not our
 // case: a standard repo gets the conversion menu instead.
-func resolveBackfillRoot(g git.GitInterface, cwd string, s config.StructureType) (string, bool) {
+func resolveBackfillRoot(fs afero.Fs, g git.GitInterface, cwd string, s config.StructureType) (string, bool) {
 	switch s {
 	case config.BareWorktreeRoot, config.WorktreeRoot:
 		return cwd, true
 	case config.WorktreeChild:
-		return hop.RepoRootOfWorktree(g, cwd)
+		root, rs, ok := repoOfLinkedWorktree(fs, g, cwd)
+		if !ok || !isHubStructure(rs) {
+			return "", false
+		}
+		return root, true
 	default:
 		return "", false
 	}
