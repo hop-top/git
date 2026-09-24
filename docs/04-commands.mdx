@@ -1013,7 +1013,7 @@ These flags work with all commands:
 | `--global, -g` | Use the global hopspace in `$GIT_HOP_DATA_HOME` (default: local) |
 | `--config <file>` | Config file (default: `$XDG_CONFIG_HOME/git-hop/config.json`) |
 | `--dry-run, -n` | Show what would happen without making changes. A command that cannot preview itself (`env start`, `env stop`, `env generate`, clone) refuses the flag with exit 129 instead of running |
-| `--no-color` | Disable ANSI color |
+| `--no-color` | Disable ANSI color. Without it, colour is used only when stdout is a terminal; `NO_COLOR` turns it off and `CLICOLOR_FORCE=1` forces it on |
 | `--no-hints` | Suppress next-step hints after command output |
 | `--offline` | Disable network access |
 | `--help, -h` | Show help for command |

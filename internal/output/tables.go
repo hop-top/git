@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/tabwriter"
 
+	"charm.land/lipgloss/v2"
 	kitout "hop.top/kit/go/console/output"
 )
 
@@ -66,14 +67,21 @@ func (tb *TableBuilder) Render() string {
 
 // renderTabwriter produces aligned plain-text output via tabwriter.
 func (tb *TableBuilder) renderTabwriter() string {
+	return strings.Join(alignRows(append([][]string{tb.headers}, tb.rows...)), "\n")
+}
+
+// alignRows lays rows out as lines of columns two spaces apart. Cells
+// must be plain text: text/tabwriter counts every byte, so a colour code
+// in a cell would pad its column by the code's length. Style the lines
+// it returns instead.
+func alignRows(rows [][]string) []string {
 	var buf bytes.Buffer
 	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, strings.Join(tb.headers, "\t"))
-	for _, row := range tb.rows {
+	for _, row := range rows {
 		fmt.Fprintln(tw, strings.Join(row, "\t"))
 	}
 	tw.Flush()
-	return strings.TrimRight(buf.String(), "\n")
+	return strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
 }
 
 // renderPlain returns plain text output for non-human modes.
@@ -152,23 +160,18 @@ func (st *StatusTable) Render() string {
 		return st.renderPlain()
 	}
 
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-
-	fmt.Fprintln(tw, strings.Join(st.headers, "\t"))
+	rows := [][]string{st.headers}
+	for _, row := range st.rows {
+		rows = append(rows, row.Cells)
+	}
+	lines := alignRows(rows)
 
 	// The row status only colours the row; callers spell the state out
 	// in a column of words, as git does, so it survives without colour.
-	for _, row := range st.rows {
-		cells := make([]string, len(row.Cells))
-		for i, cell := range row.Cells {
-			cells[i] = colorizeCell(cell, row.Status)
-		}
-		fmt.Fprintln(tw, strings.Join(cells, "\t"))
+	for i, row := range st.rows {
+		lines[i+1] = colorizeCell(lines[i+1], row.Status)
 	}
-
-	tw.Flush()
-	return strings.TrimRight(buf.String(), "\n")
+	return strings.Join(lines, "\n")
 }
 
 // renderPlain returns plain text output.
@@ -230,16 +233,16 @@ func SummaryTable(items map[string]string) string {
 		return strings.Join(lines, "\n")
 	}
 
-	var buf bytes.Buffer
-	tw := tabwriter.NewWriter(&buf, 0, 0, 2, ' ', 0)
-	for k, v := range items {
-		fmt.Fprintf(tw, "%s\t%s\n",
-			StyleKey.Render(k),
-			StyleValue.Render(v),
-		)
+	keyWidth := 0
+	for k := range items {
+		keyWidth = max(keyWidth, lipgloss.Width(k))
 	}
-	tw.Flush()
-	return strings.TrimRight(buf.String(), "\n")
+	var lines []string
+	for k, v := range items {
+		pad := strings.Repeat(" ", keyWidth-lipgloss.Width(k)+2)
+		lines = append(lines, Paint(StyleKey, k)+pad+Paint(StyleValue, v))
+	}
+	return strings.Join(lines, "\n")
 }
 
 // CompactList creates a compact, indented list coloured by status.
@@ -269,18 +272,18 @@ func AlignedList(items []struct{ Label, Value string }) string {
 
 	maxWidth := 0
 	for _, item := range items {
-		if len(item.Label) > maxWidth {
-			maxWidth = len(item.Label)
+		if lipgloss.Width(item.Label) > maxWidth {
+			maxWidth = lipgloss.Width(item.Label)
 		}
 	}
 
 	var lines []string
 	for _, item := range items {
-		padding := strings.Repeat(" ", maxWidth-len(item.Label))
+		padding := strings.Repeat(" ", maxWidth-lipgloss.Width(item.Label))
 		line := fmt.Sprintf("  %s%s  %s",
-			StyleKey.Render(item.Label),
+			Paint(StyleKey, item.Label),
 			padding,
-			StyleValue.Render(item.Value),
+			Paint(StyleValue, item.Value),
 		)
 		lines = append(lines, line)
 	}
@@ -306,7 +309,7 @@ func Legend(items map[string]string) string {
 		parts = append(parts, word+" = "+items[word])
 	}
 
-	return StyleMuted.Render("Legend: " + strings.Join(parts, ", "))
+	return Paint(StyleMuted, "Legend: "+strings.Join(parts, ", "))
 }
 
 // RenderStructTable renders a slice of structs using kit/output.Render.

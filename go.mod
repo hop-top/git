@@ -7,6 +7,7 @@ require (
 	charm.land/bubbletea/v2 v2.0.5
 	charm.land/lipgloss/v2 v2.0.6
 	charm.land/log/v2 v2.0.0
+	github.com/charmbracelet/colorprofile v0.4.3
 	github.com/charmbracelet/x/exp/charmtone v0.0.0-20260413165052-6921c759c913
 	github.com/rogpeppe/go-internal v1.16.0
 	github.com/spf13/afero v1.15.0
@@ -31,7 +32,6 @@ require (
 	github.com/bahlo/generic-list-go v0.2.0 // indirect
 	github.com/bits-and-blooms/bitset v1.24.6 // indirect
 	github.com/buger/jsonparser v1.1.2 // indirect
-	github.com/charmbracelet/colorprofile v0.4.3 // indirect
 	github.com/charmbracelet/ultraviolet v0.0.0-20260811164956-006e29f97886 // indirect
 	github.com/charmbracelet/x/ansi v0.11.8 // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect

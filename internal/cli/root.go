@@ -678,6 +678,7 @@ func setupOutputMode(cmd *cobra.Command) {
 
 	output.SetViper(Root.Viper)
 	output.SetupLogger(req.mode(format), verboseEnabled())
+	output.SetupColor(Root.Viper.GetBool("no-color"))
 }
 
 // outputRequest is what a command line asked of the output layer. The

@@ -687,7 +687,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 	// Summary
 	fmt.Println()
 	if totalWorktrees == 0 {
-		fmt.Println(output.StyleMuted.Render("No worktrees found. Run 'git hop <uri>' to clone a repository."))
+		fmt.Println(output.Colorize("No worktrees found. Run 'git hop <uri>' to clone a repository.", "muted"))
 	} else {
 		summary := fmt.Sprintf("Tracking %d worktrees across %d repositories",
 			totalWorktrees, len(st.Repositories))
