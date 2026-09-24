@@ -18,6 +18,10 @@ type MockGit struct {
 	RenamedBranches       []string // tracks [oldBranch, newBranch] pairs flattened
 	LocalBranches         []string // tracks local branches for LocalBranchExists
 
+	// CurrentBranches maps a dir to the branch GetCurrentBranch reports
+	// there; dirs not listed report "main".
+	CurrentBranches map[string]string
+
 	// StatusOverride lets tests dictate what GetStatus returns. When
 	// nil, GetStatus returns a clean default.
 	StatusOverride *git.Status
@@ -239,6 +243,9 @@ func (m *MockGit) GetRemoteURL(dir string) (string, error) {
 
 // GetCurrentBranch mocks getting current branch, always returns "main"
 func (m *MockGit) GetCurrentBranch(dir string) (string, error) {
+	if b, ok := m.CurrentBranches[dir]; ok {
+		return b, nil
+	}
 	return "main", nil
 }
 

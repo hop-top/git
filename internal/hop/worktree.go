@@ -236,20 +236,30 @@ func (m *WorktreeManager) resolveStartPoint(basePath, startPoint, defaultBranch 
 }
 
 // CheckMove reports why MoveWorktree would refuse to rename oldBranch to
-// newBranch in hub. It reads only the hub config, so callers can settle it
-// before running anything with side effects.
-func CheckMove(hub *Hub, oldBranch, newBranch string) error {
+// newBranch in hub. It only reads the hub config and git refs, so callers
+// can settle it before running anything with side effects.
+func CheckMove(hub *Hub, g git.GitInterface, oldBranch, newBranch string) error {
 	if oldBranch == "" || newBranch == "" {
 		return fmt.Errorf("branch names cannot be empty")
 	}
 	if oldBranch == hub.Config.Repo.DefaultBranch {
 		return fmt.Errorf("cannot move the default branch '%s'", oldBranch)
 	}
-	if _, exists := hub.Config.Branches[oldBranch]; !exists {
+	entry, exists := hub.Config.Branches[oldBranch]
+	if !exists {
 		return fmt.Errorf("branch '%s' not found in hub", oldBranch)
 	}
 	if _, exists := hub.Config.Branches[newBranch]; exists {
 		return fmt.Errorf("branch '%s' already exists", newBranch)
+	}
+	// An existing newBranch is adopted only when the worktree already has
+	// it checked out (the branch was renamed outside git-hop); any other
+	// branch by that name is unrelated, and git branch -m would refuse it.
+	oldPath := config.ResolveWorktreePath(entry.Path, hub.Path)
+	if g.LocalBranchExists(oldPath, newBranch) {
+		if cur, err := g.GetCurrentBranch(oldPath); err != nil || cur != newBranch {
+			return fmt.Errorf("branch '%s' already exists and is not checked out in '%s'", newBranch, oldBranch)
+		}
 	}
 	return nil
 }
@@ -258,7 +268,7 @@ func CheckMove(hub *Hub, oldBranch, newBranch string) error {
 // and updates hub and hopspace configs.
 // Returns (oldPath, newPath, error).
 func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, newBranch string, locationPattern, org, repo string) (string, string, error) {
-	if err := CheckMove(hub, oldBranch, newBranch); err != nil {
+	if err := CheckMove(hub, m.git, oldBranch, newBranch); err != nil {
 		return "", "", err
 	}
 	oldPath := config.ResolveWorktreePath(hub.Config.Branches[oldBranch].Path, hub.Path)
