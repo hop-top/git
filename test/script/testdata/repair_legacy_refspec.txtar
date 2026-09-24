@@ -57,6 +57,14 @@ stderr 'missing remote.origin.fetch refspec'
 stderr 're-run .git hop repair. without a pathspec'
 ! exec git config --get remote.origin.fetch
 
+# The warning survives --porcelain, on stderr beside the records, as git
+# keeps warnings with --porcelain. -q drops it whatever the format.
+exec git-hop repair -n --porcelain hops/feature
+stderr '^warning: hub is missing remote.origin.fetch refspec'
+! stdout 'warning'
+exec git-hop repair -n --porcelain -q hops/feature
+! stderr .
+
 # --- apply ---
 exec git-hop repair
 stdout 'restore-fetch-refspec'

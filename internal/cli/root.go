@@ -686,6 +686,7 @@ func setupOutputMode(cmd *cobra.Command) {
 
 	output.SetViper(Root.Viper)
 	output.SetupLogger(req.mode(format), verboseEnabled())
+	output.SetQuiet(req.quiet)
 	output.SetupColor(Root.Viper.GetBool("no-color"))
 }
 

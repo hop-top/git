@@ -24,6 +24,10 @@ var (
 	CurrentMode = ModeHuman
 	Verbose     = false
 	logger      *log.Logger
+
+	// quiet is -q. It is kept apart from CurrentMode because a structured
+	// mode outranks ModeQuiet there, yet -q still silences warnings.
+	quiet = false
 )
 
 func init() {
@@ -39,6 +43,7 @@ func init() {
 func SetupLogger(mode Mode, verbose bool) {
 	CurrentMode = mode
 	Verbose = verbose
+	quiet = mode == ModeQuiet
 
 	// Determine desired level from mode + verbose.
 	level := log.InfoLevel
@@ -73,6 +78,11 @@ func ErrorJSON(w io.Writer, msg string) {
 	l.SetOutput(w)
 	l.Error(msg)
 }
+
+// SetQuiet records -q for a run whose mode is not ModeQuiet, such as
+// --porcelain -q or --json -q: warnings and hints are dropped in every
+// mode once -q is given. Call it after SetupLogger, which resets it.
+func SetQuiet(q bool) { quiet = q || CurrentMode == ModeQuiet }
 
 // rootViper returns the shared viper instance set by SetViper, or a
 // zero-value viper if none has been wired yet.
@@ -113,44 +123,53 @@ func ErrorCode(code int, msg string, args ...interface{}) {
 }
 
 func exitWith(code int, prefix, msg string) {
-	if CurrentMode == ModeJSON {
-		logger.Error(msg)
-	} else {
-		fmt.Fprintf(os.Stderr, "%s: %s\n", prefix, msg)
-	}
+	printError(prefix, msg)
 	os.Exit(code)
 }
 
-// Error prints a non-fatal error.
+// printError writes an error-level diagnostic to stderr: a JSON record
+// in JSON mode, else "<prefix>: msg". Errors are never dropped, in any
+// mode or under -q; git's -q is "only report errors".
+func printError(prefix, msg string) {
+	if CurrentMode == ModeJSON {
+		logger.Error(msg)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "%s: %s\n", prefix, msg)
+}
+
+// Error prints a non-fatal error with git's lowercase "error:" prefix on
+// stderr (a structured record in JSON mode). It prints in every mode,
+// quiet included.
 func Error(msg string, args ...interface{}) {
-	if CurrentMode == ModeQuiet {
+	printError("error", fmt.Sprintf(msg, args...))
+}
+
+// Warn prints a warning with git's lowercase "warning:" prefix on stderr
+// (a structured record in JSON mode). Porcelain and the other structured
+// formats keep it, as git keeps warnings beside --porcelain output: it is
+// on stderr, so it never mixes into the result on stdout. -q drops it in
+// every mode, following git's -q ("only report errors").
+func Warn(msg string, args ...interface{}) {
+	if quiet {
 		return
 	}
 	formatted := fmt.Sprintf(msg, args...)
 	if CurrentMode == ModeJSON {
-		logger.Error(formatted)
-	} else {
-		fmt.Fprintf(os.Stderr, "error: %s\n", formatted)
-	}
-}
-
-// Warn prints a warning with git's lowercase "warning:" prefix on stderr
-// (a structured record in JSON mode). Quiet and porcelain modes drop it.
-func Warn(msg string, args ...interface{}) {
-	formatted := fmt.Sprintf(msg, args...)
-	switch CurrentMode {
-	case ModeJSON:
 		logger.Warn(formatted)
-	case ModeHuman:
-		fmt.Fprintf(os.Stderr, "warning: %s\n", formatted)
+		return
 	}
+	fmt.Fprintf(os.Stderr, "warning: %s\n", formatted)
 }
 
 // Hint prints advice with git's lowercase "hint:" prefix on stderr, one
 // prefix per line of msg as git's advise() does; an empty line prints a
-// bare "hint:". JSON mode emits one structured record (kind=hint). Quiet
-// and porcelain modes drop it.
+// bare "hint:". JSON mode emits one structured record (kind=hint).
+// Porcelain drops it, and so does -q in every mode.
 func Hint(msg string, args ...interface{}) {
+	if quiet {
+		return
+	}
 	formatted := fmt.Sprintf(msg, args...)
 	switch CurrentMode {
 	case ModeJSON:

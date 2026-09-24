@@ -97,9 +97,14 @@ no header, columns in the order the result shape lists them:
 git hop status --porcelain
 ```
 
+Warnings and errors still print, on stderr, so they never break a parser
+reading stdout. Hints and progress are dropped.
+
 ### Quiet Mode
 
-Suppress all non-error output:
+Only report errors, like git's `-q`: progress, hints and warnings are
+dropped, in every mode (`--porcelain -q` and `--json -q` included);
+`error:` and `fatal:` lines always print:
 
 ```bash
 git hop --quiet doctor
@@ -137,8 +142,8 @@ output.WithField("service", "api").
 
 - `output.Info(msg, args...)` - Info-level message (human mode only)
 - `output.Debug(msg, args...)` - Debug-level message (verbose mode only)
-- `output.Warn(msg, args...)` - Warning message
-- `output.Error(msg, args...)` - Error message (goes to stderr)
+- `output.Warn(msg, args...)` - Warning message (stderr; dropped by `-q`)
+- `output.Error(msg, args...)` - Error message (stderr; printed in every mode)
 - `output.Fatal(msg, args...)` - Fatal error and exit
 - `output.Success(msg, args...)` - Success message
 
