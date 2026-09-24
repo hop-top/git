@@ -210,7 +210,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 
 	for repoID, repo := range st.Repositories {
 		for branch, wt := range repo.Worktrees {
-			if exists, _ := afero.DirExists(fs, wt.Path); exists {
+			if worktreeDirPresent(fs, wt.Path) {
 				continue
 			}
 

@@ -881,6 +881,14 @@ names the command that releases it, `git worktree unlock <path>`. Once
 it is unlocked, the next `--fix` treats it like any other missing
 worktree.
 
+A worktree path that something other than a directory occupies (a
+file, a symlink to one, or a dangling symlink) does not count as the
+worktree. The hub check reports it as an issue ("occupied by a
+non-directory"), the state check and `git hop prune` treat the worktree
+as missing, and `--fix` never checks a worktree out over it: the
+recreate fails with the path named as in the way (below), and whatever
+occupies it is left alone.
+
 This applies **only** to worktrees that are missing on disk. Doctor
 does not bulk-remove existing-but-merged worktrees — for that, use
 [`git hop remove --merged`](#--merged).
@@ -888,8 +896,8 @@ does not bulk-remove existing-but-merged worktrees — for that, use
 Before recreating a worktree, doctor checks for the conditions that
 make `git worktree add` refuse. These are: git still registers the path
 and will not prune it (for example it is locked), the branch is checked
-out in another worktree, something is in the way of the path (a
-dangling symlink, or a parent that is not a directory), or the branch
+out in another worktree, something is in the way of the path (a file,
+a dangling symlink, or a parent that is not a directory), or the branch
 no longer exists, either locally or as `origin/<branch>`. If any of
 these applies, the repair is reported as `failed` with the reason, and
 `--dry-run` reports the same failure rather than a `would-fix`. The
