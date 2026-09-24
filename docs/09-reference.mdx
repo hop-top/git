@@ -265,7 +265,7 @@ Rules:
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.1): a MINOR bump adds
+- Result shapes are versioned together (currently 1.2): a MINOR bump adds
   fields, a MAJOR bump renames or removes them.
 - Commands not listed here have no structured result: the output flags
   only switch their log format.
@@ -282,6 +282,7 @@ One object.
 | `upstream` | string | Upstream the branch tracks (for example `origin/main`); empty when none |
 | `created` | bool | `true` when this run created the local branch |
 | `ports` | map service → port | *json/yaml only*; present when the worktree has a Docker environment |
+| `task` | string | *json/yaml only*; task id recorded with `--task`; absent when none |
 
 Columns: `branch path base upstream created`.
 
