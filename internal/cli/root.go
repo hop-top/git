@@ -191,6 +191,7 @@ func init() {
 
 	RootCmd = Root.Cmd
 	RootCmd.Version = "dev"
+	installHelpCommand(RootCmd)
 
 	RootCmd.Long = `git-hop is a context-aware porcelain tool for managing
 Git worktrees, Docker environments, and structured workspaces.

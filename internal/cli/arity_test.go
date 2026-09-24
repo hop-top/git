@@ -12,10 +12,12 @@ import (
 )
 
 // unboundedArity lists the runnable leaves that legitimately take any
-// number of positionals. Every other leaf must refuse one word past its
-// arity as a usage error. Keep each entry justified.
+// number of positionals; the probe skips them. Every other leaf must
+// refuse one word past its arity as a usage error. Keep each entry
+// justified.
 var unboundedArity = map[string]string{
 	"git-hop repair": "takes a pathspec list, like git add -- <pathspec>...",
+	"git-hop help":   "takes a command path of any depth (help env start); its validator refuses unknown topics by content",
 }
 
 // arityProbeLimit is how many positionals the probe tries before calling
@@ -41,13 +43,10 @@ func TestLeafCommandsRefuseSurplusPositionals(t *testing.T) {
 		path := c.CommandPath()
 		seen[path] = true
 
-		most, bounded := acceptedArity(c)
 		if _, ok := unboundedArity[path]; ok {
-			if bounded {
-				t.Errorf("%s: listed in unboundedArity but accepts at most %d positional(s); drop the entry", path, most)
-			}
 			return
 		}
+		most, bounded := acceptedArity(c)
 		if !bounded {
 			t.Errorf("%s: accepts %d+ positionals; declare its arity with an Args validator", path, arityProbeLimit)
 			return

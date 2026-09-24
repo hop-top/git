@@ -1,0 +1,41 @@
+# `git hop help <command>` prints that command's help, exactly as
+# `git hop <command> --help` does. A topic naming no command is a usage
+# error.
+
+# --- one-word command path ---
+exec git-hop list --help
+cp stdout list-flag.txt
+exec git-hop help list
+cmp stdout list-flag.txt
+stdout '^List all worktrees tracked by git-hop'
+! stdout 'Show help for a command'
+
+# --- multi-word path and alias resolve like the command line ---
+exec git-hop env start --help
+cp stdout env-start-flag.txt
+exec git-hop help env start
+cmp stdout env-start-flag.txt
+
+exec git-hop help st
+stdout '^Show the status of the current worktree or hub'
+
+# --- a command group prints the group's help ---
+exec git-hop help env
+stdout 'Manage the environment lifecycle'
+stdout 'start'
+
+# --- bare help is the top-level help ---
+exec git-hop --help
+cp stdout root-flag.txt
+exec git-hop help
+cmp stdout root-flag.txt
+
+# --- unknown topic: usage error, nothing on stdout ---
+exec sh -c 'git-hop help bogus; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown help topic "bogus" for "git-hop"$'
+! stdout 'Usage:'
+
+exec sh -c 'git-hop help env bogus; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: unknown help topic "env bogus" for "git-hop"$'
