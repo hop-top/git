@@ -229,6 +229,7 @@ To convert anyway, carrying uncommitted files into the new worktree
 	output.Info("Converting repository...")
 
 	result, err := converter.ConvertToBareWorktree(repoPath, useBare, true)
+	cwdErr := reanchorInitCwd(repoPath)
 	if err != nil {
 		output.Error("Conversion failed: %v", err)
 
@@ -243,6 +244,9 @@ To convert anyway, carrying uncommitted files into the new worktree
 		reportPreservedBackup(fs, result.BackupPath)
 
 		os.Exit(1)
+	}
+	if cwdErr != nil {
+		output.Warn("could not change into %s after conversion: %v", repoPath, cwdErr)
 	}
 
 	// Load hub config to get actual worktree path
