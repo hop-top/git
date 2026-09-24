@@ -13,13 +13,15 @@ import (
 )
 
 // checkHub validates the hub, its hopspace, and each branch worktree.
-// Returns the hub path ("" when not in a hub) for the later checks.
-func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *doctorReport) string {
+// Returns the hub path ("" when not in a hub) for the later checks, and
+// the missing worktrees the hub check could not recreate, which the
+// state repair must keep (see checkBranchWorktrees).
+func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *doctorReport) (string, keptWorktrees) {
 	output.Info("\n=== Checking Hub ===")
 	hubPath, err := hop.FindHub(fs, cwd)
 	if err != nil {
 		output.Info("Not in a hub. Skipping hub-specific checks.")
-		return ""
+		return "", nil
 	}
 
 	output.Info("Hub found at: %s", hubPath)
@@ -27,7 +29,7 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 	if err != nil {
 		output.Error("Failed to load hub config: %v", err)
 		r.issue(doctorCheckHub, hubPath, "failed to load hub config: %v", err)
-		return hubPath
+		return hubPath, nil
 	}
 
 	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
@@ -43,8 +45,7 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 		reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
 	}
 
-	checkBranchWorktrees(fs, g, hub, hopspacePath, opts, r)
-	return hubPath
+	return hubPath, checkBranchWorktrees(fs, g, hub, hopspacePath, opts, r)
 }
 
 // warnStaleHopspaceCopy reports a data-home hop.json left beside an

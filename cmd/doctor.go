@@ -222,10 +222,10 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	}
 
 	checkPaths(fs, opts, &r)
-	hubPath := checkHub(fs, g, cwd, opts, &r)
+	hubPath, hubKept := checkHub(fs, g, cwd, opts, &r)
 	checkDependencies(fs, hubPath, opts, &r)
 	checkWorktreeState(fs, g, hubPath, opts, &r)
-	checkState(fs, g, hubPath, opts, &r)
+	checkState(fs, g, hubPath, hubKept, opts, &r)
 	checkConfig(config.NewGlobalLoader(), hubPath, opts, &r)
 
 	summarizeDoctor(opts, r)
@@ -347,20 +347,21 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 }
 
 // checkState reconciles the global state file (and the current hub's
-// hop.json) against the filesystem.
-func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts, r *doctorReport) {
+// hop.json) against the filesystem. hubKept are the missing worktrees the
+// hub check could not recreate; their hop.json rows are kept.
+func checkState(fs afero.Fs, g git.GitInterface, hubPath string, hubKept keptWorktrees, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking State ===")
 	st, stateIssues := inspectState(fs, g, r)
 	switch {
 	case len(stateIssues) > 0 && opts.fix:
-		r.fixed += fixStateIssues(fs, g, st, hubPath, opts, r)
+		r.fixed += fixStateIssues(fs, g, st, hubPath, hubKept, opts, r)
 	case len(stateIssues) > 0:
 		output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
 	case opts.fix:
 		// state.json has nothing to fix, but the hub's hop.json can still
 		// list a worktree the hub check left for cleanup (a merged branch
 		// whose directory is gone) when state never recorded it.
-		r.fixed += pruneMissingHubRows(fs, g, hubPath, nil, opts, r)
+		r.fixed += pruneMissingHubRows(fs, g, hubPath, hubKept, opts, r)
 	}
 }
 

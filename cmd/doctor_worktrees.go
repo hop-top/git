@@ -34,7 +34,13 @@ import (
 // The hub check runs before the state check on purpose: a worktree it
 // recreates is back on disk when the state check looks, so the state
 // check only sees what the hub check left for cleanup.
-func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath string, opts doctorOpts, r *doctorReport) {
+//
+// Returns the missing worktrees it could not recreate (or, under
+// --dry-run, would not be able to). The state repair after it keeps
+// their hop.json rows: the row is the only record left of an unmerged
+// branch's worktree, and a repair that failed is no reason to drop it.
+func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath string, opts doctorOpts, r *doctorReport) keptWorktrees {
+	kept := keptWorktrees{}
 	var registry *string // git's worktree list, read once a worktree is missing
 	for _, name := range sortedBranchNames(hub) {
 		b := hub.Config.Branches[name]
@@ -63,8 +69,11 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 			clearStaleRegistration(fs, g, hopspacePath, linkPath, opts, r)
 			continue
 		}
-		recreateWorktree(fs, g, name, b.HopspaceBranch, linkPath, hopspacePath, opts, r)
+		if !recreateWorktree(fs, g, *registry, name, b.HopspaceBranch, linkPath, hopspacePath, opts, r) {
+			kept.add(linkPath)
+		}
 	}
+	return kept
 }
 
 // warnLockedWorktree reports a missing worktree git has locked: a
@@ -101,8 +110,10 @@ func mergedIntoDefault(g git.GitInterface, dir, branch, defaultBranch string) bo
 }
 
 // recreateWorktree checks out branch again at linkPath, the directory its
-// hop.json row points at.
-func recreateWorktree(fs afero.Fs, g git.GitInterface, name, branch, linkPath, hopspacePath string, opts doctorOpts, r *doctorReport) {
+// hop.json row points at. registry is git's worktree list as the hub
+// check read it. Returns whether the worktree was recreated (under
+// --dry-run: would be); every failure is recorded.
+func recreateWorktree(fs afero.Fs, g git.GitInterface, registry, name, branch, linkPath, hopspacePath string, opts doctorOpts, r *doctorReport) bool {
 	// Feasibility is checked before branching on dry-run so a preview
 	// reports the same "cannot fix" verdicts a real run would hit, rather
 	// than promising a repair that would fail.
@@ -110,46 +121,52 @@ func recreateWorktree(fs afero.Fs, g git.GitInterface, name, branch, linkPath, h
 	if err != nil {
 		output.Error("Cannot fix: failed to load hopspace: %v", err)
 		r.failed(doctorCheckHub, name, "cannot recreate worktree: failed to load hopspace: %v", err)
-		return
+		return false
 	}
 	if _, ok := hopspace.Config.Branches[branch]; !ok {
 		output.Error("Cannot fix: branch %s not found in hopspace", branch)
 		r.failed(doctorCheckHub, name, "cannot recreate worktree: branch %s not found in hopspace", branch)
-		return
+		return false
+	}
+	if blocker := recreateBlocker(fs, g, registry, hopspacePath, branch, linkPath); blocker != "" {
+		output.Error("Cannot fix: %s", blocker)
+		r.failed(doctorCheckHub, name, "cannot recreate worktree: %s", blocker)
+		return false
 	}
 	if !clearStaleRegistration(fs, g, hopspacePath, linkPath, opts, r) {
-		return
+		return false
 	}
 
 	if !opts.mutating() {
 		output.Info("[dry-run] Would recreate worktree for branch %s at %s", name, linkPath)
 		r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
 		previewDir(fs, linkPath)
-		return
+		return true
 	}
 
 	output.Info("Attempting to fix broken worktree for branch %s...", name)
 	if err := fs.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
 		output.Error("Failed to create parent directory: %v", err)
 		r.failed(doctorCheckHub, name, "recreate worktree: create parent directory: %v", err)
-		return
+		return false
 	}
 	if err := g.CreateWorktree(hopspacePath, branch, linkPath, "", false, "origin/"+branch); err != nil {
 		output.Error("Failed to recreate worktree: %v", err)
 		r.failed(doctorCheckHub, name, "recreate worktree: %v", err)
-		return
+		return false
 	}
 	if err := hopspace.RegisterBranch(branch, linkPath); err != nil {
 		output.Error("Failed to update hopspace: %v", err)
 		// Continue anyway as the worktree was created.
 	}
-	if _, err := fs.Stat(linkPath); err == nil {
-		output.Info("Fixed worktree for branch %s", name)
-		r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
-	} else {
+	if _, err := fs.Stat(linkPath); err != nil {
 		output.Error("Worktree creation appeared to succeed but path still not accessible")
 		r.failed(doctorCheckHub, name, "recreate worktree: path still not accessible")
+		return false
 	}
+	output.Info("Fixed worktree for branch %s", name)
+	r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
+	return true
 }
 
 // clearStaleRegistration drops git's record of the worktree at path when

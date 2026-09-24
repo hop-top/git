@@ -36,11 +36,13 @@ import (
 // gone: it removes, relocates or keeps each one. What it keeps (the user
 // answered "Keep as-is", or git has the worktree locked) is kept for the
 // rest of the run, so no pass after it prunes state worktree entries,
-// and the hop.json pass skips the kept worktrees' rows.
+// and the hop.json pass skips the kept worktrees' rows. So are the
+// worktrees in hubKept, the ones the hub check could not recreate,
+// unless the user deletes or relocates their entry at the prompt.
 //
 // Each repair is recorded in r as it lands (or would); the returned count
 // is what the caller adds to r.fixed.
-func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath string, opts doctorOpts, r *doctorReport) int {
+func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath string, hubKept keptWorktrees, opts doctorOpts, r *doctorReport) int {
 	dryRun := !opts.mutating()
 	// The repairs are recorded on a scratch report and folded into r
 	// below, once their outcome is known: a state save that fails turns
@@ -48,7 +50,7 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 	var fixes doctorReport
 
 	output.Info("\nFixing missing worktrees...")
-	missingFixed, kept := fixMissingWorktrees(fs, g, st, opts, &fixes)
+	missingFixed, kept := fixMissingWorktrees(fs, g, st, hubKept, opts, &fixes)
 
 	output.Info("\nPruning orphaned hubs from state...")
 	hubsPruned := pruneOrphanedHubs(fs, st, dryRun)
@@ -170,6 +172,8 @@ type keptWorktrees map[string]struct{}
 
 func (k keptWorktrees) add(path string) { k[resolvedPath(path)] = struct{}{} }
 
+func (k keptWorktrees) remove(path string) { delete(k, resolvedPath(path)) }
+
 func (k keptWorktrees) has(path string) bool {
 	_, ok := k[resolvedPath(path)]
 	return ok
@@ -186,8 +190,9 @@ func (k keptWorktrees) has(path string) bool {
 //
 // Returns the number of entries resolved (relocated or deleted), and the
 // worktrees kept: locked, kept at the prompt, or left alone because the
-// prompt got no usable answer. The passes after this one must leave the
-// kept worktrees alone.
+// prompt got no usable answer, plus those in hubKept whose entry the
+// user did not delete or relocate. The passes after this one must leave
+// the kept worktrees alone.
 //
 // Under dryRun the entry is reported but st is left untouched, and the
 // user is never prompted: a preview must not ask for decisions it will
@@ -195,10 +200,13 @@ func (k keptWorktrees) has(path string) bool {
 // since the preview cannot know the answer.
 //
 // Each resolved entry is recorded in r.
-func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts doctorOpts, r *doctorReport) (int, keptWorktrees) {
+func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKept keptWorktrees, opts doctorOpts, r *doctorReport) (int, keptWorktrees) {
 	dryRun := !opts.mutating()
 	resolved := 0
 	kept := keptWorktrees{}
+	for path := range hubKept {
+		kept[path] = struct{}{}
+	}
 
 	for repoID, repo := range st.Repositories {
 		for branch, wt := range repo.Worktrees {
@@ -263,6 +271,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts 
 					kept.add(wt.Path)
 					continue
 				}
+				kept.remove(wt.Path)
 				wt.Path = newPath
 				repo.Worktrees[branch] = wt
 				output.Info("  Updated path to %s", newPath)
@@ -270,6 +279,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts 
 				resolved++
 
 			case 1: // delete
+				kept.remove(wt.Path)
 				delete(repo.Worktrees, branch)
 				output.Info("  Deleted entry for '%s'", branch)
 				r.repaired(opts, doctorCheckState, repoID+":"+branch, "delete entry")
