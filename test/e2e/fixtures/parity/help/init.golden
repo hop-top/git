@@ -20,7 +20,7 @@ Aliases:
 Flags:
   -n, --dry-run           Show conversion steps without executing
       --enable-chdir      Install shell integration for automatic directory switching after hop commands
-      --force             Convert even with uncommitted changes (DANGEROUS; a backup is still taken)
+      --force             Convert even with uncommitted changes (DANGEROUS; a backup is still taken); with --restore, replace what occupies the original location
   -h, --help              help for init
       --hooks string      mirror committed .git-hop/hooks/ into hopspace: symlink|copy|prompt|none (overrides --no-hooks)
       --hooks-overwrite   overwrite an existing hopspace hook with different content (symlink/copy modes)
@@ -28,7 +28,7 @@ Flags:
       --no-hooks          Skip hooks: no .git-hop/hooks/ directory, no lifecycle hook runs
       --no-prompt         Skip the interactive menu and convert non-interactively (bare unless --regular)
       --regular           Convert to a regular repo + worktrees instead of bare (with --no-prompt)
-      --restore string    Restore repository from backup (manual rollback)
+      --restore string    Restore a conversion backup to the location it was taken from (manual rollback)
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
