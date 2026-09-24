@@ -38,10 +38,16 @@ type WorktreeState struct {
 	LastAccessed time.Time `json:"lastAccessed"`
 }
 
+// Hub modes: where a hub keeps its hopspace.
+const (
+	HubModeLocal  = "local"  // in the hub's own hop.json (the default)
+	HubModeGlobal = "global" // in $GIT_HOP_DATA_HOME/<org>/<repo> (clone --global)
+)
+
 // HubState represents a hub location for a repository
 type HubState struct {
 	Path         string    `json:"path"`
-	Mode         string    `json:"mode"` // "local" or "global"
+	Mode         string    `json:"mode"` // HubModeLocal or HubModeGlobal
 	CreatedAt    time.Time `json:"createdAt"`
 	LastAccessed time.Time `json:"lastAccessed"`
 }

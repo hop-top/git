@@ -1,0 +1,32 @@
+# state.json records whether a hub keeps its hopspace in the hub (local,
+# the default) or in $GIT_HOP_DATA_HOME (global, clone --global).
+#
+# The regression this pins: clone and add recorded every hub as "local",
+# so state could not tell a --global hub from a default one.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- clone --global records a global hub ---
+exec git-hop --global $WORK/org/repo.git hubg
+grep '"mode": "global"' $WORK/.local/state/git-hop/state.json
+! grep '"mode": "local"' $WORK/.local/state/git-hop/state.json
+
+# --- add recreates the hub entry with the same mode when state lost it ---
+rm $WORK/.local/state/git-hop/state.json
+cd $WORK/hubg
+exec git-hop add feat/x
+grep '"mode": "global"' $WORK/.local/state/git-hop/state.json
+! grep '"mode": "local"' $WORK/.local/state/git-hop/state.json
+
+# --- a default clone of another repo records a local hub ---
+cd $WORK
+exec git init --bare $WORK/org/other.git
+exec git -C $WORK/seed push $WORK/org/other.git main
+exec git-hop $WORK/org/other.git hubl
+grep -count=1 '"mode": "local"' $WORK/.local/state/git-hop/state.json
+grep -count=1 '"mode": "global"' $WORK/.local/state/git-hop/state.json

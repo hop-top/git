@@ -260,9 +260,13 @@ and no hook runs.`,
 			})
 
 			// Add the hub to state
+			mode := state.HubModeLocal
+			if hopspacePath != hubPath {
+				mode = state.HubModeGlobal
+			}
 			st.AddHub(repoID, &state.HubState{
 				Path:         hubPath,
-				Mode:         "local",
+				Mode:         mode,
 				CreatedAt:    time.Now(),
 				LastAccessed: time.Now(),
 			})

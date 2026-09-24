@@ -166,9 +166,13 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	}
 
 	// Add hub to state
+	mode := state.HubModeLocal
+	if globalConfig {
+		mode = state.HubModeGlobal
+	}
 	st.AddHub(repoID, &state.HubState{
 		Path:         projectRoot,
-		Mode:         "local",
+		Mode:         mode,
 		CreatedAt:    time.Now(),
 		LastAccessed: time.Now(),
 	})
