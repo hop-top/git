@@ -209,6 +209,7 @@ To convert anyway, carrying uncommitted files into the new worktree
 		for _, step := range initConversionPlan(backupRoot, branch, useBare) {
 			fmt.Println(step)
 		}
+		previewLocalConfig(g, repoPath, useBare)
 
 		if !noHooks {
 			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)

@@ -1,0 +1,112 @@
+# A bare conversion clones the repository into a new hub, and a clone
+# copies no local config. Everything the repository had in .git/config
+# carries over into the hub's config, in the same order and with every
+# value of a multi-valued key, except the keys that describe the old
+# layout or the old storage format. The remotes step owns remote.* and
+# branch.*, so they are written exactly once.
+
+exec git init --bare $WORK/remotes/acme/widget.git
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git remote add origin file://$WORK/remotes/acme/widget.git
+exec git push -u origin main
+
+exec git config user.name 'Local Name'
+exec git config user.email local@example.test
+exec git config --add url.https://mirror-a.example.test/.insteadOf https://git.example.test/
+exec git config --add url.https://mirror-a.example.test/.insteadOf https://code.example.test/
+exec git config core.hooksPath .githooks
+exec git config alias.st 'status -sb'
+exec git config hop.backup.maxBackups 7
+exec git config commit.gpgSign false
+# an include with an absolute path means the same thing from the hub
+exec git config include.path $WORK/shared.gitconfig
+# a relative one would resolve against the hub instead of .git/
+exec git config includeIf.onbranch:main.path ../relative.gitconfig
+# keys of the old layout and format
+exec git config core.worktree $WORK/proj
+exec git config extensions.worktreeConfig true
+
+exec git config --local --get-regexp '^(user|url|alias|hop|commit|include)\.|^core\.hookspath$'
+cp stdout $WORK/carried-before
+exec git config --local --get-regexp '^(remote|branch)\.'
+cp stdout $WORK/remotes-before
+
+# --- dry run names what would carry over and what would not ---
+exec git-hop init --no-prompt --no-hooks --dry-run
+stdout 'Carry over [0-9]+ local config key\(s\):'
+stdout '^         user\.email$'
+stdout '^         url\.https://mirror-a\.example\.test/\.insteadof$'
+stdout '^         remote\.origin\.url$'
+stdout '^         core\.filemode$'
+stdout 'Leave out 5 local config key\(s\):'
+stdout '^         core\.bare: '
+stdout '^         core\.worktree: '
+stdout '^         extensions\.worktreeconfig: '
+stdout '^         includeif\.onbranch:main\.path: relative include path'
+! stdout '^         user\.email:'
+exec git config --local core.bare
+stdout '^false$'
+
+# --- the conversion ---
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+stderr 'warning: .*includeif\.onbranch:main\.path'
+
+# --- carried keys are identical: same values, same order ---
+exec git config --local --get-regexp '^(user|url|alias|hop|commit|include)\.|^core\.hookspath$'
+cmp stdout $WORK/carried-before
+exec git config --local --get-all url.https://mirror-a.example.test/.insteadOf
+stdout -count=2 '^.+$'
+
+# --- remote.* and branch.* written once, by the remotes step ---
+exec git config --local --get-regexp '^(remote|branch)\.'
+cmp stdout $WORK/remotes-before
+exec git config --local --get-all remote.origin.url
+stdout -count=1 '^.+$'
+
+# --- excluded keys: the hub's own layout wins ---
+exec git config --local --get-all core.bare
+stdout -count=1 '^.+$'
+stdout '^true$'
+! exec git config --local core.worktree
+! exec git config --local extensions.worktreeConfig
+! exec git config --local --get-regexp '^includeif\.'
+
+# --- the include is live, and its contents were not flattened in ---
+! exec git config --local hop.shared
+exec git config hop.shared
+stdout '^yes$'
+
+# --- worktrees see the carried config ---
+cd $WORK/proj/hops/main
+exec git config user.email
+stdout '^local@example\.test$'
+exec git config core.hooksPath
+stdout '^\.githooks$'
+exec git config hop.backup.maxBackups
+stdout '^7$'
+exec git st
+stdout '^## main\.\.\.origin/main$'
+
+# --- a regular conversion keeps .git, and its config, in place ---
+exec git init $WORK/reg
+cd $WORK/reg
+exec git commit --allow-empty -m 'initial'
+exec git config user.email reg@example.test
+exec git config core.hooksPath .githooks
+exec git config --add hop.multi a
+exec git config --add hop.multi b
+exec git config --local --list
+cp stdout $WORK/reg-before
+exec git-hop init --no-prompt --no-hooks --regular --dry-run
+stdout 'local config stays in place'
+exec git-hop init --no-prompt --no-hooks --regular
+stdout 'Conversion successful'
+exec git config --local --list
+cmp stdout $WORK/reg-before
+
+-- shared.gitconfig --
+[hop]
+	shared = yes

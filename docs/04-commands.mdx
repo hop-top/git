@@ -984,6 +984,51 @@ time, so `pre-repair` sees the possibly-damaged config while
 when the hub config cannot yield an org and repo, which is exactly the
 state `pre-repair` exists to inspect.
 
+## git hop init
+
+Convert an existing repository to the hub + worktrees layout.
+
+### Usage
+
+```bash
+git hop init [--no-prompt] [--regular] [-n|--dry-run] [--force] [--keep-backup]
+```
+
+### What carries over
+
+A regular conversion (`--regular`) keeps `.git` where it is, so its local
+config is untouched.
+
+A bare conversion (the default) clones the repository into a new bare
+hub, and a clone copies no local config. `init` carries it over: every
+entry of the repository's `.git/config` is written into the hub's
+config, in the same order and with every value of a multi-valued key.
+That covers `user.*`, `url.*.insteadOf`, `core.hooksPath`, `alias.*`,
+`commit.gpgSign`, `hop.*` and the rest. Remotes, their refspecs and each
+branch's upstream come across as they were, along with the
+remote-tracking refs, so upstreams resolve without a fetch.
+
+The keys left out describe the old layout or the old storage format:
+
+| Key | Why it is left out |
+|-----|--------------------|
+| `core.bare` | The hub is bare; it keeps the clone's `true`. |
+| `core.worktree` | Names the old working tree; hub worktrees live under `hops/`. |
+| `core.repositoryformatversion` | The clone sets it to match its own storage. |
+| `extensions.*` | Repository format declarations (`objectFormat`, `worktreeConfig`, ...); the clone writes its own. |
+| `include.path`, `includeIf.<cond>.path` with a relative path, or a `gitdir:./` condition | Resolved against the directory of the config file, which moves from `<repo>/.git/` to `<repo>/`. `init` prints a `warning:` for each; set it again with an absolute path. |
+
+Includes with an absolute or `~/` path are carried over, as the
+directives themselves: the included file is not copied in. Filesystem
+settings git probes on its own (`core.fileMode`, `core.ignoreCase`,
+`core.precomposeUnicode`, `core.symlinks`) carry over too; the hub sits on
+the same filesystem, so they only differ from the clone's when you set
+them yourself.
+
+`git hop init -n` lists the keys it would carry over and the ones it
+would leave out, with the reason. It prints key names only, never
+values, since those can hold credentials.
+
 ## Command Aliases
 
 Many commands have shorter aliases for convenience:
