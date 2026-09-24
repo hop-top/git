@@ -10,10 +10,12 @@ import (
 	"hop.top/git/test/mocks"
 )
 
-// TestRemoveGate covers the four safety cases plus their flag-bypass
+// TestRemoveGate covers the safety cases plus their flag-bypass
 // combinations. The matrix mirrors the documented spec on `git hop
-// remove`: unmerged+unpushed needs --force --no-verify, unmerged needs
-// --force, merged+dirty needs --no-verify, and merged+clean is silent.
+// remove`: --force answers the not-merged check, --no-verify answers
+// dirty or unpushed state, so unmerged+unpushed and unmerged+dirty need
+// both, unmerged+pushed+clean needs --force, merged+dirty needs
+// --no-verify, and merged+clean is silent.
 func TestRemoveGate(t *testing.T) {
 	cases := []struct {
 		name      string
@@ -34,6 +36,16 @@ func TestRemoveGate(t *testing.T) {
 		{"unmerged pushed: only no-verify", branchSafety{Pushed: true, Clean: true}, false, true, true, "not merged"},
 		{"unmerged pushed: only force", branchSafety{Pushed: true, Clean: true}, true, false, false, ""},
 		{"unmerged pushed: both flags", branchSafety{Pushed: true, Clean: true}, true, true, false, ""},
+
+		// Case 2b: unmerged + pushed + dirty. Being on origin protects
+		// the commits, not the uncommitted or untracked files, so
+		// --force alone must not discard them.
+		{"unmerged pushed dirty: no flags", branchSafety{Pushed: true}, false, false, true, "--force --no-verify"},
+		{"unmerged pushed dirty: only force", branchSafety{Pushed: true}, true, false, true, "--force --no-verify"},
+		{"unmerged pushed dirty: only force names dirty state", branchSafety{Pushed: true}, true, false, true, "uncommitted changes or untracked files"},
+		{"unmerged pushed dirty: only no-verify", branchSafety{Pushed: true}, false, true, true, "--force --no-verify"},
+		{"unmerged pushed dirty: only no-verify names not-merged", branchSafety{Pushed: true}, false, true, true, "not merged"},
+		{"unmerged pushed dirty: both flags", branchSafety{Pushed: true}, true, true, false, ""},
 
 		// Case 3: merged + dirty (Pushed irrelevant).
 		{"merged dirty: no flags", branchSafety{Merged: true}, false, false, true, "uncommitted"},
@@ -77,6 +89,7 @@ func TestRemoveGateHintIsSelfSufficient(t *testing.T) {
 	}{
 		{"unmerged unpushed", branchSafety{}, []string{"--force", "--no-verify", "--no-prompt"}},
 		{"unmerged pushed", branchSafety{Pushed: true, Clean: true}, []string{"--force", "--no-prompt"}},
+		{"unmerged pushed dirty", branchSafety{Pushed: true}, []string{"--force", "--no-verify", "--no-prompt"}},
 		{"merged dirty", branchSafety{Merged: true}, []string{"--no-verify", "--no-prompt"}},
 	}
 

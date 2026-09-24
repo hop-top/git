@@ -4,12 +4,14 @@ Removing a branch worktree runs a safety gate first. A branch merged into
 the default branch (merge commit, squash, or rebase) with a clean worktree
 is removed silently. Anything else needs explicit flags:
 
-  merged, uncommitted or untracked files   --no-verify
-  not merged, pushed to origin             --force
-  not merged, not pushed                   --force --no-verify
+  merged, uncommitted or untracked files         --no-verify
+  not merged, pushed to origin, clean            --force
+  not merged, pushed, uncommitted or untracked   --force --no-verify
+  not merged, not pushed                         --force --no-verify
 
 --force covers the not-merged check; --no-verify covers uncommitted or
-untracked files and unpushed commits. Neither implies the other.
+untracked files (merged or not) and unpushed commits. Neither implies
+the other: pushing protects commits, not the files in the worktree.
 --no-prompt only skips the confirmation prompt; it never satisfies the
 gate. --no-verify does not skip pre-/post-worktree-remove hooks.
 
