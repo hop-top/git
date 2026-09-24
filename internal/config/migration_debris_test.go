@@ -91,10 +91,10 @@ func debrisKeys(t *testing.T, l *config.GlobalLoader) []string {
 	return keys
 }
 
-// Debris is a --global key the buggy migration invented: absent from the
-// .bak (or "" there, except worktreeLocation) and still holding the zero
-// value it wrote. Keys the .bak carries, and keys the user has since
-// changed, are the user's and stay.
+// Debris is a --global key of a live setting the buggy migration invented:
+// absent from the .bak (or "" there, except worktreeLocation) and still
+// holding the zero value it wrote. Keys the .bak carries, and keys the user
+// has since changed, are the user's and stay.
 func TestMigrationDebris(t *testing.T) {
 	dir := isolateGitConfig(t)
 	if err := os.WriteFile(filepath.Join(dir, "global.json.bak"), []byte(bakWithThreeKeys), 0o644); err != nil {
@@ -105,24 +105,17 @@ func TestMigrationDebris(t *testing.T) {
 	setGlobal(t, map[string]string{"hop.autoEnvStart": "true", config.KeyBackupMaxBackups: "5"})
 
 	l := config.NewGlobalLoaderWithGitConfig(config.NewGitConfig())
-	// The quoted keys are retired settings git-hop no longer has; the
-	// migration wrote them all the same, so they are debris too.
+	// Live settings only. The migration wrote the retired ones too, but
+	// those are the stale-retired check's, which removes them whatever
+	// their value; listing them here as well would report them twice.
 	want := []string{
 		config.KeyAddDefaultStartPoint,
 		config.KeyBackupCleanupAgeDays,
 		config.KeyBackupKeepBackup,
-		"hop.backup.preserveStashes",
-		"hop.conventionWarning",
-		"hop.conversion.allowDirtyForce",
-		"hop.conversion.autoRollback",
-		"hop.conversion.enforceClean",
-		"hop.enforceCleanForConversion",
 		config.KeyHooksInstallMode,
 		config.KeyShellIntegrationPath,
 		config.KeyShellIntegrationShell,
 		config.KeyShellIntegrationStatus,
-		"hop.showAllManagedRepos",
-		"hop.unusedThresholdDays",
 	}
 	sort.Strings(want)
 	got := debrisKeys(t, l)
@@ -145,11 +138,19 @@ func TestMigrationDebris(t *testing.T) {
 		}
 	}
 	for _, k := range []string{
-		"hop.autoEnvStart", config.KeyGitDomain, config.KeyWorktreeLocation,
-		"hop.backup.enabled", config.KeyBackupMaxBackups, "hop.migrated",
+		config.KeyGitDomain, config.KeyWorktreeLocation, config.KeyBackupMaxBackups, "hop.migrated",
 	} {
 		if _, ok := gitGlobal(t, "--get", k); !ok {
 			t.Errorf("%s was removed; it is the user's", k)
+		}
+	}
+	// Retired keys are left to the stale-retired check.
+	for _, k := range allRetiredKeys {
+		if _, set := buggyMigration()[k]; !set {
+			continue
+		}
+		if _, ok := gitGlobal(t, "--get", k); !ok {
+			t.Errorf("retired %s was removed as migration debris", k)
 		}
 	}
 	if got := debrisKeys(t, l); len(got) != 0 {

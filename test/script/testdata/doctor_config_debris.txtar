@@ -6,7 +6,9 @@
 # hop.worktreeLocation "" selects the centralized layout). Evidence is
 # global.json.bak, the file it read, plus the hop.migrated sentinel; a key
 # is only touched while it still holds the value the migration wrote.
-# Settings git-hop has since dropped (hop.conversion.autoRollback) count too.
+# Retired settings are not migration debris: doctor's retired-settings
+# check warns about them and --fix unsets them whatever their value, even
+# one global.json.bak shows the user chose (hop.backup.enabled here).
 # git's global config here is $WORK/gitconfig (see the script setup).
 
 mkdir $WORK/data $WORK/.config/git-hop $WORK/.cache/git-hop
@@ -31,25 +33,33 @@ stdout '"check": "config"'
 stdout '"subject": "hop.shellIntegration.status"'
 stdout '"subject": "hop.backup.keepBackup"'
 stdout '"subject": "hop.worktreeLocation"'
-stdout '"subject": "hop.conversion.autoRollback"'
 stdout 'run ''git hop doctor --fix'' to unset it'
 ! stdout '"subject": "hop.gitDomain"'
-! stdout '"subject": "hop.backup.enabled"'
 ! stdout '"subject": "hop.backup.maxBackups"'
+
+# --- retired keys are warnings of the retired check, once each ---
+! exec git-hop doctor --porcelain
+stdout '^warning	config	hop.conversion.autoRollback	retired setting'
+stdout '^warning	config	hop.backup.enabled	retired setting'
+! stdout '^issue	config	hop.conversion.autoRollback'
+! stdout '^issue	config	hop.backup.enabled'
+exec sh -c 'git-hop doctor --porcelain | grep -c "	hop.conversion.autoRollback	"'
+stdout '^1$'
 
 # --- the preview changes nothing ---
 exec git-hop doctor --fix --dry-run
 exec git config --global --get hop.backup.keepBackup
 
-# --- --fix unsets the leftovers and keeps the user's keys ---
+# --- --fix unsets the leftovers and the retired keys, and keeps the
+# --- user's live keys ---
 exec git-hop doctor --fix
 ! exec git config --global --get hop.shellIntegration.status
 ! exec git config --global --get hop.backup.keepBackup
 ! exec git config --global --get hop.worktreeLocation
 ! exec git config --global --get hop.conversion.autoRollback
+! exec git config --global --get hop.backup.enabled
 exec git config --global --get hop.gitDomain
 stdout example.com
-exec git config --global --get hop.backup.enabled
 exec git config --global --get hop.backup.maxBackups
 exec git config --global --get hop.migrated
 exec git-hop doctor

@@ -13,8 +13,8 @@ type DebrisEntry struct {
 	Value string
 }
 
-// MigrationDebris lists the --global hop.* keys the zero-value migration
-// wrote that the user never set.
+// MigrationDebris lists the --global keys of live hop.* settings the
+// zero-value migration wrote that the user never set.
 //
 // That migration decoded global.json into GlobalConfig and wrote every
 // scalar to git config --global, so keys absent from the file landed as
@@ -45,8 +45,10 @@ func (l *GlobalLoader) MigrationDebris() ([]DebrisEntry, error) {
 
 	var out []DebrisEntry
 	for _, e := range legacy.scalars() {
-		// Retired settings included: the zero-value migration wrote them too.
-		if e.userSet() {
+		// The zero-value migration wrote the retired settings too, but
+		// doctor's retired-settings check removes those whatever their
+		// value (see retiredSettings), so they are not reported here.
+		if e.retired || e.userSet() {
 			continue
 		}
 		written := e.zero
