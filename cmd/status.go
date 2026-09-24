@@ -93,7 +93,7 @@ configuration, and resource usage.`,
 		//     looking accidentally identical to plain `git status`.
 		// Either way the user can't tell what to do next. Surface the actual
 		// problem and the fix.
-		if root, ok := detectUnregisteredBareWorktreeRepo(fs, cwd); ok {
+		if root, ok := hop.FindUnregisteredHub(fs, g, cwd); ok {
 			output.Note("%s", unregisteredBareWorktreeHint(root))
 			return
 		}
