@@ -47,6 +47,33 @@ var ValidHookNames = []string{
 	"post-worktree-switch",
 }
 
+// reservedHookNames are valid names (accepted, installed, mirrored) that no
+// code path dispatches. `git hop env start/stop` run config-declared hooks
+// instead of these files.
+var reservedHookNames = map[string]bool{
+	"pre-env-start":  true,
+	"post-env-start": true,
+	"pre-env-stop":   true,
+	"post-env-stop":  true,
+}
+
+// IsDispatched reports whether some git-hop command fires hookName.
+func IsDispatched(hookName string) bool {
+	return !reservedHookNames[hookName]
+}
+
+// RepoLevelHookNames returns, in ValidHookNames order, the hooks that are
+// dispatched and can resolve from a repo's .git-hop/hooks/ directory.
+func RepoLevelHookNames() []string {
+	var names []string
+	for _, name := range ValidHookNames {
+		if IsDispatched(name) && hasRepoLevel(name) {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // ValidateHookName validates that a hook name is valid
 func ValidateHookName(hookName string) error {
 	if hookName == "" {
