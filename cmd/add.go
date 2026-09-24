@@ -254,51 +254,12 @@ created or written and no hook runs.`,
 		recordAddedWorktree(fs, hub, repoID, hubPath, branch, worktreePath)
 
 		// Generate Environment
-		// We need to load ports and volumes config
-		portsLoader := config.NewLoader(fs)
-		portsCfg, err := portsLoader.LoadPortsConfig(hopspacePath)
-		if err != nil {
-			// Create default configuration if missing
-			portsCfg = &config.PortsConfig{
-				AllocationMode: "incremental",
-				BaseRange:      config.PortRange{Start: 10000, End: 20000},
-				Branches:       make(map[string]config.BranchPorts),
-			}
-		}
-
-		volsLoader := config.NewLoader(fs)
-		volsCfg, err := volsLoader.LoadVolumesConfig(hopspacePath)
-		if err != nil {
-			volsCfg = &config.VolumesConfig{
-				BasePath: filepath.Join(hopspacePath, "volumes"),
-				Branches: make(map[string]config.BranchVolumes),
-			}
-		}
-
-		// Check if docker environment exists before trying to generate environment
-		hasDockerEnv := d.HasDockerEnv(worktreePath)
-
 		var branchPorts *config.BranchPorts
-		var branchVols *config.BranchVolumes
-
-		if hasDockerEnv {
-			envMgr := services.NewEnvManager(fs, portsCfg, volsCfg, d)
-			branchPorts, branchVols, _, err = envMgr.Generate(branch, worktreePath, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-			if err != nil {
-				output.Error("Failed to generate environment: %v", err)
-			} else {
-				// Update configs
-				portsCfg.Branches[branch] = *branchPorts
-				volsCfg.Branches[branch] = *branchVols
-
-				writer := config.NewWriter(fs)
-				if err := writer.WritePortsConfig(hopspacePath, portsCfg); err != nil {
-					output.Error("Failed to save ports config: %v", err)
-				}
-				if err := writer.WriteVolumesConfig(hopspacePath, volsCfg); err != nil {
-					output.Error("Failed to save volumes config: %v", err)
-				}
-			}
+		env, err := services.GenerateWorktreeEnv(fs, d, hopspacePath, worktreePath, branch, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		if err != nil {
+			output.Error("Failed to generate environment: %v", err)
+		} else if env != nil {
+			branchPorts = env.Ports
 		}
 
 		// Register deps-as-sync-subscriber on worktree.created.
