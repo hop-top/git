@@ -42,11 +42,8 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// gitconfig.go defaults: bareRepo=false, gitDomain=github.com,
-	// autoEnvStart=true, conventionWarning=true
-	if cfg.Defaults.BareRepo != false {
-		t.Errorf("BareRepo = %v, want false (gitconfig default)", cfg.Defaults.BareRepo)
-	}
+	// gitconfig.go defaults: gitDomain=github.com, autoEnvStart=true,
+	// conventionWarning=true
 	if cfg.Defaults.AutoEnvStart != true {
 		t.Errorf("AutoEnvStart = %v, want true", cfg.Defaults.AutoEnvStart)
 	}
@@ -67,7 +64,6 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 
 func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	store := map[string]string{
-		"hop.bareRepo":                "false",
 		"hop.gitDomain":               "gitlab.com",
 		"hop.autoEnvStart":            "false",
 		"hop.conventionWarning":       "false",
@@ -85,9 +81,6 @@ func TestLoad_OverridesFromGitConfig(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	if cfg.Defaults.BareRepo != false {
-		t.Errorf("BareRepo = %v, want false", cfg.Defaults.BareRepo)
-	}
 	if cfg.Defaults.GitDomain != "gitlab.com" {
 		t.Errorf("GitDomain = %q, want %q", cfg.Defaults.GitDomain, "gitlab.com")
 	}
@@ -122,7 +115,6 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 	original := &config.GlobalConfig{
 		Defaults: config.DefaultSettings{
 			AutoEnvStart:              false,
-			BareRepo:                  false,
 			GitDomain:                 "bitbucket.org",
 			ConventionWarning:         false,
 			WorktreeLocation:          "/my/path/{branch}",
@@ -154,9 +146,6 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 	}
 
 	// Verify values landed in the fake store
-	if store["hop.bareRepo"] != "false" {
-		t.Errorf("store[hop.bareRepo] = %q, want %q", store["hop.bareRepo"], "false")
-	}
 	if store["hop.gitDomain"] != "bitbucket.org" {
 		t.Errorf("store[hop.gitDomain] = %q, want %q",
 			store["hop.gitDomain"], "bitbucket.org")
@@ -168,9 +157,6 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 		t.Fatalf("Load() after Write() error = %v", err)
 	}
 
-	if cfg.Defaults.BareRepo != false {
-		t.Errorf("roundtrip BareRepo = %v, want false", cfg.Defaults.BareRepo)
-	}
 	if cfg.Defaults.GitDomain != "bitbucket.org" {
 		t.Errorf("roundtrip GitDomain = %q, want %q",
 			cfg.Defaults.GitDomain, "bitbucket.org")
@@ -202,7 +188,6 @@ func TestMigration_JSONToGitConfig(t *testing.T) {
 
 	legacy := config.GlobalConfig{
 		Defaults: config.DefaultSettings{
-			BareRepo:     false,
 			AutoEnvStart: false,
 			GitDomain:    "gitlab.com",
 		},
@@ -235,9 +220,6 @@ func TestMigration_JSONToGitConfig(t *testing.T) {
 	}
 
 	// Verify scalars migrated to git config
-	if cfg.Defaults.BareRepo != false {
-		t.Errorf("migrated BareRepo = %v, want false", cfg.Defaults.BareRepo)
-	}
 	if cfg.Defaults.GitDomain != "gitlab.com" {
 		t.Errorf("migrated GitDomain = %q, want %q",
 			cfg.Defaults.GitDomain, "gitlab.com")
@@ -311,9 +293,6 @@ func TestGetDefaults(t *testing.T) {
 	loader := config.NewGlobalLoaderWithGitConfig(gc)
 	defs := loader.GetDefaults()
 
-	if defs.Defaults.BareRepo != true {
-		t.Errorf("default BareRepo = %v, want true", defs.Defaults.BareRepo)
-	}
 	if defs.Defaults.WorktreeLocation != "{hubPath}/hops/{branch}" {
 		t.Errorf("default WorktreeLocation = %q", defs.Defaults.WorktreeLocation)
 	}

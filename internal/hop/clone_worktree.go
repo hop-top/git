@@ -64,8 +64,7 @@ type HookDispatchOptions struct {
 
 // CloneWorktree clones uri into a hub at projectPath. The hub is always a
 // bare repository with the default branch checked out at
-// hops/<defaultBranch>/ (docs/stories/015-hopspace-shape-contract.md); the
-// hop.bareRepo setting does not change that shape and is not consulted.
+// hops/<defaultBranch>/ (docs/stories/015-hopspace-shape-contract.md).
 func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, globalConfig bool, hookOpts HookMirrorOptions, dispatch HookDispatchOptions) error {
 	projectRoot := projectPath
 

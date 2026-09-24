@@ -18,7 +18,6 @@ type GitConfig struct {
 
 // Known hop.* config keys with their defaults.
 const (
-	KeyBareRepo               = "hop.bareRepo"
 	KeyGitDomain              = "hop.gitDomain"
 	KeyAutoEnvStart           = "hop.autoEnvStart"
 	KeyConventionWarning      = "hop.conventionWarning"
@@ -39,7 +38,6 @@ const (
 
 // Defaults for keys that have them.
 var defaults = map[string]string{
-	KeyBareRepo:               "false",
 	KeyGitDomain:              "github.com",
 	KeyAutoEnvStart:           "true",
 	KeyConventionWarning:      "true",

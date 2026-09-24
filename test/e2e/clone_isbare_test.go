@@ -10,15 +10,15 @@ import (
 )
 
 // Clone always produces a bare hub (docs/stories/015-hopspace-shape-contract.md),
-// whatever hop.bareRepo says. hop.json must record that layout, not the
-// setting: a hub whose repo.isBare disagrees with
+// including when git config still holds the removed hop.bareRepo setting.
+// hop.json must record that layout: a hub whose repo.isBare disagrees with
 // `git rev-parse --is-bare-repository` misdescribes itself to every reader.
 func TestClone_HopJSONRecordsActualBareLayout(t *testing.T) {
 	t.Parallel()
 
 	cases := []struct {
 		name     string
-		bareRepo string // "" leaves hop.bareRepo unset
+		bareRepo string // stale hop.bareRepo value; "" leaves it unset
 		global   bool
 	}{
 		{name: "setting unset, local", bareRepo: ""},

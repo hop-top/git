@@ -180,7 +180,6 @@ type DefaultSettings struct {
 	AutoEnvStart              bool   `json:"autoEnvStart"`
 	ShowAllManagedRepos       bool   `json:"showAllManagedRepos"`
 	UnusedThresholdDays       int    `json:"unusedThresholdDays"`
-	BareRepo                  bool   `json:"bareRepo"`
 	EnforceCleanForConversion bool   `json:"enforceCleanForConversion"`
 	ConventionWarning         bool   `json:"conventionWarning"`
 	GitDomain                 string `json:"gitDomain"`

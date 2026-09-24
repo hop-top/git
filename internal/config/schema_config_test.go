@@ -18,7 +18,6 @@ func TestSchemaConfig_Defaults(t *testing.T) {
 
 	// Check defaults
 	assert.Equal(t, "github.com", cfg.Defaults.GitDomain)
-	assert.True(t, cfg.Defaults.BareRepo)
 	assert.False(t, cfg.Defaults.AutoEnvStart)
 	assert.Equal(t, "${EDITOR}", cfg.Defaults.Editor)
 	assert.Equal(t, "${SHELL}", cfg.Defaults.Shell)
@@ -61,7 +60,6 @@ func TestLoadSchemaConfig_ExistingFile(t *testing.T) {
 	configData := SchemaConfig{
 		Defaults: DefaultsSchema{
 			GitDomain:    "gitlab.com",
-			BareRepo:     false,
 			AutoEnvStart: true,
 			Editor:       "vim",
 			Shell:        "/bin/zsh",

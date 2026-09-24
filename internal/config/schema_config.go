@@ -23,7 +23,6 @@ type SchemaConfig struct {
 // DefaultsSchema represents default settings
 type DefaultsSchema struct {
 	GitDomain    string `json:"gitDomain"`
-	BareRepo     bool   `json:"bareRepo"`
 	AutoEnvStart bool   `json:"autoEnvStart"`
 	Editor       string `json:"editor"`
 	Shell        string `json:"shell"`
@@ -92,7 +91,6 @@ func NewSchemaConfig() *SchemaConfig {
 	return &SchemaConfig{
 		Defaults: DefaultsSchema{
 			GitDomain:    "github.com",
-			BareRepo:     true,
 			AutoEnvStart: false,
 			Editor:       "${EDITOR}",
 			Shell:        "${SHELL}",
