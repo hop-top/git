@@ -78,8 +78,35 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 
 	fixed += pruneMissingHubRows(fs, g, hubPath, kept, opts, &fixes)
 
-	r.records = append(r.records, fixes.records...)
-	return fixed
+	records, dropped := dedupeRepairs(fixes.records)
+	r.records = append(r.records, records...)
+	return fixed - dropped
+}
+
+// dedupeRepairs drops every fixed or would-fix record whose check and
+// subject an earlier one in records already repairs, and returns the
+// rest and how many it dropped. A state entry or hop.json row is one
+// thing to repair: however many of the state repair's passes reach it,
+// the report lists it, and counts it, once.
+//
+// Scoped to the state repair's records on purpose. Elsewhere one subject
+// can take two genuine repairs, e.g. the config check unsetting the same
+// key from --global and from the hub's own config.
+func dedupeRepairs(records []doctorRecord) ([]doctorRecord, int) {
+	type key struct{ check, subject string }
+	seen := map[key]bool{}
+	out := make([]doctorRecord, 0, len(records))
+	for _, rec := range records {
+		if rec.Kind == doctorKindFixed || rec.Kind == doctorKindWouldFix {
+			k := key{rec.Check, rec.Subject}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+		}
+		out = append(out, rec)
+	}
+	return out, len(records) - len(out)
 }
 
 // pruneMissingHubRows drops the current hub's hop.json rows whose
