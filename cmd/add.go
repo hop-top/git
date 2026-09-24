@@ -171,6 +171,9 @@ runs.`,
 			output.Fatal("Hook pre-worktree-add failed: %v", err)
 		}
 
+		// Probed before creation: afterwards the branch exists either way.
+		branchExisted := localBranchExists(g, hubPath, branch)
+
 		// Create Worktree in the current hub
 		wm := hop.NewWorktreeManager(fs, g)
 		wm.EnforceStartPoint = addFromFlag != ""
@@ -376,6 +379,11 @@ runs.`,
 			},
 		))
 
+		if output.IsStructured() {
+			emitResult(cmd, newAddResult(g, hub, branch, worktreePath, !branchExisted, branchPorts))
+			return
+		}
+
 		output.Info("Created hopspace for '%s'", branch)
 
 		output.Info("Worktree: %s", displayPath(cwd, worktreePath))
@@ -512,4 +520,5 @@ func init() {
 	addCmd.Flags().BoolVar(&addNoCopyIgnoredFlag, "no-copy-ignored", false,
 		"do not copy git-ignored files into the new worktree")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames
+	declareOutputSchema(addCmd, &addResult{})
 }

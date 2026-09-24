@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
 	kitcli "hop.top/kit/go/console/cli"
+	kitout "hop.top/kit/go/console/output"
 	"hop.top/kit/go/core/upgrade"
 	"hop.top/kit/go/core/xdg"
 	"hop.top/kit/go/runtime/bus"
@@ -161,7 +162,7 @@ func init() {
 			// setupOutputMode initializes output.Verbose via SetupLogger
 			// so initConfig's Debug call can actually emit.
 			PrePersistentRunE: func(cmd *cobra.Command, args []string) error {
-				setupOutputMode()
+				setupOutputMode(cmd)
 				if err := checkDryRunSupported(cmd); err != nil {
 					output.FatalCode(exitUsage, "%s", err)
 				}
@@ -617,13 +618,19 @@ func isStdinTTY() bool {
 	return (fi.Mode() & os.ModeCharDevice) != 0
 }
 
-func setupOutputMode() {
+func setupOutputMode(cmd *cobra.Command) {
 	quiet = Root.Viper.GetBool("quiet")
 
+	format, formatOpts, err := resolveResultFormat(cmd)
+	if err != nil {
+		output.FatalCode(129, "%v", err)
+	}
+	output.SetResultFormat(format, formatOpts...)
+
 	var mode output.Mode
-	if jsonOut {
+	if format == kitout.JSON || (format == "" && jsonOut) {
 		mode = output.ModeJSON
-	} else if porcelain {
+	} else if format != "" || porcelain {
 		mode = output.ModePorcelain
 	} else if quiet {
 		mode = output.ModeQuiet
@@ -633,4 +640,58 @@ func setupOutputMode() {
 
 	output.SetViper(Root.Viper)
 	output.SetupLogger(mode, verboseEnabled())
+}
+
+// resolveResultFormat decides which structured format, if any, cmd renders
+// its result in. It returns "" for the human view.
+//
+// Only commands that declare an output schema (kit's SetOutputSchema) take
+// part: they are the ones with a result to render. For the others the
+// output flags keep their previous meaning -- --json and --porcelain only
+// switch the logger mode -- until each is given a result of its own.
+//
+// --json is --format json. --porcelain is kit's text format in its
+// lines style: one tab-separated record per line, no header, columns in
+// the result's declared order. The returned format and options are what
+// output.EmitResult hands kit's Dispatch; the root viper is left as parsed.
+//
+// Every rejection happens here, in the pre-run, so a contradictory or
+// unknown mode fails before the command mutates anything.
+func resolveResultFormat(cmd *cobra.Command) (format string, formatOpts []string, err error) {
+	if cmd == nil {
+		return "", nil, nil
+	}
+	if _, _, ok := kitcli.GetOutputSchemaJSON(cmd); !ok {
+		return "", nil, nil
+	}
+
+	format = Root.Viper.GetString("format")
+	explicit := false
+	if f := cmd.Flags().Lookup("format"); f != nil {
+		explicit = f.Changed
+	}
+
+	switch {
+	case jsonOut && porcelain:
+		return "", nil, fmt.Errorf("--json and --porcelain are mutually exclusive")
+	case jsonOut:
+		if explicit && format != kitout.JSON {
+			return "", nil, fmt.Errorf("--json and --format=%s are mutually exclusive", format)
+		}
+		return kitout.JSON, nil, nil
+	case porcelain:
+		if explicit {
+			return "", nil, fmt.Errorf("--porcelain and --format=%s are mutually exclusive", format)
+		}
+		return kitout.Text, []string{"style=lines"}, nil
+	}
+
+	if output.IsHumanFormat(format) {
+		return "", nil, nil
+	}
+	if _, ok := kitout.Default.Lookup(format); !ok {
+		return "", nil, fmt.Errorf("unknown output format %q (valid: %s)",
+			format, strings.Join(kitout.Default.Keys(), ", "))
+	}
+	return format, nil, nil
 }

@@ -93,6 +93,17 @@ func runList(cmd *cobra.Command, args []string) {
 		}
 	}
 
+	if output.IsStructured() {
+		// Inside a hub whose repository is tracked, the result is that
+		// repository's worktrees -- the same scope as the human view.
+		repoIDs := sortedRepoIDs(st)
+		if currentRepoID != "" && st.Repositories[currentRepoID] != nil {
+			repoIDs = []string{currentRepoID}
+		}
+		emitResult(cmd, listRecords(fs, g, st, repoIDs))
+		return
+	}
+
 	if len(st.Repositories) == 0 {
 		output.Info("No worktrees found.")
 		output.Info("\nRun 'git hop migrate' if you have existing data to migrate.")
@@ -308,6 +319,51 @@ func showAllRepositories(fs afero.Fs, g git.GitInterface, st *state.State) {
 	fmt.Println(legend)
 }
 
+// listRecords builds one list record per worktree of the given
+// repositories, in repository then branch order. The slice is never nil,
+// so an empty result renders as [] rather than null.
+func listRecords(fs afero.Fs, g git.GitInterface, st *state.State, repoIDs []string) []listRecord {
+	records := []listRecord{}
+	for _, repoID := range repoIDs {
+		repo := st.Repositories[repoID]
+		compareMap := compareBranchesForRepo(fs, repo)
+		branches := make([]string, 0, len(repo.Worktrees))
+		for branch := range repo.Worktrees {
+			branches = append(branches, branch)
+		}
+		sort.Strings(branches)
+
+		for _, branch := range branches {
+			wt := repo.Worktrees[branch]
+			r := listRecord{
+				Repository: repoID,
+				Branch:     branch,
+				Base:       compareMap[branch],
+				Type:       wt.Type,
+				Path:       wt.Path,
+				State:      "missing",
+				Status:     "-",
+			}
+			if exists, _ := afero.DirExists(fs, wt.Path); exists {
+				r.State = "active"
+				r.Status = getBranchSyncStatus(g, wt.Path, branch, r.Base)
+			}
+			records = append(records, r)
+		}
+	}
+	return records
+}
+
+// sortedRepoIDs returns the ids of every repository tracked in st, sorted.
+func sortedRepoIDs(st *state.State) []string {
+	ids := make([]string, 0, len(st.Repositories))
+	for id := range st.Repositories {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
 // loadStateOrLegacy loads state.json, returning an empty state if not found.
 func loadStateOrLegacy(fs afero.Fs) (*state.State, error) {
 	st, err := state.LoadState(fs)
@@ -318,5 +374,6 @@ func loadStateOrLegacy(fs afero.Fs) (*state.State, error) {
 }
 
 func init() {
+	declareOutputSchema(listCmd, &[]listRecord{})
 	cli.RootCmd.AddCommand(listCmd)
 }

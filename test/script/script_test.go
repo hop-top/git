@@ -48,6 +48,9 @@ func TestScripts(t *testing.T) {
 		RequireExplicitExec: true,
 		UpdateScripts:       os.Getenv("UPDATE_SCRIPTS") != "",
 		Setup:               setup,
+		Cmds: map[string]func(*testscript.TestScript, bool, []string){
+			"decode": cmdDecode,
+		},
 	})
 }
 
