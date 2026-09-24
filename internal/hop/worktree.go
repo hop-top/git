@@ -120,39 +120,7 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 		return "", fmt.Errorf("hub path does not exist: %s", hubPath)
 	}
 
-	// Find an existing worktree in this hub to use as base for git commands
-	var baseWorktreePath string
-
-	for _, b := range hopspace.Config.Branches {
-		if b.Exists && b.Path != "" {
-			// Resolve the path relative to hub if it's not absolute
-			branchPath := config.ResolveWorktreePath(b.Path, hubPath)
-
-			// Check if this worktree belongs to the current hub
-			if strings.HasPrefix(branchPath, hubPath+string(filepath.Separator)) || strings.HasPrefix(branchPath, hubPath) {
-				baseWorktreePath = branchPath
-				break
-			}
-		}
-	}
-
-	// If no worktree found in this hub, use any existing worktree
-	// (this handles the case where we're adding to a new clone of the same repo)
-	if baseWorktreePath == "" {
-		for _, b := range hopspace.Config.Branches {
-			if b.Exists && b.Path != "" {
-				// Resolve the path relative to hub if it's not absolute
-				branchPath := config.ResolveWorktreePath(b.Path, hubPath)
-				baseWorktreePath = branchPath
-				break
-			}
-		}
-	}
-
-	// If no existing worktree found, use the hub path (bare repo) as base
-	if baseWorktreePath == "" {
-		baseWorktreePath = hubPath
-	}
+	baseWorktreePath := findBaseWorktree(hopspace, hubPath)
 
 	// Expand worktree location pattern
 	dataHome := GetGitHopDataHome()
@@ -194,6 +162,27 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	}
 
 	return worktreePath, nil
+}
+
+// findBaseWorktree picks the directory git commands run in for a new
+// worktree: a registered worktree of this hub, else any registered worktree
+// of the hopspace, else the hub itself (the bare repo).
+func findBaseWorktree(hopspace *Hopspace, hubPath string) string {
+	for _, b := range hopspace.Config.Branches {
+		if b.Exists && b.Path != "" {
+			branchPath := config.ResolveWorktreePath(b.Path, hubPath)
+			if strings.HasPrefix(branchPath, hubPath+string(filepath.Separator)) || strings.HasPrefix(branchPath, hubPath) {
+				return branchPath
+			}
+		}
+	}
+	// No worktree in this hub: a new clone of the same repo can use any.
+	for _, b := range hopspace.Config.Branches {
+		if b.Exists && b.Path != "" {
+			return config.ResolveWorktreePath(b.Path, hubPath)
+		}
+	}
+	return hubPath
 }
 
 // resolveStartPoint maps the caller's startPoint hint to a concrete ref or

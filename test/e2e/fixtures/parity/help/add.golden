@@ -4,6 +4,11 @@ Creates the branch (if missing) from the start-point, checks it out under
 hops/<branch>, sets up shared dependencies, and starts the environment if
 configured.
 
+An existing branch is checked out as-is unless --from is given. With
+--from it must end up at that start-point: it is fast-forwarded when at or
+behind it, and add refuses when it is ahead or has diverged, so no local
+commit is lost.
+
 The new worktree is also seeded with the git-ignored local files (.env,
 tool config, small caches) present in the worktree it forks from. Nothing
 is overwritten, dependency directories are left to the deps layer, and
@@ -32,7 +37,7 @@ Aliases:
 
 Flags:
       --copy-ignored      copy git-ignored files from the source worktree into the new one (default true)
-      --from string       start-point for the new branch (branch name, ref, SHA, or 'initial' for the root commit)
+      --from string       start-point: branch name, ref, SHA, or 'initial' for the root commit; an existing branch is fast-forwarded to it
   -h, --help              help for add
       --no-copy-ignored   do not copy git-ignored files into the new worktree
 

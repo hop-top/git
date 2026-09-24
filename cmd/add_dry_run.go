@@ -14,6 +14,7 @@ import (
 type addPlan struct {
 	cwd           string
 	hubPath       string
+	hopspace      *hop.Hopspace
 	repoID        string
 	branch        string
 	worktreePath  string
@@ -28,14 +29,11 @@ var addHooks = []string{"pre-worktree-add", "post-worktree-add"}
 // of it. Reads only: no worktree, branch, hop.json, state, symlink or
 // dependency writes, and no hook or branch-type detector runs, since
 // either may mutate the repo.
-func previewAdd(g git.GitInterface, hookRunner *hooks.Runner, p addPlan) {
-	switch {
-	case refExists(g, p.hubPath, "refs/heads/"+p.branch):
-		output.Info("[dry-run] Would check out existing branch '%s'", p.branch)
-	case refExists(g, p.hubPath, "refs/remotes/origin/"+p.branch):
-		output.Info("[dry-run] Would check out existing branch '%s' (tracking 'origin/%s')", p.branch, p.branch)
-	default:
-		output.Info("[dry-run] Would create branch '%s' from %s", p.branch, describeStartPoint(p.startPoint, p.defaultBranch))
+func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.Runner, p addPlan) {
+	if wm.EnforceStartPoint {
+		previewEnforcedBranch(wm, p)
+	} else {
+		previewBranch(g, p)
 	}
 
 	output.Info("[dry-run] Would create worktree at %s", displayPath(p.cwd, p.worktreePath))
@@ -47,6 +45,42 @@ func previewAdd(g git.GitInterface, hookRunner *hooks.Runner, p addPlan) {
 	}
 
 	output.Info("[dry-run] Would register '%s' in hop.json and point 'current' at it", p.branch)
+}
+
+// previewBranch reports how add links or creates the branch when the
+// start-point only seeds new branches: an existing local or remote branch
+// is checked out as-is.
+func previewBranch(g git.GitInterface, p addPlan) {
+	switch {
+	case refExists(g, p.hubPath, "refs/heads/"+p.branch):
+		output.Info("[dry-run] Would check out existing branch '%s'", p.branch)
+	case refExists(g, p.hubPath, "refs/remotes/origin/"+p.branch):
+		output.Info("[dry-run] Would check out existing branch '%s' (tracking 'origin/%s')", p.branch, p.branch)
+	default:
+		output.Info("[dry-run] Would create branch '%s' from %s", p.branch, describeStartPoint(p.startPoint, p.defaultBranch))
+	}
+}
+
+// previewEnforcedBranch reports how add honours an explicit --from: an
+// existing local branch is fast-forwarded or refused (see
+// hop.CheckExistingBranch), and a missing one is created from the
+// start-point, never from a same-named remote branch. A refusal fails the
+// preview with the real run's message and exit status.
+func previewEnforcedBranch(wm *hop.WorktreeManager, p addPlan) {
+	e, target, err := wm.PreviewExistingBranch(p.hopspace, p.hubPath, p.branch, p.startPoint, p.defaultBranch)
+	if err != nil {
+		output.Fatal("Failed to create worktree: %v", err)
+	}
+	switch {
+	case !e.Exists:
+		output.Info("[dry-run] Would create branch '%s' from %s", p.branch, describeStartPoint(p.startPoint, p.defaultBranch))
+	case e.FastForwards():
+		output.Info("[dry-run] Would fast-forward existing branch '%s' from %s to '%s' (%s)",
+			p.branch, hop.AbbrevSHA(e.Local), target, hop.AbbrevSHA(e.Target))
+	default:
+		output.Info("[dry-run] Would check out existing branch '%s' (already at '%s', %s)",
+			p.branch, target, hop.AbbrevSHA(e.Target))
+	}
 }
 
 // describeStartPoint renders the start-point the way WorktreeManager
