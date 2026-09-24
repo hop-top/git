@@ -14,6 +14,7 @@ import (
 	"github.com/spf13/afero"
 
 	"hop.top/git/internal/hop"
+	"hop.top/git/internal/output"
 )
 
 // Install modes for mirroring committed .git-hop/hooks/ into hopspace.
@@ -39,10 +40,10 @@ type MirrorOpts struct {
 	// Stdin is read for prompt mode. If nil, ModePrompt degrades to ModeNone
 	// with an info line.
 	Stdin io.Reader
-	// Stdout/Stderr are used for human-facing output. Defaults to os.Stdout/
-	// os.Stderr when nil.
+	// Stdout carries the interactive prompt. Defaults to os.Stdout when
+	// nil. Warnings and notes go through the output package, so -q and
+	// JSON mode apply to them.
 	Stdout io.Writer
-	Stderr io.Writer
 	// Interactive forces interactive mode regardless of Stdin. Useful for
 	// tests; production callers should leave this false and rely on TTY
 	// detection by the caller.
@@ -89,10 +90,6 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	if stdout == nil {
 		stdout = os.Stdout
 	}
-	stderr := opts.Stderr
-	if stderr == nil {
-		stderr = os.Stderr
-	}
 
 	mode := opts.Mode
 	if mode == "" {
@@ -101,12 +98,12 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 
 	// Non-interactive prompt mode degrades to none.
 	if mode == ModePrompt && opts.Stdin == nil && !opts.Interactive {
-		fmt.Fprintln(stderr, "Skipping hook mirror (non-interactive). Re-run with --hooks=symlink to install committed hooks.")
+		output.Note("Skipping hook mirror (non-interactive). Re-run with --hooks=symlink to install committed hooks.")
 		return res, nil
 	}
 
 	if mode == ModeNone {
-		fmt.Fprintln(stderr, "skipping hook mirror (--hooks=none)")
+		output.Note("skipping hook mirror (--hooks=none)")
 		return res, nil
 	}
 
@@ -166,13 +163,13 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 		if err != nil {
 			res.Warned++
 			res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: fmt.Sprintf("stat: %v", err)})
-			fmt.Fprintf(stderr, "warning: hook %s: %v\n", name, err)
+			output.Warn("hook %s: %v", name, err)
 			continue
 		}
 		if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
 			res.Warned++
 			res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: "not executable"})
-			fmt.Fprintf(stderr, "warning: hook %s is not executable; skipping. chmod +x then run git hop hooks sync (TBD)\n", name)
+			output.Warn("hook %s is not executable; skipping. chmod +x then run git hop hooks sync (TBD)", name)
 			continue
 		}
 
@@ -198,13 +195,13 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 			if dstExists && !opts.Overwrite {
 				res.Warned++
 				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: "exists, no overwrite"})
-				fmt.Fprintf(stderr, "warning: hopspace hook %s already exists with different content; pass --hooks-overwrite to replace\n", name)
+				output.Warn("hopspace hook %s already exists with different content; pass --hooks-overwrite to replace", name)
 				continue
 			}
 			if err := installHook(fs, mode, srcPath, dstPath, info); err != nil {
 				res.Warned++
 				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: err.Error()})
-				fmt.Fprintf(stderr, "warning: failed to install hook %s: %v\n", name, err)
+				output.Warn("failed to install hook %s: %v", name, err)
 				continue
 			}
 			res.Installed++
@@ -246,7 +243,7 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 			if err := installHook(fs, ModeSymlink, srcPath, dstPath, info); err != nil {
 				res.Warned++
 				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: err.Error()})
-				fmt.Fprintf(stderr, "warning: failed to install hook %s: %v\n", name, err)
+				output.Warn("failed to install hook %s: %v", name, err)
 				continue
 			}
 			res.Installed++
