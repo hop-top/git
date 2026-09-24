@@ -129,8 +129,12 @@ func ResolveArg(arg string, gitDomain string, knownBranches map[string]config.Hu
 }
 
 // Execute runs the command line in os.Args. A usage error is reported
-// on stderr with git's `error:` prefix; map the returned error to the
-// process status with ExitCode.
+// on stderr as git does: an `error:` line, then the usage of the command
+// reached. Map the returned error to the process status with ExitCode.
+//
+// When machine output was asked for, only the `error:` line is printed:
+// the usage block is prose for a person at a terminal, and a consumer
+// reading --json or --porcelain gets one predictable line to parse.
 func Execute() error {
 	defer func() {
 		if EventBus != nil {
@@ -138,13 +142,18 @@ func Execute() error {
 		}
 	}()
 	installUsageErrors(RootCmd)
-	err := checkUnknownSubcommand(RootCmd, os.Args[1:])
+	args := os.Args[1:]
+	err := checkUnknownSubcommand(RootCmd, args)
 	if err == nil {
 		err = RootCmd.Execute()
 	}
 	var ue *UsageError
 	if errors.As(err, &ue) {
-		fmt.Fprintf(RootCmd.ErrOrStderr(), "error: %s\n", ue.Err)
+		w := RootCmd.ErrOrStderr()
+		fmt.Fprintf(w, "error: %s\n", ue.Err)
+		if ue.Cmd != nil && !structuredOutputRequested(ue.Cmd, args) {
+			fmt.Fprint(w, usageBlock(ue.Cmd))
+		}
 	}
 	return err
 }

@@ -27,6 +27,7 @@ func installHelpCommand(root *cobra.Command) {
 	if help == nil {
 		return
 	}
+	help.Use = "help [<command>...]"
 	help.Args = func(_ *cobra.Command, args []string) error {
 		if len(args) == 0 || helpTarget(root, args) != nil {
 			return nil
