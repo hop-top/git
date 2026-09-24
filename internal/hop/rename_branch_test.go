@@ -178,3 +178,127 @@ func TestMoveWorktree_SharedHopJSONKeepsBranchEntry(t *testing.T) {
 		}
 	}
 }
+
+// branchEntry reads branches[branch] from the hop.json at dir as raw JSON,
+// so members no Go type models are visible.
+func branchEntry(t *testing.T, fs afero.Fs, dir, branch string) (map[string]any, bool) {
+	t.Helper()
+	raw, err := afero.ReadFile(fs, dir+"/hop.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var doc struct {
+		Branches map[string]map[string]any `json:"branches"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatal(err)
+	}
+	e, ok := doc.Branches[branch]
+	return e, ok
+}
+
+// Members of a branch entry that neither HubBranch nor HopspaceBranch
+// models (another tool's, or a newer git-hop's) belong to the branch, not
+// to its name: a rename must carry them to the new key.
+func TestHubRenameBranch_KeepsUnmodeledMembers(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	_ = afero.WriteFile(fs, "/hub/hop.json", []byte(`{
+  "repo": {"defaultBranch": "main"},
+  "branches": {
+    "feat/x": {"path": "/hub/hops/feat/x", "hopspaceBranch": "feat/x", "ticket": "ABC-1", "meta": {"owner": "kim"}}
+  }
+}`), 0644)
+	hub, err := hop.LoadHub(fs, "/hub")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := hub.RenameBranch("feat/x", "feat/y", "/hub/hops/feat/y"); err != nil {
+		t.Fatalf("RenameBranch: %v", err)
+	}
+
+	if _, ok := branchEntry(t, fs, "/hub", "feat/x"); ok {
+		t.Error("old key feat/x still present")
+	}
+	got, ok := branchEntry(t, fs, "/hub", "feat/y")
+	if !ok {
+		t.Fatal("new key feat/y missing")
+	}
+	if got["ticket"] != "ABC-1" {
+		t.Errorf("branches[feat/y].ticket = %v, want ABC-1", got["ticket"])
+	}
+	if meta, _ := got["meta"].(map[string]any); meta["owner"] != "kim" {
+		t.Errorf("branches[feat/y].meta = %v, want owner kim", got["meta"])
+	}
+	if got["path"] != "/hub/hops/feat/y" {
+		t.Errorf("branches[feat/y].path = %v, want the new path", got["path"])
+	}
+}
+
+func TestHopspaceRenameBranch_KeepsUnmodeledMembers(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	path := "/data/github.com/org/repo"
+	_ = afero.WriteFile(fs, path+"/hop.json", []byte(`{
+  "repo": {"defaultBranch": "main"},
+  "branches": {
+    "feat/x": {"exists": true, "path": "`+path+`/feat/x", "lastSync": "2026-01-02T03:04:05Z", "ticket": "ABC-1"}
+  },
+  "forks": {}
+}`), 0644)
+	hs, err := hop.LoadHopspace(fs, path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := hs.RenameBranch("feat/x", "feat/y", path+"/feat/y"); err != nil {
+		t.Fatalf("RenameBranch: %v", err)
+	}
+
+	if _, ok := branchEntry(t, fs, path, "feat/x"); ok {
+		t.Error("old key feat/x still present")
+	}
+	got, ok := branchEntry(t, fs, path, "feat/y")
+	if !ok {
+		t.Fatal("new key feat/y missing")
+	}
+	if got["ticket"] != "ABC-1" {
+		t.Errorf("branches[feat/y].ticket = %v, want ABC-1", got["ticket"])
+	}
+}
+
+// Shared hop.json: the hub write goes first and must carry the members it
+// does not model (hopspace's and third-party ones) to the new key, so the
+// file never holds an entry missing them.
+func TestMoveWorktree_SharedHopJSONKeepsUnmodeledMembers(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hub"
+	oldPath := "/hub/hops/feat/x"
+	_ = fs.MkdirAll(oldPath, 0755)
+	_ = fs.MkdirAll(hubPath+"/hops/main", 0755)
+	_ = afero.WriteFile(fs, hubPath+"/hop.json", []byte(`{
+  "repo": {"defaultBranch": "main"},
+  "branches": {
+    "main": {"path": "/hub/hops/main", "hopspaceBranch": "main", "exists": true},
+    "feat/x": {"path": "`+oldPath+`", "hopspaceBranch": "feat/x", "exists": true, "ticket": "ABC-1"}
+  },
+  "forks": {}
+}`), 0644)
+	hs, _ := hop.LoadHopspace(fs, hubPath)
+	hub, _ := hop.LoadHub(fs, hubPath)
+
+	wm := hop.NewWorktreeManager(fs, mocks.NewMockGit())
+	if _, _, err := wm.MoveWorktree(hs, hub, "feat/x", "feat/y", "{hubPath}/hops/{branch}", "org", "repo"); err != nil {
+		t.Fatalf("MoveWorktree: %v", err)
+	}
+
+	got, ok := branchEntry(t, fs, hubPath, "feat/y")
+	if !ok {
+		t.Fatal("new key feat/y missing")
+	}
+	if got["ticket"] != "ABC-1" {
+		t.Errorf("branches[feat/y].ticket = %v, want ABC-1", got["ticket"])
+	}
+	if got["exists"] != true || got["hopspaceBranch"] != "feat/y" {
+		t.Errorf("branches[feat/y] = %v, want hub and hopspace halves", got)
+	}
+}

@@ -178,7 +178,7 @@ func (h *Hub) RenameBranch(oldBranch, newBranch, newPath string) error {
 	}
 	delete(h.Config.Branches, oldBranch)
 	h.Config.Branches[newBranch] = entry
-	return h.Save()
+	return h.save(config.RenamedBranch(oldBranch, newBranch))
 }
 
 // BranchPath resolves a registered branch's worktree to an absolute
@@ -194,6 +194,9 @@ func (h *Hub) BranchPath(branchName string) string {
 
 // Save persists the hub config
 func (h *Hub) Save() error {
-	writer := config.NewWriter(h.fs)
-	return writer.WriteHubConfig(h.Path, h.Config)
+	return h.save()
+}
+
+func (h *Hub) save(opts ...config.WriteOption) error {
+	return config.NewWriter(h.fs).WriteHubConfig(h.Path, h.Config, opts...)
 }
