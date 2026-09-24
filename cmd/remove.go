@@ -11,7 +11,6 @@ import (
 	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
-	"hop.top/git/internal/detector"
 	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
@@ -310,9 +309,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 	// Create detector manager and register detectors
-	detectorMgr := detector.NewManager(fs, g)
-	detectorMgr.Register(detector.NewGitFlowNextDetector(g))
-	detectorMgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
+	detectorMgr := newBranchDetectors(fs, g, hubPath)
 
 	// Execute pre-remove (detector OnRemove)
 	detectorCtx := context.Background()

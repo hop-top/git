@@ -61,20 +61,23 @@ func previewBranchDeletion(branch string, local, remote bool) {
 }
 
 // previewDetector reports the git-flow action a real run would take for
-// branch; action is the git-flow verb (e.g. "finish" on remove). Detection
-// only reads git config; the generic detector's actions are no-ops, so
-// git-flow is the one detector with an effect worth naming.
-func previewDetector(fs afero.Fs, g git.GitInterface, branch, hubPath, action string) error {
-	gitflow := detector.NewGitFlowNextDetector(g)
-	mgr := detector.NewManager(fs, g)
+// branch; action is the git-flow verb ("start" on add, "finish" on
+// remove). Detection only reads git config; the generic detector's actions
+// are no-ops, so git-flow is the one detector with an effect worth naming,
+// and only when hop.gitflow.enabled lets it run.
+func previewDetector(g git.GitInterface, branch, hubPath, action string) error {
+	gitflow := newGitflowDetector(g, hubPath)
+	mgr := detector.NewManager(afero.NewOsFs(), g)
 	mgr.Register(gitflow)
 	mgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
 	info, err := mgr.DetectBranch(branch, hubPath)
-	if err != nil {
+	if err != nil || info == nil || info.Source != gitflow.Name() {
 		return err
 	}
-	if info != nil && info.Source == gitflow.Name() {
-		output.Info("[dry-run] Would run 'git flow %s %s %s'", info.Type, action, info.Name)
+	if !gitflow.ActionsEnabled() {
+		hintGitflowOptIn()
+		return nil
 	}
+	output.Info("[dry-run] Would run 'git flow %s %s %s'", info.Type, action, info.Name)
 	return nil
 }

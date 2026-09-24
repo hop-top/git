@@ -6,12 +6,43 @@ import (
 	"strings"
 )
 
+// GitFlowNextDetector maps branches onto git-flow-next branch types by
+// reading gitflow.* config. Detection is read-only. Its add/remove actions
+// (`git flow <type> start|finish`) change the repo, and finish merges into
+// the parent branch, so they are off unless WithGitFlowActions turns them
+// on.
 type GitFlowNextDetector struct {
-	git GitInterface
+	git     GitInterface
+	actions bool
+	skipped func(info *BranchTypeInfo, action string)
 }
 
-func NewGitFlowNextDetector(git GitInterface) *GitFlowNextDetector {
-	return &GitFlowNextDetector{git: git}
+// GitFlowOption configures a GitFlowNextDetector.
+type GitFlowOption func(*GitFlowNextDetector)
+
+// WithGitFlowActions lets OnAdd/OnRemove run `git flow <type> start` and
+// `git flow <type> finish`.
+func WithGitFlowActions(enabled bool) GitFlowOption {
+	return func(d *GitFlowNextDetector) { d.actions = enabled }
+}
+
+// WithSkippedAction registers fn to be told about each git-flow action
+// (start or finish) not run because actions are off.
+func WithSkippedAction(fn func(info *BranchTypeInfo, action string)) GitFlowOption {
+	return func(d *GitFlowNextDetector) { d.skipped = fn }
+}
+
+func NewGitFlowNextDetector(git GitInterface, opts ...GitFlowOption) *GitFlowNextDetector {
+	d := &GitFlowNextDetector{git: git}
+	for _, opt := range opts {
+		opt(d)
+	}
+	return d
+}
+
+// ActionsEnabled reports whether OnAdd/OnRemove run git-flow commands.
+func (d *GitFlowNextDetector) ActionsEnabled() bool {
+	return d.actions
 }
 
 func (d *GitFlowNextDetector) Name() string {
@@ -103,7 +134,7 @@ func (d *GitFlowNextDetector) getConfig(repoPath, key string) string {
 }
 
 func (d *GitFlowNextDetector) OnAdd(ctx context.Context, info *BranchTypeInfo, worktreePath string, repoPath string) error {
-	if info == nil {
+	if info == nil || d.skip(info, "start") {
 		return nil
 	}
 
@@ -115,7 +146,7 @@ func (d *GitFlowNextDetector) OnAdd(ctx context.Context, info *BranchTypeInfo, w
 }
 
 func (d *GitFlowNextDetector) OnRemove(ctx context.Context, info *BranchTypeInfo, worktreePath string, repoPath string) error {
-	if info == nil {
+	if info == nil || d.skip(info, "finish") {
 		return nil
 	}
 
@@ -124,4 +155,15 @@ func (d *GitFlowNextDetector) OnRemove(ctx context.Context, info *BranchTypeInfo
 	}
 
 	return nil
+}
+
+// skip reports whether action must not run, telling the skip listener.
+func (d *GitFlowNextDetector) skip(info *BranchTypeInfo, action string) bool {
+	if d.actions {
+		return false
+	}
+	if d.skipped != nil {
+		d.skipped(info, action)
+	}
+	return true
 }
