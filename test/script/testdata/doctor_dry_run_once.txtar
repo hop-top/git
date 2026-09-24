@@ -1,0 +1,33 @@
+# doctor --fix --dry-run previews each repair once, and previews what the
+# real run then does: a merged branch whose worktree is gone gets one
+# state repair ("remove entry"), not that plus a second prune of the
+# same entry, and the preview's count matches the real run's.
+#
+# The regression this pins: under --dry-run the missing-worktree pass
+# left the entry in memory, so the prune pass after it listed the same
+# entry again, and "Would fix" counted it twice.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add feat
+exec git -C $WORK/hub/hops/feat commit --allow-empty -m 'work'
+exec git -C $WORK/hub/hops/main merge --no-ff feat -m 'merge feat'
+rm $WORK/hub/hops/feat
+
+# --- the preview: one state record per entry, besides the issue ---
+exec sh -c 'git-hop doctor --fix --dry-run --json | grep -c "\"subject\": \"github.com/org/repo:feat\""'
+stdout '^2$'
+exec git-hop doctor --fix --dry-run
+stdout 'Would remove entry: branch .feat. is merged'
+! stdout 'Would prune orphaned worktree'
+stdout 'Would fix 3 issue'
+
+# --- the real run does what the preview said ---
+exec git-hop doctor --fix
+stdout 'Fixed 3 issue'
