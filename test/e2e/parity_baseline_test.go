@@ -238,17 +238,35 @@ func TestParityExitCodes(t *testing.T) {
 		}
 	})
 
+	// A usage error exits 129, git's status for a bad command line.
 	t.Run("unknown_flag", func(t *testing.T) {
-		_, _, code := env.run(t, "--nonexistent-flag-xyz")
-		if code == 0 {
-			t.Errorf("unknown flag exit code: got 0, want non-zero")
+		_, stderr, code := env.run(t, "--nonexistent-flag-xyz")
+		if code != 129 {
+			t.Errorf("unknown flag exit code: got %d, want 129", code)
+		}
+		if !strings.HasPrefix(stderr, "error: unknown flag: --nonexistent-flag-xyz") {
+			t.Errorf("unknown flag stderr: got %q, want git-style error: line", stderr)
 		}
 	})
 
 	t.Run("unknown_subcommand_flag", func(t *testing.T) {
 		_, _, code := env.run(t, "list", "--nonexistent-flag-xyz")
-		if code == 0 {
-			t.Errorf("unknown subcommand flag exit code: got 0, want non-zero")
+		if code != 129 {
+			t.Errorf("unknown subcommand flag exit code: got %d, want 129", code)
+		}
+	})
+
+	t.Run("wrong_arg_count", func(t *testing.T) {
+		_, _, code := env.run(t, "add")
+		if code != 129 {
+			t.Errorf("wrong arg count exit code: got %d, want 129", code)
+		}
+	})
+
+	t.Run("unknown_subcommand", func(t *testing.T) {
+		_, _, code := env.run(t, "env", "nonexistent-subcommand-xyz")
+		if code != 129 {
+			t.Errorf("unknown subcommand exit code: got %d, want 129", code)
 		}
 	})
 }
