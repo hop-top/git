@@ -96,10 +96,11 @@ exec sh -c 'git-hop upgrade bogus; echo "exit=$?"'
 stdout 'exit=129'
 stderr '^error: unknown command "bogus" for "git-hop upgrade"'
 
-# --- machine output asked for: the error line alone, no usage block ---
+# --- machine output asked for: no usage block ---
+# JSON mode reports the error as the JSON record operation failures emit.
 exec sh -c 'git-hop list --json extra; echo "exit=$?"'
 stdout 'exit=129'
-stderr '\Aerror: unknown command "extra" for "git-hop list"\n\z'
+stderr '\A\{"level":"error","msg":"unknown command \\"extra\\" for \\"git-hop list\\""\}\n\z'
 
 # ...even when the output flag comes after the flag that failed to parse.
 exec sh -c 'git-hop status -Z --porcelain; echo "exit=$?"'
@@ -107,6 +108,11 @@ stdout 'exit=129'
 stderr '\Aerror: unknown shorthand flag: ''Z'' in -Z\n\z'
 
 exec sh -c 'git-hop add --format=json; echo "exit=$?"'
+stdout 'exit=129'
+stderr '\A\{"level":"error","msg":"requires a branch name, or --task <id> to derive one"\}\n\z'
+
+# Other machine formats keep the plain error line alone.
+exec sh -c 'git-hop add --format=yaml; echo "exit=$?"'
 stdout 'exit=129'
 stderr '\Aerror: requires a branch name, or --task <id> to derive one\n\z'
 
