@@ -60,7 +60,7 @@ See docs/hooks.md for details.`,
 		keepBackupFlagSet = cmd.Flags().Changed("keep-backup")
 
 		if restorePath != "" {
-			handleRestore(fs, g, restorePath)
+			handleRestore(fs, g, restorePath, forceFlag)
 			return
 		}
 
@@ -379,6 +379,7 @@ func reportPreservedBackup(fs afero.Fs, backupPath string) {
 		return
 	}
 	fmt.Printf("\nBackup preserved at: %s\n", backupPath)
+	output.Hint("%s", restoreHint(backupPath))
 	output.Hint("To remove backup manually:\n  rm -rf %s", backupPath)
 }
 
@@ -602,29 +603,6 @@ func maybeInstallShellIntegration(fs afero.Fs, enabled bool) error {
 	return nil
 }
 
-func handleRestore(fs afero.Fs, g git.GitInterface, backupPath string) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		output.Error("Failed to get current directory: %v", err)
-		os.Exit(1)
-	}
-
-	output.Info("Restoring from backup...")
-
-	converter := hop.NewConverter(fs, g)
-	if err := converter.RestoreFromBackup(backupPath, cwd); err != nil {
-		output.Error("Restore failed: %v", err)
-		os.Exit(1)
-	}
-
-	fmt.Println("\nRestore successful!")
-	fmt.Printf("Repository restored to: %s\n", cwd)
-	fmt.Printf("Original backup: %s\n", backupPath)
-
-	fmt.Println("\nYou can now inspect or delete the backup:")
-	fmt.Printf("  rm -rf %s\n", backupPath)
-}
-
 // The conversion strategies offered by the init menu.
 const (
 	choiceBareWorktree    = "1" // bare repo + worktrees (recommended)
@@ -671,16 +649,16 @@ func promptInitChoice() (string, error) {
 // prints. Tests assert each one is actually declared, so a hint can
 // never send a user to a flag that does not exist.
 func initHintedFlags() []string {
-	return []string{"no-prompt", "force", "dry-run"}
+	return []string{"no-prompt", "force", "dry-run", "restore"}
 }
 
 func init() {
-	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Convert even with uncommitted changes (DANGEROUS; a backup is still taken)")
+	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Convert even with uncommitted changes (DANGEROUS; a backup is still taken); with --restore, replace what occupies the original location")
 	initCmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "n", false, "Show conversion steps without executing")
 	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion (default: hop.backup.keepBackup)")
 	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Convert to a regular repo + worktrees instead of bare (with --no-prompt)")
 	initCmd.Flags().BoolVar(&noPromptFlag, "no-prompt", false, "Skip the interactive menu and convert non-interactively (bare unless --regular)")
-	initCmd.Flags().StringVar(&restorePath, "restore", "", "Restore repository from backup (manual rollback)")
+	initCmd.Flags().StringVar(&restorePath, "restore", "", "Restore a conversion backup to the location it was taken from (manual rollback)")
 	initCmd.Flags().BoolVar(&noHooksFlag, "no-hooks", false, "Skip hooks: no .git-hop/hooks/ directory, no lifecycle hook runs")
 	initCmd.Flags().BoolVar(&enableChdirFlag, "enable-chdir", false, "Install shell integration for automatic directory switching after hop commands")
 	initCmd.Flags().StringVar(&initHooksMode, "hooks", "", "mirror committed .git-hop/hooks/ into hopspace: symlink|copy|prompt|none (overrides --no-hooks)")
