@@ -2,6 +2,7 @@ package output
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -52,11 +53,25 @@ func SetupLogger(mode Mode, verbose bool) {
 		// JSON mode keeps info level; formatter set below.
 	}
 
-	logger = kitlog.WithLevel(rootViper(), level)
+	logger = newLogger(mode, level)
+}
 
+// newLogger builds the logger for mode at level on stderr.
+func newLogger(mode Mode, level log.Level) *log.Logger {
+	l := kitlog.WithLevel(rootViper(), level)
 	if mode == ModeJSON {
-		logger.SetFormatter(log.JSONFormatter)
+		l.SetFormatter(log.JSONFormatter)
 	}
+	return l
+}
+
+// ErrorJSON writes msg to w as the JSON error record Error and Fatal
+// emit in JSON mode. It serves errors raised before the output mode is
+// set up, such as a usage error, whose command line asked for JSON.
+func ErrorJSON(w io.Writer, msg string) {
+	l := newLogger(ModeJSON, log.ErrorLevel)
+	l.SetOutput(w)
+	l.Error(msg)
 }
 
 // rootViper returns the shared viper instance set by SetViper, or a

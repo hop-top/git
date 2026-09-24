@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	kitcli "hop.top/kit/go/console/cli"
 )
 
 func TestExitCode(t *testing.T) {
@@ -191,5 +192,53 @@ func TestUsageErrorCarriesCommand(t *testing.T) {
 	var ue *UsageError
 	if !errors.As(err, &ue) || ue.Cmd != grp {
 		t.Errorf("grp bogus: UsageError = %v, want Cmd grp", err)
+	}
+}
+
+// TestJSONUsageErrorRequested pins the rule that picks the JSON form of a
+// usage error: the one the pre-run uses to put the logger in JSON mode,
+// so a usage error and an operation failure under the same flags report
+// in the same shape.
+func TestJSONUsageErrorRequested(t *testing.T) {
+	root, show, plain, _ := synopsisTree()
+	root.PersistentFlags().Bool("json", false, "")
+	root.PersistentFlags().Bool("porcelain", false, "")
+	root.PersistentFlags().String("format", "table", "")
+	type record struct {
+		Name string `json:"name"`
+	}
+	if err := kitcli.SetOutputSchema(show, kitcli.OutputSchema{Type: &record{}, Version: "1.0"}); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		cmd  *cobra.Command
+		args []string
+		want bool
+	}{
+		{show, []string{"show", "--json", "--bogus"}, true},
+		{show, []string{"show", "--bogus", "--json"}, true},
+		{show, []string{"show", "--format=json", "--bogus"}, true},
+		{show, []string{"show", "--format", "json", "a", "b"}, true},
+		{show, []string{"show", "--json", "--format=json", "-Z"}, true},
+		{plain, []string{"plain", "--json", "extra"}, true}, // --json alone selects JSON logging
+		{root, []string{"--json", "--bogus"}, true},
+		// Not a JSON mode: plain text, as operation failures report.
+		{show, []string{"show", "--porcelain", "--bogus"}, false},
+		{show, []string{"show", "--format=yaml", "--bogus"}, false},
+		{show, []string{"show", "--format=table", "--bogus"}, false},
+		{show, []string{"show", "--json=false", "--bogus"}, false},
+		{show, []string{"show", "--bogus"}, false},
+		{show, []string{"show", "--", "--json"}, false},
+		// --format only takes effect on a command that declares a result.
+		{plain, []string{"plain", "--format=json", "extra"}, false},
+		// Contradictions the pre-run refuses in plain text.
+		{show, []string{"show", "--json", "--porcelain", "--bogus"}, false},
+		{show, []string{"show", "--json", "--format=yaml", "--bogus"}, false},
+		{show, []string{"show", "--format=nope", "--bogus"}, false},
+	}
+	for _, tc := range cases {
+		if got := jsonUsageErrorRequested(tc.cmd, tc.args); got != tc.want {
+			t.Errorf("%v: json = %v, want %v", tc.args, got, tc.want)
+		}
 	}
 }

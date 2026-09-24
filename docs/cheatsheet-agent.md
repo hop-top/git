@@ -170,8 +170,10 @@ Structured output rules:
 - Structured `env gc` without `--no-prompt`: exit 129 (cannot confirm).
 - Usage error (unknown flag, wrong operand count, unknown subcommand):
   exit 129 and an `error:` line on stderr. A human run also gets the
-  command's `usage:` block after it; with `--json`, `--porcelain` or a
-  structured `--format` the `error:` line is all of stderr.
+  command's `usage:` block after it; with `--porcelain` or a structured
+  `--format` the `error:` line is all of stderr. In JSON mode (`--json`,
+  or `--format json` on a command with a result) stderr is instead the
+  one JSON error record any failure emits: `{"level":"error","msg":...}`.
 - Full field reference: `docs/09-reference.mdx#structured-output`.
 
 ---
