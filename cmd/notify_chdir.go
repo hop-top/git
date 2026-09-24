@@ -13,6 +13,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
+	"hop.top/git/internal/output"
 	"hop.top/git/internal/shell"
 )
 
@@ -140,7 +141,7 @@ func runNotifyChdir(fs afero.Fs, path string, oldPwd string) error {
 		// already succeeded and is not undoable. Report and move on -- and
 		// specifically do NOT report the directive below, because a hook
 		// that failed navigated nothing.
-		fmt.Fprintf(os.Stderr, "warning: hook post-worktree-switch failed: %v\n", err)
+		output.Warn("hook post-worktree-switch failed: %v", err)
 		return nil
 	}
 

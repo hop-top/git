@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
 	"strings"
 
 	"hop.top/git/internal/config"
@@ -96,6 +94,6 @@ func fetchOrigin(g git.GitInterface, hubPath string, mode fetchMode) {
 		output.Fatal("could not fetch origin: %v\n"+
 			"hint: fix the origin remote, or pass --no-fetch to start from the local refs", err)
 	}
-	fmt.Fprintf(os.Stderr, "warning: could not fetch origin: %v\n"+
-		"hint: starting from the local refs, which may be stale\n", err)
+	output.Warn("could not fetch origin: %v", err)
+	output.Hint("starting from the local refs, which may be stale")
 }

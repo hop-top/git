@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
 	"sync"
 
 	"github.com/spf13/afero"
@@ -48,7 +46,7 @@ func hintGitflowOptIn() {
 		return
 	}
 	gitflowHintOnce.Do(func() {
-		fmt.Fprintf(os.Stderr, "hint: git-flow is set up but git hop runs no 'git flow' commands; to run start/finish on add/remove: git config %s true\n",
+		output.Hint("git-flow is set up but git hop runs no 'git flow' commands; to run start/finish on add/remove: git config %s true",
 			config.KeyGitflowEnabled)
 	})
 }

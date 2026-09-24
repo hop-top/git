@@ -3,7 +3,9 @@ package output_test
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 
@@ -332,4 +334,52 @@ func captureStdout(t *testing.T, fn func()) string {
 	var buf bytes.Buffer
 	buf.ReadFrom(r)
 	return buf.String()
+}
+
+// Note is unprefixed feedback on stderr, for a person at a terminal only.
+func TestNoteHumanOnly(t *testing.T) {
+	got := captureStderr(t, func() {
+		output.SetupLogger(output.ModeHuman, false)
+		output.Note("hooks: installed=%d", 2)
+	})
+	if got != "hooks: installed=2\n" {
+		t.Errorf("human Note stderr = %q", got)
+	}
+	for _, mode := range []output.Mode{output.ModeQuiet, output.ModePorcelain, output.ModeJSON} {
+		got := captureStderr(t, func() {
+			output.SetupLogger(mode, false)
+			output.Note("should not appear")
+		})
+		if got != "" {
+			t.Errorf("mode %v: Note stderr = %q, want empty", mode, got)
+		}
+	}
+}
+
+// ErrorCode is the last word of a failed run: printed in every mode,
+// quiet included, with git's "error:" prefix, then the process exits.
+func TestErrorCodeAlwaysPrints(t *testing.T) {
+	if mode := os.Getenv("OUTPUT_ERRORCODE_MODE"); mode != "" {
+		m := map[string]output.Mode{"quiet": output.ModeQuiet, "json": output.ModeJSON}[mode]
+		output.SetupLogger(m, false)
+		output.ErrorCode(3, "dirty %s", "tree")
+		return
+	}
+	for mode, want := range map[string]string{
+		"quiet": "error: dirty tree\n",
+		"json":  `{"level":"error","msg":"dirty tree"}` + "\n",
+	} {
+		cmd := exec.Command(os.Args[0], "-test.run=^TestErrorCodeAlwaysPrints$")
+		cmd.Env = append(os.Environ(), "OUTPUT_ERRORCODE_MODE="+mode)
+		var stderr bytes.Buffer
+		cmd.Stderr = &stderr
+		err := cmd.Run()
+		var exit *exec.ExitError
+		if !errors.As(err, &exit) || exit.ExitCode() != 3 {
+			t.Errorf("%s: err = %v, want exit status 3", mode, err)
+		}
+		if stderr.String() != want {
+			t.Errorf("%s: stderr = %q, want %q", mode, stderr.String(), want)
+		}
+	}
 }

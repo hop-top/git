@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -45,7 +44,7 @@ func initRepoID(g git.GitInterface, repoPath string) string {
 func dispatchInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, worktreePath, branch string) {
 	repoID := initRepoID(g, repoPath)
 	if err := cli.BuildHookDispatch(fs).PostWorktreeAdd(worktreePath, repoID, branch); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: post-worktree-add hook failed: %v\n", err)
+		output.Warn("post-worktree-add hook failed: %v", err)
 	}
 }
 

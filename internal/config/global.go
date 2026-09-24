@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"hop.top/git/internal/output"
 	"hop.top/kit/go/core/xdg"
 )
 
@@ -54,8 +55,7 @@ func NewGlobalLoaderWithGitConfig(gc *GitConfig) *GlobalLoader {
 func (l *GlobalLoader) Load() (*GlobalConfig, error) {
 	if err := l.maybeMigrate(); err != nil {
 		// Migration failure is non-fatal; log and continue
-		fmt.Fprintf(os.Stderr,
-			"warning: git-hop config migration failed: %v\n", err)
+		output.Warn("git-hop config migration failed: %v", err)
 	}
 
 	cfg := readFromGitConfig(l.gc)

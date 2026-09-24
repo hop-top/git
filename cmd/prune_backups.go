@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -75,16 +73,16 @@ func retireLegacyRepairDir(fs afero.Fs, hubPath string, dryRun bool) {
 	for _, s := range steps {
 		switch {
 		case s.Kind == "moved" && dryRun:
-			fmt.Fprintf(os.Stderr, "hint: [dry-run] would move legacy repair backup %s -> %s\n", s.Path, s.Dest)
+			output.Hint("[dry-run] would move legacy repair backup %s -> %s", s.Path, s.Dest)
 		case s.Kind == "moved":
-			fmt.Fprintf(os.Stderr, "hint: moved legacy repair backup %s -> %s\n", s.Path, s.Dest)
+			output.Hint("moved legacy repair backup %s -> %s", s.Path, s.Dest)
 		case dryRun:
-			fmt.Fprintf(os.Stderr, "hint: [dry-run] would remove %s\n", s.Path)
+			output.Hint("[dry-run] would remove %s", s.Path)
 		default:
-			fmt.Fprintf(os.Stderr, "hint: removed %s\n", s.Path)
+			output.Hint("removed %s", s.Path)
 		}
 	}
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "warning: legacy repair cleanup in %s: %v\n", hubPath, err)
+		output.Warn("legacy repair cleanup in %s: %v", hubPath, err)
 	}
 }

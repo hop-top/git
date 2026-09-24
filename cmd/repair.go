@@ -181,7 +181,7 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 
 	outcome := repairLocked(cmd, fs, g, hubPath, pathspec)
 	if err := lock.Release(); err != nil {
-		fmt.Fprintf(os.Stderr, "warning: release lock: %v\n", err)
+		output.Warn("release lock: %v", err)
 	}
 	return outcome.exit()
 }
@@ -199,7 +199,7 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 	if !repairForceDirty {
 		if dirty := dirtyWorktrees(g, plan); len(dirty) > 0 {
 			for _, p := range dirty {
-				fmt.Fprintf(os.Stderr, "error: %s has uncommitted changes\n", p)
+				output.Error("%s has uncommitted changes", p)
 			}
 			return opOutcome("dirty worktrees; use --force-dirty to override")
 		}
@@ -247,7 +247,7 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 	mutations, err := applier.Apply(plan)
 	if err != nil {
 		if backupID != "" {
-			fmt.Fprintf(os.Stderr, "error: apply failed; backup at %s\n", backupDir)
+			output.Error("apply failed; backup at %s", backupDir)
 		}
 		return opOutcome(err.Error())
 	}
@@ -260,7 +260,7 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 		if introducedNewIssue(plan, postPlan) {
 			if backupID != "" {
 				if _, rerr := hop.NewRepairBackup(fs, hubPath).Restore(backupID); rerr == nil {
-					fmt.Fprintf(os.Stderr, "error: repair introduced new issues, restored from backup %s\n", backupID)
+					output.Error("repair introduced new issues, restored from backup %s", backupID)
 					return opOutcome("repair introduced new issues, restored")
 				}
 			}
@@ -272,7 +272,7 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 	_ = firePostRepairHook(fs, hubPath)
 
 	if backupID != "" {
-		fmt.Fprintf(os.Stderr, "hint: backup written to %s\n", backupDir)
+		output.Hint("backup written to %s", backupDir)
 	}
 	if mutations > 0 {
 		output.Success("Repaired %d worktree(s)", mutations)
@@ -347,7 +347,7 @@ func printPlan(plan *hop.Plan) {
 
 func printPlanWarnings(plan *hop.Plan) {
 	for _, w := range plan.Warnings {
-		fmt.Fprintf(os.Stderr, "warning: %s\n", w)
+		output.Warn("%s", w)
 	}
 }
 
@@ -457,15 +457,13 @@ func repairHookRepoID(fs afero.Fs, hubPath string) string {
 
 // fatal returns an error that the cobra layer surfaces with exit 128.
 func fatal(msg string) error {
-	fmt.Fprintf(os.Stderr, "fatal: %s\n", msg)
-	os.Exit(exitFatal)
+	output.FatalCode(exitFatal, "%s", msg)
 	return nil
 }
 
 // opErr formats a non-fatal operation failure for exit 1 and returns
 // the cobra-friendly error so cobra also reports it through SilenceUsage.
 func opErr(msg string) error {
-	fmt.Fprintf(os.Stderr, "error: %s\n", msg)
-	os.Exit(exitOp)
+	output.ErrorCode(exitOp, "%s", msg)
 	return nil
 }

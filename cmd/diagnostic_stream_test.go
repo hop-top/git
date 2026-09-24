@@ -7,6 +7,7 @@ import (
 	"go/token"
 	"regexp"
 	"strconv"
+	"strings"
 	"testing"
 )
 
@@ -87,4 +88,91 @@ func isOSStdout(e ast.Expr) bool {
 	}
 	pkg, ok := sel.X.(*ast.Ident)
 	return ok && pkg.Name == "os" && sel.Sel.Name == "Stdout"
+}
+
+// rawStderrAllowed lists the functions outside internal/output that may
+// write to os.Stderr directly, keyed "<file>:<func>". Everything else
+// goes through output.Warn/Error/Hint/Note/Fatal*, so -q, --porcelain
+// and JSON mode apply to it. Keep each entry justified.
+var rawStderrAllowed = map[string]string{
+	// An interactive prompt and its answer; only reached on a terminal.
+	"cmd/add.go:opencodeAgentHint": "interactive OpenCode config prompt",
+	// Fails before the CLI, and so the output package, is set up.
+	"main.go:main": "xrr cassette install failure, before any command runs",
+	// Test-only process setup, never part of a git hop run.
+	"internal/testenv/testenv.go:Run": "test harness setup failure",
+}
+
+// TestDiagnostics_NotWrittenRawToStderr keeps stderr diagnostics going
+// through the output package: a fmt.Fprint* straight to os.Stderr
+// ignores -q and prints plain text in JSON mode.
+func TestDiagnostics_NotWrittenRawToStderr(t *testing.T) {
+	seen := map[string]bool{}
+	forEachSourceFile(t, func(path, rel string) {
+		if strings.HasPrefix(rel, "internal/output/") {
+			return
+		}
+		for _, w := range rawStderrWrites(t, path, rel) {
+			if _, ok := rawStderrAllowed[w.key]; ok {
+				seen[w.key] = true
+				continue
+			}
+			t.Errorf("raw write to os.Stderr (use the output package): %s", w.where)
+		}
+	})
+	for key := range rawStderrAllowed {
+		if !seen[key] {
+			t.Errorf("rawStderrAllowed lists %s, which no longer writes to os.Stderr", key)
+		}
+	}
+}
+
+type rawWrite struct{ key, where string }
+
+// rawStderrWrites finds fmt.Fprint* calls whose writer is os.Stderr,
+// keyed by the enclosing top-level function.
+func rawStderrWrites(t *testing.T, path, rel string) []rawWrite {
+	t.Helper()
+	fset := token.NewFileSet()
+	file, err := parser.ParseFile(fset, path, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", path, err)
+	}
+	var found []rawWrite
+	for _, decl := range file.Decls {
+		name := "<package>"
+		if fn, ok := decl.(*ast.FuncDecl); ok {
+			name = fn.Name.Name
+		}
+		ast.Inspect(decl, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok || len(call.Args) == 0 || !isOSStderr(call.Args[0]) {
+				return true
+			}
+			sel, ok := call.Fun.(*ast.SelectorExpr)
+			if !ok {
+				return true
+			}
+			pkg, ok := sel.X.(*ast.Ident)
+			if !ok || pkg.Name != "fmt" || !strings.HasPrefix(sel.Sel.Name, "Fprint") {
+				return true
+			}
+			pos := fset.Position(call.Pos())
+			found = append(found, rawWrite{
+				key:   rel + ":" + name,
+				where: fmt.Sprintf("%s:%d in %s", rel, pos.Line, name),
+			})
+			return true
+		})
+	}
+	return found
+}
+
+func isOSStderr(e ast.Expr) bool {
+	sel, ok := e.(*ast.SelectorExpr)
+	if !ok {
+		return false
+	}
+	pkg, ok := sel.X.(*ast.Ident)
+	return ok && pkg.Name == "os" && sel.Sel.Name == "Stderr"
 }
