@@ -1,6 +1,7 @@
 # Warnings reach stderr with git's lowercase `warning:` prefix, never a
-# logger level tag. A failing post-worktree-switch hook only warns: the
-# switch itself still succeeds.
+# logger level tag and never on stdout. A failing post-worktree-switch
+# hook only warns: the switch itself still succeeds. So does a clone over
+# a corrupt hops registry.
 
 exec git init --bare $WORK/repo.git
 exec git clone $WORK/repo.git $WORK/seed
@@ -24,6 +25,15 @@ stderr '^warning: Hook post-worktree-switch failed'
 exec git-hop -q main
 ! stderr 'warning:'
 
+# --- clone with a corrupt hops registry: warning on stderr only ---
+cd $WORK
+cp $WORK/bad-registry $WORK/.config/git-hop/hops.json
+exec git-hop $WORK/repo.git hub2
+stderr '^warning: failed to parse hops registry'
+! stdout 'parse hops registry'
+
+-- bad-registry --
+{not json
 -- post-hook --
 #!/bin/sh
 exit 1

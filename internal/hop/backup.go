@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/output"
 )
 
 type BackupMetadata struct {
@@ -67,7 +68,7 @@ func (b *BackupManager) CreateBackup(repoPath string) error {
 	stashManager := NewStashManager(b.git, b.fs)
 	stashes, err := stashManager.ExportStashes(repoPath)
 	if err != nil {
-		fmt.Printf("Warning: failed to export stashes: %v\n", err)
+		output.Warn("failed to export stashes: %v", err)
 	}
 
 	b.metadata = &BackupMetadata{
@@ -124,9 +125,9 @@ func (b *BackupManager) Restore(targetPath string) error {
 		stashManager := NewStashManager(b.git, b.fs)
 		stashes, err := b.loadStashes()
 		if err != nil {
-			fmt.Printf("Warning: failed to load stashes for restoration: %v\n", err)
+			output.Warn("failed to load stashes for restoration: %v", err)
 		} else if err := stashManager.ImportStashes(targetPath, stashes); err != nil {
-			fmt.Printf("Warning: failed to restore stashes: %v\n", err)
+			output.Warn("failed to restore stashes: %v", err)
 		}
 	}
 

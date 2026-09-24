@@ -259,7 +259,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 	// Update current symlink to point to the main worktree
 	if mainWorktreePath != "" && !isRegularRepo {
 		if err := hop.UpdateCurrentSymlink(fs, repoPath, mainWorktreePath); err != nil {
-			fmt.Printf("Warning: failed to create current symlink: %v\n", err)
+			output.Warn("failed to create current symlink: %v", err)
 		}
 	}
 
@@ -292,11 +292,8 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 		fmt.Printf("    current -> hops/%s  (symlink)\n", currentBranchName)
 	}
 
-	if len(result.Warnings) > 0 {
-		fmt.Println("\nWarnings:")
-		for _, warning := range result.Warnings {
-			fmt.Printf("  - %s\n", warning)
-		}
+	for _, warning := range result.Warnings {
+		output.Warn("%s", warning)
 	}
 
 	if keepBackupFlag || len(result.Warnings) > 0 {
@@ -307,7 +304,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 
 	if !noHooks {
 		if err := installInitHooks(fs, repoPath, mainWorktreePath, isRegularRepo); err != nil {
-			fmt.Printf("Warning: failed to install hooks directory: %v\n", err)
+			output.Warn("failed to install hooks directory: %v", err)
 		} else {
 			hookInstallPath := repoPath
 			if mainWorktreePath != "" && !isRegularRepo {
@@ -334,7 +331,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 
 	if enableChdir {
 		if err := maybeInstallShellIntegration(fs, true); err != nil {
-			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
+			output.Warn("failed to install shell integration: %v", err)
 		}
 	}
 
@@ -409,7 +406,7 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 
 	if !noHooks {
 		if err := installInitHooks(fs, repoPath, "", false); err != nil {
-			fmt.Printf("Warning: failed to install hooks directory: %v\n", err)
+			output.Warn("failed to install hooks directory: %v", err)
 		} else {
 			fmt.Printf("\nHooks directory created: %s/.git-hop/hooks/\n", repoPath)
 			printInitHooksHint()
@@ -421,7 +418,7 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 
 	if enableChdir {
 		if err := maybeInstallShellIntegration(fs, true); err != nil {
-			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
+			output.Warn("failed to install shell integration: %v", err)
 		}
 	}
 }
@@ -456,7 +453,7 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 
 	if !noHooks {
 		if err := installInitHooks(fs, path, "", true); err != nil {
-			fmt.Printf("Warning: failed to ensure hooks directory: %v\n", err)
+			output.Warn("failed to ensure hooks directory: %v", err)
 		} else {
 			fmt.Printf("\nHooks directory: %s/.git-hop/hooks/\n", path)
 		}
@@ -467,7 +464,7 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 
 	if enableChdir {
 		if err := maybeInstallShellIntegration(fs, true); err != nil {
-			fmt.Printf("Warning: failed to install shell integration: %v\n", err)
+			output.Warn("failed to install shell integration: %v", err)
 		}
 	}
 

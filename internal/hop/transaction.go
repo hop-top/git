@@ -2,6 +2,8 @@ package hop
 
 import (
 	"fmt"
+
+	"hop.top/git/internal/output"
 )
 
 // TransactionStep represents a single step in a transaction
@@ -56,9 +58,8 @@ func (t *Transaction) Rollback() {
 	for _, rollback := range t.rollbacks {
 		if rollback != nil {
 			if err := rollback(); err != nil {
-				// Log but continue rolling back
-				// In production, use proper logger
-				fmt.Printf("Rollback error: %v\n", err)
+				// Report and keep rolling back the remaining steps.
+				output.Error("rollback failed: %v", err)
 			}
 		}
 	}

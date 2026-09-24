@@ -10,6 +10,7 @@ import (
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/output"
 )
 
 // Registry manages the global hops registry
@@ -25,7 +26,7 @@ func LoadRegistry(fs afero.Fs) *Registry {
 
 	if content, err := os.ReadFile(path); err == nil {
 		if err := json.Unmarshal(content, cfg); err != nil {
-			fmt.Printf("Warning: failed to parse hops registry: %v\n", err)
+			output.Warn("failed to parse hops registry: %v", err)
 		}
 	}
 

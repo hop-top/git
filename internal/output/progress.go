@@ -85,7 +85,7 @@ func (pb *ProgressBar) Start() {
 
 	go func() {
 		if _, err := pb.program.Run(); err != nil {
-			Error("Error running progress bar: %v", err)
+			Error("progress bar: %v", err)
 		}
 	}()
 
