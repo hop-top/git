@@ -426,13 +426,8 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 		os.Exit(1)
 	}
 
-	registry := hop.LoadRegistry(fs)
 	repoKey := org + "/" + repo
-
-	if err := registry.AddHop(repoKey, branch, repoPath); err != nil {
-		output.Error("Failed to register repository: %v", err)
-		os.Exit(1)
-	}
+	registerAsIsHub(fs, remoteURL, org, repo, branch, repoPath)
 
 	// Emit hopspace.initialized for register-as-is path.
 	_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(

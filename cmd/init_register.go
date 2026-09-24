@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"path/filepath"
+
 	"github.com/spf13/afero"
 	"hop.top/git/internal/hop"
 )
@@ -26,5 +28,26 @@ func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, bra
 		HubPath:       repoPath,
 		WorktreePath:  worktreePath,
 		WorktreeType:  wtType,
+	})
+}
+
+// registerAsIsHub records a repository registered as-is (init menu option
+// 3) the way registerConvertedHub records a converted one, so list,
+// status --all and prune see it. Its structure is unchanged: the hub is
+// the repository root, which is also its branch's worktree, and no
+// hop.json is written.
+func registerAsIsHub(fs afero.Fs, uri, org, repo, branch, repoPath string) {
+	absPath, err := filepath.Abs(repoPath)
+	if err != nil {
+		absPath = repoPath
+	}
+	hop.RegisterNewHub(fs, hop.NewHub{
+		URI:           uri,
+		Org:           org,
+		Repo:          repo,
+		DefaultBranch: branch,
+		HubPath:       absPath,
+		WorktreePath:  absPath,
+		WorktreeType:  hop.WorktreeTypeMain,
 	})
 }
