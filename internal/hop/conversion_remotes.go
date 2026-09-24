@@ -68,7 +68,7 @@ func (c *Converter) carryOverRemotes(srcRepo, bareRepo string) error {
 		return fmt.Errorf("failed to drop the clone's origin: %w", err)
 	}
 	for _, e := range entries {
-		if err := addConfigEntry(c.git, bareRepo, e); err != nil {
+		if err := addConfigEntry(c.git, []string{"-C", bareRepo, "config"}, e); err != nil {
 			return err
 		}
 	}
@@ -95,15 +95,7 @@ func readLocalConfig(g git.GitInterface, repoPath string) ([]configEntry, error)
 	if err != nil {
 		return nil, err
 	}
-	var entries []configEntry
-	for _, rec := range strings.Split(out, "\x00") {
-		if rec == "" {
-			continue
-		}
-		key, value, hasValue := strings.Cut(rec, "\n")
-		entries = append(entries, configEntry{key: key, value: value, implicit: !hasValue})
-	}
-	return entries, nil
+	return parseConfigList(out), nil
 }
 
 // localConfigEntries lists repoPath's local config entries under the

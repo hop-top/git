@@ -26,6 +26,8 @@ exec git config include.path $WORK/shared.gitconfig
 exec git config includeIf.onbranch:main.path ../relative.gitconfig
 # keys of the old layout and format
 exec git config core.worktree $WORK/proj
+# per-worktree config on: the hub gets it too, with core.bare moved into
+# the hub's own config.worktree (see init_carries_worktree_config)
 exec git config extensions.worktreeConfig true
 
 exec git config --local --get-regexp '^(user|url|alias|hop|commit|include)\.|^core\.hookspath$'
@@ -40,10 +42,11 @@ stdout '^         user\.email$'
 stdout '^         url\.https://mirror-a\.example\.test/\.insteadof$'
 stdout '^         remote\.origin\.url$'
 stdout '^         core\.filemode$'
-stdout 'Leave out 5 local config key\(s\):'
+stdout '^         extensions\.worktreeconfig$'
+stdout 'Leave out 4 local config key\(s\):'
 stdout '^         core\.bare: '
 stdout '^         core\.worktree: '
-stdout '^         extensions\.worktreeconfig: '
+! stdout '^         extensions\.worktreeconfig: '
 stdout '^         includeif\.onbranch:main\.path: relative include path'
 ! stdout '^         user\.email:'
 exec git config --local core.bare
@@ -67,11 +70,17 @@ exec git config --local --get-all remote.origin.url
 stdout -count=1 '^.+$'
 
 # --- excluded keys: the hub's own layout wins ---
-exec git config --local --get-all core.bare
+# core.bare=true is the hub's own, in its config.worktree, since the
+# extension is on; the shared config would apply it to every worktree.
+! exec git config --local core.bare
+exec git config --file config.worktree --get-all core.bare
 stdout -count=1 '^.+$'
 stdout '^true$'
+exec git rev-parse --is-bare-repository
+stdout '^true$'
 ! exec git config --local core.worktree
-! exec git config --local extensions.worktreeConfig
+exec git config --local --get-all extensions.worktreeConfig
+stdout -count=1 '^true$'
 ! exec git config --local --get-regexp '^includeif\.'
 
 # --- the include is live, and its contents were not flattened in ---

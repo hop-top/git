@@ -38,6 +38,10 @@ var gitDirCarried = map[string]string{
 		"and any other namespace; per-worktree and derived ones excepted " +
 		"(see carryOverExtraRefs)",
 	"packed-refs": "same as refs",
+	"config.worktree": "per-worktree config: with extensions.worktreeConfig " +
+		"on, its keys go to the default worktree's own config.worktree and " +
+		"the hub's core.bare moves to the hub's (see carryOverWorktreeConfig); " +
+		"with it off git did not read the file, and it is left behind with a warning",
 	"modules": "the submodules' git dirs, moved to the default worktree's " +
 		"own git dir and reconnected (see carryOverSubmodules)",
 	"logs": "reflogs: every stash entry but the latest lives only in the " +
@@ -83,10 +87,7 @@ var gitDirLeftBehindPrefixes = map[string]string{
 }
 
 // Left behind with a warning: user state this conversion does not carry.
-var gitDirWarned = map[string]string{
-	"config.worktree": "per-worktree config (extensions.worktreeConfig) is not " +
-		"carried over; set its keys again with git config",
-}
+var gitDirWarned = map[string]string{}
 
 // Refused up front: the markers of an operation in progress
 // (gitDirInProgress: MERGE_HEAD, rebase-merge, sequencer, BISECT_START,

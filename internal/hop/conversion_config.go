@@ -42,10 +42,10 @@ var excludedConfigRules = []struct {
 	{keyIs("core.repositoryformatversion"),
 		"set by the clone to match its own storage format"},
 	// objectformat, refstorage and compatobjectformat declare how the
-	// clone's storage is laid out; the clone writes its own. worktreeConfig
-	// switches on per-worktree config files (.git/config.worktree) that a
-	// conversion does not carry, and noop, partialclone and preciousobjects
-	// are format declarations in the same namespace.
+	// clone's storage is laid out; the clone writes its own. noop,
+	// partialclone and preciousobjects are format declarations in the
+	// same namespace. worktreeConfig set to true is not excluded:
+	// PlanLocalConfig carries it, and carryOverWorktreeConfig writes it.
 	{sectionIs("extensions"),
 		"repository format declaration; the clone writes its own"},
 	{isRelativeInclude,
@@ -96,6 +96,21 @@ func isRelativeInclude(key, value string) bool {
 type LocalConfigPlan struct {
 	Carried  []configEntry
 	Excluded []ExcludedConfigEntry
+
+	// WorktreeConfig is true when the repository has
+	// extensions.worktreeConfig on, so git reads .git/config.worktree.
+	// Its entries are sorted by the same rules into PerWorktree, written
+	// to the default worktree's own config.worktree, and
+	// PerWorktreeExcluded.
+	WorktreeConfig      bool
+	PerWorktree         []configEntry
+	PerWorktreeExcluded []ExcludedConfigEntry
+}
+
+const worktreeConfigKey = "extensions.worktreeconfig"
+
+func isWorktreeConfigKey(key string) bool {
+	return strings.EqualFold(key, worktreeConfigKey)
 }
 
 // ExcludedConfigEntry is a local config entry a bare conversion leaves
@@ -114,12 +129,33 @@ func PlanLocalConfig(g git.GitInterface, repoPath string) (*LocalConfigPlan, err
 		return nil, fmt.Errorf("failed to read the local config of %s: %w", repoPath, err)
 	}
 	plan := &LocalConfigPlan{}
+	// git's own reading of the extension, whatever its spelling.
+	if on, err := g.Run("git", "-C", repoPath, "config", "--local", "--type=bool", "--get", "extensions.worktreeConfig"); err == nil && on == "true" {
+		plan.WorktreeConfig = true
+	}
 	for _, e := range entries {
+		if plan.WorktreeConfig && isWorktreeConfigKey(e.key) {
+			plan.Carried = append(plan.Carried, e)
+			continue
+		}
 		if reason := excludedReason(e.key, e.value); reason != "" {
 			plan.Excluded = append(plan.Excluded, ExcludedConfigEntry{Key: e.key, Value: e.value, Reason: reason})
 			continue
 		}
 		plan.Carried = append(plan.Carried, e)
+	}
+	if plan.WorktreeConfig {
+		perWorktree, err := readWorktreeConfig(g, repoPath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to read the per-worktree config of %s: %w", repoPath, err)
+		}
+		for _, e := range perWorktree {
+			if reason := excludedReason(e.key, e.value); reason != "" {
+				plan.PerWorktreeExcluded = append(plan.PerWorktreeExcluded, ExcludedConfigEntry{Key: e.key, Value: e.value, Reason: reason})
+				continue
+			}
+			plan.PerWorktree = append(plan.PerWorktree, e)
+		}
 	}
 	return plan, nil
 }
@@ -134,10 +170,24 @@ func excludedReason(key, value string) string {
 }
 
 // CarriedKeys lists the carried key names once each, in file order.
-func (p *LocalConfigPlan) CarriedKeys() []string {
+func (p *LocalConfigPlan) CarriedKeys() []string { return uniqueKeys(p.Carried) }
+
+// ExcludedKeys lists the excluded entries once per key and reason, in
+// file order.
+func (p *LocalConfigPlan) ExcludedKeys() []ExcludedConfigEntry { return uniqueExcluded(p.Excluded) }
+
+// PerWorktreeKeys and PerWorktreeExcludedKeys are CarriedKeys and
+// ExcludedKeys for .git/config.worktree.
+func (p *LocalConfigPlan) PerWorktreeKeys() []string { return uniqueKeys(p.PerWorktree) }
+
+func (p *LocalConfigPlan) PerWorktreeExcludedKeys() []ExcludedConfigEntry {
+	return uniqueExcluded(p.PerWorktreeExcluded)
+}
+
+func uniqueKeys(entries []configEntry) []string {
 	var keys []string
 	seen := map[string]bool{}
-	for _, e := range p.Carried {
+	for _, e := range entries {
 		if !seen[e.key] {
 			seen[e.key] = true
 			keys = append(keys, e.key)
@@ -146,12 +196,10 @@ func (p *LocalConfigPlan) CarriedKeys() []string {
 	return keys
 }
 
-// ExcludedKeys lists the excluded entries once per key and reason, in
-// file order.
-func (p *LocalConfigPlan) ExcludedKeys() []ExcludedConfigEntry {
+func uniqueExcluded(entries []ExcludedConfigEntry) []ExcludedConfigEntry {
 	var out []ExcludedConfigEntry
 	seen := map[string]bool{}
-	for _, e := range p.Excluded {
+	for _, e := range entries {
 		id := e.Key + "\x00" + e.Reason
 		if !seen[id] {
 			seen[id] = true
@@ -187,7 +235,8 @@ func (c *Converter) carryOverLocalConfig(plan *LocalConfigPlan, bareRepo string)
 	}
 
 	for _, e := range plan.Carried {
-		if isRemoteConfig(e.key) {
+		// carryOverRemotes and carryOverWorktreeConfig own these.
+		if isRemoteConfig(e.key) || isWorktreeConfigKey(e.key) {
 			continue
 		}
 		if inHub[e.key] {
@@ -196,21 +245,24 @@ func (c *Converter) carryOverLocalConfig(plan *LocalConfigPlan, bareRepo string)
 			}
 			inHub[e.key] = false
 		}
-		if err := addConfigEntry(c.git, bareRepo, e); err != nil {
+		if err := addConfigEntry(c.git, []string{"-C", bareRepo, "config"}, e); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func addConfigEntry(g git.GitInterface, repo string, e configEntry) error {
+// addConfigEntry appends e with `git <cfgCmd...> --add`, where cfgCmd
+// selects the file ("-C <repo> config" or "config --file <path>").
+func addConfigEntry(g git.GitInterface, cfgCmd []string, e configEntry) error {
 	value := e.value
 	if e.implicit {
 		// A key with no "=" is boolean true; the command line cannot
 		// write one, and "true" reads the same.
 		value = "true"
 	}
-	if _, err := g.Run("git", "-C", repo, "config", "--add", e.key, value); err != nil {
+	args := append(append([]string{}, cfgCmd...), "--add", e.key, value)
+	if _, err := g.Run("git", args...); err != nil {
 		return fmt.Errorf("failed to restore %s: %w", e.key, err)
 	}
 	return nil
@@ -224,6 +276,13 @@ func (p *LocalConfigPlan) relativeIncludeWarnings() []string {
 		if isRelativeInclude(e.Key, e.Value) {
 			out = append(out, fmt.Sprintf(
 				"local config %s=%s not carried over: a relative include resolves against the hub now, not .git/; set it again with an absolute path",
+				e.Key, e.Value))
+		}
+	}
+	for _, e := range p.PerWorktreeExcluded {
+		if isRelativeInclude(e.Key, e.Value) {
+			out = append(out, fmt.Sprintf(
+				"per-worktree config %s=%s not carried over: a relative include resolves against the worktree's git dir now, not .git/; set it again with an absolute path",
 				e.Key, e.Value))
 		}
 	}

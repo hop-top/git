@@ -213,7 +213,7 @@ staged and unstaged as they are:
 		for _, step := range initConversionPlan(backupRoot, branch, useBare) {
 			fmt.Println(step)
 		}
-		previewLocalConfig(g, repoPath, useBare)
+		previewLocalConfig(g, repoPath, branch, useBare)
 
 		if !noHooks {
 			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)

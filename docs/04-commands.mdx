@@ -1044,10 +1044,10 @@ The keys left out describe the old layout or the old storage format:
 
 | Key | Why it is left out |
 |-----|--------------------|
-| `core.bare` | The hub is bare; it keeps the clone's `true`. |
+| `core.bare` | The hub is bare; it keeps the clone's `true` (in its own `config.worktree` when `extensions.worktreeConfig` is on, see below). |
 | `core.worktree` | Names the old working tree; hub worktrees live under `hops/`. |
 | `core.repositoryformatversion` | The clone sets it to match its own storage. |
-| `extensions.*` | Repository format declarations (`objectFormat`, `worktreeConfig`, ...); the clone writes its own. |
+| `extensions.*` | Repository format declarations (`objectFormat`, `refStorage`, ...); the clone writes its own. `extensions.worktreeConfig=true` is the exception: it carries over, see below. |
 | `include.path`, `includeIf.<cond>.path` with a relative path, or a `gitdir:./` condition | Resolved against the directory of the config file, which moves from `<repo>/.git/` to `<repo>/`. `init` prints a `warning:` for each; set it again with an absolute path. |
 
 Includes with an absolute or `~/` path are carried over, as the
@@ -1056,6 +1056,18 @@ settings git probes on its own (`core.fileMode`, `core.ignoreCase`,
 `core.precomposeUnicode`, `core.symlinks`) carry over too; the hub sits on
 the same filesystem, so they only differ from the clone's when you set
 them yourself.
+
+Per-worktree config (`extensions.worktreeConfig`, which `git
+sparse-checkout` turns on) carries over exactly. The hub gets the
+extension, and its `core.bare=true` moves from the shared config into the
+hub's own `config.worktree`, as git requires: in the shared config it
+would apply to every worktree and break them. The entries of
+`.git/config.worktree` (such as `core.sparseCheckout` and
+`core.sparseCheckoutCone`) go to the default worktree's own
+`config.worktree`, the same exclusions applying, and its sparse checkout
+is applied again, so the default worktree has the files it had before.
+Without the extension, git does not read `.git/config.worktree`; if the
+file exists it is left behind with a `warning:`.
 
 `git hop init -n` lists the keys it would carry over and the ones it
 would leave out, with the reason. It prints key names only, never
@@ -1079,9 +1091,8 @@ clone. The index is rebuilt in the default worktree with the same
 staged changes (see below); editor scratch files are dropped. `init`
 prints a `warning:` for each of these:
 
-- `config.worktree` (per-worktree config from
-  `extensions.worktreeConfig`): not carried over. Set its keys again
-  with `git config`.
+- `config.worktree` when `extensions.worktreeConfig` is off: git was
+  not reading it, so it is not carried over.
 - Any entry git-hop does not recognise.
 
 ### Uncommitted changes and `--force`
