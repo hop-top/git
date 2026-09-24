@@ -63,7 +63,7 @@ func pruneHubBranchesKeeping(fs afero.Fs, g git.GitInterface, st *state.State, d
 		var registry *string // git's worktree list, read once a row is missing
 		for _, branch := range sortedBranchNames(hub) {
 			wtPath := hub.BranchPath(branch)
-			if exists, _ := afero.DirExists(fs, wtPath); exists {
+			if worktreeDirPresent(fs, wtPath) {
 				continue
 			}
 			if registry == nil {

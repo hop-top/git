@@ -488,7 +488,7 @@ func missingStateWorktrees(fs afero.Fs, st *state.State) []stateIssue {
 	var issues []stateIssue
 	for _, repoID := range scopeRepoIDs(st) {
 		for branch, wt := range st.Repositories[repoID].Worktrees {
-			if exists, _ := afero.DirExists(fs, wt.Path); !exists {
+			if !worktreeDirPresent(fs, wt.Path) {
 				issues = append(issues, stateIssue{repoID: repoID, branch: branch, path: wt.Path})
 			}
 		}

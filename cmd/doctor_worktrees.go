@@ -31,6 +31,12 @@ import (
 // A worktree git has locked is none of these: it is reported as a
 // warning and left alone in every mode (warnLockedWorktree).
 //
+// A path something other than a directory occupies (a file, a dangling
+// symlink) is not the worktree either: it is reported as such and goes
+// through the same repair, which recreateBlocker then refuses, since git
+// cannot check a worktree out over it. worktreeAt is the test, the one
+// the state check and prune use too.
+//
 // The hub check runs before the state check on purpose: a worktree it
 // recreates is back on disk when the state check looks, so the state
 // check only sees what the hub check left for cleanup.
@@ -45,7 +51,8 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 	for _, name := range sortedBranchNames(hub) {
 		b := hub.Config.Branches[name]
 		linkPath := config.ResolveWorktreePath(b.Path, hub.Path)
-		if _, err := fs.Stat(linkPath); err == nil {
+		presence := worktreeAt(fs, linkPath)
+		if presence == worktreePresent {
 			continue
 		}
 
@@ -58,8 +65,13 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 			continue
 		}
 
-		output.Error("Broken link for branch %s: %s", name, linkPath)
-		r.issue(doctorCheckHub, name, "worktree directory missing: %s", linkPath)
+		if presence == worktreeOccupied {
+			output.Error("Worktree path for branch %s is occupied by a non-directory: %s", name, linkPath)
+			r.issue(doctorCheckHub, name, "worktree path occupied by a non-directory: %s", linkPath)
+		} else {
+			output.Error("Broken link for branch %s: %s", name, linkPath)
+			r.issue(doctorCheckHub, name, "worktree directory missing: %s", linkPath)
+		}
 		if !opts.fix {
 			continue
 		}
