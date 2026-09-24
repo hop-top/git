@@ -135,9 +135,8 @@ func SetupTestEnv(t *testing.T) *TestEnv {
 	os.MkdirAll(cliPluginsDir, 0755)
 	WriteFile(t, filepath.Join(dockerConfigDir, "config.json"), "{}")
 
-	home, err := os.UserHomeDir()
-	if err == nil {
-		pluginPath := filepath.Join(home, ".docker", "cli-plugins", "docker-compose")
+	if userDockerConfig := userDockerConfigDir(); userDockerConfig != "" {
+		pluginPath := filepath.Join(userDockerConfig, "cli-plugins", "docker-compose")
 		if _, err := os.Stat(pluginPath); err == nil {
 			os.Symlink(pluginPath, filepath.Join(cliPluginsDir, "docker-compose"))
 		}
@@ -325,4 +324,19 @@ func WriteFile(t *testing.T, path, content string) {
 	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
 		t.Fatalf("Failed to write file %s: %v", path, err)
 	}
+}
+
+// userDockerConfigDir returns the docker CLI config dir the way docker
+// resolves it: $DOCKER_CONFIG, else ~/.docker. Test binaries run with
+// HOME pointed at a throwaway dir (see testenv), which pins DOCKER_CONFIG
+// to the real one first, so the lookup still finds installed CLI plugins.
+func userDockerConfigDir() string {
+	if dir := os.Getenv("DOCKER_CONFIG"); dir != "" {
+		return dir
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(home, ".docker")
 }

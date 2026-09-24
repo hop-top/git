@@ -20,6 +20,7 @@ import (
 	"github.com/rogpeppe/go-internal/testscript"
 
 	"hop.top/git/cmd"
+	"hop.top/git/internal/testenv"
 )
 
 // TestMain installs the CLI as an in-script command.
@@ -30,8 +31,12 @@ import (
 // does on failure. The binary the script invokes is therefore this package's
 // own build of the production entry point, not a stale artifact on $PATH:
 // there is no `go build` step and nothing to go out of date.
+//
+// testenv.Wrap isolates only the top-level run: testscript.Main calls m.Run
+// there and nowhere else, so the re-executed git-hop subprocesses keep the
+// per-script environment that setup builds.
 func TestMain(m *testing.M) {
-	testscript.Main(m, map[string]func(){
+	testscript.Main(testenv.Wrap(m), map[string]func(){
 		"git-hop": func() {
 			cmd.SetVersion("test", "none", "unknown")
 			cmd.Execute()

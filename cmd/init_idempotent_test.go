@@ -30,7 +30,30 @@ func captureStdout(t *testing.T, f func()) string {
 	return buf.String()
 }
 
+// isolateDataHome points both data-home knobs at a fresh temp dir.
+// handleAlreadyInitialized mirrors hooks into a hopspace resolved from
+// GIT_HOP_DATA_HOME, falling back to $XDG_DATA_HOME/git-hop, so both must
+// move or the mirror writes into the developer's real data home.
+func isolateDataHome(t *testing.T) string {
+	t.Helper()
+	dataHome := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("GIT_HOP_DATA_HOME", dataHome)
+	return dataHome
+}
+
+// hopspaceHooksDirs returns the hopspace hook dirs the mirror step
+// created under dataHome (<dataHome>/<host>/<org>/<repo>/hooks).
+func hopspaceHooksDirs(t *testing.T, dataHome string) []string {
+	t.Helper()
+	dirs, err := filepath.Glob(filepath.Join(dataHome, "*", "*", "*", "hooks"))
+	require.NoError(t, err)
+	return dirs
+}
+
 func TestHandleAlreadyInitialized_BareWorktreeRoot(t *testing.T) {
+	dataHome := isolateDataHome(t)
+
 	// DetectRepoStructure uses os.Stat for HEAD, so we need a real tmpdir.
 	repoPath := t.TempDir()
 	g := git.New()
@@ -48,9 +71,15 @@ func TestHandleAlreadyInitialized_BareWorktreeRoot(t *testing.T) {
 	})
 
 	assert.Contains(t, out, "already initialized")
+	// The hook mirror resolves a hopspace from the data home; it must land
+	// in the one this test owns, never the developer's real one.
+	assert.NotEmpty(t, hopspaceHooksDirs(t, dataHome),
+		"hook mirror did not write under the test's data home %q", dataHome)
 }
 
 func TestHandleAlreadyInitialized_WorktreeChild(t *testing.T) {
+	dataHome := isolateDataHome(t)
+
 	// IsWorktree uses os.Stat, so we need a real tmpdir.
 	worktreePath := t.TempDir()
 	g := git.New()
@@ -68,4 +97,8 @@ func TestHandleAlreadyInitialized_WorktreeChild(t *testing.T) {
 	})
 
 	assert.Contains(t, out, "already initialized")
+	// The hook mirror resolves a hopspace from the data home; it must land
+	// in the one this test owns, never the developer's real one.
+	assert.NotEmpty(t, hopspaceHooksDirs(t, dataHome),
+		"hook mirror did not write under the test's data home %q", dataHome)
 }
