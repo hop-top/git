@@ -1,0 +1,41 @@
+# `git hop init` says "Backup preserved at" only when the conversion
+# backup really is still on disk: --keep-backup, or a failed conversion.
+# A warning such as "no remote" must not make it claim a deleted backup.
+
+# --- no remote, default: backup deleted, and init does not claim otherwise ---
+exec git init $WORK/plain
+cd $WORK/plain
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+stderr '^warning: No remote configured'
+stdout '^Backup cleaned up: '
+! stdout 'Backup preserved at'
+! stderr 'To remove backup manually'
+exec find $WORK/.cache -name backup-info.json
+! stdout .
+
+# --- --keep-backup: reported once, and it is there ---
+exec git init $WORK/kept
+cd $WORK/kept
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks --keep-backup
+stdout '^Backup preserved at: '
+! stderr 'warning: backup preserved at'
+stderr '^hint: To remove backup manually:$'
+exec find $WORK/.cache -name backup-info.json
+stdout 'backup-info.json'
+
+# --- failed conversion: rolled back, and the backup is reported ---
+exec git init $WORK/fail
+cd $WORK/fail
+exec git commit --allow-empty -m 'initial'
+mkdir $WORK/fail.new
+cp $WORK/blocker $WORK/fail.new/blocker
+! exec git-hop init --no-prompt --no-hooks
+stderr 'Conversion failed'
+stdout '^Backup preserved at: '
+exists $WORK/fail/.git
+
+-- blocker --
+occupies the bare clone's destination
