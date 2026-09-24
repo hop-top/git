@@ -21,7 +21,7 @@ import (
 func init() {
 	cli.SupportDryRun(
 		// Preview their writes and stop before the first one.
-		removeCmd, moveCmd, mergeCmd, pruneCmd, doctorCmd,
+		addCmd, removeCmd, moveCmd, mergeCmd, pruneCmd, doctorCmd,
 		// Write nothing.
 		listCmd, statusCmd, completionCmd, currentPathCmd,
 	)
