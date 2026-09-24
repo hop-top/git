@@ -190,7 +190,7 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 		name string
 		path string
 	}{
-		{"data", filepath.Join(dataHome, "git-hop")},
+		{"data", dataHome}, // already git-hop's own directory
 		{"config", filepath.Join(configHome, "git-hop")},
 		{"cache", filepath.Join(cacheHome, "git-hop")},
 	} {

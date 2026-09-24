@@ -14,7 +14,7 @@ exec git push origin main
 cd $WORK
 exec git-hop $WORK/org/repo.git hub
 cd $WORK/hub
-mkdir $WORK/data/git-hop $WORK/.config/git-hop $WORK/.cache/git-hop
+mkdir $WORK/data $WORK/.config/git-hop $WORK/.cache/git-hop
 
 # --- env gc with nothing to collect ---
 exec git-hop env gc --no-prompt
