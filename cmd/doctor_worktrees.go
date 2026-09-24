@@ -1,0 +1,223 @@
+package cmd
+
+import (
+	"path/filepath"
+	"strings"
+
+	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
+	"hop.top/git/internal/hop"
+	"hop.top/git/internal/output"
+)
+
+// checkBranchWorktrees reports hub branches whose worktree directory is
+// gone and, under --fix, repairs each one. The repair depends on the
+// branch:
+//
+//   - merged into the default branch: the worktree is not recreated. Its
+//     work is already on the default branch and its directory is already
+//     gone, so the repair is cleanup. The state check that runs next
+//     drops the branch's state entry and hop.json row, as it always has
+//     for merged branches; recreating the worktree here would only have
+//     that check undo it.
+//   - otherwise: the worktree is recreated, bringing the branch's
+//     unmerged work back on disk.
+//
+// Either way git's registration of the vanished directory is cleared
+// first (clearStaleRegistration). `git worktree add` refuses a path git
+// still registers, and a registration left behind by cleanup would block
+// a later `git hop add` of the same branch.
+//
+// The hub check runs before the state check on purpose: a worktree it
+// recreates is back on disk when the state check looks, so the state
+// check only sees what the hub check left for cleanup.
+func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath string, opts doctorOpts, r *doctorReport) {
+	for _, name := range sortedBranchNames(hub) {
+		b := hub.Config.Branches[name]
+		linkPath := config.ResolveWorktreePath(b.Path, hub.Path)
+		if _, err := fs.Stat(linkPath); err == nil {
+			continue
+		}
+
+		output.Error("Broken link for branch %s: %s", name, linkPath)
+		r.issue(doctorCheckHub, name, "worktree directory missing: %s", linkPath)
+		if !opts.fix {
+			continue
+		}
+
+		if base, merged := mergedMissingBranch(g, hub, b.HopspaceBranch); merged {
+			output.Info("Branch %s is merged into %s; not recreating its worktree", name, base)
+			clearStaleRegistration(fs, g, hopspacePath, linkPath, opts, r)
+			continue
+		}
+		recreateWorktree(fs, g, name, b.HopspaceBranch, linkPath, hopspacePath, opts, r)
+	}
+}
+
+// mergedMissingBranch reports whether branch is merged into the hub's
+// default branch, and names that branch. It is the state check's test
+// (isBranchMerged, run in the hub), so both checks agree on which missing
+// worktrees are cleanup. The default branch never counts, since it is
+// trivially merged into itself. An unknown default branch, or a merge
+// test that fails, answers false: recreating is the repair that loses
+// nothing.
+func mergedMissingBranch(g git.GitInterface, hub *hop.Hub, branch string) (string, bool) {
+	base := hub.Config.Repo.DefaultBranch
+	if base == "" || branch == base {
+		return base, false
+	}
+	return base, isBranchMerged(g, hub.Path, branch, base)
+}
+
+// recreateWorktree checks out branch again at linkPath, the directory its
+// hop.json row points at.
+func recreateWorktree(fs afero.Fs, g git.GitInterface, name, branch, linkPath, hopspacePath string, opts doctorOpts, r *doctorReport) {
+	// Feasibility is checked before branching on dry-run so a preview
+	// reports the same "cannot fix" verdicts a real run would hit, rather
+	// than promising a repair that would fail.
+	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
+	if err != nil {
+		output.Error("Cannot fix: failed to load hopspace: %v", err)
+		r.failed(doctorCheckHub, name, "cannot recreate worktree: failed to load hopspace: %v", err)
+		return
+	}
+	if _, ok := hopspace.Config.Branches[branch]; !ok {
+		output.Error("Cannot fix: branch %s not found in hopspace", branch)
+		r.failed(doctorCheckHub, name, "cannot recreate worktree: branch %s not found in hopspace", branch)
+		return
+	}
+	if !clearStaleRegistration(fs, g, hopspacePath, linkPath, opts, r) {
+		return
+	}
+
+	if !opts.mutating() {
+		output.Info("[dry-run] Would recreate worktree for branch %s at %s", name, linkPath)
+		r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
+		previewDir(fs, linkPath)
+		return
+	}
+
+	output.Info("Attempting to fix broken worktree for branch %s...", name)
+	if err := fs.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
+		output.Error("Failed to create parent directory: %v", err)
+		r.failed(doctorCheckHub, name, "recreate worktree: create parent directory: %v", err)
+		return
+	}
+	if err := g.CreateWorktree(hopspacePath, branch, linkPath, "", false, "origin/"+branch); err != nil {
+		output.Error("Failed to recreate worktree: %v", err)
+		r.failed(doctorCheckHub, name, "recreate worktree: %v", err)
+		return
+	}
+	if err := hopspace.RegisterBranch(branch, linkPath); err != nil {
+		output.Error("Failed to update hopspace: %v", err)
+		// Continue anyway as the worktree was created.
+	}
+	if _, err := fs.Stat(linkPath); err == nil {
+		output.Info("Fixed worktree for branch %s", name)
+		r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
+	} else {
+		output.Error("Worktree creation appeared to succeed but path still not accessible")
+		r.failed(doctorCheckHub, name, "recreate worktree: path still not accessible")
+	}
+}
+
+// clearStaleRegistration drops git's record of the worktree at path when
+// git marks that record prunable, i.e. its directory is gone. A hand-run
+// `rm -rf` of a worktree leaves exactly that, and `git worktree add`
+// refuses such a path ("missing but already registered").
+//
+// The mechanism is `git worktree remove <path>` without --force, rather
+// than the other ways out git's refusal names:
+//   - `git worktree prune` takes no path; it would drop every other stale
+//     registration in the repository too, which is more than this repair.
+//   - `git worktree add -f` also overrides add's other safeguard, the
+//     refusal to check out a branch already checked out elsewhere.
+//
+// remove acts on the named worktree only, deletes nothing but git's
+// administrative files when the directory is missing, and without
+// --force honours `git worktree lock` (git never marks a locked worktree
+// prunable in the first place).
+//
+// Nothing is removed for a directory that exists: git marks a record
+// prunable only when the directory is missing, and path is checked again
+// here just before the call. A record that is not prunable (present,
+// locked, or not registered at all) is left alone, as is a registry that
+// cannot be read; the add that follows then reports whatever git refuses.
+//
+// Returns false when the registration could not be cleared; the failure
+// is recorded.
+func clearStaleRegistration(fs afero.Fs, g git.GitInterface, gitDir, path string, opts doctorOpts, r *doctorReport) bool {
+	list, err := g.WorktreeListPorcelain(gitDir)
+	if err != nil || !prunableWorktree(list, path) {
+		return true
+	}
+	if _, err := fs.Stat(path); err == nil {
+		return true
+	}
+
+	if !opts.mutating() {
+		output.Info("[dry-run] Would clear stale worktree registration for %s", path)
+		r.repaired(opts, doctorCheckHub, path, "clear stale worktree registration")
+		return true
+	}
+	if err := g.WorktreeRemove(gitDir, path, false); err != nil {
+		output.Error("Failed to clear stale worktree registration for %s: %v", path, err)
+		r.failed(doctorCheckHub, path, "clear stale worktree registration: %v", err)
+		return false
+	}
+	output.Info("Cleared stale worktree registration for %s", path)
+	r.repaired(opts, doctorCheckHub, path, "clear stale worktree registration")
+	return true
+}
+
+// prunableWorktree reports whether porcelain, the output of `git worktree
+// list --porcelain`, marks the worktree at path prunable.
+func prunableWorktree(porcelain, path string) bool {
+	want := resolvedPath(path)
+	var cur string
+	for _, line := range strings.Split(porcelain, "\n") {
+		switch {
+		case line == "":
+			cur = ""
+		case strings.HasPrefix(line, "worktree "):
+			cur = strings.TrimPrefix(line, "worktree ")
+		case line == "prunable" || strings.HasPrefix(line, "prunable "):
+			if cur != "" && resolvedPath(cur) == want {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// resolvedPath resolves symlinks in the longest prefix of p that exists.
+// git records worktree paths resolved (on macOS the temp dir under /var
+// is really under /private/var) while hop.json may not, and a missing
+// worktree's own directory cannot be resolved, so filepath.EvalSymlinks
+// on the whole path would fail.
+func resolvedPath(p string) string {
+	p = filepath.Clean(p)
+	var rest []string
+	for dir := p; ; {
+		if resolved, err := filepath.EvalSymlinks(dir); err == nil {
+			return filepath.Join(append([]string{resolved}, rest...)...)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return p
+		}
+		rest = append([]string{filepath.Base(dir)}, rest...)
+		dir = parent
+	}
+}
+
+// previewDir marks path present on the scratch layer runDoctor gives a
+// --dry-run, so the checks after this one see the directory a real run
+// would have created. It writes only to that layer; on any other
+// filesystem it does nothing, so a preview never creates a directory.
+func previewDir(fs afero.Fs, path string) {
+	if layer, ok := fs.(*afero.CopyOnWriteFs); ok {
+		_ = layer.MkdirAll(path, 0o755)
+	}
+}

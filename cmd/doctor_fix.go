@@ -72,28 +72,42 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 		}
 	}
 
-	if scoped := stateScopedToHub(hubPath); scoped != nil {
-		if rows := pruneOrphanedHubBranches(fs, g, scoped, dryRun); len(rows) > 0 {
-			if dryRun {
-				output.Info("[dry-run] Would prune %d hop.json entry(ies) from %s", len(rows), hubPath)
-			} else {
-				output.Info("Pruned %d hop.json entry(ies) from %s", len(rows), hubPath)
-			}
-			for _, p := range rows {
-				recordStatePrune(&fixes, opts, p)
-			}
-			fixed += len(rows)
-		}
-	}
+	fixed += pruneMissingHubRows(fs, g, hubPath, opts, &fixes)
 
 	r.records = append(r.records, fixes.records...)
 	return fixed
 }
 
-// recordStatePrune records one entry doctor's state repair prunes. The
-// subject names the entry the way the state check reported it:
-// repository:branch for a worktree, the path for a hub, the branch for a
-// hop.json entry.
+// pruneMissingHubRows drops the current hub's hop.json rows whose
+// worktree directory is gone, recording each in r, and returns how many
+// it dropped (or, under --dry-run, would drop). Outside a hub (hubPath
+// empty) there is no hop.json to rewrite.
+func pruneMissingHubRows(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts, r *doctorReport) int {
+	scoped := stateScopedToHub(hubPath)
+	if scoped == nil {
+		return 0
+	}
+	dryRun := !opts.mutating()
+	rows := pruneOrphanedHubBranches(fs, g, scoped, dryRun)
+	if len(rows) == 0 {
+		return 0
+	}
+	if dryRun {
+		output.Info("[dry-run] Would prune %d hop.json entry(ies) from %s", len(rows), hubPath)
+	} else {
+		output.Info("Pruned %d hop.json entry(ies) from %s", len(rows), hubPath)
+	}
+	for _, p := range rows {
+		recordStatePrune(r, opts, p)
+	}
+	return len(rows)
+}
+
+// recordStatePrune records one entry doctor's state repair prunes, under
+// the check and subject that reported the problem: repository:branch
+// for a state worktree and the path for a state hub (the state check),
+// the branch for a hop.json row (the hub check, which reports the row's
+// missing worktree directory).
 func recordStatePrune(r *doctorReport, opts doctorOpts, p pruneRecord) {
 	switch p.Kind {
 	case pruneKindWorktree:
@@ -101,7 +115,7 @@ func recordStatePrune(r *doctorReport, opts doctorOpts, p pruneRecord) {
 	case pruneKindHub:
 		r.repaired(opts, doctorCheckState, p.Path, "prune hub entry from state")
 	case pruneKindHopJSONEntry:
-		r.repaired(opts, doctorCheckState, p.Branch, "prune hop.json entry")
+		r.repaired(opts, doctorCheckHub, p.Branch, "prune hop.json entry")
 	}
 }
 

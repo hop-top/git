@@ -136,68 +136,6 @@ func reconcileHopspaceBranches(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath 
 	}
 }
 
-// checkBranchWorktrees reports branches whose worktree directory is gone
-// and, under --fix, recreates them.
-func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath string, opts doctorOpts, r *doctorReport) {
-	for _, name := range sortedBranchNames(hub) {
-		b := hub.Config.Branches[name]
-		linkPath := config.ResolveWorktreePath(b.Path, hub.Path)
-		if _, err := fs.Stat(linkPath); err == nil {
-			continue
-		}
-
-		output.Error("Broken link for branch %s: %s", name, linkPath)
-		r.issue(doctorCheckHub, name, "worktree directory missing: %s", linkPath)
-		if !opts.fix {
-			continue
-		}
-
-		// Feasibility is checked before branching on dry-run so a preview
-		// reports the same "cannot fix" verdicts a real run would hit,
-		// rather than promising a repair that would fail.
-		hopspace, err := hop.LoadHopspace(fs, hopspacePath)
-		if err != nil {
-			output.Error("Cannot fix: failed to load hopspace: %v", err)
-			r.failed(doctorCheckHub, name, "cannot recreate worktree: failed to load hopspace: %v", err)
-			continue
-		}
-		if _, ok := hopspace.Config.Branches[b.HopspaceBranch]; !ok {
-			output.Error("Cannot fix: branch %s not found in hopspace", b.HopspaceBranch)
-			r.failed(doctorCheckHub, name, "cannot recreate worktree: branch %s not found in hopspace", b.HopspaceBranch)
-			continue
-		}
-
-		if !opts.mutating() {
-			output.Info("[dry-run] Would recreate worktree for branch %s at %s", name, linkPath)
-			r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
-			continue
-		}
-
-		output.Info("Attempting to fix broken worktree for branch %s...", name)
-		if err := fs.MkdirAll(filepath.Dir(linkPath), 0755); err != nil {
-			output.Error("Failed to create parent directory: %v", err)
-			r.failed(doctorCheckHub, name, "recreate worktree: create parent directory: %v", err)
-			continue
-		}
-		if err := g.CreateWorktree(hopspacePath, b.HopspaceBranch, linkPath, "", false, "origin/"+b.HopspaceBranch); err != nil {
-			output.Error("Failed to recreate worktree: %v", err)
-			r.failed(doctorCheckHub, name, "recreate worktree: %v", err)
-			continue
-		}
-		if err := hopspace.RegisterBranch(b.HopspaceBranch, linkPath); err != nil {
-			output.Error("Failed to update hopspace: %v", err)
-			// Continue anyway as the worktree was created.
-		}
-		if _, err := fs.Stat(linkPath); err == nil {
-			output.Info("Fixed worktree for branch %s", name)
-			r.repaired(opts, doctorCheckHub, name, "recreate worktree at %s", linkPath)
-		} else {
-			output.Error("Worktree creation appeared to succeed but path still not accessible")
-			r.failed(doctorCheckHub, name, "recreate worktree: path still not accessible")
-		}
-	}
-}
-
 // checkDependencies audits per-worktree dependency directories and, under
 // --fix, repairs them.
 func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorReport) {

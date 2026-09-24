@@ -207,6 +207,14 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	output.Info("Running git-hop diagnostics...")
 	if opts.planning() {
 		output.Info("[dry-run] Previewing repairs; no changes will be applied.")
+		// A preview applies nothing, so a later check would judge the
+		// disk as it was before the repairs an earlier check planned: a
+		// worktree the hub check would recreate still looks missing to
+		// the state check, which would then plan to prune it. The checks
+		// run on a scratch copy-on-write layer instead, where previewDir
+		// records what a real run would create. Nothing written to the
+		// layer reaches disk.
+		fs = afero.NewCopyOnWriteFs(fs, afero.NewMemMapFs())
 	}
 
 	checkPaths(fs, opts, &r)
@@ -332,22 +340,39 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 // hop.json) against the filesystem.
 func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking State ===")
+	st, stateIssues := inspectState(fs, r)
+	switch {
+	case len(stateIssues) > 0 && opts.fix:
+		r.fixed += fixStateIssues(fs, g, st, hubPath, opts, r)
+	case len(stateIssues) > 0:
+		output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
+	case opts.fix:
+		// state.json has nothing to fix, but the hub's hop.json can still
+		// list a worktree the hub check left for cleanup (a merged branch
+		// whose directory is gone) when state never recorded it.
+		r.fixed += pruneMissingHubRows(fs, g, hubPath, opts, r)
+	}
+}
+
+// inspectState loads the global state and reports every worktree it
+// lists whose directory is gone. st is nil when state cannot be loaded.
+func inspectState(fs afero.Fs, r *doctorReport) (*state.State, []stateIssue) {
 	st, err := state.LoadState(fs)
 	if err != nil {
 		output.Warn("Could not load state: %v", err)
 		output.Info("Run 'git hop migrate' if you have legacy data to migrate.")
 		r.record(doctorKindWarning, doctorCheckState, "state", "could not load state: %v; run 'git hop migrate' if you have legacy data to migrate", err)
-		return
+		return nil, nil
 	}
 	if len(st.Repositories) == 0 {
 		output.Info("No repositories in state. Skipping state checks.")
-		return
+		return st, nil
 	}
 
 	stateIssues := missingStateWorktrees(fs, st)
 	if len(stateIssues) == 0 {
 		output.Info("State is consistent")
-		return
+		return st, nil
 	}
 
 	output.Info("Found %d state consistency issue(s):", len(stateIssues))
@@ -355,12 +380,7 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts
 		output.Error("  %s", issue)
 		r.issue(doctorCheckState, issue.repoID+":"+issue.branch, "worktree missing: %s", issue.path)
 	}
-
-	if opts.fix {
-		r.fixed += fixStateIssues(fs, g, st, hubPath, opts, r)
-	} else {
-		output.Info("\nRun 'git hop doctor --fix' or 'git hop prune' to clean up orphaned entries.")
-	}
+	return st, stateIssues
 }
 
 // summarizeDoctor prints doctor's verdict. Under --dry-run the counts
