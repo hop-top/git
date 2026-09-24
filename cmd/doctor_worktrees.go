@@ -174,6 +174,26 @@ func clearStaleRegistration(fs afero.Fs, g git.GitInterface, gitDir, path string
 // prunableWorktree reports whether porcelain, the output of `git worktree
 // list --porcelain`, marks the worktree at path prunable.
 func prunableWorktree(porcelain, path string) bool {
+	return worktreeMarked(porcelain, path, "prunable")
+}
+
+// lockedWorktree reports whether porcelain, the output of `git worktree
+// list --porcelain`, marks the worktree at path locked.
+func lockedWorktree(porcelain, path string) bool {
+	return worktreeMarked(porcelain, path, "locked")
+}
+
+// worktreeLocked reports whether the repository at gitDir has the
+// worktree at path locked. A registry that cannot be read answers false.
+func worktreeLocked(g git.GitInterface, gitDir, path string) bool {
+	list, err := g.WorktreeListPorcelain(gitDir)
+	return err == nil && lockedWorktree(list, path)
+}
+
+// worktreeMarked reports whether porcelain, the output of `git worktree
+// list --porcelain`, gives the worktree at path the attribute attr
+// ("prunable", "locked"), with or without a reason after it.
+func worktreeMarked(porcelain, path, attr string) bool {
 	want := resolvedPath(path)
 	var cur string
 	for _, line := range strings.Split(porcelain, "\n") {
@@ -182,7 +202,7 @@ func prunableWorktree(porcelain, path string) bool {
 			cur = ""
 		case strings.HasPrefix(line, "worktree "):
 			cur = strings.TrimPrefix(line, "worktree ")
-		case line == "prunable" || strings.HasPrefix(line, "prunable "):
+		case line == attr || strings.HasPrefix(line, attr+" "):
 			if cur != "" && resolvedPath(cur) == want {
 				return true
 			}

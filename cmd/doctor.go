@@ -353,7 +353,7 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts
 		// state.json has nothing to fix, but the hub's hop.json can still
 		// list a worktree the hub check left for cleanup (a merged branch
 		// whose directory is gone) when state never recorded it.
-		r.fixed += pruneMissingHubRows(fs, g, hubPath, opts, r)
+		r.fixed += pruneMissingHubRows(fs, g, hubPath, nil, opts, r)
 	}
 }
 

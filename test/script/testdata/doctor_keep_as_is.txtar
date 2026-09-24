@@ -1,0 +1,59 @@
+# Answering "Keep as-is" at doctor's missing-worktree prompt keeps the
+# entry for the whole run: the passes after the prompt leave the state
+# entry and the hop.json row alone.
+#
+# The regression this pins: the prompt honoured the answer, then the
+# prune passes that ran right after dropped the same state entry and
+# hop.json row anyway.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add feat
+exec git -C $WORK/hub/hops/feat commit --allow-empty -m 'work'
+
+# The worktree is gone and so is its branch, so the hub check cannot
+# recreate it and the state check has to ask.
+rm $WORK/hub/hops/feat
+exec git worktree prune
+exec git branch -D feat
+
+# --- the preview promises nothing it would have to ask about. Run from
+# outside the hub, where no hub check plans a recreate first ---
+cd $WORK
+! exec git-hop doctor --fix --dry-run --json
+stdout '"subject": "github.com/org/repo:feat"'
+! stdout 'prune worktree entry from state'
+cd $WORK/hub
+
+# --- 3) Keep as-is: the issue stays, and so does every record of it ---
+stdin $WORK/keep.txt
+! exec git-hop doctor --fix
+stdout 'Kept as-is'
+! stdout 'Pruning orphaned worktree'
+! stdout 'Pruning hop.json entry'
+decode json $WORK/hub/hop.json branches.feat.hopspaceBranch feat
+grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+
+# --- no answer at all is not a decision to delete ---
+! exec git-hop doctor --fix
+decode json $WORK/hub/hop.json branches.feat.hopspaceBranch feat
+grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+
+# --- 2) Delete the entry: the user's choice goes through. The failed
+# recreate still fails the run ---
+stdin $WORK/delete.txt
+! exec git-hop doctor --fix
+stdout 'Deleted entry'
+! decode json $WORK/hub/hop.json branches.feat
+! grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+
+-- keep.txt --
+3
+-- delete.txt --
+2
