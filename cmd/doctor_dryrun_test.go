@@ -261,6 +261,12 @@ func TestDoctorDryRun_DoesNotWriteState(t *testing.T) {
 }
 
 // TestDoctorFix_WritesState confirms the apply path still prunes state.
+//
+// The branch is merged, so the entry is removed without a prompt. It used
+// to be unmerged with nobody to answer the prompt: the entry was kept as
+// is, and the assertion below held only because a later pass pruned the
+// kept entry anyway, the defect TestDoctorFix_KeepsLockedWorktreeStateEntry
+// and doctor_keep_as_is.txtar now guard against.
 func TestDoctorFix_WritesState(t *testing.T) {
 	isolateDoctorPaths(t)
 	fs := afero.NewMemMapFs()
@@ -269,13 +275,16 @@ func TestDoctorFix_WritesState(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"feat/gone": {Path: "/hubs/repo/hops/feat/gone", Type: "linked"},
+		"feat/gone": {Path: "/hubs/repo/hops/feat/gone", Type: "linked", HubPath: hubPath},
 	}
 	require.NoError(t, state.SaveState(fs, st))
 
+	g := mocks.NewMockGit()
+	g.Runner.Responses = map[string]string{hubPath + ":git branch --merged main": "  feat/gone\n* main\n"}
+
 	loaded, err := state.LoadState(fs)
 	require.NoError(t, err)
-	fixStateIssues(fs, mocks.NewMockGit(), loaded, hubPath, doctorOpts{fix: true}, &doctorReport{})
+	fixStateIssues(fs, g, loaded, hubPath, doctorOpts{fix: true}, &doctorReport{})
 
 	reloaded, err := state.LoadState(fs)
 	require.NoError(t, err)

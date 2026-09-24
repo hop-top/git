@@ -31,6 +31,13 @@ import (
 // Hubs are visited in a stable order and each is handled independently:
 // one unreadable or non-hub entry does not abort the others.
 func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
+	return pruneHubBranchesKeeping(fs, g, st, dryRun, nil)
+}
+
+// pruneHubBranchesKeeping is pruneOrphanedHubBranches leaving alone every
+// row whose worktree path keep reports true for. A nil keep keeps
+// nothing.
+func pruneHubBranchesKeeping(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, keep func(path string) bool) []pruneRecord {
 	prefix := "Pruning"
 	if dryRun {
 		prefix = "[dry-run] Would prune"
@@ -52,6 +59,10 @@ func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, 
 		for _, branch := range sortedBranchNames(hub) {
 			wtPath := hub.BranchPath(branch)
 			if exists, _ := afero.DirExists(fs, wtPath); exists {
+				continue
+			}
+			if keep != nil && keep(wtPath) {
+				output.Info("Keeping hop.json entry: %s:%s (%s)", h.repoID, branch, wtPath)
 				continue
 			}
 			output.Info("%s hop.json entry: %s:%s (%s)", prefix, h.repoID, branch, wtPath)
