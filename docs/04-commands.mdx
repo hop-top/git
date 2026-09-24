@@ -698,6 +698,15 @@ when — and only when — they are empty. A `.hop/` holding anything else
 stderr as a `hint:` line; under `--dry-run` the hints say what would
 happen and nothing moves.
 
+A worktree that git has locked (`git worktree lock`, for example one on
+a drive that is not mounted) is left alone even when its directory is
+missing, as `git worktree prune` does. Its state entry and `hop.json` row
+stay, both with and without `--dry-run`. Prune prints a `Skipping ...:
+locked in git: <reason>` line for each one, followed by a `hint:` that
+names `git worktree unlock <path>`. In structured output these entries
+have the action `skipped` and a `reason`. Once the worktree is unlocked,
+the next prune removes the entries.
+
 `prune` does **not** remove merged branches that still exist on disk —
 for that, use [`git hop remove --merged`](#git-hop-remove). It also
 does not touch containers, volumes, or symlinks; those go through

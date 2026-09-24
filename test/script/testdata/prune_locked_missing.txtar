@@ -1,0 +1,51 @@
+# prune leaves a worktree git keeps locked (`git worktree lock`, e.g. one
+# on a drive that is not mounted) alone when its directory is missing,
+# as `git worktree prune` does: its state entry and hop.json row stay,
+# in a preview and in a real run, and prune says why it skipped them.
+# An unlocked missing worktree beside it is still pruned.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add usb
+exec git-hop add gone
+exec git worktree lock --reason 'on the usb drive' $WORK/hub/hops/usb
+rm $WORK/hub/hops/usb
+rm $WORK/hub/hops/gone
+
+# --- the preview skips it too ---
+exec git-hop prune --dry-run --json
+decode json stdout '#' 4
+stdout '"action": "skipped"'
+stdout '"reason": "locked in git: on the usb drive"'
+! stdout '"action": "would-prune",\s*"kind": "\S+",\s*"repository": "\S+",\s*"branch": "usb"'
+
+exec git-hop prune --dry-run
+stdout 'Skipping hop.json entry: github.com/org/repo:usb .*: locked in git: on the usb drive'
+stdout 'Skipping orphaned worktree: github.com/org/repo:usb .*: locked in git: on the usb drive'
+stderr '^hint: run ''git worktree unlock .*/hub/hops/usb'''
+! stdout 'Would prune hop.json entry: github.com/org/repo:usb'
+stdout 'Would prune 1 worktree\(s\), 0 hub\(s\), 1 hop.json entry\(ies\)'
+
+# --- the real run ---
+exec git-hop prune
+! stdout 'Pruning hop.json entry: github.com/org/repo:usb'
+! stdout 'Pruning orphaned worktree: github.com/org/repo:usb'
+stdout 'Pruning hop.json entry: github.com/org/repo:gone'
+stdout 'Pruned 1 worktree\(s\), 0 hub\(s\), 1 hop.json entry\(ies\)'
+decode json $WORK/hub/hop.json branches.usb.hopspaceBranch usb
+! decode json $WORK/hub/hop.json branches.gone
+grep '"usb": \{' $WORK/.local/state/git-hop/state.json
+! grep '"gone": \{' $WORK/.local/state/git-hop/state.json
+exec git worktree list --porcelain
+stdout '^locked on the usb drive$'
+
+# --- porcelain keeps its columns; the skip shows in the action ---
+exec git-hop prune --porcelain
+stdout '^skipped\thop-json-entry\t\S+\tusb\t\S+/hops/usb$'
+stdout '^skipped\tworktree\t\S+\tusb\t\S+/hops/usb$'

@@ -30,13 +30,17 @@ import (
 //
 // Hubs are visited in a stable order and each is handled independently:
 // one unreadable or non-hub entry does not abort the others.
+//
+// A row whose worktree git has locked is kept and reported skipped
+// (skipLockedEntry): like `git worktree prune`, prune leaves it for the
+// user to unlock. The returned records include the skipped rows.
 func pruneOrphanedHubBranches(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
 	return pruneHubBranchesKeeping(fs, g, st, dryRun, nil)
 }
 
-// pruneHubBranchesKeeping is pruneOrphanedHubBranches leaving alone every
-// row whose worktree path keep reports true for. A nil keep keeps
-// nothing.
+// pruneHubBranchesKeeping is pruneOrphanedHubBranches also leaving alone
+// every row whose worktree path keep reports true for. A nil keep keeps
+// nothing beyond the locked rows.
 func pruneHubBranchesKeeping(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, keep func(path string) bool) []pruneRecord {
 	prefix := "Pruning"
 	if dryRun {
@@ -56,9 +60,18 @@ func pruneHubBranchesKeeping(fs afero.Fs, g git.GitInterface, st *state.State, d
 
 		plan := &hop.Plan{HubPath: hubPath}
 		var entries []pruneRecord
+		var registry *string // git's worktree list, read once a row is missing
 		for _, branch := range sortedBranchNames(hub) {
 			wtPath := hub.BranchPath(branch)
 			if exists, _ := afero.DirExists(fs, wtPath); exists {
+				continue
+			}
+			if registry == nil {
+				list, _ := g.WorktreeListPorcelain(hubPath)
+				registry = &list
+			}
+			if reason, locked := worktreeLock(*registry, wtPath); locked {
+				pruned = append(pruned, skipLockedEntry(pruneKindHopJSONEntry, "hop.json entry", h.repoID, branch, wtPath, reason))
 				continue
 			}
 			if keep != nil && keep(wtPath) {

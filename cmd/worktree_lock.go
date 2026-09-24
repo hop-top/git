@@ -23,13 +23,6 @@ func worktreeLock(porcelain, path string) (reason string, locked bool) {
 	return worktreeAttr(porcelain, path, "locked")
 }
 
-// lockedWorktree reports whether porcelain marks the worktree at path
-// locked.
-func lockedWorktree(porcelain, path string) bool {
-	_, locked := worktreeLock(porcelain, path)
-	return locked
-}
-
 // gitWorktreeLock reports whether the repository at gitDir has the
 // worktree at path locked, and the lock's reason. A registry that cannot
 // be read answers not locked.

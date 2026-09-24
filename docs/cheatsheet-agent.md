@@ -147,7 +147,8 @@ exits 0 without prompting.
 /usr/bin/git hop prune --dry-run      # list this repo's orphaned state + hop.json entries
 /usr/bin/git hop prune                # remove them (clears status Missing rows); current repo only
 /usr/bin/git hop prune --all          # sweep every registered repo; state removals are not undoable
-/usr/bin/git hop prune --dry-run --json  # [{action, kind, repository, branch, path}]
+/usr/bin/git hop prune --dry-run --json  # [{action, kind, repository, branch, path, reason?}]
+# action: pruned | would-prune | skipped (locked worktree kept; reason says why)
 # kind: worktree | hub | hop-json-entry | repair-backup | conversion-backup
 # conversion-backup = init backup beyond hop.backup.maxBackups (3) / cleanupAgeDays (30)
 /usr/bin/git hop repair -n --json     # plan: [{status, path, kind, old, new, reason}]
