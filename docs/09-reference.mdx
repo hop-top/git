@@ -59,7 +59,7 @@ git hop add &lt;branch&gt; [flags]
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--from <ref>` | Start-point for a new branch (branch, ref, SHA, or `initial`) |
+| `--from <ref>` | Start-point for a new branch (branch, ref, SHA, or `initial`); fast-forwards an existing local branch to `<ref>`, refuses if it is ahead or diverged |
 | `--copy-ignored` | Copy git-ignored local files from the fork-source worktree (default) |
 | `--no-copy-ignored` | Skip that copy for this worktree |
 

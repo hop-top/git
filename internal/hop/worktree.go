@@ -23,6 +23,12 @@ const StartPointDefaultBranch = "default-branch"
 type WorktreeManager struct {
 	git git.GitInterface
 	fs  afero.Fs
+
+	// EnforceStartPoint makes the start-point binding for a branch that
+	// already exists locally (see reconcileExistingBranch) instead of the
+	// existing branch being linked as-is. Set it when the user named the
+	// start-point explicitly; configured defaults only seed new branches.
+	EnforceStartPoint bool
 }
 
 // NewWorktreeManager creates a new manager
@@ -95,7 +101,7 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 // upstream tracking shortcut is suppressed: the explicit start-point becomes
 // the positional <commit-ish> for `git worktree add -b`. Existing branches
 // (already present in the repo) are linked rather than re-created, and
-// startPoint is irrelevant for that path.
+// startPoint is irrelevant for that path unless EnforceStartPoint is set.
 func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, branch string, locationPattern string, org string, repo string, defaultBranch string, startPoint string) (string, error) {
 	// Validate inputs
 	if hubPath == "" {
@@ -174,7 +180,16 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	if !suppressTrack && defaultBranch != "" {
 		trackBranch = "origin/" + defaultBranch
 	}
-	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, resolvedBase, false, trackBranch); err != nil {
+
+	forceCreate := false
+	if m.EnforceStartPoint {
+		branchExists, err := m.reconcileExistingBranch(baseWorktreePath, branch, resolvedBase)
+		if err != nil {
+			return "", err
+		}
+		forceCreate = !branchExists
+	}
+	if err := m.git.CreateWorktree(baseWorktreePath, branch, worktreePath, resolvedBase, forceCreate, trackBranch); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)
 	}
 

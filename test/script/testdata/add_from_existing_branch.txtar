@@ -1,0 +1,132 @@
+# `git hop add <branch> --from <ref>` must honour --from even when
+# refs/heads/<branch> already exists.
+#
+# A bare clone copies every origin head into refs/heads/ at clone time, so
+# after origin moves on the hub holds a stale local copy of each branch.
+# Linking that stale head while claiming to start from --from hands the
+# user old code with no upstream. The contract pinned here:
+#
+#   local == --from          -> link it, upstream set from --from
+#   local behind --from      -> fast-forward, upstream set from --from
+#   local ahead / diverged   -> refuse, name both commits, touch nothing
+#   local missing            -> create from --from, never from a same-named
+#                               remote branch that git would otherwise guess
+#
+# Without --from the existing branch is still linked as-is: the start-point
+# only ever seeds new branches unless the user asks for it explicitly.
+
+# --- origin with one branch per scenario ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b behind main
+exec git commit --allow-empty -m 'behind 1'
+exec git push origin behind
+exec git checkout -b same main
+exec git commit --allow-empty -m 'same 1'
+exec git push origin same
+exec git checkout -b ahead main
+exec git commit --allow-empty -m 'ahead 1'
+exec git push origin ahead
+exec git checkout -b diverged main
+exec git commit --allow-empty -m 'diverged 1'
+exec git push origin diverged
+exec git checkout -b stale main
+exec git commit --allow-empty -m 'stale 1'
+exec git push origin stale
+exec git checkout -b remote-only main
+exec git commit --allow-empty -m 'remote-only 1'
+exec git push origin remote-only
+
+# --- hub: the bare clone copies every head into refs/heads/ ---
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git rev-parse --verify refs/heads/behind
+
+# --- origin moves on; the hub's local heads go stale ---
+cd $WORK/seed
+exec git checkout behind
+exec git commit --allow-empty -m 'behind 2'
+exec git push origin behind
+exec git checkout stale
+exec git commit --allow-empty -m 'stale 2'
+exec git push origin stale
+exec git checkout diverged
+exec git commit --allow-empty -m 'diverged 2 (origin)'
+exec git push origin diverged
+# Local-only commits for the hub, shipped under throwaway names so the hub
+# can fetch them and point its own heads there.
+exec git checkout -b ahead-local ahead
+exec git commit --allow-empty -m 'ahead 2 (local only)'
+exec git push origin ahead-local
+exec git checkout -b diverged-local diverged~1
+exec git commit --allow-empty -m 'diverged 2 (local only)'
+exec git push origin diverged-local
+
+cd $WORK/hub
+exec git fetch origin
+exec git update-ref refs/heads/ahead refs/remotes/origin/ahead-local
+exec git update-ref refs/heads/diverged refs/remotes/origin/diverged-local
+exec git branch -D remote-only
+
+# --- local behind --from: fast-forwarded and tracking ---
+exec git-hop add behind --from origin/behind
+exec git rev-parse origin/behind
+cp stdout $WORK/want-behind
+cd $WORK/hub/hops/behind
+exec git rev-parse HEAD
+cmp stdout $WORK/want-behind
+exec git rev-parse --abbrev-ref '@{u}'
+stdout '^origin/behind$'
+cd $WORK/hub
+
+# --- local identical to --from: linked and tracking ---
+exec git-hop add same --from origin/same
+exec git rev-parse origin/same
+cp stdout $WORK/want-same
+cd $WORK/hub/hops/same
+exec git rev-parse HEAD
+cmp stdout $WORK/want-same
+exec git rev-parse --abbrev-ref '@{u}'
+stdout '^origin/same$'
+cd $WORK/hub
+
+# --- local ahead of --from: refused, nothing changed ---
+exec git rev-parse refs/heads/ahead
+cp stdout $WORK/before-ahead
+! exec git-hop add ahead --from origin/ahead
+stderr '^fatal: .*branch ''ahead'' already exists at [0-9a-f]{7,}.*ahead of ''origin/ahead'' \([0-9a-f]{7,}\)'
+stderr 'omit --from'
+stderr 'git branch -f ahead origin/ahead'
+! exists $WORK/hub/hops/ahead
+exec git rev-parse refs/heads/ahead
+cmp stdout $WORK/before-ahead
+
+# --- local diverged from --from: refused, nothing changed ---
+exec git rev-parse refs/heads/diverged
+cp stdout $WORK/before-diverged
+! exec git-hop add diverged --from origin/diverged
+stderr '^fatal: .*branch ''diverged'' already exists at [0-9a-f]{7,}.*diverged from ''origin/diverged'' \([0-9a-f]{7,}\)'
+! exists $WORK/hub/hops/diverged
+exec git rev-parse refs/heads/diverged
+cmp stdout $WORK/before-diverged
+
+# --- local missing, same name on origin: --from wins over git's guess ---
+exec git-hop add remote-only --from main
+exec git rev-parse main
+cp stdout $WORK/want-remote-only
+cd $WORK/hub/hops/remote-only
+exec git rev-parse HEAD
+cmp stdout $WORK/want-remote-only
+cd $WORK/hub
+
+# --- no --from: existing branch linked as-is (unchanged behaviour) ---
+exec git rev-parse refs/heads/stale
+cp stdout $WORK/want-stale
+exec git-hop add stale
+cd $WORK/hub/hops/stale
+exec git rev-parse HEAD
+cmp stdout $WORK/want-stale
