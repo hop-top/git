@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"testing"
 
@@ -54,16 +55,24 @@ func hopspaceHooksDirs(t *testing.T, dataHome string) []string {
 func TestHandleAlreadyInitialized_BareWorktreeRoot(t *testing.T) {
 	dataHome := isolateDataHome(t)
 
-	// DetectRepoStructure uses os.Stat for HEAD, so we need a real tmpdir.
-	repoPath := t.TempDir()
+	// A real bare hub: bareness is git's answer, so a .git dir that merely
+	// has a worktrees/ subdir no longer passes for one.
+	dir := t.TempDir()
+	seed := filepath.Join(dir, "seed")
+	repoPath := filepath.Join(dir, "hub")
+	for _, args := range [][]string{
+		{"init", "-q", "-b", "main", seed},
+		{"-C", seed, "commit", "-q", "--allow-empty", "-m", "init"},
+		{"clone", "-q", "--bare", seed, repoPath},
+		{"-C", repoPath, "worktree", "add", "-q", "hops/main", "main"},
+	} {
+		out, err := exec.Command("git", args...).CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
 	g := git.New()
 	fs := afero.NewOsFs()
 
-	gitDir := filepath.Join(repoPath, ".git")
-	require.NoError(t, os.MkdirAll(filepath.Join(gitDir, "worktrees"), 0755))
-	require.NoError(t, os.WriteFile(filepath.Join(gitDir, "HEAD"), []byte("ref: refs/heads/main\n"), 0644))
-
-	structure := hop.DetectRepoStructure(fs, repoPath)
+	structure := hop.DetectRepoStructure(fs, g, repoPath)
 	assert.Equal(t, config.BareWorktreeRoot, structure)
 
 	out := captureStdout(t, func() {
@@ -89,7 +98,7 @@ func TestHandleAlreadyInitialized_WorktreeChild(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(worktreePath, ".git"),
 		[]byte("gitdir: /some/hub/.git/worktrees/feature-x\n"), 0644))
 
-	structure := hop.DetectRepoStructure(fs, worktreePath)
+	structure := hop.DetectRepoStructure(fs, g, worktreePath)
 	assert.Equal(t, config.WorktreeChild, structure)
 
 	out := captureStdout(t, func() {

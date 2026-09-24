@@ -41,10 +41,17 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		Warnings:     []string{},
 	}
 
-	structure := DetectRepoStructure(c.fs, repoPath)
+	structure := DetectRepoStructure(c.fs, c.git, repoPath)
 	if structure != config.StandardRepo {
 		result.Errors = append(result.Errors, fmt.Sprintf("repository is not a standard git repo (current structure: %s)", structure))
 		return result, fmt.Errorf("invalid repository structure")
+	}
+
+	if useBare {
+		if err := refuseLinkedWorktrees(c.git, repoPath); err != nil {
+			result.Errors = append(result.Errors, err.Error())
+			return result, fmt.Errorf("linked worktrees present")
+		}
 	}
 
 	currentBranch, err := c.git.GetCurrentBranch(repoPath)

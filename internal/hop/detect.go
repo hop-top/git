@@ -61,18 +61,33 @@ func isBareRepoAtPath(fs afero.Fs, path string) bool {
 	return true
 }
 
-func DetectRepoStructure(fs afero.Fs, path string) config.StructureType {
+// DetectRepoStructure classifies path. What it reads from disk only
+// narrows the question; bareness and whether a .git file belongs to a
+// linked worktree are git's answers (rev-parse), so a regular repository
+// with linked worktrees, which has a .git/worktrees/ directory, is still
+// a StandardRepo.
+//
+//   - BareWorktreeRoot: git reports a bare repository whose git dir is
+//     path itself (the hub layout) or path/.git.
+//   - WorktreeRoot: a non-bare repository whose root holds hop.json, the
+//     hub a --regular conversion leaves.
+//   - WorktreeChild: a .git file naming a linked worktree's admin dir.
+//   - StandardRepo: any other non-bare repository with a .git directory.
+//   - UnknownStructure: git disagrees with the shape on disk, for example
+//     the .git directory of a regular repository, or a .git file that is
+//     not a linked worktree's (a separate git dir, a submodule).
+func DetectRepoStructure(fs afero.Fs, g git.GitInterface, path string) config.StructureType {
 	// Hub directories created by cloneBareRepo are bare git repos with
-	// metadata living directly under <path>/ (no .git subdir). Detect
-	// that shape first: HEAD as a regular file plus objects/ and refs/
-	// as directories. Without this branch, the .git-subdir check below
-	// would mis-classify hubs as NotGit.
+	// metadata living directly under <path>/ (no .git subdir).
 	if isBareRepoAtPath(fs, path) {
-		return config.BareWorktreeRoot
+		if isBareRepoRoot(fs, g, path) {
+			return config.BareWorktreeRoot
+		}
+		return config.UnknownStructure
 	}
 
-	gitDir := filepath.Join(path, ".git")
-	gitInfo, err := fs.Stat(gitDir)
+	gitPath := filepath.Join(path, ".git")
+	gitInfo, err := fs.Stat(gitPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return config.NotGit
@@ -80,39 +95,24 @@ func DetectRepoStructure(fs afero.Fs, path string) config.StructureType {
 		return config.UnknownStructure
 	}
 
-	worktreesDir := filepath.Join(gitDir, "worktrees")
-	_, err = fs.Stat(worktreesDir)
-	if err == nil {
-		if IsWorktree(fs, path) {
-			return config.WorktreeChild
-		}
-
-		headPath := filepath.Join(gitDir, "HEAD")
-		headInfo, err := os.Stat(headPath)
-		if err != nil {
-			return config.UnknownStructure
-		}
-
-		if headInfo.Mode()&os.ModeSymlink != 0 || headInfo.Mode().IsRegular() {
+	if gitInfo.IsDir() {
+		if p, ok := probeRepo(g, path); ok && p.bare {
 			return config.BareWorktreeRoot
 		}
-
-		return config.WorktreeRoot
-	}
-
-	if gitInfo.IsDir() {
+		if IsHub(fs, path) {
+			return config.WorktreeRoot
+		}
 		return config.StandardRepo
 	}
 
-	if gitInfo.Mode()&os.ModeSymlink != 0 {
-		return config.WorktreeChild
-	}
-
-	content, err := afero.ReadFile(fs, gitDir)
-	if err == nil {
-		if strings.Contains(string(content), "gitdir:") {
-			return config.WorktreeChild
+	if IsWorktree(fs, path) {
+		// A .git file is also how a separate git dir or a submodule is
+		// attached; only a git dir apart from the common dir is a
+		// linked worktree. Without an answer from git, the shape wins.
+		if p, ok := probeRepo(g, path); ok && !p.linked() {
+			return config.UnknownStructure
 		}
+		return config.WorktreeChild
 	}
 
 	return config.StandardRepo
@@ -139,10 +139,10 @@ func IsWorktree(fs afero.Fs, path string) bool {
 	return false
 }
 
-func FindProjectRoot(fs afero.Fs, path string) (string, error) {
+func FindProjectRoot(fs afero.Fs, g git.GitInterface, path string) (string, error) {
 	currentPath := path
 	for {
-		structure := DetectRepoStructure(fs, currentPath)
+		structure := DetectRepoStructure(fs, g, currentPath)
 
 		if structure == config.BareWorktreeRoot || structure == config.WorktreeRoot {
 			return currentPath, nil
