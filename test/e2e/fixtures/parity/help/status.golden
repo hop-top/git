@@ -5,7 +5,7 @@ Use --all to show system-wide git-hop information including all repositories,
 configuration, and resource usage.
 
 Usage:
-  git-hop status [flags]
+  git-hop status [target] [flags]
 
 Aliases:
   status, st, info

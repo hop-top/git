@@ -231,13 +231,17 @@ Show detailed environment state for current worktree or hub.
 ### Usage
 
 ```bash
-git hop status [flags]
+git hop status [target] [flags]
 ```
+
+With a `target`, shows that worktree's state instead of the current one
+(inside a hub only).
 
 ### Examples
 
 ```bash
 git hop status
+git hop status feature-x
 ```
 
 ### Output (worktree)

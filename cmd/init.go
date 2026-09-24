@@ -38,6 +38,7 @@ func init() {
 
 var initCmd = &cobra.Command{
 	Use:     "init",
+	Args:    cobra.NoArgs,
 	Aliases: []string{"setup", "install"},
 	Short:   "Initialize git-hop repository structure",
 	Long: `Initialize git-hop repository structure with interactive setup for worktree conversion.

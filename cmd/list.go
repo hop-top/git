@@ -63,6 +63,7 @@ func compareBranchesForRepo(fs afero.Fs, repo *state.RepositoryState) map[string
 
 var listCmd = &cobra.Command{
 	Use:     "list",
+	Args:    cobra.NoArgs,
 	Aliases: []string{"ls", "all"},
 	Short:   "List all managed worktrees",
 	Long: `List all worktrees tracked by git-hop.

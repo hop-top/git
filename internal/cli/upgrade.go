@@ -37,6 +37,7 @@ var upgradeCmd = &cobra.Command{
 
 var upgradePreambleCmd = &cobra.Command{
 	Use:   "preamble",
+	Args:  cobra.NoArgs,
 	Short: "Print the upgrade preamble fragment for skill files",
 	Long: `Print a markdown preamble fragment for embedding in skill files.
 Agents read this to know how to self-upgrade git-hop before executing tasks.`,
