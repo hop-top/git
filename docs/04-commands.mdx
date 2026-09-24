@@ -405,7 +405,10 @@ git hop remove feature-x --no-verify
 
 `remove` probes the worktree before deleting and requires explicit
 flags when the operation would lose work. A clean, merged branch
-removes silently — no prompt, no warning.
+removes silently — no prompt, no warning. "Merged" covers merge
+commits as well as squash- and rebase-merges (detected by content), so
+a shipped branch never needs a bypass flag just because its commits
+were rewritten on the way in.
 
 | Branch state | Required flags |
 |--------------|----------------|
@@ -430,8 +433,14 @@ These three flags do **different** things. They are not interchangeable.
 | Flag | Purpose | Bypasses gate? |
 |------|---------|----------------|
 | `--force` | Allow removing a branch that is **not merged** into the default branch | Yes — for the unmerged case |
-| `--no-verify` | Allow removing a worktree with **uncommitted/untracked files** or **unpushed commits** | Yes — for the dirty/unpushed case |
+| `--no-verify` | Allow removing a worktree with **uncommitted/untracked files** or **unpushed commits** | Yes — for the dirty/unpushed case only; **never** for the unmerged case |
 | `--no-prompt` | Skip the post-gate "Really delete?" confirmation. Useful in scripts | **No** — never bypasses the gate |
+
+`--force` and `--no-verify` are independent: neither implies the
+other. An unmerged branch is refused with `--no-verify` alone, and a
+dirty worktree on a merged branch is refused with `--force` alone.
+Despite the name, `--no-verify` does not skip the
+`pre-worktree-remove` / `post-worktree-remove` hooks; they always run.
 
 In particular, `--no-prompt` alone on a risky removal will **fail
 fast with exit 1**, not silently delete. You must combine it with

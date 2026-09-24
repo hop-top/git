@@ -25,7 +25,21 @@ var removeCmd = &cobra.Command{
 	Use:     "remove [target]",
 	Aliases: []string{"rm", "delete", "del"},
 	Short:   "Remove a hub, hopspace, or branch",
-	Args:    cobra.MaximumNArgs(1),
+	Long: `Remove a hub, hopspace, or branch.
+
+Removing a branch worktree runs a safety gate first. A branch merged into
+the default branch (merge commit, squash, or rebase) with a clean worktree
+is removed silently. Anything else needs explicit flags:
+
+  merged, uncommitted or untracked files   --no-verify
+  not merged, pushed to origin             --force
+  not merged, not pushed                   --force --no-verify
+
+--force covers the not-merged check; --no-verify covers uncommitted or
+untracked files and unpushed commits. Neither implies the other.
+--no-prompt only skips the confirmation prompt; it never satisfies the
+gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
+	Args: cobra.MaximumNArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		noPrompt, _ := cmd.Flags().GetBool("no-prompt")
 		noVerify, _ := cmd.Flags().GetBool("no-verify")
@@ -622,7 +636,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 func init() {
 	cli.RootCmd.AddCommand(removeCmd)
 	removeCmd.Flags().Bool("no-prompt", false, "Skip the confirmation prompt only; does NOT bypass the safety gate")
-	removeCmd.Flags().Bool("no-verify", false, "Allow removal of dirty worktrees or unpushed commits (gate bypass)")
+	removeCmd.Flags().Bool("no-verify", false, "Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)")
 	removeCmd.Flags().Bool("merged", false, "Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)")
 	removeCmd.Flags().Bool("delete-remote", false, "Also delete the branch on origin; without it removal stays local and never contacts the network")
 	removeCmd.ValidArgsFunction = completeBranchNames

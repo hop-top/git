@@ -96,7 +96,7 @@ exits 0 without prompting.
 /usr/bin/git hop remove <branch> --no-prompt              # non-interactive delete (gate must already be satisfied)
 /usr/bin/git hop remove <branch> --dry-run                # preview
 /usr/bin/git hop remove <branch> --force                  # unmerged but pushed
-/usr/bin/git hop remove <branch> --no-verify              # merged but dirty / unpushed
+/usr/bin/git hop remove <branch> --no-verify              # merged but dirty (never unlocks an unmerged branch)
 /usr/bin/git hop remove <branch> --force --no-verify      # unmerged AND unpushed
 /usr/bin/git hop remove <branch> --force --no-verify --no-prompt  # full automation, all flags
 
@@ -180,6 +180,7 @@ cd <path from list>
 | `remove` blocked: "not merged into default" | add `--force --no-prompt` (loses unmerged commits) |
 | `remove` blocked: "uncommitted changes or untracked files" | add `--no-verify --no-prompt` |
 | `remove` blocked: "not merged and not pushed" | add `--force --no-verify --no-prompt` |
+| `remove` blocked: "not merged into default" (with `--no-verify` set) | `--no-verify` does not cover unmerged; add `--force` |
 | `remove --no-prompt` exited 1 | `--no-prompt` is NOT a gate bypass — combine with `--force` / `--no-verify` |
 | `remove` exited 129: "cannot prompt for confirmation" | prompt hit a non-interactive stdin — add `--no-prompt` |
 | `env gc` exited 129: "cannot prompt for confirmation" | same cause — add `--no-prompt` (or `--force`) |

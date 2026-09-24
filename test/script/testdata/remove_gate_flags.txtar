@@ -1,0 +1,98 @@
+# `git hop remove` has two gate-bypass flags that cover DIFFERENT checks:
+#
+#   --force      the not-merged check
+#   --no-verify  uncommitted/untracked files and unpushed commits
+#
+# Neither implies the other. The help text used to call --no-verify a
+# "(gate bypass)" with no qualifier, so users passed it to remove an
+# unmerged branch and were refused. This script pins the contract end to
+# end: what --help promises, and what each flag actually unlocks.
+#
+#   branch         merged | pushed | worktree | needs
+#   feat/pushed      no   |  yes   |  clean   | --force
+#   feat/local       no   |  no    |  clean   | --force --no-verify
+#   feat/merged      yes  |  yes   |  dirty   | --no-verify
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+
+# Branch commits carry real content. The merged probe also accepts a
+# branch whose content main already has (squash/rebase merges), so an
+# empty commit would read as merged and slip past the gate.
+
+# feat/pushed: on origin, never merged.
+exec git checkout -b feat/pushed
+cp $WORK/pushed.txt pushed.txt
+exec git add pushed.txt
+exec git commit -m 'pushed work'
+exec git push origin feat/pushed
+
+# feat/merged: on origin, merged into main by merge commit.
+exec git checkout -b feat/merged main
+cp $WORK/merged.txt merged.txt
+exec git add merged.txt
+exec git commit -m 'merged work'
+exec git push origin feat/merged
+exec git checkout main
+exec git merge --no-ff feat/merged -m 'merge feat/merged'
+exec git push origin main
+
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/pushed
+exec git-hop add feat/merged
+exec git-hop add feat/local
+
+# feat/local: a commit that exists nowhere but this worktree.
+cd $WORK/hub/hops/feat/local
+cp $WORK/local.txt local.txt
+exec git add local.txt
+exec git commit -m 'local-only work'
+cd $WORK/hub
+
+# feat/merged: shipped, but the worktree holds an untracked file.
+cp $WORK/scratch.txt $WORK/hub/hops/feat/merged/scratch.txt
+
+# --- help states the scope of each flag, not a blanket "gate bypass" ---
+exec git-hop remove --help
+! stdout '\(gate bypass\)'
+stdout 'not merged, pushed to origin +--force$'
+stdout 'not merged, not pushed +--force --no-verify$'
+stdout 'merged, uncommitted or untracked files +--no-verify$'
+stdout '--no-verify .*does NOT bypass the not-merged check'
+
+# --- the reported case: --no-verify does not unlock an unmerged branch ---
+! exec git-hop remove feat/pushed --no-verify --no-prompt
+stderr 'not merged into default; pass --force'
+exists $WORK/hub/hops/feat/pushed
+exec git-hop remove feat/pushed --force --no-prompt
+! exists $WORK/hub/hops/feat/pushed
+
+# --- --force does not unlock a dirty worktree ---
+! exec git-hop remove feat/merged --force --no-prompt
+stderr 'uncommitted changes or untracked files; pass --no-verify'
+exists $WORK/hub/hops/feat/merged/scratch.txt
+exec git-hop remove feat/merged --no-verify --no-prompt
+! exists $WORK/hub/hops/feat/merged
+
+# --- unmerged AND unpushed needs both; either alone is refused ---
+! exec git-hop remove feat/local --no-verify --no-prompt
+stderr 'pass --force --no-verify'
+! exec git-hop remove feat/local --force --no-prompt
+stderr 'pass --force --no-verify'
+exists $WORK/hub/hops/feat/local
+exec git-hop remove feat/local --force --no-verify --no-prompt
+! exists $WORK/hub/hops/feat/local
+
+-- pushed.txt --
+pushed
+-- merged.txt --
+merged
+-- local.txt --
+local only
+-- scratch.txt --
+uncommitted notes
