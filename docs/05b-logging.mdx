@@ -164,15 +164,20 @@ git hop status --json | jq .
 
 ### Health Check for Scripts
 
-doctor exits 0 whether or not it finds problems; read its result:
+doctor exits like `git fsck`: 0 when healthy (warnings alone do not
+count), 1 when it reports an issue it did not fix:
 
 ```bash
-if [ "$(git hop doctor --json | jq '[.[] | select(.kind == "issue")] | length')" -eq 0 ]; then
+if git hop --quiet doctor; then
     echo "Healthy"
 else
     echo "Issues found"
 fi
 ```
+
+With `--fix` it exits 0 only if every issue was fixed, so
+`git hop doctor --fix || echo "needs attention"` flags what repair could
+not handle. The records (`--json`) still say which issue is which.
 
 ## Git-like Styling
 

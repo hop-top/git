@@ -1,0 +1,54 @@
+# doctor exits like git fsck: non-zero when it leaves an issue behind.
+#
+# 0 when healthy or only warnings were found; 1 when an issue was reported
+# and not fixed. With --fix, 0 only if every issue was fixed; --fix
+# --dry-run applies the same rule to the repairs it would make. The report
+# is printed either way, and no cobra "Error:" line is added.
+#
+# The regression this pins: doctor always exited 0, so scripts and CI could
+# not tell a broken install from a healthy one.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+
+# --- healthy ---
+exec git-hop doctor
+stdout 'No issues found'
+
+# --- an issue doctor can fix: the data home is gone ---
+rm $WORK/data
+exec sh -c 'git-hop doctor; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'data directory does not exist'
+! stderr 'Error:'
+! exec git-hop doctor --json
+decode json stdout 0.kind issue
+
+# the preview would fix it: 0, and nothing changes
+exec git-hop doctor --fix --dry-run
+! exists $WORK/data
+
+exec git-hop doctor --fix
+exists $WORK/data
+exec git-hop doctor
+
+# --- an issue doctor cannot fix: an unreadable hub config ---
+mkdir $WORK/broken
+cp $WORK/bad.json $WORK/broken/hop.json
+cd $WORK/broken
+! exec git-hop doctor
+exec sh -c 'git-hop doctor --fix; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'Failed to load hub config'
+! exec git-hop doctor --fix --dry-run
+! exec git-hop doctor --fix --json
+decode json stdout 0.message '~^failed to load hub config'
+
+-- bad.json --
+{

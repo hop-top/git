@@ -60,7 +60,7 @@ exec git-hop doctor --json
 
 # --- a global hub whose data-home hopspace is gone: an issue --fix repairs ---
 rm $WORK/data/org/repo/hop.json
-exec git-hop doctor --json
+! exec git-hop doctor --json
 stdout '"message": "hopspace does not exist"'
 exec git-hop doctor --fix
 exists $WORK/data/org/repo/hop.json

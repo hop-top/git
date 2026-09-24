@@ -134,9 +134,11 @@ exits 0 without prompting.
 
 ```bash
 /usr/bin/git hop doctor --json        # [{kind, check, subject, message}]; [] = healthy
-                                      #   (exit 0 either way: test for kind == "issue")
+                                      #   exit 1 on any issue; warnings alone exit 0
 /usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json)
+                                      #   exit 0 only if every issue was fixed
 /usr/bin/git hop doctor --fix --dry-run  # preview those repairs; writes nothing, no backups
+                                      #   exit 0 only if every issue would be fixed
 /usr/bin/git hop prune --dry-run      # list this repo's orphaned state + hop.json entries
 /usr/bin/git hop prune                # remove them (clears status Missing rows); current repo only
 /usr/bin/git hop prune --all          # sweep every registered repo; state removals are not undoable
@@ -193,8 +195,8 @@ cd <path from list>
 # Every tracked worktree, all repos
 /usr/bin/git hop status --all --json | jq .
 
-# Healthy?
-/usr/bin/git hop doctor --json | jq -e 'map(select(.kind == "issue")) | length == 0'
+# Healthy? (exit status is the verdict)
+/usr/bin/git hop --quiet doctor
 
 # Dry-run everything before committing to a destructive step
 /usr/bin/git hop remove feat/foo --dry-run
