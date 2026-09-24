@@ -134,11 +134,14 @@ The global configuration file (`global.json`) stores your preferences. This is t
 | `autoEnvStart` | boolean | `false` | Automatically start environment services when switching to a branch |
 | `showAllManagedRepos` | boolean | `false` | Show all managed repositories in list command |
 | `unusedThresholdDays` | number | `30` | Days before a worktree is considered unused |
-| `bareRepo` | boolean | `true` | Ignored; kept for compatibility. Clones always create a bare hub (see [story 015](stories/015-hopspace-shape-contract.md)) |
 | `enforceCleanForConversion` | boolean | `true` | Require clean working directory for repo conversion |
 | `conventionWarning` | boolean | `true` | Warn when worktree doesn't follow naming conventions |
 | `gitDomain` | string | `"github.com"` | Default Git hosting domain |
 | `worktreeLocation` | string | `"hops"` | Directory name for worktrees |
+
+The former `bareRepo` setting is gone: clones always create a bare hub (see
+[story 015](stories/015-hopspace-shape-contract.md)). A leftover `bareRepo`
+in an old config file, or `hop.bareRepo` in git config, is ignored.
 
 ### Full Configuration Schema
 
@@ -150,7 +153,6 @@ For reference, here's the complete JSON structure:
     "autoEnvStart": false,
     "showAllManagedRepos": false,
     "unusedThresholdDays": 30,
-    "bareRepo": true,
     "enforceCleanForConversion": true,
     "conventionWarning": true,
     "gitDomain": "github.com",

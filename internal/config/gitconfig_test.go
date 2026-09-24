@@ -76,16 +76,16 @@ func TestGetSetBool(t *testing.T) {
 	gc := &GitConfig{RunCmd: runCmd}
 
 	// Missing key → error
-	_, err := gc.GetBool(KeyBareRepo)
+	_, err := gc.GetBool(KeyAutoEnvStart)
 	if err != ErrKeyNotFound {
 		t.Fatalf("expected ErrKeyNotFound, got %v", err)
 	}
 
 	// Set true, get true
-	if err := gc.Set(KeyBareRepo, "true"); err != nil {
+	if err := gc.Set(KeyAutoEnvStart, "true"); err != nil {
 		t.Fatal(err)
 	}
-	v, err := gc.GetBool(KeyBareRepo)
+	v, err := gc.GetBool(KeyAutoEnvStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,10 +94,10 @@ func TestGetSetBool(t *testing.T) {
 	}
 
 	// Set false, get false
-	if err := gc.Set(KeyBareRepo, "false"); err != nil {
+	if err := gc.Set(KeyAutoEnvStart, "false"); err != nil {
 		t.Fatal(err)
 	}
-	v, err = gc.GetBool(KeyBareRepo)
+	v, err = gc.GetBool(KeyAutoEnvStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -259,7 +259,7 @@ func TestGetBoolInvalidValue(t *testing.T) {
 			return "maybe", nil
 		},
 	}
-	_, err := gc.GetBool(KeyBareRepo)
+	_, err := gc.GetBool(KeyAutoEnvStart)
 	if err == nil {
 		t.Fatal("expected error for invalid bool value")
 	}
@@ -271,10 +271,10 @@ func TestSetError(t *testing.T) {
 			return "", fmt.Errorf("git failed")
 		},
 	}
-	if err := gc.Set(KeyBareRepo, "true"); err == nil {
+	if err := gc.Set(KeyAutoEnvStart, "true"); err == nil {
 		t.Fatal("expected error")
 	}
-	if err := gc.SetLocal(KeyBareRepo, "true"); err == nil {
+	if err := gc.SetLocal(KeyAutoEnvStart, "true"); err == nil {
 		t.Fatal("expected error")
 	}
 }

@@ -30,8 +30,8 @@ after creation:
 4. `git status --porcelain` in `<hubPath>/hops/<defaultBranch>/` is empty
    (clean working tree).
 
-This applies to both clone paths (`Defaults.BareRepo: true` and `false`) and
-to the conversion path (`git hop init`).
+This applies to every clone (the former `Defaults.BareRepo` setting has
+since been removed) and to the conversion path (`git hop init`).
 
 ## Why this story exists
 
@@ -55,7 +55,7 @@ every test that produces a hopspace.
       only) is now backed by the invariant test for full shape coverage.
 - [x] `cloneRegularRepo` produces a bare hopspace by delegating to
       `cloneBareRepo`. The `Defaults.BareRepo` flag is effectively a no-op
-      and remains only for persisted-config compatibility.
+      (later removed outright; stale values are ignored on load).
 - [x] `cloneBareRepo` re-establishes the standard `+refs/heads/*:refs/remotes/origin/*`
       fetch refspec after `git clone --bare` and re-fetches, so
       `setUpstreamTracking` against `origin/<defaultBranch>` works
