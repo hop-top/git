@@ -274,6 +274,8 @@ To convert anyway, carrying uncommitted files into the new worktree
 		}
 	}
 
+	registerConvertedHub(fs, hub, repoPath, mainWorktreePath, currentBranchName, isRegularRepo)
+
 	// Emit hopspace.initialized after successful conversion.
 	if hub != nil {
 		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(

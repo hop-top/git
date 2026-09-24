@@ -1,0 +1,52 @@
+# A converted repository is registered in git-hop's state the way a clone
+# is, so list, status --all and prune see it straight after init, with no
+# `git hop add` first. A dry run registers nothing.
+
+exec git init --bare $WORK/remotes/acme/widget.git
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git remote add origin file://$WORK/remotes/acme/widget.git
+exec git push -u origin main
+
+# --- dry run: nothing registered ---
+exec git-hop init --no-prompt --no-hooks -n
+! exists $WORK/.local/state/git-hop/state.json
+! exists $WORK/data
+
+# --- bare conversion ---
+exec git-hop init --no-prompt --no-hooks --keep-backup
+stdout 'Conversion successful'
+exists $WORK/.local/state/git-hop/state.json
+
+exec git-hop list --json
+stdout '"repository": "github.com/acme/widget"'
+stdout '"branch": "main"'
+exec git-hop status --all
+stdout 'github.com/acme/widget'
+
+# --- prune sees the repository and its conversion backups: with room for
+# one backup, the older one goes and init's own backup stays ---
+exec git config hop.backup.maxBackups 1
+mkdir $WORK/.cache/git-hop/acme-widget/older
+exec sh -c 'printf "{\"timestamp\":\"2001-01-01T00:00:00Z\",\"originalPath\":\"%s\"}" "$1" > "$2"' sh $WORK/proj $WORK/.cache/git-hop/acme-widget/older/backup-info.json
+exec git-hop prune -n
+! stdout 'No repositories in state'
+stdout 'Would prune conversion backup: .*acme-widget/older'
+! stdout 'Would prune conversion backup: .*acme-widget/2'
+
+# --- a doctor run straight after init finds an installed data home ---
+exec git-hop doctor --json
+! stdout 'data directory'
+
+# --- a remote-less regular conversion registers under its folder names ---
+exec git init $WORK/local/plain
+cd $WORK/local/plain
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks --regular
+stdout 'Conversion successful'
+exec git-hop list --json
+stdout '"repository": "github.com/local/plain"'
+exec git-hop prune -n
+! stdout 'No repositories in state'
+! stderr 'not registered in state'

@@ -12,7 +12,6 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
-	"hop.top/git/internal/state"
 )
 
 // HookMirrorOptions describes how committed .git-hop/hooks/ scripts should
@@ -147,56 +146,17 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		}
 	}
 
-	if err := registerProject(fs, org, repo, defaultBranch, absMainWorktreePath); err != nil {
-		output.Warn("failed to register in global registry: %v", err)
-	}
-
-	// Update global state
-	st, err := state.LoadState(fs)
-	if err != nil {
-		st = state.NewState()
-	}
-
-	repoID := repoIDFor(org, repo)
-
-	// Add repository and initial worktree to state
-	if st.Repositories[repoID] == nil {
-		st.AddRepository(repoID, &state.RepositoryState{
-			URI:           uri,
-			Org:           org,
-			Repo:          repo,
-			DefaultBranch: defaultBranch,
-			Worktrees:     make(map[string]*state.WorktreeState),
-			Hubs:          []*state.HubState{},
-		})
-	}
-
-	// Add hub to state
-	mode := state.HubModeLocal
-	if globalConfig {
-		mode = state.HubModeGlobal
-	}
-	st.AddHub(repoID, &state.HubState{
-		Path:         projectRoot,
-		Mode:         mode,
-		CreatedAt:    time.Now(),
-		LastAccessed: time.Now(),
+	RegisterNewHub(fs, NewHub{
+		URI:           uri,
+		Org:           org,
+		Repo:          repo,
+		DefaultBranch: defaultBranch,
+		HubPath:       projectRoot,
+		WorktreePath:  absMainWorktreePath,
+		WorktreeType:  WorktreeTypeBare,
+		Global:        globalConfig,
 	})
-
-	// Add main worktree to state
-	if err := st.AddWorktree(repoID, defaultBranch, &state.WorktreeState{
-		Path:         absMainWorktreePath,
-		Type:         "bare",
-		HubPath:      projectRoot,
-		CreatedAt:    time.Now(),
-		LastAccessed: time.Now(),
-	}); err != nil {
-		output.Warn("failed to add worktree to state: %v", err)
-	} else {
-		if err := state.SaveState(fs, st); err != nil {
-			output.Warn("failed to save state: %v", err)
-		}
-	}
+	repoID := repoIDFor(org, repo)
 
 	// Update current symlink to point to main worktree
 	if err := UpdateCurrentSymlink(fs, projectRoot, absMainWorktreePath); err != nil {
