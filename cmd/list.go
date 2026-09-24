@@ -84,14 +84,11 @@ func runList(cmd *cobra.Command, args []string) {
 		output.Fatal("Failed to load state: %v", err)
 	}
 
-	// Check if we're in a hub to filter by current repo
+	// Inside a hub, scope to its repository.
 	cwd, _ := os.Getwd()
 	var currentRepoID string
-	if hubPath, err := hop.FindHub(fs, cwd); err == nil {
-		// Try to determine repo ID from hub
-		if hub, err := hop.LoadHub(fs, hubPath); err == nil {
-			currentRepoID = fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
-		}
+	if ref, err := hop.ResolveHub(fs, st, cwd); err == nil {
+		currentRepoID = ref.RepoID
 	}
 
 	if output.IsStructured() {

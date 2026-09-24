@@ -1,0 +1,63 @@
+# A repository registered as-is (init menu option 3) has no hop.json,
+# but git-hop's state records it as a hub, so the hub-scoped commands
+# recognise it from inside: prune scopes to it, list shows its worktrees
+# and status shows its hub view, from its root or any folder below.
+# hop.json-based discovery still comes first, and a plain repository
+# git-hop never registered is still refused.
+#
+# The regression this pins: prune without --all failed "not inside a
+# git-hop repository" there, list fell back to every repository and
+# status printed a bare git-status summary.
+
+exec git init $WORK/local/other
+cd $WORK/local/other
+exec git commit -q --allow-empty -m 'initial'
+stdin $WORK/choice3.txt
+exec git-hop init --no-hooks
+stdout 'Repository registered successfully'
+
+exec git init $WORK/local/plain
+cd $WORK/local/plain
+exec git commit -q --allow-empty -m 'initial'
+stdin $WORK/choice3.txt
+exec git-hop init --no-hooks
+stdout 'Repository registered successfully'
+! exists $WORK/local/plain/hop.json
+mkdir $WORK/local/plain/sub
+
+# --- prune scopes to this repository ---
+exec git-hop prune -n
+! stderr 'not inside a git-hop repository'
+stdout 'Scanning github.com/local/plain for orphaned entries'
+cd $WORK/local/plain/sub
+exec git-hop prune -n
+stdout 'Scanning github.com/local/plain for orphaned entries'
+
+# --- list shows this repository only ---
+exec git-hop list --json
+stdout '"repository": "github.com/local/plain"'
+! stdout 'github.com/local/other'
+exec git-hop list
+stdout 'Repository: github.com/local/plain'
+
+# --- status shows the hub view ---
+cd $WORK/local/plain
+exec git-hop status
+stdout 'Hub: local/plain'
+stdout 'main'
+exec git-hop status --json
+stdout '"branch": "main"'
+stdout '"path": ".*/local/plain"'
+
+# --- an unregistered plain repository is still refused ---
+exec git init $WORK/local/stray
+cd $WORK/local/stray
+exec git commit -q --allow-empty -m 'initial'
+! exec git-hop prune -n
+stderr 'not inside a git-hop repository'
+exec git-hop list --json
+stdout 'github.com/local/plain'
+stdout 'github.com/local/other'
+
+-- choice3.txt --
+3
