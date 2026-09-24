@@ -1,0 +1,84 @@
+# A bare conversion keeps the repository's remotes exactly as they were:
+# every remote, its URLs and fetch refspecs, and the upstream of each
+# branch. The hub's identity (hop.json repo.uri/org/repo) comes from the
+# original origin URL, parsed the way clone parses it, not from the
+# folder the repository happens to live in.
+
+# --- origin: a file:// URL shaped like <org>/<repo> ---
+exec git init --bare $WORK/remotes/acme/widget.git
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git remote add origin file://$WORK/remotes/acme/widget.git
+exec git push -u origin main
+exec git branch feature
+exec git push -u origin feature
+# a second remote with a narrowed refspec and a separate push URL
+exec git remote add upstream file://$WORK/remotes/up/widget.git
+exec git config remote.upstream.fetch '+refs/heads/main:refs/remotes/upstream/main'
+exec git config remote.upstream.pushurl file://$WORK/remotes/up/widget-push.git
+exec git remote set-head origin main
+
+exec git remote -v
+cp stdout $WORK/remotes-before
+exec git config --local --get-regexp '^(remote|branch)\.'
+cp stdout $WORK/config-before
+
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+
+# --- remotes, refspecs and branch upstreams are the original ones ---
+exec git remote -v
+cmp stdout $WORK/remotes-before
+exec git config --local --get-regexp '^(remote|branch)\.'
+cmp stdout $WORK/config-before
+
+# --- identity from the original origin URL ---
+decode json hop.json repo.org acme
+decode json hop.json repo.repo widget
+decode json hop.json repo.uri '~^file://.*/remotes/acme/widget\.git$'
+
+# --- remote-tracking refs came along, so upstreams resolve right away ---
+exec git rev-parse --verify refs/remotes/origin/main
+exec git symbolic-ref refs/remotes/origin/HEAD
+stdout '^refs/remotes/origin/main$'
+exec git rev-parse --abbrev-ref feature@{upstream}
+stdout '^origin/feature$'
+cd $WORK/proj/hops/main
+exec git rev-parse --abbrev-ref main@{upstream}
+stdout '^origin/main$'
+exec git status -sb
+stdout '^## main\.\.\.origin/main$'
+
+# --- fetching from the hub reaches the real origin ---
+exec git clone $WORK/remotes/acme/widget.git $WORK/other
+cd $WORK/other
+exec git commit --allow-empty -m 'upstream work'
+exec git push origin main
+exec git rev-parse HEAD
+cp stdout $WORK/upstream-head
+cd $WORK/proj
+exec git fetch origin
+exec git rev-parse refs/remotes/origin/main
+cmp stdout $WORK/upstream-head
+
+# --- an https-style origin (rewritten locally, so no network) ---
+exec git config --global url.file://$WORK/remotes/.insteadOf https://git.example.test/
+exec git init --bare $WORK/remotes/tools/gadget.git
+exec git init $WORK/gadget
+cd $WORK/gadget
+exec git commit --allow-empty -m 'initial'
+exec git remote add origin https://git.example.test/tools/gadget.git
+exec git push -u origin main
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+# get-url would apply the rewrite; the stored URL is what must survive
+exec git config remote.origin.url
+stdout '^https://git\.example\.test/tools/gadget\.git$'
+decode json hop.json repo.org tools
+decode json hop.json repo.repo gadget
+decode json hop.json repo.uri https://git.example.test/tools/gadget.git
+exec git fetch origin
+cd $WORK/gadget/hops/main
+exec git status -sb
+stdout '^## main\.\.\.origin/main$'

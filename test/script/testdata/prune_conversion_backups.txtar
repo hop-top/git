@@ -24,9 +24,9 @@ mkdir $WORK/.cache/git-hop/org-repo/old $WORK/.cache/git-hop/org-repo/failed $WO
 cp $WORK/meta-old $WORK/.cache/git-hop/org-repo/old/backup-info.json
 cp $WORK/meta-old $WORK/.cache/git-hop/org-repo/failed/backup-info.json
 cp $WORK/failed-marker $WORK/.cache/git-hop/org-repo/failed/conversion-failed
-# A backup taken of this hub under another name: a bare conversion
-# re-points origin at the local path, so the hub's identity afterwards is
-# not the remote its backup directory was named after.
+# A backup taken of this hub under another name: the hub's identity can
+# change after its backup directory was named (origin re-pointed, or a
+# conversion from an older git-hop that named the hub after its folder).
 mkdir $WORK/.cache/git-hop/acme-widget/renamed
 exec sh -c 'printf "{\"timestamp\":\"2000-01-01T00:00:00Z\",\"originalPath\":\"%s\"}" "$1" > "$2"' sh $WORK/hub $WORK/.cache/git-hop/acme-widget/renamed/backup-info.json
 # Another repository's backups are out of scope.

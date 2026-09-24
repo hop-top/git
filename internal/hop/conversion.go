@@ -21,6 +21,8 @@ type Converter struct {
 	// BackupRoot is where the conversion backup is taken (hop.backup.path);
 	// empty means DefaultConversionBackupRoot().
 	BackupRoot string
+
+	identity repoIdentity
 }
 
 func NewConverter(fs afero.Fs, g git.GitInterface) *Converter {
@@ -52,12 +54,6 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 	}
 	_ = currentBranch
 
-	remoteURL, err := c.git.GetRemoteURL(repoPath)
-	if err != nil {
-		// No remote configured - use local path for org/repo
-		remoteURL = ""
-	}
-
 	// The clean check guards the bare layout, whose conversion moves the
 	// working tree; Force (init --force) is the caller's explicit consent
 	// to carry uncommitted changes across. The backup is taken either way.
@@ -69,26 +65,20 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		}
 	}
 
-	var org, repo string
-	if remoteURL != "" {
-		org, repo = parseRepoFromURL(remoteURL)
-		if org == "" || repo == "" {
-			result.Errors = append(result.Errors, "could not parse org/repo from remote URL")
-			return result, fmt.Errorf("invalid remote URL")
-		}
-	} else {
-		// Use repository path for org/repo when no remote
-		absPath, err := filepath.Abs(repoPath)
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Sprintf("failed to get absolute path: %v", err))
-			return result, fmt.Errorf("failed to get absolute path: %w", err)
-		}
-		repo = filepath.Base(absPath)
-		org = filepath.Base(filepath.Dir(absPath))
-		result.Warnings = append(result.Warnings, "No remote configured - using local path for backup organization")
+	// Resolved before anything moves: a bare conversion clones from the
+	// local folder, so origin read afterwards would name that folder.
+	c.identity, err = c.resolveRepoIdentity(repoPath)
+	if err != nil {
+		result.Errors = append(result.Errors, err.Error())
+		return result, fmt.Errorf("invalid remote URL: %w", err)
+	}
+	if c.identity.FromPath {
+		result.Hints = append(result.Hints, fmt.Sprintf(
+			"No remote configured - using the folder names %s/%s as the repository identity",
+			c.identity.Org, c.identity.Repo))
 	}
 
-	c.backupMgr, err = NewBackupManager(c.fs, c.git, org, repo)
+	c.backupMgr, err = NewBackupManager(c.fs, c.git, c.identity.Org, c.identity.Repo)
 	if err != nil {
 		result.Errors = append(result.Errors, fmt.Sprintf("failed to create backup manager: %v", err))
 		return result, fmt.Errorf("failed to create backup manager: %w", err)
@@ -173,6 +163,9 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 
 		if err := c.git.CloneBare(repoPath, bareRepoPath); err != nil {
 			return fmt.Errorf("failed to create bare repository: %w", err)
+		}
+		if err := c.carryOverRemotes(repoPath, bareRepoPath); err != nil {
+			return err
 		}
 
 		// Worktree checkouts live under hops/<branch>, matching `git hop
@@ -351,21 +344,6 @@ func (c *Converter) getWorktreePathForBranch(branch, repoPath string) string {
 }
 
 func (c *Converter) createHopConfig(repoPath string, useBare bool, result *config.ConversionResult) error {
-	remoteURL, err := c.git.GetRemoteURL(repoPath)
-	if err != nil {
-		// No remote configured
-		remoteURL = ""
-	}
-
-	var org, repo string
-	if remoteURL != "" {
-		org, repo = parseRepoFromURL(remoteURL)
-	} else {
-		// Use repository path for org/repo when no remote
-		absPath, _ := filepath.Abs(repoPath)
-		repo = filepath.Base(absPath)
-		org = filepath.Base(filepath.Dir(absPath))
-	}
 	defaultBranch, _ := c.git.GetCurrentBranch(repoPath)
 
 	// For regular repos, the current branch's working tree is the repo root
@@ -379,9 +357,9 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 
 	hopConfig := map[string]interface{}{
 		"repo": map[string]interface{}{
-			"uri":           remoteURL,
-			"org":           org,
-			"repo":          repo,
+			"uri":           c.identity.URI,
+			"org":           c.identity.Org,
+			"repo":          c.identity.Repo,
 			"defaultBranch": defaultBranch,
 			"structure":     structure,
 			"isBare":        useBare,

@@ -1,6 +1,6 @@
 # `git hop init` says "Backup preserved at" only when the conversion
 # backup really is still on disk: --keep-backup, or a failed conversion.
-# A warning such as "no remote" must not make it claim a deleted backup.
+# A note such as "no remote" must not make it claim a deleted backup.
 
 # --- no remote, default: backup deleted, and init does not claim otherwise ---
 exec git init $WORK/plain
@@ -8,7 +8,8 @@ cd $WORK/plain
 exec git commit --allow-empty -m 'initial'
 exec git-hop init --no-prompt --no-hooks
 stdout 'Conversion successful'
-stderr '^warning: No remote configured'
+stderr '^hint: No remote configured - using the folder names .*/plain as the repository identity$'
+! stderr '^warning: No remote'
 stdout '^Backup cleaned up: '
 ! stdout 'Backup preserved at'
 ! stderr 'To remove backup manually'

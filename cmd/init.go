@@ -306,6 +306,9 @@ To convert anyway, carrying uncommitted files into the new worktree
 	for _, warning := range result.Warnings {
 		output.Warn("%s", warning)
 	}
+	for _, hint := range result.Hints {
+		output.Hint("%s", hint)
+	}
 
 	reportPreservedBackup(fs, result.BackupPath)
 
