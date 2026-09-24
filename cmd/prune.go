@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -155,10 +156,11 @@ func runPrune(cmd *cobra.Command, args []string) {
 // With all set, st is returned as-is — the deliberate global sweep, and
 // the same pointer so the caller's save persists the mutations.
 //
-// Without it the repository is resolved exactly as 'git hop list' does:
-// walk up from cwd to the enclosing hub, load its hop.json, and build the
-// repo ID as github.com/<org>/<repo>. Not in a hub, or in a hub whose repo
-// has no state entry, is an error — never a silent fallback to global.
+// Without it the repository is resolved exactly as 'git hop list' does,
+// through hop.ResolveHub: the enclosing hub's hop.json, or failing that a
+// hub state records around cwd (a repository registered as-is has no
+// hop.json). Not in a hub, or in a hub whose repo has no state entry, is
+// an error — never a silent fallback to global.
 //
 // The returned state shares its *RepositoryState pointers with st, so the
 // passes mutate the real entries; only the map of what is visible narrows.
@@ -167,19 +169,17 @@ func resolvePruneScope(fs afero.Fs, st *state.State, cwd string, all bool) (*sta
 		return st, nil
 	}
 
-	hubPath, err := hop.FindHub(fs, cwd)
-	if err != nil {
+	ref, err := hop.ResolveHub(fs, st, cwd)
+	if errors.Is(err, hop.ErrNotInHub) {
 		return nil, fmt.Errorf("not inside a git-hop repository: %s\n"+
 			"hint: run prune from a repository, or pass --all to prune every repository in state", cwd)
 	}
-
-	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read hub config at %s: %v\n"+
-			"hint: pass --all to prune every repository in state", hubPath, err)
+		return nil, fmt.Errorf("%v\n"+
+			"hint: pass --all to prune every repository in state", err)
 	}
 
-	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	repoID := ref.RepoID
 	repo, ok := st.Repositories[repoID]
 	if !ok || repo == nil {
 		return nil, fmt.Errorf("repository %s is not registered in state\n"+

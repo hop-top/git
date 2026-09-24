@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,10 +71,31 @@ configuration, and resource usage.`,
 			output.Fatal("Target status only available inside a hub")
 		}
 
-		// Check context
-		hubPath, err := hop.FindHub(fs, cwd)
-		if err == nil {
-			showHubStatus(cmd, fs, g, hubPath)
+		// Check context: a hub found by hop.json, or one state records
+		// around cwd (a repository registered as-is has no hop.json).
+		st, _ := state.LoadState(fs)
+		ref, err := hop.ResolveHub(fs, st, cwd)
+		if err != nil && !errors.Is(err, hop.ErrNotInHub) {
+			output.Fatal("Failed to load hub: %v", err)
+		}
+		if ref != nil && !ref.Recorded {
+			showHubStatus(cmd, fs, g, ref.Hub)
+			return
+		}
+
+		// A bare-worktree-shaped repo that's just missing hop.json gets a
+		// hint to restore it, even when state still records it. Without
+		// this:
+		//   - at the bare-repo root we'd print "Not in a hub or worktree.",
+		//     which is wrong (it IS a worktree-shaped repo);
+		//   - inside hops/<branch>/ we'd fall into showWorktreeStatus and
+		//     print a 2-line git-status-shaped summary with no hub context,
+		//     looking accidentally identical to plain `git status`.
+		// Either way the user can't tell what to do next. Surface the actual
+		// problem and the fix.
+		unregRoot, unregistered := hop.FindUnregisteredHub(fs, g, cwd)
+		if ref != nil && !unregistered {
+			showHubStatus(cmd, fs, g, ref.Hub)
 			return
 		}
 
@@ -83,18 +105,8 @@ configuration, and resource usage.`,
 			output.FatalCode(128, "not in a git-hop hub; structured status is only available inside one")
 		}
 
-		// Before falling through to a worktree probe or "Not in a hub or
-		// worktree.", check whether we're sitting in a bare-worktree-shaped
-		// repo that's just missing hop.json. Without this branch:
-		//   - at the bare-repo root we'd print "Not in a hub or worktree.",
-		//     which is wrong (it IS a worktree-shaped repo);
-		//   - inside hops/<branch>/ we'd fall into showWorktreeStatus and
-		//     print a 2-line git-status-shaped summary with no hub context,
-		//     looking accidentally identical to plain `git status`.
-		// Either way the user can't tell what to do next. Surface the actual
-		// problem and the fix.
-		if root, ok := hop.FindUnregisteredHub(fs, g, cwd); ok {
-			output.Note("%s", unregisteredBareWorktreeHint(root))
+		if unregistered {
+			output.Note("%s", unregisteredBareWorktreeHint(unregRoot))
 			return
 		}
 
@@ -109,12 +121,7 @@ configuration, and resource usage.`,
 	},
 }
 
-func showHubStatus(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, path string) {
-	hub, err := hop.LoadHub(fs, path)
-	if err != nil {
-		output.Fatal("Failed to load hub: %v", err)
-	}
-
+func showHubStatus(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hub *hop.Hub) {
 	records := hubStatusRecords(fs, g, hub)
 	if output.IsStructured() {
 		emitResult(cmd, records)

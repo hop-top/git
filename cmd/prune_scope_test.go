@@ -306,3 +306,32 @@ func TestPruneOutput_NamesAffectedRepo(t *testing.T) {
 			"prune line without a repository ID: %q", line)
 	}
 }
+
+// TestResolvePruneScope_RecordedHubWithoutHopJSON: a repository registered
+// as-is has no hop.json, only its state record. Standing in it (or below
+// it), prune scopes to that repository instead of refusing.
+func TestResolvePruneScope_RecordedHubWithoutHopJSON(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubA := "/roots/a/plain"
+	hubB := "/elsewhere/b/hub"
+	require.NoError(t, fs.MkdirAll(filepath.Join(hubA, "src"), 0o755))
+	st := twoRepoState(hubA, hubB)
+
+	for _, cwd := range []string{hubA, filepath.Join(hubA, "src")} {
+		scoped, err := resolvePruneScope(fs, st, cwd, false /* all */)
+		require.NoError(t, err, "cwd %s", cwd)
+		assert.Len(t, scoped.Repositories, 1)
+		assert.Contains(t, scoped.Repositories, "github.com/test/a")
+	}
+}
+
+// TestResolvePruneScope_UnrecordedRepoRefused is the inverse guard: a
+// directory neither hop.json nor state knows is still refused.
+func TestResolvePruneScope_UnrecordedRepoRefused(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	st := twoRepoState("/roots/a/plain", "/elsewhere/b/hub")
+
+	_, err := resolvePruneScope(fs, st, "/roots/a/plainer", false /* all */)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not inside a git-hop repository")
+}
