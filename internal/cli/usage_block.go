@@ -91,24 +91,44 @@ func ownOptions(c *cobra.Command) *pflag.FlagSet {
 	return fs
 }
 
-// structuredOutputRequested reports whether args ask cmd for machine
-// output: --json, --porcelain, or a --format other than the human ones.
+// requestedOutput reads the output flags given in args to cmd.
 //
 // A usage error stops cobra's parse at the bad flag, before the output
 // mode is set up and possibly before the output flags were even reached,
 // so args are read with a probe that skips unknown flags instead.
-func structuredOutputRequested(cmd *cobra.Command, args []string) bool {
+func requestedOutput(cmd *cobra.Command, args []string) outputRequest {
 	probe := probeFlagSet(cmd)
 	_ = probe.Parse(args) // a malformed tail leaves the flags read so far
-	given := func(name string) string {
-		if f := probe.Lookup(name); f != nil {
-			return f.Value.String()
-		}
-		return ""
-	}
 	on := func(name string) bool {
-		v, err := strconv.ParseBool(given(name))
+		f := probe.Lookup(name)
+		if f == nil {
+			return false
+		}
+		v, err := strconv.ParseBool(f.Value.String())
 		return err == nil && v
 	}
-	return on("json") || on("porcelain") || !output.IsHumanFormat(given("format"))
+	req := outputRequest{json: on("json"), porcelain: on("porcelain")}
+	if f := probe.Lookup("format"); f != nil {
+		req.format = f.Value.String()
+		req.formatExplicit = probe.Changed("format")
+	}
+	return req
+}
+
+// structuredOutputRequested reports whether args ask cmd for machine
+// output: --json, --porcelain, or a --format other than the human ones.
+func structuredOutputRequested(cmd *cobra.Command, args []string) bool {
+	req := requestedOutput(cmd, args)
+	return req.json || req.porcelain || !output.IsHumanFormat(req.format)
+}
+
+// jsonUsageErrorRequested reports whether args put cmd's diagnostics in
+// JSON mode, by the rule the pre-run applies, so a usage error reports
+// in the shape an operation failure under the same flags would. A
+// contradictory request is refused in plain text by the pre-run, and is
+// here too.
+func jsonUsageErrorRequested(cmd *cobra.Command, args []string) bool {
+	req := requestedOutput(cmd, args)
+	format, _, err := req.resultFormat(declaresResult(cmd))
+	return err == nil && req.mode(format) == output.ModeJSON
 }

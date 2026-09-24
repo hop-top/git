@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -128,13 +129,9 @@ func ResolveArg(arg string, gitDomain string, knownBranches map[string]config.Hu
 	return ExpandShorthand(arg, gitDomain)
 }
 
-// Execute runs the command line in os.Args. A usage error is reported
-// on stderr as git does: an `error:` line, then the usage of the command
-// reached. Map the returned error to the process status with ExitCode.
-//
-// When machine output was asked for, only the `error:` line is printed:
-// the usage block is prose for a person at a terminal, and a consumer
-// reading --json or --porcelain gets one predictable line to parse.
+// Execute runs the command line in os.Args, reporting a usage error on
+// stderr (see reportUsageError). Map the returned error to the process
+// status with ExitCode.
 func Execute() error {
 	defer func() {
 		if EventBus != nil {
@@ -149,13 +146,31 @@ func Execute() error {
 	}
 	var ue *UsageError
 	if errors.As(err, &ue) {
-		w := RootCmd.ErrOrStderr()
-		fmt.Fprintf(w, "error: %s\n", ue.Err)
-		if ue.Cmd != nil && !structuredOutputRequested(ue.Cmd, args) {
-			fmt.Fprint(w, usageBlock(ue.Cmd))
-		}
+		reportUsageError(RootCmd.ErrOrStderr(), ue, args)
 	}
 	return err
+}
+
+// reportUsageError prints ue as git does: an `error:` line, then the
+// usage of the command reached.
+//
+// When machine output was asked for, the usage block is left out: it is
+// prose for a person at a terminal. In JSON mode the error is the JSON
+// record an operation failure emits, so a consumer parses one shape
+// whichever way the command failed.
+func reportUsageError(w io.Writer, ue *UsageError, args []string) {
+	cmd := ue.Cmd
+	if cmd == nil {
+		cmd = RootCmd
+	}
+	if jsonUsageErrorRequested(cmd, args) {
+		output.ErrorJSON(w, ue.Err.Error())
+		return
+	}
+	fmt.Fprintf(w, "error: %s\n", ue.Err)
+	if !structuredOutputRequested(cmd, args) {
+		fmt.Fprint(w, usageBlock(cmd))
+	}
 }
 
 func init() {
@@ -641,7 +656,17 @@ func isStdinTTY() bool {
 func setupOutputMode(cmd *cobra.Command) {
 	quiet = Root.Viper.GetBool("quiet")
 
-	format, formatOpts, err := resolveResultFormat(cmd)
+	req := outputRequest{
+		json:      jsonOut,
+		porcelain: porcelain,
+		quiet:     quiet,
+		format:    Root.Viper.GetString("format"),
+	}
+	if f := cmd.Flags().Lookup("format"); f != nil {
+		req.formatExplicit = f.Changed
+	}
+
+	format, formatOpts, err := req.resultFormat(declaresResult(cmd))
 	if err != nil {
 		output.FatalCode(129, "%v", err)
 	}
@@ -652,26 +677,33 @@ func setupOutputMode(cmd *cobra.Command) {
 	}
 	output.SetResultFormat(format, formatOpts...)
 
-	var mode output.Mode
-	if format == kitout.JSON || (format == "" && jsonOut) {
-		mode = output.ModeJSON
-	} else if format != "" || porcelain {
-		mode = output.ModePorcelain
-	} else if quiet {
-		mode = output.ModeQuiet
-	} else {
-		mode = output.ModeHuman
-	}
-
 	output.SetViper(Root.Viper)
-	output.SetupLogger(mode, verboseEnabled())
+	output.SetupLogger(req.mode(format), verboseEnabled())
 }
 
-// resolveResultFormat decides which structured format, if any, cmd renders
-// its result in. It returns "" for the human view.
+// outputRequest is what a command line asked of the output layer. The
+// pre-run reads it from the parsed flags; a usage error, which stops
+// the parse, reads it from the raw arguments (see requestedOutput).
+type outputRequest struct {
+	json, porcelain, quiet bool
+	format                 string
+	formatExplicit         bool
+}
+
+// declaresResult reports whether cmd declares an output schema (kit's
+// SetOutputSchema): only those commands have a result to render.
+func declaresResult(cmd *cobra.Command) bool {
+	if cmd == nil {
+		return false
+	}
+	_, _, ok := kitcli.GetOutputSchemaJSON(cmd)
+	return ok
+}
+
+// resultFormat decides which structured format, if any, a command
+// renders its result in. It returns "" for the human view.
 //
-// Only commands that declare an output schema (kit's SetOutputSchema) take
-// part: they are the ones with a result to render. For the others the
+// Only commands that declare a result take part. For the others the
 // output flags keep their previous meaning -- --json and --porcelain only
 // switch the logger mode -- until each is given a result of its own.
 //
@@ -682,41 +714,47 @@ func setupOutputMode(cmd *cobra.Command) {
 //
 // Every rejection happens here, in the pre-run, so a contradictory or
 // unknown mode fails before the command mutates anything.
-func resolveResultFormat(cmd *cobra.Command) (format string, formatOpts []string, err error) {
-	if cmd == nil {
+func (r outputRequest) resultFormat(declared bool) (format string, formatOpts []string, err error) {
+	if !declared {
 		return "", nil, nil
-	}
-	if _, _, ok := kitcli.GetOutputSchemaJSON(cmd); !ok {
-		return "", nil, nil
-	}
-
-	format = Root.Viper.GetString("format")
-	explicit := false
-	if f := cmd.Flags().Lookup("format"); f != nil {
-		explicit = f.Changed
 	}
 
 	switch {
-	case jsonOut && porcelain:
+	case r.json && r.porcelain:
 		return "", nil, fmt.Errorf("--json and --porcelain are mutually exclusive")
-	case jsonOut:
-		if explicit && format != kitout.JSON {
-			return "", nil, fmt.Errorf("--json and --format=%s are mutually exclusive", format)
+	case r.json:
+		if r.formatExplicit && r.format != kitout.JSON {
+			return "", nil, fmt.Errorf("--json and --format=%s are mutually exclusive", r.format)
 		}
 		return kitout.JSON, nil, nil
-	case porcelain:
-		if explicit {
-			return "", nil, fmt.Errorf("--porcelain and --format=%s are mutually exclusive", format)
+	case r.porcelain:
+		if r.formatExplicit {
+			return "", nil, fmt.Errorf("--porcelain and --format=%s are mutually exclusive", r.format)
 		}
 		return kitout.Text, []string{"style=lines"}, nil
 	}
 
-	if output.IsHumanFormat(format) {
+	if output.IsHumanFormat(r.format) {
 		return "", nil, nil
 	}
-	if _, ok := kitout.Default.Lookup(format); !ok {
+	if _, ok := kitout.Default.Lookup(r.format); !ok {
 		return "", nil, fmt.Errorf("unknown output format %q (valid: %s)",
-			format, strings.Join(kitout.Default.Keys(), ", "))
+			r.format, strings.Join(kitout.Default.Keys(), ", "))
 	}
-	return format, nil, nil
+	return r.format, nil, nil
+}
+
+// mode is the logger mode for a command rendering its result in format,
+// as returned by resultFormat.
+func (r outputRequest) mode(format string) output.Mode {
+	switch {
+	case format == kitout.JSON || (format == "" && r.json):
+		return output.ModeJSON
+	case format != "" || r.porcelain:
+		return output.ModePorcelain
+	case r.quiet:
+		return output.ModeQuiet
+	default:
+		return output.ModeHuman
+	}
 }
