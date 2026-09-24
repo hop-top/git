@@ -1019,7 +1019,7 @@ git hop repair -n --porcelain
 | `--force-dirty` | Allow repair when worktrees have uncommitted changes |
 | `-f`, `--force` | Bypass safety checks (combined with `--no-backup`) |
 | `--progress` / `--no-progress` | Force progress on/off (default: auto) |
-| `--color=<when>` | `always`, `auto`, `never` |
+| `--color[=<when>]` | Colour of the human output: `always` (also bare `--color`), `auto` (default: only on a terminal, off under `NO_COLOR`) or `never`. Any other value is refused with exit 129. The global `--no-color` wins over it |
 
 ### Where repair keeps its state
 

@@ -1,6 +1,7 @@
 package output
 
 import (
+	"errors"
 	"os"
 	"strings"
 
@@ -12,17 +13,45 @@ import (
 // in full colour, then brought down to it by Paint.
 var stdoutProfile = colorprofile.Detect(os.Stdout, os.Environ())
 
-// SetupColor decides how much colour human output on stdout carries,
-// following colorprofile's reading of the conventions: colour only on a
-// terminal (not when piped, nor on TERM=dumb), none under NO_COLOR, and
-// forced on by CLICOLOR_FORCE. noColor (--no-color) turns every escape
-// code off, whatever the environment says.
-func SetupColor(noColor bool) {
-	if noColor {
-		stdoutProfile = colorprofile.NoTTY
-		return
+// ColorWhen is git's --color=<when>: always, auto or never. It is a
+// flag value (pflag.Value), so a bad word is refused when the flag is
+// parsed, as a usage error.
+type ColorWhen string
+
+const (
+	ColorAuto   ColorWhen = "auto"
+	ColorAlways ColorWhen = "always"
+	ColorNever  ColorWhen = "never"
+)
+
+func (w *ColorWhen) String() string { return string(*w) }
+func (w *ColorWhen) Type() string   { return "when" }
+
+func (w *ColorWhen) Set(s string) error {
+	switch v := ColorWhen(s); v {
+	case ColorAuto, ColorAlways, ColorNever:
+		*w = v
+		return nil
 	}
-	stdoutProfile = colorprofile.Detect(os.Stdout, os.Environ())
+	return errors.New("want always, auto or never")
+}
+
+// SetupColor decides how much colour human output on stdout carries.
+// auto follows colorprofile's reading of the conventions: colour only on
+// a terminal (not when piped, nor on TERM=dumb), none under NO_COLOR,
+// and forced on by CLICOLOR_FORCE. always forces colour on, as git's
+// --color=always does, whatever the terminal or NO_COLOR say; the depth
+// still follows TERM and COLORTERM. never (--no-color) turns every
+// escape code off, whatever the environment says.
+func SetupColor(when ColorWhen) {
+	switch when {
+	case ColorNever:
+		stdoutProfile = colorprofile.NoTTY
+	case ColorAlways:
+		stdoutProfile = colorprofile.Detect(os.Stdout, append(os.Environ(), "CLICOLOR_FORCE=1"))
+	default:
+		stdoutProfile = colorprofile.Detect(os.Stdout, os.Environ())
+	}
 }
 
 // Paint renders s in style for stdout. Every styled string goes through

@@ -22,7 +22,7 @@ var (
 	repairForceDirty      bool
 	repairProgressFlag    bool
 	repairNoProgressFlag  bool
-	repairColor           string
+	repairColor           = output.ColorAuto
 	repairBaseFlag        bool
 	repairDryRunFlag      bool
 )
@@ -53,7 +53,8 @@ func init() {
 	f.BoolVar(&repairForceDirty, "force-dirty", false, "allow repair when worktrees have uncommitted changes")
 	f.BoolVar(&repairProgressFlag, "progress", false, "force progress to stderr")
 	f.BoolVar(&repairNoProgressFlag, "no-progress", false, "force progress off")
-	f.StringVar(&repairColor, "color", "auto", "color output: always|auto|never")
+	f.Var(&repairColor, "color", "color output: always|auto|never (bare --color: always)")
+	f.Lookup("color").NoOptDefVal = string(output.ColorAlways)
 	f.BoolVar(&repairBaseFlag, "base", false, "infer and record HubBranch.Base for legacy entries (best-effort heuristic; use --dry-run to preview)")
 	// Local --dry-run shadows the global persistent flag, so repair handles
 	// its own preview. The runRepair logic reads

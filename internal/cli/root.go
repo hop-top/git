@@ -687,7 +687,23 @@ func setupOutputMode(cmd *cobra.Command) {
 	output.SetViper(Root.Viper)
 	output.SetupLogger(req.mode(format), verboseEnabled())
 	output.SetQuiet(req.quiet)
-	output.SetupColor(Root.Viper.GetBool("no-color"))
+	output.SetupColor(colorWhen(cmd, Root.Viper.GetBool("no-color")))
+}
+
+// colorWhen is the colour setting for a run of cmd: never under the
+// global --no-color, else the command's own --color=<when> when given,
+// else auto. --color is a per-command flag (repair) rather than a global
+// one, so a command without it runs on auto.
+func colorWhen(cmd *cobra.Command, noColor bool) output.ColorWhen {
+	if noColor {
+		return output.ColorNever
+	}
+	if f := cmd.Flags().Lookup("color"); f != nil && f.Changed {
+		if w, ok := f.Value.(*output.ColorWhen); ok {
+			return *w
+		}
+	}
+	return output.ColorAuto
 }
 
 // outputRequest is what a command line asked of the output layer. The
