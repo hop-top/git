@@ -306,7 +306,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 				hookInstallPath = mainWorktreePath
 			}
 			fmt.Printf("\nHooks directory created: %s/.git-hop/hooks/\n", hookInstallPath)
-			printInitHooksHint()
+			printInitHooksHint(repoPath, hookInstallPath != repoPath)
 		}
 	}
 
@@ -408,7 +408,7 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 			output.Warn("failed to install hooks directory: %v", err)
 		} else {
 			fmt.Printf("\nHooks directory created: %s/.git-hop/hooks/\n", repoPath)
-			printInitHooksHint()
+			printInitHooksHint(repoPath, false)
 		}
 	}
 

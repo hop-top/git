@@ -1,0 +1,34 @@
+# A bare conversion creates .git-hop/hooks/ inside hops/<branch>/. Repair
+# anchors its hook lookup on the hub, so init must not offer repair hooks
+# there; it names the hub's hooks dir instead, and a repair hook placed
+# where the hint says actually runs.
+
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --hooks none
+stdout '^Hooks directory created: .*/proj/hops/main/\.git-hop/hooks/$'
+stderr '^hint:   post-worktree-add, pre-worktree-remove, pre/post-worktree-move,$'
+stderr '^hint: place them in .*/proj/\.git-hop/hooks/ instead:$'
+stderr '^hint:   pre-worktree-add, post-worktree-remove, pre/post-repair$'
+
+# --- the worktree dir is not searched; the advertised hub dir is ---
+mkdir $WORK/proj/.git-hop/hooks
+cp $WORK/pre-repair-hub $WORK/proj/.git-hop/hooks/pre-repair
+chmod 755 $WORK/proj/.git-hop/hooks/pre-repair
+cp $WORK/pre-repair-worktree $WORK/proj/hops/main/.git-hop/hooks/pre-repair
+chmod 755 $WORK/proj/hops/main/.git-hop/hooks/pre-repair
+
+# the converted hub's origin lacks a fetch refspec, which gives repair
+# something to fix, so pre-repair runs
+exec git-hop repair
+stdout 'restore-fetch-refspec'
+exists $WORK/fired-hub
+! exists $WORK/fired-worktree
+
+-- pre-repair-hub --
+#!/bin/sh
+touch "$WORK/fired-hub"
+-- pre-repair-worktree --
+#!/bin/sh
+touch "$WORK/fired-worktree"

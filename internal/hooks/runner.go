@@ -74,6 +74,51 @@ func RepoLevelHookNames() []string {
 	return names
 }
 
+// notWorktreeAnchored are the repo-level hooks whose dispatcher never
+// starts the lookup at an existing worktree, so a script in a worktree's
+// own .git-hop/hooks/ is never found for them:
+//
+//   - pre-worktree-add runs before the worktree exists; only the parent
+//     walk from the would-be path is searched.
+//   - post-worktree-remove runs after the worktree, and any hooks dir in
+//     it, is gone; again only the parent walk remains.
+//   - pre-repair / post-repair anchor on the hub (cmd/repair.go).
+//
+// All of them still resolve from the hub's .git-hop/hooks/: repair looks
+// there directly, and the parent walk from a worktree under the hub
+// reaches it.
+var notWorktreeAnchored = map[string]bool{
+	"pre-worktree-add":     true,
+	"post-worktree-remove": true,
+	"pre-repair":           true,
+	"post-repair":          true,
+}
+
+// WorktreeLevelHookNames returns, in ValidHookNames order, the repo-level
+// hooks a script in a worktree's own .git-hop/hooks/ can implement.
+func WorktreeLevelHookNames() []string {
+	var names []string
+	for _, name := range RepoLevelHookNames() {
+		if !notWorktreeAnchored[name] {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// HubOnlyHookNames returns, in ValidHookNames order, the repo-level hooks
+// that resolve from the hub's .git-hop/hooks/ but never from a worktree's
+// own; see notWorktreeAnchored.
+func HubOnlyHookNames() []string {
+	var names []string
+	for _, name := range RepoLevelHookNames() {
+		if notWorktreeAnchored[name] {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
 // ValidateHookName validates that a hook name is valid
 func ValidateHookName(hookName string) error {
 	if hookName == "" {
