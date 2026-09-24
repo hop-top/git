@@ -3,13 +3,13 @@ package hop
 import (
 	"encoding/json"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
 )
@@ -299,42 +299,21 @@ func (b *BackupManager) getGitStatus(path string) string {
 	return "dirty"
 }
 
+// detectStructure labels the backed-up repository's layout for the
+// backup metadata, using the same classification as init.
 func (b *BackupManager) detectStructure(path string) string {
-	gitDir := filepath.Join(path, ".git")
-	worktreesDir := filepath.Join(gitDir, "worktrees")
-
-	_, err := b.fs.Stat(worktreesDir)
-	if err == nil {
-		if b.isWorktree(path) {
-			return "worktree-child"
-		}
-		return "bare-worktree-root"
-	}
-
-	_, err = b.fs.Stat(gitDir)
-	if err == nil {
+	switch DetectRepoStructure(b.fs, b.git, path) {
+	case config.StandardRepo:
 		return "standard"
+	case config.BareWorktreeRoot:
+		return "bare-worktree-root"
+	case config.WorktreeRoot:
+		return "worktree-root"
+	case config.WorktreeChild:
+		return "worktree-child"
+	default:
+		return "unknown"
 	}
-
-	return "unknown"
-}
-
-func (b *BackupManager) isWorktree(path string) bool {
-	gitFile := filepath.Join(path, ".git")
-	info, err := b.fs.Stat(gitFile)
-	if err != nil {
-		return false
-	}
-
-	if info.Mode()&fs.ModeSymlink == 0 {
-		content, err := afero.ReadFile(b.fs, gitFile)
-		if err != nil {
-			return false
-		}
-		return strings.Contains(string(content), "gitdir:")
-	}
-
-	return true
 }
 
 func sanitizePath(path string) string {

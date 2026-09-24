@@ -70,7 +70,7 @@ See docs/hooks.md for details.`,
 			os.Exit(1)
 		}
 
-		structure := hop.DetectRepoStructure(fs, cwd)
+		structure := hop.DetectRepoStructure(fs, g, cwd)
 		if structure == config.NotGit {
 			output.Error("Not in a git repository")
 			os.Exit(1)
@@ -488,7 +488,7 @@ func handleAlreadyInitialized(fs afero.Fs, g git.GitInterface, path string, stru
 // initialized" and yet downstream commands (status, list, add) treat
 // the directory as an un-registered hub. See cmd/init_backfill.go.
 func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path string, structure config.StructureType, noHooks, enableChdir bool) {
-	if hubPath, ok := resolveBackfillRoot(fs, path, structure); ok {
+	if hubPath, ok := resolveBackfillRoot(g, path, structure); ok {
 		if created, err := backfillHubConfigIfMissing(fs, g, hubPath); err != nil {
 			output.Warn("failed to back-fill hop.json at %s: %v", hubPath, err)
 		} else if created {

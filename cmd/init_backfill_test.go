@@ -2,12 +2,15 @@ package cmd
 
 import (
 	"errors"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
 	"hop.top/git/test/mocks"
 )
 
@@ -240,71 +243,73 @@ func TestBackfillHubConfigIfMissing(t *testing.T) {
 
 // resolveBackfillRoot picks the path to back-fill given the cwd and the
 // repo structure detected there. BareWorktreeRoot/WorktreeRoot → cwd;
-// WorktreeChild → derived from the worktree's .git gitdir pointer
-// (handling both bare-hub "<hub>/worktrees/<n>" and regular-hub
-// "<hub>/.git/worktrees/<n>" shapes). Anything else → ("", false).
+// WorktreeChild → the repository the worktree belongs to, as git reports
+// its common dir (both the bare-hub "<hub>/worktrees/<n>" and the
+// regular-hub "<hub>/.git/worktrees/<n>" shapes). Anything else →
+// ("", false).
 func TestResolveBackfillRoot(t *testing.T) {
+	g := git.New()
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	run := func(t *testing.T, args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	seed := filepath.Join(dir, "seed")
+	run(t, "init", "-q", "-b", "main", seed)
+	run(t, "-C", seed, "commit", "-q", "--allow-empty", "-m", "init")
+
 	t.Run("BareWorktreeRoot returns cwd", func(t *testing.T) {
-		fs := afero.NewMemMapFs()
-		got, ok := resolveBackfillRoot(fs, "/repo", config.BareWorktreeRoot)
+		got, ok := resolveBackfillRoot(g, "/repo", config.BareWorktreeRoot)
 		if !ok || got != "/repo" {
 			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
 		}
 	})
 	t.Run("WorktreeChild of a bare hub: gitdir is <hub>/worktrees/<name>", func(t *testing.T) {
-		// Bare-hub shape: git hop's own layout. gitdir has no ".git".
-		fs := afero.NewMemMapFs()
-		hopsMain := "/repo/hops/main"
-		if err := afero.WriteFile(fs, filepath.Join(hopsMain, ".git"),
-			[]byte("gitdir: /repo/worktrees/main\n"), 0644); err != nil {
-			t.Fatal(err)
-		}
-		got, ok := resolveBackfillRoot(fs, hopsMain, config.WorktreeChild)
-		if !ok || got != "/repo" {
-			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
+		hub := filepath.Join(dir, "hub")
+		run(t, "clone", "-q", "--bare", seed, hub)
+		run(t, "-C", hub, "worktree", "add", "-q", "hops/main", "main")
+		got, ok := resolveBackfillRoot(g, filepath.Join(hub, "hops", "main"), config.WorktreeChild)
+		if !ok || got != hub {
+			t.Errorf("got (%q, %v), want (%s, true)", got, ok, hub)
 		}
 	})
 	t.Run("WorktreeChild of a regular hub: gitdir is <hub>/.git/worktrees/<name>", func(t *testing.T) {
-		// Regular-hub shape: `git worktree add` from a non-bare repo
-		// places the per-worktree gitdir under <hub>/.git/worktrees/.
-		// hubFromWorktreeChild must strip the ".git" segment so the
-		// returned root is the hub itself, not <hub>/.git.
-		fs := afero.NewMemMapFs()
-		wt := "/repo/wt-feature"
-		if err := afero.WriteFile(fs, filepath.Join(wt, ".git"),
-			[]byte("gitdir: /repo/.git/worktrees/feature\n"), 0644); err != nil {
-			t.Fatal(err)
-		}
-		got, ok := resolveBackfillRoot(fs, wt, config.WorktreeChild)
-		if !ok || got != "/repo" {
-			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
+		// The returned root is the hub itself, not <hub>/.git.
+		hub := filepath.Join(dir, "reg")
+		run(t, "clone", "-q", seed, hub)
+		wt := filepath.Join(dir, "reg-feature")
+		run(t, "-C", hub, "worktree", "add", "-q", "-b", "feature", wt)
+		got, ok := resolveBackfillRoot(g, wt, config.WorktreeChild)
+		if !ok || got != hub {
+			t.Errorf("got (%q, %v), want (%s, true)", got, ok, hub)
 		}
 	})
-	t.Run("WorktreeChild with malformed gitdir returns false", func(t *testing.T) {
-		// gitdir parent isn't "worktrees" — pointer doesn't refer to a
-		// worktree, so we can't infer a hub.
-		fs := afero.NewMemMapFs()
-		wt := "/repo/wt"
-		if err := afero.WriteFile(fs, filepath.Join(wt, ".git"),
-			[]byte("gitdir: /some/random/dir/main\n"), 0644); err != nil {
+	t.Run("WorktreeChild with a gitdir git does not accept returns false", func(t *testing.T) {
+		wt := filepath.Join(dir, "wt")
+		if err := os.MkdirAll(wt, 0o755); err != nil {
 			t.Fatal(err)
 		}
-		_, ok := resolveBackfillRoot(fs, wt, config.WorktreeChild)
-		if ok {
-			t.Errorf("got ok=true for malformed gitdir; want false")
+		if err := os.WriteFile(filepath.Join(wt, ".git"),
+			[]byte("gitdir: /some/random/dir/main\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := resolveBackfillRoot(g, wt, config.WorktreeChild); ok {
+			t.Errorf("got ok=true for a dangling gitdir; want false")
 		}
 	})
-	t.Run("WorktreeRoot returns cwd (regular non-bare with worktrees)", func(t *testing.T) {
-		fs := afero.NewMemMapFs()
-		got, ok := resolveBackfillRoot(fs, "/repo", config.WorktreeRoot)
+	t.Run("WorktreeRoot returns cwd (regular non-bare hub)", func(t *testing.T) {
+		got, ok := resolveBackfillRoot(g, "/repo", config.WorktreeRoot)
 		if !ok || got != "/repo" {
 			t.Errorf("got (%q, %v), want (/repo, true)", got, ok)
 		}
 	})
 	t.Run("StandardRepo declines — not our case", func(t *testing.T) {
-		fs := afero.NewMemMapFs()
-		_, ok := resolveBackfillRoot(fs, "/repo", config.StandardRepo)
-		if ok {
+		if _, ok := resolveBackfillRoot(g, "/repo", config.StandardRepo); ok {
 			t.Errorf("got ok=true for StandardRepo; want false")
 		}
 	})

@@ -1009,6 +1009,17 @@ Convert an existing repository to the hub + worktrees layout.
 git hop init [--no-prompt] [--regular] [-n|--dry-run] [--force] [--keep-backup]
 ```
 
+Run in a hub (a bare repository, a regular repository with `hop.json`,
+or one of their worktrees), `init` reports it as already initialized and
+changes nothing. Any other repository is offered a conversion, including
+a regular one with linked worktrees from `git worktree add`: git does
+not consider it bare, so it is not a hub yet.
+
+A bare conversion refuses a repository that has linked worktrees: their
+admin directories live in the `.git` directory the conversion replaces,
+so they would be disconnected. Remove them with `git worktree remove`
+first, or convert with `--regular`, which keeps `.git` in place.
+
 ### What carries over
 
 A regular conversion (`--regular`) keeps `.git` where it is, so its local

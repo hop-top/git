@@ -70,8 +70,9 @@ var gitDirLeftBehind = map[string]string{
 	"gitk.cache":            "cache",
 	"fsmonitor--daemon":     "runtime state of the fsmonitor daemon",
 	"fsmonitor--daemon.ipc": "runtime state of the fsmonitor daemon",
-	"worktrees": "never present: DetectRepoStructure does not report a " +
-		"repository with linked worktrees as standard, so it is not converted",
+	"worktrees": "admin dirs of linked worktrees: a bare conversion refuses " +
+		"a repository with live ones (refuseLinkedWorktrees), so only " +
+		"prunable entries are left",
 }
 
 // Left-behind name prefixes, for entries whose names carry a suffix.

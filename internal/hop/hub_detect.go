@@ -41,6 +41,28 @@ func probeRepo(g git.GitInterface, dir string) (repoProbe, bool) {
 	}, true
 }
 
+// linked reports whether the probed directory is a linked worktree: its
+// git dir is a per-worktree admin dir, not the repository's common dir.
+func (p repoProbe) linked() bool {
+	return !samePath(p.gitDir, p.commonDir)
+}
+
+// RepoRootOfWorktree returns the root of the repository the linked
+// worktree at dir belongs to, from git's common dir: the common dir itself
+// for a bare hub, the directory holding it when it is a .git directory.
+// ok is false when git does not report dir as a linked worktree.
+func RepoRootOfWorktree(g git.GitInterface, dir string) (string, bool) {
+	p, ok := probeRepo(g, dir)
+	if !ok || !p.linked() {
+		return "", false
+	}
+	root := filepath.Clean(p.commonDir)
+	if filepath.Base(root) == ".git" {
+		root = filepath.Dir(root)
+	}
+	return root, true
+}
+
 // isBareRepoRoot reports whether dir is itself the git dir of a bare
 // repository. The structural check runs first and spawns nothing, so a
 // caller walking up a tree only asks git about directories that look
