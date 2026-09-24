@@ -244,8 +244,7 @@ To skip this check entirely (DANGEROUS - uncommitted work may be lost):
 				mainWorktreePath = repoPath
 				isRegularRepo = true
 			} else {
-				// Bare repo - path is full path to worktree
-				mainWorktreePath = filepath.Join(repoPath, branch.Path)
+				mainWorktreePath = config.ResolveWorktreePath(branch.Path, repoPath)
 				isRegularRepo = false
 			}
 			break

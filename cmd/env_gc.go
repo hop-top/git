@@ -76,10 +76,7 @@ silently cancelling.`,
 
 		// Collect all worktree paths
 		output.Info("Scanning worktrees...")
-		worktrees := make(map[string]string, len(hub.Config.Branches))
-		for branchName, branch := range hub.Config.Branches {
-			worktrees[branchName] = filepath.Join(hubPath, branch.Path)
-		}
+		worktrees := hub.WorktreePaths()
 
 		output.Info("  ✓ Found %d worktree(s)", len(worktrees))
 

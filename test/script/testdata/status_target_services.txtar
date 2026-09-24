@@ -1,0 +1,37 @@
+# status <branch> looks for services in the branch's worktree.
+#
+# The regression this pins: `git hop add` records worktree paths in hop.json
+# as absolute paths, and status <branch> joined them onto the hub path, so it
+# looked for docker-compose.yml under <hub>/<hub>/hops/<branch>, never found
+# it, and reported "No services defined" for a worktree that defines some.
+#
+# A stub docker on PATH stands in for compose and reports the directory it
+# ran in, so the script needs no real docker.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/x
+grep '"path": "/' $WORK/hub/hop.json
+
+cp $WORK/compose.yml $WORK/hub/hops/feat/x/docker-compose.yml
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git-hop status feat/x
+stdout '^compose-ps-in .*/hops/feat/x$'
+! stderr 'No services defined'
+! stdout 'No services defined'
+
+-- compose.yml --
+services: {}
+-- docker-stub --
+#!/bin/sh
+echo "compose-ps-in $PWD"

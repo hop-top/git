@@ -214,10 +214,7 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		return
 	}
 
-	worktrees := make(map[string]string, len(hub.Config.Branches))
-	for branchName, branch := range hub.Config.Branches {
-		worktrees[branchName] = config.ResolveWorktreePath(branch.Path, hubPath)
-	}
+	worktrees := hub.WorktreePaths()
 
 	issues, err := depsManager.Audit(worktrees)
 	if err != nil {
