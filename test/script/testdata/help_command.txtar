@@ -34,6 +34,7 @@ cmp stdout root-flag.txt
 exec sh -c 'git-hop help bogus; echo "exit=$?"'
 stdout 'exit=129'
 stderr '^error: unknown help topic "bogus" for "git-hop"$'
+stderr '^usage: git hop help \[<command>\.\.\.\]$'
 ! stdout 'Usage:'
 
 exec sh -c 'git-hop help env bogus; echo "exit=$?"'

@@ -168,6 +168,10 @@ Structured output rules:
   or column: exit 129 before anything changes.
 - `repair --list-backups` / `--undo` in a structured mode: exit 129.
 - Structured `env gc` without `--no-prompt`: exit 129 (cannot confirm).
+- Usage error (unknown flag, wrong operand count, unknown subcommand):
+  exit 129 and an `error:` line on stderr. A human run also gets the
+  command's `usage:` block after it; with `--json`, `--porcelain` or a
+  structured `--format` the `error:` line is all of stderr.
 - Full field reference: `docs/09-reference.mdx#structured-output`.
 
 ---

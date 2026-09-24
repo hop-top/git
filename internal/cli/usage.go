@@ -12,7 +12,13 @@ import (
 // UsageError is a command line the CLI refused before any command logic
 // ran: an unknown or malformed flag, a wrong number of positional
 // arguments, or an unknown subcommand. Git reports these with status 129.
-type UsageError struct{ Err error }
+//
+// Cmd is the command the invocation reached, whose usage Execute prints
+// after the error line.
+type UsageError struct {
+	Err error
+	Cmd *cobra.Command
+}
 
 func (e *UsageError) Error() string { return e.Err.Error() }
 func (e *UsageError) Unwrap() error { return e.Err }
@@ -66,7 +72,7 @@ func asUsageError(c *cobra.Command, err error) error {
 		return err
 	}
 	c.SilenceErrors = true
-	return &UsageError{Err: err}
+	return &UsageError{Err: err, Cmd: c}
 }
 
 // checkUnknownSubcommand refuses a word that names no subcommand of a
@@ -86,14 +92,25 @@ func checkUnknownSubcommand(root *cobra.Command, args []string) error {
 		// A malformed flag, including a help request, is left to cobra.
 		return nil
 	}
-	return &UsageError{Err: fmt.Errorf("unknown command %q for %q", words[0], target.CommandPath())}
+	return &UsageError{Err: fmt.Errorf("unknown command %q for %q", words[0], target.CommandPath()), Cmd: target}
 }
 
 // positionalWords returns the non-flag words of args as cobra would
-// parse them for cmd. It parses against placeholder values so the real
-// flags are untouched for the parse cobra does next. The help flag is
-// left undefined, so a help request surfaces as pflag.ErrHelp.
+// parse them for cmd. The help flag is left undefined in the probe, so a
+// help request surfaces as pflag.ErrHelp.
 func positionalWords(cmd *cobra.Command, args []string) ([]string, error) {
+	probe := probeFlagSet(cmd)
+	if err := probe.Parse(args); err != nil {
+		return nil, err
+	}
+	return probe.Args(), nil
+}
+
+// probeFlagSet mirrors cmd's local and inherited flags onto placeholder
+// values, so args can be parsed, and the values given read back, without
+// touching the real flags cobra parses. Unknown flags are skipped and
+// any value is accepted.
+func probeFlagSet(cmd *cobra.Command) *pflag.FlagSet {
 	probe := pflag.NewFlagSet(cmd.Name(), pflag.ContinueOnError)
 	probe.SetOutput(io.Discard)
 	probe.ParseErrorsAllowlist.UnknownFlags = true
@@ -108,24 +125,21 @@ func positionalWords(cmd *cobra.Command, args []string) ([]string, error) {
 		probe.AddFlag(&pflag.Flag{
 			Name:        f.Name,
 			Shorthand:   shorthand,
-			Value:       placeholder{typ: f.Value.Type()},
+			Value:       &placeholder{typ: f.Value.Type()},
 			NoOptDefVal: f.NoOptDefVal,
 		})
 	}
 	cmd.LocalFlags().VisitAll(add)
 	cmd.InheritedFlags().VisitAll(add)
-	if err := probe.Parse(args); err != nil {
-		return nil, err
-	}
-	return probe.Args(), nil
+	return probe
 }
 
-// placeholder accepts any flag value and stores nothing.
-type placeholder struct{ typ string }
+// placeholder accepts any flag value and keeps the last one given.
+type placeholder struct{ typ, val string }
 
-func (p placeholder) String() string   { return "" }
-func (p placeholder) Set(string) error { return nil }
-func (p placeholder) Type() string     { return p.typ }
+func (p *placeholder) String() string       { return p.val }
+func (p *placeholder) Set(val string) error { p.val = val; return nil }
+func (p *placeholder) Type() string         { return p.typ }
 
 func walkCommands(c *cobra.Command, fn func(*cobra.Command)) {
 	fn(c)

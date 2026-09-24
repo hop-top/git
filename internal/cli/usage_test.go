@@ -86,3 +86,110 @@ func TestInstallUsageErrors_ClassifiesCobraValidation(t *testing.T) {
 		}
 	}
 }
+
+// synopsisTree is root -> {show [<name>] with -a/--all, plain, grp ->
+// {one, two, hidden}}.
+func synopsisTree() (root, show, plain, grp *cobra.Command) {
+	run := func(*cobra.Command, []string) {}
+	root = &cobra.Command{Use: "git-hop", Args: cobra.ArbitraryArgs, Run: run}
+	root.PersistentFlags().String("config", "", "config file")
+	root.Flags().String("branch", "", "branch name")
+	show = &cobra.Command{Use: "show [<name>]", Run: run}
+	show.Flags().BoolP("all", "a", false, "show all")
+	plain = &cobra.Command{Use: "plain", Run: run}
+	grp = &cobra.Command{Use: "grp"}
+	one := &cobra.Command{Use: "one <x>", Run: run}
+	one.Flags().Bool("force", false, "force it")
+	grp.AddCommand(one, &cobra.Command{Use: "two", Run: run},
+		&cobra.Command{Use: "hidden", Hidden: true, Run: run})
+	root.AddCommand(show, plain, grp)
+	for _, c := range []*cobra.Command{root, show, plain, grp} {
+		c.InitDefaultHelpFlag()
+	}
+	return root, show, plain, grp
+}
+
+func TestUsageBlock(t *testing.T) {
+	root, show, plain, grp := synopsisTree()
+	cases := []struct {
+		name string
+		cmd  *cobra.Command
+		want string
+	}{
+		{"leaf with options", show,
+			"usage: git hop show [<options>] [<name>]\n\n" +
+				"    -a, --all   show all\n\n"},
+		{"leaf without options", plain,
+			"usage: git hop plain\n\n"},
+		{"group lists its visible commands", grp,
+			"usage: git hop grp one [<options>] <x>\n" +
+				"   or: git hop grp two\n\n"},
+		{"root", root,
+			"usage: git hop [<options>] <command> [<args>]\n" +
+				"   or: git hop [<options>] <branch>\n" +
+				"   or: git hop [<options>] <uri> [<path>]\n\n" +
+				"        --branch string   branch name\n" +
+				"        --config string   config file\n\n"},
+	}
+	for _, tc := range cases {
+		if got := usageBlock(tc.cmd); got != tc.want {
+			t.Errorf("%s:\n--- got ---\n%s--- want ---\n%s", tc.name, got, tc.want)
+		}
+	}
+}
+
+func TestStructuredOutputRequested(t *testing.T) {
+	root, show, _, _ := synopsisTree()
+	root.PersistentFlags().Bool("json", false, "")
+	root.PersistentFlags().Bool("porcelain", false, "")
+	root.PersistentFlags().String("format", "table", "")
+	cases := []struct {
+		args []string
+		want bool
+	}{
+		{[]string{"show", "--json", "--bogus"}, true},
+		{[]string{"show", "--bogus", "--json"}, true},
+		{[]string{"show", "--porcelain", "a", "b"}, true},
+		{[]string{"show", "--format=json"}, true},
+		{[]string{"show", "--format", "yaml", "-Z"}, true},
+		{[]string{"show", "--format=table"}, false},
+		{[]string{"show", "--format=human"}, false},
+		{[]string{"show", "--json=false"}, false},
+		{[]string{"show", "--bogus"}, false},
+		{[]string{"show", "--", "--json"}, false},
+	}
+	for _, tc := range cases {
+		if got := structuredOutputRequested(show, tc.args); got != tc.want {
+			t.Errorf("%v: structured = %v, want %v", tc.args, got, tc.want)
+		}
+	}
+}
+
+func TestUsageErrorCarriesCommand(t *testing.T) {
+	root, show, plain, grp := synopsisTree()
+	plain.Args = cobra.NoArgs
+	root.SetOut(io.Discard)
+	root.SetErr(io.Discard)
+	installUsageErrors(root)
+	cases := []struct {
+		args []string
+		want *cobra.Command
+	}{
+		{[]string{"show", "--bogus"}, show},
+		{[]string{"plain", "extra"}, plain},
+		{[]string{"--bogus"}, root},
+	}
+	for _, tc := range cases {
+		root.SetArgs(tc.args)
+		err := root.Execute()
+		var ue *UsageError
+		if !errors.As(err, &ue) || ue.Cmd != tc.want {
+			t.Errorf("%v: UsageError.Cmd = %v (err %v), want %s", tc.args, ue, err, tc.want.Name())
+		}
+	}
+	err := checkUnknownSubcommand(root, []string{"grp", "bogus"})
+	var ue *UsageError
+	if !errors.As(err, &ue) || ue.Cmd != grp {
+		t.Errorf("grp bogus: UsageError = %v, want Cmd grp", err)
+	}
+}
