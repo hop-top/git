@@ -55,6 +55,21 @@ exec sh -c 'git-hop remove a b; echo "exit=$?"'
 stdout 'exit=129'
 stderr '^error: accepts at most 1 arg\(s\), received 2$'
 
+# remove takes a target or --merged: neither, or both, is a usage error.
+exec sh -c 'git-hop remove; echo "exit=$?"'
+stdout 'exit=129'
+stderr '\Aerror: requires a target, or --merged\nusage: git hop remove \[<options>\] \[target\]\n\n'
+stderr '^        --merged '
+! stderr 'fatal:'
+
+exec sh -c 'git-hop remove main --merged; echo "exit=$?"'
+stdout 'exit=129'
+stderr '\Aerror: cannot pass both a target and --merged\nusage: git hop remove '
+
+exec sh -c 'git-hop remove --json; echo "exit=$?"'
+stdout 'exit=129'
+stderr '\A\{"level":"error","msg":"requires a target, or --merged"\}\n\z'
+
 exec sh -c 'git-hop move; echo "exit=$?"'
 stdout 'exit=129'
 stderr '^error: accepts between 1 and 2 arg\(s\), received 0$'

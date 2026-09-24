@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -19,6 +20,22 @@ import (
 	"hop.top/git/internal/state"
 	"hop.top/kit/go/runtime/bus"
 )
+
+// removeArgs accepts one target, or none when --merged picks them. A
+// missing target, or a target beside --merged, is a usage error.
+func removeArgs(cmd *cobra.Command, args []string) error {
+	if err := cobra.MaximumNArgs(1)(cmd, args); err != nil {
+		return err
+	}
+	merged, _ := cmd.Flags().GetBool("merged")
+	switch {
+	case merged && len(args) > 0:
+		return errors.New("cannot pass both a target and --merged")
+	case !merged && len(args) == 0:
+		return errors.New("requires a target, or --merged")
+	}
+	return nil
+}
 
 var removeCmd = &cobra.Command{
 	Use:     "remove [target]",
@@ -40,7 +57,7 @@ untracked files (merged or not) and unpushed commits. Neither implies
 the other: pushing protects commits, not the files in the worktree.
 --no-prompt only skips the confirmation prompt; it never satisfies the
 gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
-	Args: cobra.MaximumNArgs(1),
+	Args: removeArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		noPrompt, _ := cmd.Flags().GetBool("no-prompt")
 		noVerify, _ := cmd.Flags().GetBool("no-verify")
@@ -48,14 +65,6 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 		deleteRemote, _ := cmd.Flags().GetBool("delete-remote")
 		force, _ := cmd.Root().PersistentFlags().GetBool("force")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
-
-		// Validate flag/arg combinations.
-		if merged && len(args) > 0 {
-			output.Fatal("cannot pass both target and --merged")
-		}
-		if !merged && len(args) == 0 {
-			output.Fatal("usage: git hop remove <target> | --merged")
-		}
 
 		fs := afero.NewOsFs()
 		g := git.New()
