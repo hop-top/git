@@ -171,10 +171,8 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 
 Then run: git hop init
 
-To convert to a regular repo instead of a bare one:
-  git hop init --no-prompt --regular
-
-To skip this check entirely (DANGEROUS - uncommitted work may be lost):
+To convert anyway, carrying uncommitted files into the new worktree
+(staged-but-uncommitted state is not preserved):
   git hop init --force`)
 			os.Exit(1)
 		}
@@ -627,11 +625,11 @@ func promptInitChoice() (string, error) {
 // prints. Tests assert each one is actually declared, so a hint can
 // never send a user to a flag that does not exist.
 func initHintedFlags() []string {
-	return []string{"regular", "no-prompt", "force", "dry-run"}
+	return []string{"no-prompt", "force", "dry-run"}
 }
 
 func init() {
-	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Skip clean repo check and backup requirements (DANGEROUS)")
+	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Convert even with uncommitted changes (DANGEROUS; a backup is still taken)")
 	initCmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "n", false, "Show conversion steps without executing")
 	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion")
 	initCmd.Flags().BoolVar(&regularFlag, "regular", false, "Convert to a regular repo + worktrees instead of bare (with --no-prompt)")

@@ -12,6 +12,7 @@ git hop init --enable-chdir           # also install shell wrapper for auto-cd
 git hop init --no-hooks               # no .git-hop/hooks/ directory, no hook runs
 git hop init --no-prompt              # non-interactive: take the recommended (bare) layout
 git hop init --no-prompt --regular    # non-interactive: regular repo + worktrees
+git hop init --force                  # convert despite uncommitted changes (backup still taken)
 ```
 
 `init` asks which structure you want (`1/2/3/q`). In a script, CI job, or
