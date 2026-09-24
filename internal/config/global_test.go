@@ -42,9 +42,9 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	// gitconfig.go defaults: gitDomain=github.com, autoEnvStart=false
-	if cfg.Defaults.AutoEnvStart != false {
-		t.Errorf("AutoEnvStart = %v, want false", cfg.Defaults.AutoEnvStart)
+	// gitconfig.go defaults: gitDomain=github.com, env.autoStart=false
+	if cfg.Defaults.EnvAutoStart != false {
+		t.Errorf("EnvAutoStart = %v, want false", cfg.Defaults.EnvAutoStart)
 	}
 	if cfg.Defaults.GitDomain != "github.com" {
 		t.Errorf("GitDomain = %q, want %q", cfg.Defaults.GitDomain, "github.com")
@@ -61,7 +61,7 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	store := map[string]string{
 		"hop.gitDomain":               "gitlab.com",
-		"hop.autoEnvStart":            "false",
+		"hop.env.autoStart":           "true",
 		"hop.worktreeLocation":        "/custom/{branch}",
 		"hop.backup.maxBackups":       "10",
 		"hop.shellIntegration.status": "approved",
@@ -78,8 +78,8 @@ func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	if cfg.Defaults.GitDomain != "gitlab.com" {
 		t.Errorf("GitDomain = %q, want %q", cfg.Defaults.GitDomain, "gitlab.com")
 	}
-	if cfg.Defaults.AutoEnvStart != false {
-		t.Errorf("AutoEnvStart = %v, want false", cfg.Defaults.AutoEnvStart)
+	if cfg.Defaults.EnvAutoStart != true {
+		t.Errorf("EnvAutoStart = %v, want true", cfg.Defaults.EnvAutoStart)
 	}
 	if cfg.Defaults.WorktreeLocation != "/custom/{branch}" {
 		t.Errorf("WorktreeLocation = %q, want %q",
@@ -105,7 +105,7 @@ func TestWriteAndReadRoundTrip(t *testing.T) {
 
 	original := &config.GlobalConfig{
 		Defaults: config.DefaultSettings{
-			AutoEnvStart:     false,
+			EnvAutoStart:     false,
 			GitDomain:        "bitbucket.org",
 			WorktreeLocation: "/my/path/{branch}",
 		},
@@ -164,7 +164,7 @@ func TestMigration_JSONToGitConfig(t *testing.T) {
 
 	legacy := config.GlobalConfig{
 		Defaults: config.DefaultSettings{
-			AutoEnvStart: false,
+			EnvAutoStart: false,
 			GitDomain:    "gitlab.com",
 		},
 		ShellIntegration: config.ShellIntegrationSettings{

@@ -33,7 +33,7 @@ Flags:
       --branch string       branch name for fork-attach mode
       --config string       config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
   -n, --dry-run             preview changes without applying
-      --env-start           start the new worktree's environment (default: hop.autoEnvStart)
+      --env-start           start the new worktree's environment (default: hop.env.autoStart)
       --force               bypass safety checks
       --format string       Output format (csv, human, json, table, text, yaml) (default "table")
       --git-domain string   Git domain for shorthand notation (e.g., github.com, gitlab.com)

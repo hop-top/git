@@ -75,8 +75,7 @@ func TestMigration_WritesOnlyKeysPresentInLegacyFile(t *testing.T) {
 // choice and must survive migration.
 func TestMigration_KeepsExplicitZeroValues(t *testing.T) {
 	writeLegacyGlobalJSON(t, `{
-		"defaults": {"autoEnvStart": false},
-		"backup": {"maxBackups": 0}
+		"backup": {"keepBackup": false, "maxBackups": 0}
 	}`)
 
 	store := map[string]string{}
@@ -87,7 +86,7 @@ func TestMigration_KeepsExplicitZeroValues(t *testing.T) {
 	}
 
 	for key, want := range map[string]string{
-		"hop.autoEnvStart":      "false",
+		"hop.backup.keepBackup": "false",
 		"hop.backup.maxBackups": "0",
 		"hop.migrated":          "true",
 	} {
@@ -98,7 +97,7 @@ func TestMigration_KeepsExplicitZeroValues(t *testing.T) {
 	if n := len(hopKeys(store)); n != 3 {
 		t.Errorf("git config holds %d hop.* keys, want 3: %v", n, hopKeys(store))
 	}
-	if cfg.Backup.MaxBackups != 0 || cfg.Defaults.AutoEnvStart {
+	if cfg.Backup.MaxBackups != 0 || cfg.Backup.KeepBackup {
 		t.Errorf("explicit zero values lost: %+v %+v", cfg.Backup, cfg.Defaults)
 	}
 }

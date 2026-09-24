@@ -102,7 +102,7 @@ func readFromGitConfig(gc *GitConfig) *GlobalConfig {
 
 	return &GlobalConfig{
 		Defaults: DefaultSettings{
-			AutoEnvStart:      gc.GetBoolOrDefault(KeyAutoEnvStart),
+			EnvAutoStart:      gc.GetBoolOrDefault(KeyEnvAutoStart),
 			GitDomain:         gc.GetStringOrDefault(KeyGitDomain),
 			WorktreeLocation:  gc.GetStringOrDefault(KeyWorktreeLocation),
 			DefaultStartPoint: gc.GetStringOrDefault(KeyAddDefaultStartPoint),
@@ -129,7 +129,6 @@ func (l *GlobalLoader) writeToGitConfig(cfg *GlobalConfig) error {
 		key string
 		val string
 	}{
-		{KeyAutoEnvStart, strconv.FormatBool(cfg.Defaults.AutoEnvStart)},
 		{KeyGitDomain, cfg.Defaults.GitDomain},
 		{KeyWorktreeLocation, cfg.Defaults.WorktreeLocation},
 		{KeyAddDefaultStartPoint, cfg.Defaults.DefaultStartPoint},

@@ -69,9 +69,24 @@ func TestHubConfig_LegacyAutoEnvStartSettingSurvives(t *testing.T) {
 	}
 }
 
-func TestDefaults_AutoEnvStartOff(t *testing.T) {
+func TestDefaults_EnvAutoStartOff(t *testing.T) {
 	gc := &GitConfig{RunCmd: func(...string) (string, error) { return "", ErrKeyNotFound }}
-	if gc.GetBoolOrDefault(KeyAutoEnvStart) {
-		t.Error("hop.autoEnvStart defaults to true, want false")
+	if gc.GetBoolOrDefault(KeyEnvAutoStart) {
+		t.Error("hop.env.autoStart defaults to true, want false")
+	}
+}
+
+// hop.autoEnvStart is retired, not renamed-and-aliased: earlier shell
+// integration installs pinned it to true in --global without the user
+// choosing it, so reading it would turn the start on for them.
+func TestRetiredAutoEnvStartIsNotRead(t *testing.T) {
+	gc := &GitConfig{RunCmd: func(args ...string) (string, error) {
+		if args[len(args)-1] == "hop.autoEnvStart" {
+			return "true", nil
+		}
+		return "", ErrKeyNotFound
+	}}
+	if readFromGitConfig(gc).Defaults.EnvAutoStart {
+		t.Error("EnvAutoStart = true from the retired hop.autoEnvStart, want false")
 	}
 }

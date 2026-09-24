@@ -30,6 +30,7 @@ var retiredKeys = map[string]bool{
 	keyConversionEnforceClean:    true,
 	keyConversionAllowDirtyForce: true,
 	keyConversionAutoRollback:    true,
+	keyRetiredAutoEnvStart:       true,
 }
 
 // legacyGlobalConfig mirrors the global.json schema with pointer scalars so
@@ -70,6 +71,12 @@ type legacyGlobalConfig struct {
 		AutoRollback    *bool `json:"autoRollback"`
 	} `json:"conversion"`
 }
+
+// keyRetiredAutoEnvStart is the git config key global.json's autoEnvStart
+// migrated to. Nothing reads it: whether add and clone start the
+// environment is hop.env.autoStart, a new key, so a copy pinned by the
+// migration or by shell integration cannot turn the start on.
+const keyRetiredAutoEnvStart = "hop.autoEnvStart"
 
 type configEntry struct {
 	key string
@@ -118,7 +125,7 @@ func (lc *legacyGlobalConfig) scalars() []legacyScalar {
 	}
 
 	d := &lc.Defaults
-	addBool(KeyAutoEnvStart, d.AutoEnvStart)
+	addBool(keyRetiredAutoEnvStart, d.AutoEnvStart)
 	addBool(keyShowAllManagedRepos, d.ShowAllManagedRepos)
 	addInt(keyUnusedThresholdDays, d.UnusedThresholdDays)
 	addBool(keyEnforceCleanForConversion, d.EnforceCleanForConversion)

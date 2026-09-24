@@ -76,16 +76,16 @@ func TestGetSetBool(t *testing.T) {
 	gc := &GitConfig{RunCmd: runCmd}
 
 	// Missing key → error
-	_, err := gc.GetBool(KeyAutoEnvStart)
+	_, err := gc.GetBool(KeyEnvAutoStart)
 	if err != ErrKeyNotFound {
 		t.Fatalf("expected ErrKeyNotFound, got %v", err)
 	}
 
 	// Set true, get true
-	if err := gc.Set(KeyAutoEnvStart, "true"); err != nil {
+	if err := gc.Set(KeyEnvAutoStart, "true"); err != nil {
 		t.Fatal(err)
 	}
-	v, err := gc.GetBool(KeyAutoEnvStart)
+	v, err := gc.GetBool(KeyEnvAutoStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -94,10 +94,10 @@ func TestGetSetBool(t *testing.T) {
 	}
 
 	// Set false, get false
-	if err := gc.Set(KeyAutoEnvStart, "false"); err != nil {
+	if err := gc.Set(KeyEnvAutoStart, "false"); err != nil {
 		t.Fatal(err)
 	}
-	v, err = gc.GetBool(KeyAutoEnvStart)
+	v, err = gc.GetBool(KeyEnvAutoStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,10 +162,10 @@ func TestSetLocal(t *testing.T) {
 
 	gc := &GitConfig{RunCmd: runCmd}
 
-	if err := gc.SetLocal(KeyAutoEnvStart, "true"); err != nil {
+	if err := gc.SetLocal(KeyEnvAutoStart, "true"); err != nil {
 		t.Fatal(err)
 	}
-	v, err := gc.GetBool(KeyAutoEnvStart)
+	v, err := gc.GetBool(KeyEnvAutoStart)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,8 +182,8 @@ func TestOrDefaultFallbacks(t *testing.T) {
 
 	// Bool default: a key whose default is true, so the fallback is
 	// distinguishable from the zero value.
-	if v := gc.GetBoolOrDefault(KeyConventionWarning); !v {
-		t.Fatal("expected default true for conventionWarning")
+	if v := gc.GetBoolOrDefault(KeyAddCopyIgnored); !v {
+		t.Fatal("expected default true for add.copyIgnored")
 	}
 
 	// String default
@@ -260,7 +260,7 @@ func TestGetBoolInvalidValue(t *testing.T) {
 			return "maybe", nil
 		},
 	}
-	_, err := gc.GetBool(KeyAutoEnvStart)
+	_, err := gc.GetBool(KeyEnvAutoStart)
 	if err == nil {
 		t.Fatal("expected error for invalid bool value")
 	}
@@ -272,10 +272,10 @@ func TestSetError(t *testing.T) {
 			return "", fmt.Errorf("git failed")
 		},
 	}
-	if err := gc.Set(KeyAutoEnvStart, "true"); err == nil {
+	if err := gc.Set(KeyEnvAutoStart, "true"); err == nil {
 		t.Fatal("expected error")
 	}
-	if err := gc.SetLocal(KeyAutoEnvStart, "true"); err == nil {
+	if err := gc.SetLocal(KeyEnvAutoStart, "true"); err == nil {
 		t.Fatal("expected error")
 	}
 }

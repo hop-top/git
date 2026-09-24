@@ -1,6 +1,6 @@
 # A clone starts the environment of the worktree it creates under the same
 # rule as add: --env-start / --no-env-start, else GIT_HOP_AUTO_ENV_START,
-# else hop.autoEnvStart (default false). A failed start warns and hints at
+# else hop.env.autoStart (default false). A failed start warns and hints at
 # env start; the clone itself still succeeds.
 #
 # A stub docker on PATH stands in for compose and logs each `up` with the
@@ -25,8 +25,14 @@ exec git-hop $WORK/org/repo.git hub-default
 exists $WORK/hub-default/hops/main/docker-compose.yml
 ! exists $WORK/up.log
 
-# --- hop.autoEnvStart=true: the cloned worktree's environment starts once ---
+# --- the retired hop.autoEnvStart is not read ---
 exec git config --global hop.autoEnvStart true
+exec git-hop $WORK/org/repo.git hub-retired
+! exists $WORK/up.log
+exec git config --global --unset hop.autoEnvStart
+
+# --- hop.env.autoStart=true: the cloned worktree's environment starts once ---
+exec git config --global hop.env.autoStart true
 exec git-hop $WORK/org/repo.git hub-auto
 grep -count=1 '^up ' $WORK/up.log
 grep '^up compose -p org-repo-main up -d in .*/hub-auto/hops/main on main$' $WORK/up.log
@@ -37,13 +43,13 @@ exec git-hop $WORK/org/repo.git hub-off --no-env-start
 exists $WORK/hub-off/hops/main
 grep -count=1 '^up ' $WORK/up.log
 
-# --- --env-start overrides hop.autoEnvStart=false ---
-exec git config --global hop.autoEnvStart false
+# --- --env-start overrides hop.env.autoStart=false ---
+exec git config --global hop.env.autoStart false
 exec git-hop $WORK/org/repo.git hub-on --env-start
 grep -count=2 '^up ' $WORK/up.log
 grep ' in .*/hub-on/hops/main on main$' $WORK/up.log
 
-# --- GIT_HOP_AUTO_ENV_START=true overrides hop.autoEnvStart=false ---
+# --- GIT_HOP_AUTO_ENV_START=true overrides hop.env.autoStart=false ---
 env GIT_HOP_AUTO_ENV_START=true
 exec git-hop $WORK/org/repo.git hub-env
 grep -count=3 '^up ' $WORK/up.log

@@ -112,8 +112,8 @@ Each hopspace can have its own `hop.json` for branch-specific settings:
 asked to. The standing choice is git config, not `hop.json`:
 
 ```bash
-git config --global hop.autoEnvStart true   # every repository
-git config hop.autoEnvStart true            # this repository only
+git config --global hop.env.autoStart true   # every repository
+git config hop.env.autoStart true            # this repository only
 ```
 
 | Setting | Behavior |
@@ -188,7 +188,7 @@ For projects with Docker services, start them on every add in this
 repository:
 
 ```bash
-git config hop.autoEnvStart true
+git config hop.env.autoStart true
 ```
 
 ### Team Config

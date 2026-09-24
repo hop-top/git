@@ -178,7 +178,7 @@ type EnvCommands struct {
 
 // DefaultSettings represents global default settings
 type DefaultSettings struct {
-	AutoEnvStart     bool   `json:"autoEnvStart"`
+	EnvAutoStart     bool   `json:"envAutoStart"`
 	GitDomain        string `json:"gitDomain"`
 	WorktreeLocation string `json:"worktreeLocation,omitempty"`
 	// DefaultStartPoint controls the start-point used by `git hop add` when

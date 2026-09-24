@@ -36,7 +36,7 @@ type addResult struct {
 	Created    bool           `json:"created" yaml:"created" table:"created" jsonschema:"description=True when this run created the local branch; false when an existing local branch was checked out"`
 	Ports      map[string]int `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service when the worktree has a Docker environment"`
 	Task       string         `json:"task,omitempty" yaml:"task,omitempty" jsonschema:"description=Task id recorded for the worktree with --task; absent when none"`
-	EnvStarted bool           `json:"env_started,omitempty" yaml:"env_started,omitempty" jsonschema:"description=True when add started the worktree's environment (--env-start or hop.autoEnvStart); absent otherwise"`
+	EnvStarted bool           `json:"env_started,omitempty" yaml:"env_started,omitempty" jsonschema:"description=True when add started the worktree's environment (--env-start or hop.env.autoStart); absent otherwise"`
 }
 
 // statusRecord is one worktree row of `git hop status`. Every status view
