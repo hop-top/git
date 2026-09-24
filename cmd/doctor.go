@@ -56,6 +56,8 @@ Checks:
 - Orphaned worktrees in state
 - --global hop.* keys the old global.json migration wrote but the user
   never set (--fix unsets them)
+- A --global hop.autoEnvStart: retired, never read, written by earlier
+  releases on their own; a warning (--fix unsets it)
 
 Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows
@@ -134,7 +136,7 @@ const (
 	doctorCheckWorktrees    = "worktrees"
 	doctorCheckState        = "state"
 	doctorCheckHopspace     = "hopspace" // stale data-home hopspace copies
-	doctorCheckConfig       = "config"   // global git config left by the legacy migration
+	doctorCheckConfig       = "config"   // global git config left by the legacy migration or old releases
 )
 
 // Kinds of doctor record; see doctorRecord.Kind.

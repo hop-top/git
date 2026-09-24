@@ -161,8 +161,9 @@ git config that still carry them load as before; the keys are ignored, and
 releases wrote it to `--global` (as `true`) when installing shell
 integration, so it cannot tell a choice from a leftover. It is no longer
 read; the setting that starts the environment on add and clone is
-`hop.env.autoStart`. Remove a leftover copy with
-`git config --global --unset hop.autoEnvStart`.
+`hop.env.autoStart`. `git hop doctor` warns about a `--global`
+`hop.autoEnvStart` whatever its value, and `git hop doctor --fix` unsets
+it (or run `git config --global --unset hop.autoEnvStart`).
 
 ### Package and Environment Managers
 
