@@ -773,6 +773,7 @@ The `--fix` flag will:
   (only here; git-hop never does it on its own)
 - Register branches from hub to hopspace
 - Sync hub-hopspace configurations
+- Recreate or clean up worktrees missing on disk (see below)
 
 #### Previewing repairs
 
@@ -792,21 +793,34 @@ backup is itself a change.
 `--dry-run` on its own (without `--fix`) changes nothing either way: a
 doctor run that is not repairing never mutates.
 
-#### Auto-cleanup of missing-on-disk merged branches
+#### Worktrees missing on disk
 
-When `--fix` finds a worktree entry whose path no longer exists on
-disk, it checks whether the branch is merged into the hub's default
-branch. If it is, doctor silently drops the entry — no prompt, no
-warning. The reasoning: the worktree was already gone, the branch is
-already on default, so there's nothing left to lose.
+When `--fix` finds a hub branch whose worktree directory is gone (for
+example removed with `rm -rf`), it checks whether the branch is merged
+into the hub's default branch:
+
+- **Merged**: the worktree is not recreated. Doctor drops the branch's
+  `hop.json` row and state entry without prompting. The reasoning: the
+  worktree was already gone, the branch is already on default, so there's
+  nothing left to lose. The branch itself is kept.
+- **Not merged** (or the merge check fails), and always for the default
+  branch itself: the worktree is recreated from the branch, so its
+  commits are checked out again.
+
+Either way, if git still registers the missing directory (it marks the
+entry `prunable` in `git worktree list`), doctor first clears that
+registration with `git worktree remove <path>`. That removes git's
+bookkeeping for that one path only; it never runs for a directory that
+exists, and leaves a locked worktree alone. `--dry-run` reports each of
+these steps as `would-fix` without running them.
 
 This applies **only** to worktrees that are missing on disk. Doctor
 does not bulk-remove existing-but-merged worktrees — for that, use
 [`git hop remove --merged`](#--merged).
 
-If the missing entry's branch is not merged (or the merge check
-fails), doctor prompts for one of: provide a new path, delete the
-entry, or skip.
+If a missing worktree cannot be recreated and its state entry remains,
+doctor prompts for one of: provide a new path, delete the entry, or
+skip.
 
 ### Flags
 
