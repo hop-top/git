@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -79,4 +80,49 @@ func TestIsDispatched_MatchesCallSites(t *testing.T) {
 			assert.NotContains(t, code, literal, "%s is marked reserved but code names it", name)
 		}
 	}
+}
+
+// notInWorktreeDir are the repo-level hooks whose dispatcher never starts
+// the lookup at an existing worktree: pre-worktree-add runs before the
+// worktree exists, post-worktree-remove after it is gone, and repair
+// anchors on the hub. A script in a worktree's own .git-hop/hooks/ is
+// never found for them.
+var notInWorktreeDir = []string{"pre-worktree-add", "post-worktree-remove", "pre-repair", "post-repair"}
+
+func TestWorktreeLevelHookNames_ExcludesHooksNotAnchoredOnAWorktree(t *testing.T) {
+	got := WorktreeLevelHookNames()
+	for _, name := range notInWorktreeDir {
+		assert.NotContains(t, got, name)
+	}
+	for _, name := range []string{
+		"post-worktree-add", "pre-worktree-remove",
+		"pre-worktree-move", "post-worktree-move",
+		"post-clone",
+		"pre-worktree-switch", "post-worktree-switch",
+	} {
+		assert.Contains(t, got, name)
+	}
+}
+
+// Every repo-level hook resolves from a hub-level .git-hop/hooks/: either
+// it anchors there (repair) or the parent walk from a worktree under the
+// hub reaches it. The two lists partition RepoLevelHookNames.
+func TestHubOnlyHookNames_PartitionRepoLevel(t *testing.T) {
+	assert.ElementsMatch(t, notInWorktreeDir, HubOnlyHookNames())
+	assert.ElementsMatch(t, RepoLevelHookNames(), append(WorktreeLevelHookNames(), HubOnlyHookNames()...))
+}
+
+// The repair anchor is the hub, so a repair hook in a worktree's own dir
+// is not found even though the worktree sits under the hub.
+func TestFindHookFile_RepairFromHubMissesWorktreeDir(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	wtHook := filepath.Join("/hub", "hops", "main", ".git-hop", "hooks", "pre-repair")
+	require.NoError(t, afero.WriteFile(fs, wtHook, []byte("#!/bin/sh\n"), 0o755))
+
+	r := NewRunner(fs)
+	assert.Empty(t, r.FindHookFile("pre-repair", "/hub", ""))
+
+	hubHook := filepath.Join("/hub", ".git-hop", "hooks", "pre-repair")
+	require.NoError(t, afero.WriteFile(fs, hubHook, []byte("#!/bin/sh\n"), 0o755))
+	assert.Equal(t, hubHook, r.FindHookFile("pre-repair", "/hub", ""))
 }

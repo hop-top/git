@@ -317,7 +317,7 @@ The dispatch follows the mirror for the reason given in [Why mirror-then-fire](#
 | | `pre-repair` / `post-repair` |
 |---|---|
 | Discovery | `Runner.FindHookFile` — repo → hopspace → global |
-| Repo-level anchor | the **hub**: `<hub>/.git-hop/hooks/<name>`, then the parent walk above it. A hook inside a worktree's `.git-hop/hooks/` is not consulted. |
+| Repo-level anchor | the **hub**: `<hub>/.git-hop/hooks/<name>`, then the parent walk above it. A hook inside a worktree's `.git-hop/hooks/` is not consulted — including the `hops/<branch>/.git-hop/hooks/` a bare `git hop init` creates, which is why init's hint sends repair hooks to the hub. |
 | `GIT_HOP_WORKTREE_PATH` | the hub path |
 | `GIT_HOP_BRANCH` | set and **empty** — a repair spans every branch |
 | `GIT_HOP_REPO_ID` | `github.com/<org>/<repo>` from the hub's `hop.json`, read at dispatch time; empty when it cannot be read |
@@ -810,10 +810,22 @@ git hop init --no-hooks  # no hook directory, no hook runs
 Re-running `git hop init` on an already-initialized repo also ensures the
 hooks directory exists (unless `--no-hooks` is passed).
 
-After creating the directory, `init` lists the hooks a script there can
-implement. The list comes from `RepoLevelHookNames()`, so it names only
-hooks that are dispatched and resolve at repo level: no `env-*` names and
-no `pre-clone`.
+After creating the directory, `init` prints a `hint:` listing the hooks a
+script there can implement. It names only hooks that are dispatched and
+resolve at repo level (no `env-*` names, no `pre-clone`), and only those
+actually looked up in *that* directory:
+
+- **Hub root** (regular conversion, register-as-is): every repo-level hook
+  (`RepoLevelHookNames()`). Repair looks there directly; every other hook
+  reaches it through the parent walk from a worktree under the hub.
+- **Worktree** (bare conversion: `hops/<branch>/.git-hop/hooks/`): only
+  `WorktreeLevelHookNames()`. Four hooks never start their lookup at an
+  existing worktree, so a script for them in a worktree's own directory
+  never runs: `pre-worktree-add` (the worktree does not exist yet),
+  `post-worktree-remove` (it is gone), and `pre-repair` / `post-repair`
+  (anchored on the hub). The hint sends these (`HubOnlyHookNames()`) to
+  `<hub>/.git-hop/hooks/` instead. Committed and mirrored with `--hooks`,
+  they also work from the hopspace.
 
 ## Debugging Hooks
 
@@ -968,7 +980,8 @@ For developers interested in the implementation:
 | Hook name list (the authority) | `ValidHookNames`, `internal/hooks/runner.go` |
 | Name validation | `ValidateHookName()`, same file |
 | Discovery / priority | `FindHookFile()`, plus `findHookInParentDirs()` for the parent walk; `hasRepoLevel()` exempts `pre-clone` from both |
-| Dispatched vs reserved names | `IsDispatched()`, `RepoLevelHookNames()` (the list `git hop init` prints), same file |
+| Dispatched vs reserved names | `IsDispatched()`, `RepoLevelHookNames()`, same file |
+| Hooks a worktree's own dir serves | `WorktreeLevelHookNames()` / `HubOnlyHookNames()`, same file; `initHooksHint()` in `cmd/init_dispatch.go` picks by where init created the dir |
 | Execution, env, exit-code handling | `Runner.run()`, behind `ExecuteHook` / `ExecuteHookWithDetector` |
 | Navigation directive | `ExitNavigationHandled`, `RunResult`, `navigationHandledFor()` |
 | Switch env vars | `SwitchEnvVars()` — omits empty fields rather than exporting them empty |

@@ -73,11 +73,34 @@ func previewInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, branch st
 // surrounding init output.
 const initHooksHintWidth = 72
 
-// initHooksHintLines lists the hooks a script in .git-hop/hooks/ can
-// implement, derived from the runner so it only names hooks that fire.
-// A pre-/post- pair is folded into "pre/post-<op>".
-func initHooksHintLines() []string {
+// initHooksHint is the advice printed under the hooks-dir message: which
+// hooks a script in that directory can implement, derived from the runner
+// so it only names hooks that fire and are looked up there.
+//
+// inWorktree means the directory sits inside a worktree (bare conversion:
+// hops/<branch>/) rather than at the hub root. Some hooks never start
+// their lookup at a worktree (see hooks.HubOnlyHookNames); those are not
+// offered there, and the hint names the hub's hooks dir for them instead.
+func initHooksHint(hubPath string, inWorktree bool) string {
 	names := hooks.RepoLevelHookNames()
+	if inWorktree {
+		names = hooks.WorktreeLevelHookNames()
+	}
+	lines := []string{"Place executable scripts there to hook into git-hop operations:"}
+	lines = append(lines, hookListLines(names)...)
+	if inWorktree {
+		lines = append(lines,
+			"A worktree's hooks directory is not searched for the hooks below;",
+			"place them in "+filepath.Join(hubPath, ".git-hop", "hooks")+"/ instead:")
+		lines = append(lines, hookListLines(hooks.HubOnlyHookNames())...)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// hookListLines formats hook names as indented, comma-separated lines no
+// wider than initHooksHintWidth. A pre-/post- pair is folded into
+// "pre/post-<op>".
+func hookListLines(names []string) []string {
 	have := make(map[string]bool, len(names))
 	for _, n := range names {
 		have[n] = true
@@ -117,8 +140,7 @@ func initHooksHintLines() []string {
 	return lines
 }
 
-// printInitHooksHint prints the hook list under the hooks-dir message.
-func printInitHooksHint() {
-	output.Hint("%s", "Place executable scripts there to hook into git-hop operations:\n"+
-		strings.Join(initHooksHintLines(), "\n"))
+// printInitHooksHint prints initHooksHint under the hooks-dir message.
+func printInitHooksHint(hubPath string, inWorktree bool) {
+	output.Hint("%s", initHooksHint(hubPath, inWorktree))
 }
