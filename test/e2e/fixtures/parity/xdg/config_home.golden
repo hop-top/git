@@ -23,4 +23,3 @@ No migration leftovers in git config --global
 === Summary ===
 Issues found. Run 'git hop doctor --fix' to automatically repair them.
 error: data directory does not exist: $TMPDIR/data
-error: cache directory does not exist: $TMPDIR/cache/git-hop
