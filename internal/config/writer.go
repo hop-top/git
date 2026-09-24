@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
 
 	"github.com/spf13/afero"
 )
@@ -38,12 +40,22 @@ func (w *Writer) WriteVolumesConfig(path string, config *VolumesConfig) error {
 	return w.writeConfig(filepath.Join(path, "volumes.json"), config)
 }
 
-// writeConfig writes the config to a temp file and renames it (atomic)
+// writeConfig writes the config to a temp file and renames it (atomic).
+// Members of the existing file that config's type does not model are
+// preserved (see mergeUnmodeled).
 func (w *Writer) writeConfig(path string, config interface{}) error {
-	data, err := json.MarshalIndent(config, "", "  ")
+	data, err := json.Marshal(config)
 	if err != nil {
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
+	if prev, err := afero.ReadFile(w.fs, path); err == nil {
+		data = mergeUnmodeled(reflect.TypeOf(config), data, prev)
+	}
+	var indented bytes.Buffer
+	if err := json.Indent(&indented, data, "", "  "); err != nil {
+		return fmt.Errorf("failed to format config: %w", err)
+	}
+	data = indented.Bytes()
 
 	dir := filepath.Dir(path)
 	if err := w.fs.MkdirAll(dir, 0755); err != nil {
