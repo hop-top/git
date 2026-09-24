@@ -18,7 +18,7 @@ Aliases:
   gc, cleanup, clean
 
 Flags:
-      --dry-run     Show what would be deleted without deleting
+  -n, --dry-run     Show what would be deleted without deleting
       --force       Skip confirmation prompt
   -h, --help        help for gc
       --no-prompt   Skip the confirmation prompt (non-interactive callers)

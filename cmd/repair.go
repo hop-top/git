@@ -54,10 +54,11 @@ func init() {
 	f.BoolVar(&repairNoProgressFlag, "no-progress", false, "force progress off")
 	f.StringVar(&repairColor, "color", "auto", "color output: always|auto|never")
 	f.BoolVar(&repairBaseFlag, "base", false, "infer and record HubBranch.Base for legacy entries (best-effort heuristic; use --dry-run to preview)")
-	// Local --dry-run shadows the global persistent flag so we can attach
-	// the -n shorthand that the Long help advertises. The runRepair logic
-	// reads cmd.Flags().GetBool("dry-run"), which resolves to this local
-	// flag (cobra prefers local over inherited persistent flags).
+	// Local --dry-run shadows the global persistent flag, so repair handles
+	// its own preview. The runRepair logic reads
+	// cmd.Flags().GetBool("dry-run"), which resolves to this local flag
+	// (cobra prefers local over inherited persistent flags). A shadowing
+	// flag must repeat the global -n shorthand or -n stops working here.
 	f.BoolVarP(&repairDryRunFlag, "dry-run", "n", false, "preview changes without applying")
 }
 

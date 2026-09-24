@@ -167,5 +167,5 @@ func init() {
 	envCmd.AddCommand(envGcCmd)
 	envGcCmd.Flags().BoolVar(&gcForce, "force", false, "Skip confirmation prompt")
 	envGcCmd.Flags().BoolVar(&gcNoPrompt, "no-prompt", false, "Skip the confirmation prompt (non-interactive callers)")
-	envGcCmd.Flags().BoolVar(&gcDryRun, "dry-run", false, "Show what would be deleted without deleting")
+	envGcCmd.Flags().BoolVarP(&gcDryRun, "dry-run", "n", false, "Show what would be deleted without deleting")
 }

@@ -141,7 +141,7 @@ exits 0 without prompting.
 |----------------|-------------------------------------------------|
 | `--json`       | structured JSON; parse with `jq`                |
 | `--porcelain`  | stable line-format; safer for scripting         |
-| `--dry-run`    | preview only; no filesystem or state changes; a command with no preview refuses it (exit 129) |
+| `-n, --dry-run` | preview only; no filesystem or state changes; a command with no preview refuses it (exit 129) |
 | `--force`      | bypass confirmations + safety checks            |
 | `-q`           | suppress non-error output                       |
 | `-g, --global` | target global hopspace (`$GIT_HOP_DATA_HOME`)   |

@@ -1,7 +1,7 @@
 # The global --dry-run is never silently ignored. A command either honors
 # it (previews, or has nothing to write) or refuses it with a usage error
 # before doing anything. Commands with their own --dry-run (init, repair,
-# env gc) handle it themselves.
+# env gc) handle it themselves. -n is the same flag everywhere.
 
 # --- upstream repo ---
 exec git init --bare $WORK/repo.git
@@ -36,6 +36,17 @@ cmp stdout $WORK/current.before
 ! exists $WORK/pre-hook-ran
 ! exists $WORK/post-hook-ran
 
+exec git-hop feat/x -n
+stdout '\[dry-run\] Would point ''current'' at .*hops/feat/x'
+! stdout 'Switched to worktree'
+! exists $WORK/pre-hook-ran
+
+# --- previewing commands accept -n ---
+exec git-hop move feat/x feat/y -n
+stdout '\[dry-run\] Would rename branch ''feat/x'' to ''feat/y'''
+exec git-hop remove feat/x -n
+stdout '\[dry-run\] Would remove worktree'
+
 # --- commands without a preview refuse --dry-run: exit 129, no effect ---
 cd $WORK/hub/hops/main
 exec sh -c 'git-hop env start --dry-run; echo "exit=$?"'
@@ -51,9 +62,21 @@ stdout 'exit=129'
 exec sh -c 'git-hop __notify-chdir . --dry-run; echo "exit=$?"'
 stdout 'exit=129'
 
+# --- -n is refused exactly like --dry-run ---
+exec sh -c 'git-hop env start -n; echo "exit=$?"'
+stdout 'exit=129'
+stderr 'fatal: --dry-run is not supported by ''git hop env start'''
+exec sh -c 'git-hop upgrade preamble --install -n; echo "exit=$?"'
+stdout 'exit=129'
+! exists $WORK/.config/git-hop/skills/upgrade-preamble.md
+
 # --- clone has no preview: refused before anything is written ---
 cd $WORK
 exec sh -c 'git-hop $WORK/repo.git clone2 --dry-run; echo "exit=$?"'
+stdout 'exit=129'
+stderr 'fatal: --dry-run is not supported for clone'
+! exists $WORK/clone2
+exec sh -c 'git-hop $WORK/repo.git clone2 -n; echo "exit=$?"'
 stdout 'exit=129'
 stderr 'fatal: --dry-run is not supported for clone'
 ! exists $WORK/clone2
@@ -64,6 +87,8 @@ exec git-hop list --dry-run
 exec git-hop status --dry-run
 exec git-hop completion bash --dry-run
 exec git-hop help remove --dry-run
+exec git-hop list -n
+exec git-hop status -n
 
 # --- --dry-run=false is not a dry run ---
 cd $WORK/hub/hops/main
@@ -73,6 +98,12 @@ exec git-hop env start --dry-run=false
 cd $WORK/hub
 exec git-hop env gc --dry-run
 exec git-hop repair --dry-run
+exec git-hop env gc -n
+exec git-hop repair -n
+cd $WORK/seed
+exec git-hop init -n --no-prompt
+stdout 'To proceed with conversion'
+! exists $WORK/seed/hop.json
 
 cd $WORK/hub
 cmp hop.json $WORK/hop.json.before

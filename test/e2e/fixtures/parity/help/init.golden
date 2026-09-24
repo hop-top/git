@@ -18,7 +18,7 @@ Aliases:
   init, setup, install
 
 Flags:
-      --dry-run           Show conversion steps without executing
+  -n, --dry-run           Show conversion steps without executing
       --enable-chdir      Install shell integration for automatic directory switching after hop commands
       --force             Skip clean repo check and backup requirements (DANGEROUS)
   -h, --help              help for init

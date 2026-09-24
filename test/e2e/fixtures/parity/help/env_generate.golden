@@ -8,7 +8,7 @@ Flags:
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
-      --dry-run         preview changes without applying
+  -n, --dry-run         preview changes without applying
       --force           bypass safety checks
       --format string   Output format (csv, human, json, table, text, yaml) (default "table")
   -g, --global          use global hopspace in $GIT_HOP_DATA_HOME (default: local)

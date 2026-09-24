@@ -102,3 +102,26 @@ func TestCheckDryRunSupported(t *testing.T) {
 		}
 	})
 }
+
+// TestCheckDryRunSupported_Shorthand runs the guard against the real root
+// flags: -n must reach it exactly as --dry-run does.
+func TestCheckDryRunSupported_Shorthand(t *testing.T) {
+	for _, arg := range []string{"-n", "--dry-run"} {
+		t.Run(arg, func(t *testing.T) {
+			global := RootCmd.PersistentFlags().Lookup("dry-run")
+			t.Cleanup(func() {
+				_ = global.Value.Set("false")
+				global.Changed = false
+			})
+
+			parse(t, upgradePreambleCmd, arg)
+			err := checkDryRunSupported(upgradePreambleCmd)
+			if err == nil {
+				t.Fatal("want error, got nil")
+			}
+			if want := "'git hop upgrade preamble'"; !strings.Contains(err.Error(), want) {
+				t.Errorf("error %q does not name %s", err, want)
+			}
+		})
+	}
+}
