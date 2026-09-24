@@ -26,6 +26,7 @@ const (
 	KeyAddDefaultStartPoint   = "hop.add.defaultStartPoint"
 	KeyAddCopyIgnored         = "hop.add.copyIgnored"
 	KeyAddCopyIgnoredMaxSize  = "hop.add.copyIgnoredMaxSize"
+	KeyAddFetch               = "hop.add.fetch"
 	KeyMergeDeleteRemote      = "hop.merge.deleteRemote"
 	KeyShellIntegrationStatus = "hop.shellIntegration.status"
 	KeyShellIntegrationShell  = "hop.shellIntegration.shell"

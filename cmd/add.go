@@ -69,9 +69,16 @@ directly above its pattern in any ignore file:
 The marker must be on its own comment line: git reads a mid-line '#' as
 part of the pattern.
 
-With --dry-run, add reports the branch, start-point, worktree path and
-hooks it would run, then stops: nothing is created or written and no hook
-runs.`,
+Before resolving the start-point, add runs 'git fetch origin' so a new
+branch does not start from a stale origin/<branch>. By default it does so
+only when the start-point is an origin ref: the default branch or an
+explicit origin/<branch>. 'git config hop.add.fetch true|false' makes that
+a standing choice; --fetch / --no-fetch decide for one run. A failed fetch
+warns and carries on from the refs already present.
+
+With --dry-run, add reports the fetch, branch, start-point, worktree path
+and hooks it would run, then stops: nothing is fetched, created or written
+and no hook runs.`,
 	Args: cobra.ExactArgs(1),
 	Run: func(cmd *cobra.Command, args []string) {
 		branch := args[0]
@@ -145,12 +152,17 @@ runs.`,
 		wm := hop.NewWorktreeManager(fs, g)
 		wm.EnforceStartPoint = addFromFlag != ""
 
+		fetch := shouldFetchOrigin(g, config.NewGitConfig(),
+			negatableFlag(cmd, "fetch", addFetchFlag, addNoFetchFlag),
+			hubPath, startPoint, hub.Config.Repo.DefaultBranch)
+
 		// Everything below writes; the preview must stop before any of it.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 			previewAdd(g, wm, hookRunner, addPlan{
 				cwd:           cwd,
 				hubPath:       hubPath,
 				hopspace:      hopspace,
+				fetch:         fetch,
 				repoID:        repoID,
 				branch:        branch,
 				worktreePath:  worktreePath,
@@ -161,6 +173,10 @@ runs.`,
 		}
 
 		output.Info("Adding branch %s...", branch)
+
+		if fetch {
+			fetchOrigin(g, hubPath)
+		}
 
 		// Create detector manager and register detectors
 		detectorMgr := detector.NewManager(fs, g)
@@ -526,6 +542,10 @@ func init() {
 		"copy git-ignored files from the source worktree into the new one")
 	addCmd.Flags().BoolVar(&addNoCopyIgnoredFlag, "no-copy-ignored", false,
 		"do not copy git-ignored files into the new worktree")
+	addCmd.Flags().BoolVar(&addFetchFlag, "fetch", false,
+		"fetch origin before resolving the start-point (default: when it is an origin ref)")
+	addCmd.Flags().BoolVar(&addNoFetchFlag, "no-fetch", false,
+		"do not fetch origin before resolving the start-point")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames
 	declareOutputSchema(addCmd, &addResult{})
 }

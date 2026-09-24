@@ -145,14 +145,20 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 // decides. --no-copy-ignored wins over --copy-ignored when both appear,
 // matching git's habit of letting the more restrictive request stand.
 func copyIgnoredOverride(cmd *cobra.Command, yes, no bool) *bool {
+	return negatableFlag(cmd, "copy-ignored", yes, no)
+}
+
+// negatableFlag reads a --<name> / --no-<name> pair: nil when neither was
+// given on the command line, so config decides; --no-<name> wins.
+func negatableFlag(cmd *cobra.Command, name string, yes, no bool) *bool {
 	if cmd == nil {
 		return nil
 	}
-	if cmd.Flags().Changed("no-copy-ignored") && no {
+	if cmd.Flags().Changed("no-"+name) && no {
 		off := false
 		return &off
 	}
-	if cmd.Flags().Changed("copy-ignored") {
+	if cmd.Flags().Changed(name) {
 		v := yes
 		return &v
 	}

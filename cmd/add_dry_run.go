@@ -20,6 +20,7 @@ type addPlan struct {
 	worktreePath  string
 	startPoint    string
 	defaultBranch string
+	fetch         bool
 }
 
 // addHooks are the lifecycle hooks add dispatches, in order.
@@ -30,6 +31,9 @@ var addHooks = []string{"pre-worktree-add", "post-worktree-add"}
 // dependency writes, and no hook or branch-type detector runs, since
 // either may mutate the repo.
 func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.Runner, p addPlan) {
+	if p.fetch {
+		output.Info("[dry-run] Would fetch origin")
+	}
 	if wm.EnforceStartPoint {
 		previewEnforcedBranch(wm, p)
 	} else {

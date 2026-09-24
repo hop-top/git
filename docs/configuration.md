@@ -230,10 +230,11 @@ hub for that repository.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of repair backup snapshots (`repair-*` directories under `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/`, or a legacy `<hub>/.hop/backups/`) before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). Set to `0` to disable auto-pruning of repair backups. |
-| `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
+| `hop.remote.timeout` | integer (seconds) | `10` | Deadline for git subcommands that contact a remote (`ls-remote`, `push --delete`, the `fetch` in `git hop add`). Prevents an unreachable or slow origin from hanging a command indefinitely. Set to `0` to wait without a deadline. |
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
+| `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, it fetches only when the start-point is an origin ref: the default branch or an explicit `origin/<branch>`. `--fetch` / `--no-fetch` on the command line override this. |
 | `hop.events.sink` | `jsonl` \| `none` | `none` | Append every lifecycle event (worktree created/removed/merged/moved/switched, env started/stopped, ...) to a JSONL file, so external tools can react without file hooks. See [`hop.events.sink`](#hopeventssink). |
 | `hop.events.path` | path | `$XDG_STATE_HOME/git-hop/events.jsonl` | File `hop.events.sink=jsonl` appends to. `~/` is expanded the way git expands path values. |
 
@@ -301,6 +302,29 @@ checks that rule's file.
 The marker cannot share the pattern's own line. Git only treats `#` as a
 comment at the start of a line, so `.tlc/ #-hop-#` would become a pattern
 matching a path literally named `.tlc/ #-hop-#` and stop ignoring `.tlc/`.
+
+### `hop.add.fetch`
+
+A hub clones origin once; after that its `origin/*` refs only move when
+something fetches. `git hop add` therefore runs `git fetch origin` before
+resolving the start-point whenever that start-point is an origin ref — the
+default branch (resolved through `origin/<default>`) or an explicit
+`--from origin/<branch>` — so a new worktree does not start from days-old
+code. A local branch, tag, SHA or `initial` start-point is used as-is.
+
+The fetch is bounded by `hop.remote.timeout`. If it fails (offline, origin
+unreachable), `add` prints a warning and carries on from the refs already
+present. `--dry-run` reports that it would fetch but does not.
+
+```bash
+# Never fetch in this repo; fetch for one add anyway
+git config hop.add.fetch false
+git hop add feature-x --fetch
+
+# Always fetch, whatever the start-point; skip it for one add
+git config --global hop.add.fetch true
+git hop add feature-x --no-fetch
+```
 
 ### `hop.merge.deleteRemote`
 

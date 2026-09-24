@@ -1,0 +1,112 @@
+# `git hop add` fetches origin before resolving the start-point, so a hub
+# cloned days ago does not fork new worktrees from a stale origin/<branch>.
+#
+#   --fetch / --no-fetch     explicit, wins over everything
+#   hop.add.fetch true|false standing preference (git config)
+#   neither                  fetch only when the start-point is an origin
+#                            ref: the default branch (resolved through
+#                            origin/<default>) or an explicit origin/<x>
+#
+# A failed fetch (offline, origin gone) warns and carries on from the
+# refs already present. --dry-run says it would fetch but does not.
+
+# --- origin + hub ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git rev-parse refs/remotes/origin/main
+cp stdout $WORK/stale-main
+
+# --- origin moves on after the clone ---
+cd $WORK/seed
+exec git commit --allow-empty -m 'main 2'
+exec git push origin main
+exec git checkout -b late main
+exec git commit --allow-empty -m 'late 1'
+exec git push origin late
+exec git rev-parse main
+cp stdout $WORK/fresh-main
+exec git rev-parse late
+cp stdout $WORK/fresh-late
+cd $WORK/hub
+
+# --- dry-run: says it would fetch, fetches nothing ---
+exec git-hop add feat/dry --dry-run
+stdout '^\[dry-run\] Would fetch origin$'
+exec git rev-parse refs/remotes/origin/main
+cmp stdout $WORK/stale-main
+! exists $WORK/hub/hops/feat/dry
+
+# --- --no-fetch: default start-point stays on the stale origin/main ---
+exec git-hop add feat/nofetch --no-fetch
+exec git -C hops/feat/nofetch rev-parse HEAD
+cmp stdout $WORK/stale-main
+exec git rev-parse refs/remotes/origin/main
+cmp stdout $WORK/stale-main
+
+# --- hop.add.fetch false: same, as a standing preference ---
+exec git config hop.add.fetch false
+exec git-hop add feat/cfgoff --dry-run
+! stdout 'Would fetch'
+exec git-hop add feat/cfgoff
+exec git -C hops/feat/cfgoff rev-parse HEAD
+cmp stdout $WORK/stale-main
+
+# --- --fetch overrides hop.add.fetch false ---
+exec git-hop add feat/flagon --fetch
+exec git -C hops/feat/flagon rev-parse HEAD
+cmp stdout $WORK/fresh-main
+exec git config --unset hop.add.fetch
+
+# --- start-point that is not an origin ref: no fetch by default ---
+cd $WORK/seed
+exec git commit --allow-empty -m 'main 3'
+exec git push origin main
+exec git rev-parse main
+cp stdout $WORK/fresh-main-3
+cd $WORK/hub
+exec git rev-parse refs/remotes/origin/main
+cp stdout $WORK/before-sha
+exec git-hop add feat/fromsha --from main --dry-run
+! stdout 'Would fetch'
+exec git-hop add feat/fromsha --from main
+exec git rev-parse refs/remotes/origin/main
+cmp stdout $WORK/before-sha
+
+# --- hop.add.fetch true: fetches even for a local start-point ---
+exec git config hop.add.fetch true
+exec git-hop add feat/cfgon --from main
+exec git rev-parse refs/remotes/origin/main
+cmp stdout $WORK/fresh-main-3
+exec git config --unset hop.add.fetch
+
+# --- explicit origin/<x> that only exists on origin since the clone ---
+exec git-hop add feat/late --from origin/late
+exec git -C hops/feat/late rev-parse HEAD
+cmp stdout $WORK/fresh-late
+
+# --- default start-point, no flag, no config: fetched ---
+cd $WORK/seed
+exec git checkout main
+exec git commit --allow-empty -m 'main 4'
+exec git push origin main
+exec git rev-parse main
+cp stdout $WORK/fresh-main-4
+cd $WORK/hub
+exec git-hop add feat/auto
+exec git -C hops/feat/auto rev-parse HEAD
+cmp stdout $WORK/fresh-main-4
+
+# --- origin unreachable: warn, carry on from local refs ---
+exec git remote set-url origin $WORK/gone.git
+exec git-hop add feat/offline
+stderr '^warning: could not fetch origin'
+stderr '^hint: starting from the local refs, which may be stale'
+exists $WORK/hub/hops/feat/offline
+exec git -C hops/feat/offline rev-parse HEAD
+cmp stdout $WORK/fresh-main-4

@@ -25,9 +25,16 @@ directly above its pattern in any ignore file:
 The marker must be on its own comment line: git reads a mid-line '#' as
 part of the pattern.
 
-With --dry-run, add reports the branch, start-point, worktree path and
-hooks it would run, then stops: nothing is created or written and no hook
-runs.
+Before resolving the start-point, add runs 'git fetch origin' so a new
+branch does not start from a stale origin/<branch>. By default it does so
+only when the start-point is an origin ref: the default branch or an
+explicit origin/<branch>. 'git config hop.add.fetch true|false' makes that
+a standing choice; --fetch / --no-fetch decide for one run. A failed fetch
+warns and carries on from the refs already present.
+
+With --dry-run, add reports the fetch, branch, start-point, worktree path
+and hooks it would run, then stops: nothing is fetched, created or written
+and no hook runs.
 
 Usage:
   git-hop add [branch] [flags]
@@ -37,9 +44,11 @@ Aliases:
 
 Flags:
       --copy-ignored      copy git-ignored files from the source worktree into the new one (default true)
+      --fetch             fetch origin before resolving the start-point (default: when it is an origin ref)
       --from string       start-point: branch name, ref, SHA, or 'initial' for the root commit; an existing branch is fast-forwarded to it
   -h, --help              help for add
       --no-copy-ignored   do not copy git-ignored files into the new worktree
+      --no-fetch          do not fetch origin before resolving the start-point
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)
