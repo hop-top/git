@@ -350,7 +350,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 // hop.json) against the filesystem.
 func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking State ===")
-	st, stateIssues := inspectState(fs, r)
+	st, stateIssues := inspectState(fs, g, r)
 	switch {
 	case len(stateIssues) > 0 && opts.fix:
 		r.fixed += fixStateIssues(fs, g, st, hubPath, opts, r)
@@ -366,7 +366,11 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts
 
 // inspectState loads the global state and reports every worktree it
 // lists whose directory is gone. st is nil when state cannot be loaded.
-func inspectState(fs afero.Fs, r *doctorReport) (*state.State, []stateIssue) {
+//
+// A missing worktree git has locked is reported as a warning and left
+// out of the returned issues: git keeps it on purpose, and so does the
+// repair (fixMissingWorktrees).
+func inspectState(fs afero.Fs, g git.GitInterface, r *doctorReport) (*state.State, []stateIssue) {
 	st, err := state.LoadState(fs)
 	if err != nil {
 		output.Warn("Could not load state: %v", err)
@@ -379,7 +383,15 @@ func inspectState(fs afero.Fs, r *doctorReport) (*state.State, []stateIssue) {
 		return st, nil
 	}
 
-	stateIssues := missingStateWorktrees(fs, st)
+	var stateIssues []stateIssue
+	for _, issue := range missingStateWorktrees(fs, st) {
+		wt := st.Repositories[issue.repoID].Worktrees[issue.branch]
+		if reason, locked := stateWorktreeLock(fs, g, issue.repoID, wt); locked {
+			warnLockedWorktree(r, doctorCheckState, issue.repoID+":"+issue.branch, issue.path, reason)
+			continue
+		}
+		stateIssues = append(stateIssues, issue)
+	}
 	if len(stateIssues) == 0 {
 		output.Info("State is consistent")
 		return st, nil

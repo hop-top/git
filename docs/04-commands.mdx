@@ -853,6 +853,16 @@ bookkeeping for that one path only; it never runs for a directory that
 exists, and leaves a locked worktree alone. `--dry-run` reports each of
 these steps as `would-fix` without running them.
 
+A missing worktree that git has locked (`git worktree lock`, for
+example one on a drive that is not mounted) is not treated as broken.
+Doctor reports it as a `warning`, not an issue, so it does not affect
+the exit status. The warning includes git's lock reason when there is
+one. Doctor does not recreate it, clear its registration, or drop its
+state entry or `hop.json` row, with or without `--dry-run`. A `hint:`
+names the command that releases it, `git worktree unlock <path>`. Once
+it is unlocked, the next `--fix` treats it like any other missing
+worktree.
+
 This applies **only** to worktrees that are missing on disk. Doctor
 does not bulk-remove existing-but-merged worktrees — for that, use
 [`git hop remove --merged`](#--merged).

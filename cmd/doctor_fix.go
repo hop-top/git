@@ -205,14 +205,14 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, opts 
 
 			output.Info("\nMissing worktree: %s:%s (was at %s)", repoID, branch, wt.Path)
 
-			// Try to determine a git dir to run branch-merged check.
-			// Prefer the hub path recorded in state; fall back to hopspace.
-			gitDir := findGitDirForRepo(fs, repoID, wt.HubPath)
-			if gitDir != "" && worktreeLocked(g, gitDir, wt.Path) {
+			if _, locked := stateWorktreeLock(fs, g, repoID, wt); locked {
 				output.Info("  Worktree is locked in git; keeping entry.")
 				kept.add(wt.Path)
 				continue
 			}
+			// Try to determine a git dir to run branch-merged check.
+			// Prefer the hub path recorded in state; fall back to hopspace.
+			gitDir := findGitDirForRepo(fs, repoID, wt.HubPath)
 			merged := gitDir != "" && mergedIntoDefault(g, gitDir, branch, repo.DefaultBranch)
 
 			if dryRun {
