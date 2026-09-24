@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -55,13 +56,19 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 
 	mainRepoPath := ""
 	output.Info("Searching for main repo in %d branches...", len(hub.Config.Branches))
-	for name, b := range hub.Config.Branches {
+	worktreePaths := hub.WorktreePaths()
+	names := make([]string, 0, len(worktreePaths))
+	for name := range worktreePaths {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		b := hub.Config.Branches[name]
 		if b.Fork == nil { // Not a fork, likely part of main repo
-			// With bare repo + worktree structure, b.Path is the full worktree path
-			// No symlinks are used in this structure
-			worktreePath := b.Path
-			// Verify the worktree exists
-			if _, err := os.Stat(worktreePath); err == nil {
+			// hop.json records paths absolute (add) or hub-relative
+			// (init); WorktreePaths resolves both against the hub.
+			worktreePath := worktreePaths[name]
+			if _, err := fs.Stat(worktreePath); err == nil {
 				output.Info("Found candidate main repo at %s (branch %s)", worktreePath, name)
 				mainRepoPath = worktreePath
 				break
