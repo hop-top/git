@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+
+	"hop.top/git/internal/git"
 )
 
 // repoIdentity is the uri/org/repo a conversion writes into hop.json and
@@ -66,8 +68,8 @@ func (c *Converter) carryOverRemotes(srcRepo, bareRepo string) error {
 		return fmt.Errorf("failed to drop the clone's origin: %w", err)
 	}
 	for _, e := range entries {
-		if _, err := c.git.Run("git", "-C", bareRepo, "config", "--add", e.key, e.value); err != nil {
-			return fmt.Errorf("failed to restore %s: %w", e.key, err)
+		if err := addConfigEntry(c.git, bareRepo, e); err != nil {
+			return err
 		}
 	}
 
@@ -77,12 +79,19 @@ func (c *Converter) carryOverRemotes(srcRepo, bareRepo string) error {
 	return c.copyRemoteTrackingRefs(srcRepo, bareRepo)
 }
 
-type configEntry struct{ key, value string }
+// configEntry is one line of a config file as `git config --list` shows
+// it: section and name lowercased, subsection as written. implicit marks
+// a key written without "=", which git reads as boolean true.
+type configEntry struct {
+	key, value string
+	implicit   bool
+}
 
-// localConfigEntries lists repoPath's local config entries under the
-// given section prefixes, in file order, multi-valued keys included.
-func (c *Converter) localConfigEntries(repoPath string, prefixes []string) ([]configEntry, error) {
-	out, err := c.git.Run("git", "-C", repoPath, "config", "--local", "--null", "--list")
+// readLocalConfig lists every entry of repoPath's own config file, in
+// file order, multi-valued keys included. Include directives are listed
+// as entries, not followed.
+func readLocalConfig(g git.GitInterface, repoPath string) ([]configEntry, error) {
+	out, err := g.Run("git", "-C", repoPath, "config", "--local", "--no-includes", "--null", "--list")
 	if err != nil {
 		return nil, err
 	}
@@ -91,10 +100,24 @@ func (c *Converter) localConfigEntries(repoPath string, prefixes []string) ([]co
 		if rec == "" {
 			continue
 		}
-		key, value, _ := strings.Cut(rec, "\n")
+		key, value, hasValue := strings.Cut(rec, "\n")
+		entries = append(entries, configEntry{key: key, value: value, implicit: !hasValue})
+	}
+	return entries, nil
+}
+
+// localConfigEntries lists repoPath's local config entries under the
+// given section prefixes, in file order, multi-valued keys included.
+func (c *Converter) localConfigEntries(repoPath string, prefixes []string) ([]configEntry, error) {
+	all, err := readLocalConfig(c.git, repoPath)
+	if err != nil {
+		return nil, err
+	}
+	var entries []configEntry
+	for _, e := range all {
 		for _, p := range prefixes {
-			if strings.HasPrefix(key, p) {
-				entries = append(entries, configEntry{key: key, value: value})
+			if strings.HasPrefix(e.key, p) {
+				entries = append(entries, e)
 				break
 			}
 		}

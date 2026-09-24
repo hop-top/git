@@ -161,6 +161,12 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 			return fmt.Errorf("failed to resolve current branch for worktree naming: %w", err)
 		}
 
+		// Read before anything moves: the swap deletes the original .git.
+		localConfig, err := PlanLocalConfig(c.git, repoPath)
+		if err != nil {
+			return err
+		}
+
 		if err := c.git.CloneBare(repoPath, bareRepoPath); err != nil {
 			return fmt.Errorf("failed to create bare repository: %w", err)
 		}
@@ -186,6 +192,14 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		if err := c.moveFilesToWorktree(repoPath, defaultPath); err != nil {
 			return fmt.Errorf("failed to move files to worktree: %w", err)
 		}
+
+		// Written after the checkout, so the carried hooks path, filters
+		// and the like take effect for the user's next command, not in
+		// the middle of the conversion.
+		if err := c.carryOverLocalConfig(localConfig, bareRepoPath); err != nil {
+			return err
+		}
+		result.Warnings = append(result.Warnings, localConfig.relativeIncludeWarnings()...)
 
 		if err := c.swapDirectories(parentDir, projectName, bareRepoPath); err != nil {
 			return fmt.Errorf("failed to swap directories: %w", err)
