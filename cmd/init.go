@@ -108,7 +108,7 @@ Current repository: Standard git repository`)
 	}
 
 	branch, err := g.GetCurrentBranch(repoPath)
-	if err == nil {
+	if err == nil && branch != "" {
 		fmt.Printf("Branch: %s\n", branch)
 	}
 
@@ -160,6 +160,7 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 	if useBare {
 		refuseOperationInProgress(fs, repoPath)
 	}
+	refuseDetachedHead(fs, g, repoPath)
 
 	converter := hop.NewConverter(fs, g)
 	converter.DryRun = dryRunFlag
@@ -394,6 +395,7 @@ const initNextSteps = `  git hop add <branch>       # Add new branch
   git hop                    # List all worktrees`
 
 func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, enableChdir bool) {
+	refuseDetachedHead(fs, g, repoPath)
 	output.Info("Registering repository as-is...")
 
 	remoteURL, err := g.GetRemoteURL(repoPath)

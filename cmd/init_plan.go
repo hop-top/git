@@ -19,11 +19,9 @@ func initRemoteLabel(g git.GitInterface, repoPath string) string {
 // describes what ConvertToBareWorktree does for the chosen layout: a bare
 // conversion checks the current branch out at hops/<branch> and points
 // current at it; a regular one keeps the repository root as that branch's
-// working tree and adds worktrees/ beside it.
+// working tree and adds worktrees/ beside it. branch is never empty: a
+// detached HEAD is refused before the plan (see refuseDetachedHead).
 func initConversionPlan(backupRoot, branch string, useBare bool) []string {
-	if branch == "" {
-		branch = "(detached HEAD)"
-	}
 	plan := []string{
 		fmt.Sprintf("  1. Create backup in %s/", backupRoot),
 		"  2. Create worktree structure",

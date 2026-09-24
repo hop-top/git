@@ -1136,7 +1136,30 @@ The exit status is 1. `--force` does not override the refusal: it
 consents to carrying uncommitted files, not to losing a paused
 operation. `--dry-run` reports the same refusal. A regular conversion
 (`--regular`) keeps `.git` in place, so the operation survives it and
-`init` does not refuse.
+`init` does not refuse, unless the operation has detached HEAD (a
+rebase, a bisect that has checked out a commit): see below.
+
+### Detached HEAD
+
+`init` names what it creates after the current branch: the bare
+layout's `hops/<branch>/` worktree, the regular layout's `hop.json`
+entry for the repository root. With no branch checked out it refuses,
+for every layout and for register-as-is, before it backs up or moves
+anything:
+
+```text
+$ git hop init --no-prompt
+hint: check out a branch first, or create one at this commit:
+hint:   git switch <branch>
+hint:   git switch -c <new-branch>
+hint: then run git hop init again
+fatal: HEAD is detached; git hop init names the hub's worktree after the current branch
+```
+
+The exit status is 1. `--force` does not override it, and `--dry-run`
+reports the same refusal. When a paused operation detached HEAD (a
+rebase, most often), the hint says how to finish or abort that
+operation instead.
 
 ## Command Aliases
 

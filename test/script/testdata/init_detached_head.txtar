@@ -1,0 +1,80 @@
+# `git hop init` on a detached HEAD (no branch checked out) is refused
+# up front, as git refuses what needs a branch: a fatal naming the
+# problem and a hint to check out a branch. Nothing is backed up or
+# moved. Both layouts and the dry run refuse the same way; the dry run
+# plans no worktree named after a branch that does not exist.
+
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit -q --allow-empty -m 'one'
+exec git commit -q --allow-empty -m 'two'
+exec git checkout -q --detach
+
+# --- dry run: the same refusal, no plan ---
+! exec git-hop init --no-prompt --no-hooks -n
+stderr '^fatal: HEAD is detached'
+stderr '^hint: .*git switch <branch>'
+stderr '^hint: then run git hop init again$'
+! stdout 'Conversion plan'
+! stdout 'detached HEAD\)/'
+! stderr '%!'
+
+# --- bare conversion: refused before the backup ---
+! exec git-hop init --no-prompt --no-hooks
+stderr '^fatal: HEAD is detached'
+stderr '^hint: .*git switch <branch>'
+! stderr '%!'
+! stdout 'Converting repository'
+! stdout 'Backup created:'
+! stderr 'Backup created:'
+! exists $WORK/.cache/git-hop
+! exists $WORK/proj/hop.json
+! exists $WORK/proj/hops
+exec git rev-parse --is-bare-repository
+stdout '^false$'
+
+# --- regular conversion: refused too ---
+! exec git-hop init --no-prompt --no-hooks --regular
+stderr '^fatal: HEAD is detached'
+! exists $WORK/proj/hop.json
+! exists $WORK/proj/worktrees
+
+# --- --force does not override it ---
+! exec git-hop init --no-prompt --no-hooks --force
+stderr '^fatal: HEAD is detached'
+! exists $WORK/.cache/git-hop
+
+# --- register as-is: refused too ---
+stdin $WORK/choice3.txt
+! exec git-hop init --no-hooks
+stderr '^fatal: HEAD is detached'
+! stdout 'registered successfully'
+
+# --- a detached HEAD left by a paused rebase names the rebase ---
+exec git switch -q -c work
+cp $WORK/a1.txt a.txt
+exec git add a.txt
+exec git commit -q -m 'a1'
+exec git switch -q -c other HEAD~1
+cp $WORK/a2.txt a.txt
+exec git add a.txt
+exec git commit -q -m 'a2'
+! exec git rebase -q work
+! exec git-hop init --no-prompt --no-hooks --regular
+stderr '^fatal: HEAD is detached'
+stderr '^hint: finish the rebase with ''git rebase --continue'' or abort it with ''git rebase --abort''$'
+! stderr 'git switch'
+exec git rebase --abort
+
+# --- on a branch, it converts ---
+exec git switch -q work
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+exists $WORK/proj/hops/work
+
+-- choice3.txt --
+3
+-- a1.txt --
+one
+-- a2.txt --
+two
