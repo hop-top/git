@@ -47,11 +47,11 @@ func TestMigration_DropsRetiredSettings(t *testing.T) {
 		t.Fatalf("Load() error = %v", err)
 	}
 
-	want := []string{"hop.autoEnvStart", "hop.backup.maxBackups", "hop.gitDomain", "hop.migrated"}
+	want := []string{"hop.backup.maxBackups", "hop.gitDomain", "hop.migrated"}
 	if got := hopKeys(store); strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("git config keys after migration = %v, want %v", got, want)
 	}
-	if cfg.Defaults.GitDomain != "example.com" || cfg.Defaults.AutoEnvStart || cfg.Backup.MaxBackups != 4 {
+	if cfg.Defaults.GitDomain != "example.com" || cfg.Defaults.EnvAutoStart || cfg.Backup.MaxBackups != 4 {
 		t.Errorf("live settings not migrated: %+v %+v", cfg.Defaults, cfg.Backup)
 	}
 }

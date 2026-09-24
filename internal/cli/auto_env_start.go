@@ -24,7 +24,7 @@ var (
 // command that creates a worktree; read it back with NegatableFlag.
 func AddEnvStartFlags(flags *pflag.FlagSet, yes, no *bool) {
 	flags.BoolVar(yes, "env-start", false,
-		"start the new worktree's environment (default: hop.autoEnvStart)")
+		"start the new worktree's environment (default: hop.env.autoStart)")
 	flags.BoolVar(no, "no-env-start", false,
 		"do not start the new worktree's environment")
 }
@@ -36,7 +36,7 @@ func AddEnvStartFlags(flags *pflag.FlagSet, yes, no *bool) {
 func DecideAutoEnvStart(override *bool, globalCfg *config.GlobalConfig) bool {
 	configured := false
 	if globalCfg != nil {
-		configured = globalCfg.Defaults.AutoEnvStart
+		configured = globalCfg.Defaults.EnvAutoStart
 	}
 	on, err := config.ResolveAutoEnvStart(override, os.Getenv(config.EnvAutoEnvStart), configured)
 	if err != nil {

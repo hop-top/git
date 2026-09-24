@@ -1,6 +1,6 @@
 # `git hop init` does not write settings.autoEnvStart into the hub's
 # hop.json. Nothing reads it there: whether add and clone start the
-# environment is git config hop.autoEnvStart (or GIT_HOP_AUTO_ENV_START,
+# environment is git config hop.env.autoStart (or GIT_HOP_AUTO_ENV_START,
 # or --[no-]env-start), and a stray `true` in hop.json read as if it
 # still promised an auto-start.
 

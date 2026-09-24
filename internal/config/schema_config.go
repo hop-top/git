@@ -21,7 +21,7 @@ type SchemaConfig struct {
 }
 
 // DefaultsSchema represents default settings. Whether add and clone
-// start the environment is git config hop.autoEnvStart, not a field here.
+// start the environment is git config hop.env.autoStart, not a field here.
 type DefaultsSchema struct {
 	GitDomain string `json:"gitDomain"`
 	Editor    string `json:"editor"`

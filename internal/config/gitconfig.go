@@ -19,7 +19,7 @@ type GitConfig struct {
 // Known hop.* config keys with their defaults.
 const (
 	KeyGitDomain              = "hop.gitDomain"
-	KeyAutoEnvStart           = "hop.autoEnvStart"
+	KeyEnvAutoStart           = "hop.env.autoStart"
 	KeyWorktreeLocation       = "hop.worktreeLocation"
 	KeyAddDefaultStartPoint   = "hop.add.defaultStartPoint"
 	KeyAddCopyIgnored         = "hop.add.copyIgnored"
@@ -41,7 +41,7 @@ const (
 // is derived from it. A key missing here defaults to its zero value.
 var defaults = map[string]string{
 	KeyGitDomain:              "github.com",
-	KeyAutoEnvStart:           "false",
+	KeyEnvAutoStart:           "false",
 	KeyWorktreeLocation:       "{hubPath}/hops/{branch}",
 	KeyAddDefaultStartPoint:   "default-branch",
 	KeyAddCopyIgnored:         "true",

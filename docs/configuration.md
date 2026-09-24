@@ -112,7 +112,7 @@ Override default directory locations:
 | `XDG_STATE_HOME` | State tracking | `~/.local/state` | `~/Library/Application Support` |
 | `XDG_CACHE_HOME` | Cache directory | `~/.cache` | `~/Library/Caches` |
 | `GIT_HOP_LOG_LEVEL` | Logging verbosity | `info` | `info` |
-| `GIT_HOP_AUTO_ENV_START` | Overrides `hop.autoEnvStart` (`true`/`false`, git's boolean spellings); `--[no-]env-start` still wins | unset | unset |
+| `GIT_HOP_AUTO_ENV_START` | Overrides `hop.env.autoStart` (`true`/`false`, git's boolean spellings); `--[no-]env-start` still wins | unset | unset |
 
 Example usage:
 
@@ -141,7 +141,7 @@ centralized layout (`{dataHome}/{org}/{repo}/hops/{branch}`).
 | `hop.gitDomain` | string | `github.com` | Git hosting domain used to expand `org/repo` shorthands |
 | `hop.worktreeLocation` | string | `{hubPath}/hops/{branch}` | Where `git hop add` and `git hop move` put worktrees. Variables: `{hubPath}`, `{branch}`, `{org}`, `{repo}`, `{dataHome}`. A relative result is resolved against the hub |
 | `hop.add.defaultStartPoint` | string | `default-branch` | Start-point for new branches: `default-branch`, `initial` (root commit), or any ref / SHA |
-| `hop.autoEnvStart` | boolean | `false` | Whether `git hop add` and clone start the new worktree's environment (the same start as `git hop env start`) once the worktree exists. Overridden by `GIT_HOP_AUTO_ENV_START` and, for one run, `--env-start` / `--no-env-start` |
+| `hop.env.autoStart` | boolean | `false` | Whether `git hop add` and clone start the new worktree's environment (the same start as `git hop env start`) once the worktree exists. Overridden by `GIT_HOP_AUTO_ENV_START` and, for one run, `--env-start` / `--no-env-start` |
 | `hop.hooks.installMode` | string | `prompt` | How committed `.git-hop/hooks/` scripts are mirrored on clone / init: `prompt`, `symlink`, `copy`, `none` |
 | `hop.shellIntegration.status` | string | `unknown` | Shell wrapper state: `unknown` (offer to install), `approved`, `declined`, `disabled`. Written by git-hop when you answer the prompt |
 
@@ -156,6 +156,13 @@ These settings were never acted on and are gone too: `hop.showAllManagedRepos`,
 `hop.backup.enabled` and `hop.backup.preserveStashes`. Old config files and
 git config that still carry them load as before; the keys are ignored, and
 `git hop doctor --fix` unsets the ones the `global.json` migration wrote.
+
+`hop.autoEnvStart` is retired too. git-hop never acted on it, yet earlier
+releases wrote it to `--global` (as `true`) when installing shell
+integration, so it cannot tell a choice from a leftover. It is no longer
+read; the setting that starts the environment on add and clone is
+`hop.env.autoStart`. Remove a leftover copy with
+`git config --global --unset hop.autoEnvStart`.
 
 ### Package and Environment Managers
 

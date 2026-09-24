@@ -1,6 +1,6 @@
 # git hop add starts the new worktree's environment only when asked to:
 # --env-start / --no-env-start for one run, else GIT_HOP_AUTO_ENV_START,
-# else hop.autoEnvStart (default false). The start runs once the worktree
+# else hop.env.autoStart (default false). The start runs once the worktree
 # exists, through the same code as `git hop env start`, and never fails
 # the add: a failure warns and hints at env start, and the exit status
 # stays 0. A worktree without an environment is skipped silently.
@@ -29,24 +29,31 @@ cd $WORK
 exec git-hop $WORK/org/repo.git hub
 cd $WORK/hub
 
-# --- default: hop.autoEnvStart unset means off ---
+# --- default: hop.env.autoStart unset means off ---
 exec git-hop add feat/default
 exists $WORK/hub/hops/feat/default/docker-compose.yml
 ! exists $WORK/up.log
 
-# --- hop.autoEnvStart=true: one start, in the new worktree, on its branch ---
+# --- the retired hop.autoEnvStart is not read: earlier shell-integration
+# installs pinned it to true in --global without the user choosing it ---
 exec git config --global hop.autoEnvStart true
+exec git-hop add feat/retired
+! exists $WORK/up.log
+exec git config --global --unset hop.autoEnvStart
+
+# --- hop.env.autoStart=true: one start, in the new worktree, on its branch ---
+exec git config --global hop.env.autoStart true
 exec git-hop add feat/auto
 grep -count=1 '^up ' $WORK/up.log
 grep '^up compose -p org-repo-feat-auto up -d in .*/hub/hops/feat/auto on feat/auto$' $WORK/up.log
 stdout 'stub-compose-up-stdout'
 ! stderr 'warning:'
 
-# --- --no-env-start overrides hop.autoEnvStart=true ---
+# --- --no-env-start overrides hop.env.autoStart=true ---
 exec git-hop add feat/off --no-env-start
 grep -count=1 '^up ' $WORK/up.log
 
-# --- GIT_HOP_AUTO_ENV_START=false overrides hop.autoEnvStart=true ---
+# --- GIT_HOP_AUTO_ENV_START=false overrides hop.env.autoStart=true ---
 env GIT_HOP_AUTO_ENV_START=false
 exec git-hop add feat/env-off
 grep -count=1 '^up ' $WORK/up.log
@@ -57,13 +64,13 @@ grep -count=2 '^up ' $WORK/up.log
 grep ' on feat/flag-on$' $WORK/up.log
 env GIT_HOP_AUTO_ENV_START=
 
-# --- --env-start overrides hop.autoEnvStart=false ---
-exec git config --global hop.autoEnvStart false
+# --- --env-start overrides hop.env.autoStart=false ---
+exec git config --global hop.env.autoStart false
 exec git-hop add feat/on --env-start
 grep -count=3 '^up ' $WORK/up.log
 grep ' on feat/on$' $WORK/up.log
 
-# --- GIT_HOP_AUTO_ENV_START=true overrides hop.autoEnvStart=false ---
+# --- GIT_HOP_AUTO_ENV_START=true overrides hop.env.autoStart=false ---
 env GIT_HOP_AUTO_ENV_START=true
 exec git-hop add feat/env-on
 grep -count=4 '^up ' $WORK/up.log
@@ -77,7 +84,7 @@ stderr '^fatal: bad boolean environment value ''maybe'' for ''GIT_HOP_AUTO_ENV_S
 env GIT_HOP_AUTO_ENV_START=
 
 # --- no environment in the worktree: skipped silently ---
-exec git config --global hop.autoEnvStart true
+exec git config --global hop.env.autoStart true
 exec git-hop add plain
 ! exists $WORK/hub/hops/plain/docker-compose.yml
 grep -count=4 '^up ' $WORK/up.log

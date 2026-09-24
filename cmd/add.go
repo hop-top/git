@@ -48,7 +48,7 @@ hops/<branch>, and sets up shared dependencies.
 
 The environment is not started unless asked: --env-start starts it once
 the worktree exists, through the same code as 'git hop env start'. 'git
-config hop.autoEnvStart true' (or GIT_HOP_AUTO_ENV_START=true) makes that
+config hop.env.autoStart true' (or GIT_HOP_AUTO_ENV_START=true) makes that
 the default; --no-env-start skips it for one run. A worktree without an
 environment is skipped, and a failed start only warns: add still succeeds.
 

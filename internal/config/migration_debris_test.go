@@ -51,7 +51,7 @@ func setGlobal(t *testing.T, kv map[string]string) {
 // other scalar, and the sentinel.
 func buggyMigration() map[string]string {
 	return map[string]string{
-		config.KeyAutoEnvStart:           "false",
+		"hop.autoEnvStart":               "false",
 		"hop.showAllManagedRepos":        "false",
 		"hop.unusedThresholdDays":        "0",
 		"hop.enforceCleanForConversion":  "false",
@@ -102,7 +102,7 @@ func TestMigrationDebris(t *testing.T) {
 	}
 	setGlobal(t, buggyMigration())
 	// Changed since the migration: no longer the zero value it wrote.
-	setGlobal(t, map[string]string{config.KeyAutoEnvStart: "true", config.KeyBackupMaxBackups: "5"})
+	setGlobal(t, map[string]string{"hop.autoEnvStart": "true", config.KeyBackupMaxBackups: "5"})
 
 	l := config.NewGlobalLoaderWithGitConfig(config.NewGitConfig())
 	// The quoted keys are retired settings git-hop no longer has; the
@@ -145,7 +145,7 @@ func TestMigrationDebris(t *testing.T) {
 		}
 	}
 	for _, k := range []string{
-		config.KeyAutoEnvStart, config.KeyGitDomain, config.KeyWorktreeLocation,
+		"hop.autoEnvStart", config.KeyGitDomain, config.KeyWorktreeLocation,
 		"hop.backup.enabled", config.KeyBackupMaxBackups, "hop.migrated",
 	} {
 		if _, ok := gitGlobal(t, "--get", k); !ok {
