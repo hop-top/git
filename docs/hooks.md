@@ -943,10 +943,14 @@ to a JSONL file.
 | `git.runtime.hopspace.initialized` | `git hop init` | `path`, `org`, `repo` |
 | `git.runtime.deps.installed` | `git hop add`, after dependency install | `worktree_path`, `branch` |
 
+`hopspace_path` is the same for every worktree event of a hub: the hub
+itself for a default clone (so it equals `repo_path`), or
+`$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`.
+
 One line per event:
 
 ```json
-{"topic":"git.runtime.worktree.created","source":"git-hop","timestamp":"2026-09-24T00:05:23.412862-04:00","payload":{"path":"/src/widgets/hops/feat/login","branch":"feat/login","hopspace_path":"/home/me/.local/share/git-hop/github.com/acme/widgets","repo_path":"/src/widgets"}}
+{"topic":"git.runtime.worktree.created","source":"git-hop","timestamp":"2026-09-24T00:05:23.412862-04:00","payload":{"path":"/src/widgets/hops/feat/login","branch":"feat/login","hopspace_path":"/src/widgets","repo_path":"/src/widgets"}}
 ```
 
 Topics follow the `[source].[category].[object].[action]` grammar of the

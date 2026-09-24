@@ -1,0 +1,38 @@
+# Every worktree event names the same hopspace_path: the hopspace the hub
+# resolves to. That is the hub itself for a default clone and
+# $GIT_HOP_DATA_HOME/<org>/<repo> for a --global one.
+#
+# The regression this pins: created reported the hub while switched and
+# removed reported the data home, so consumers correlating events by
+# hopspace_path saw two hopspaces for one repo.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git config --global hop.events.sink jsonl
+
+# --- default hub: every event names the hub ---
+exec git config --global hop.events.path $WORK/local.jsonl
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/a
+exec git-hop feat/a
+exec git-hop move feat/a feat/b
+exec git-hop remove feat/b --no-prompt
+grep -count=4 '"hopspace_path":"' $WORK/local.jsonl
+grep -count=4 '"hopspace_path":"[^"]*/hub"' $WORK/local.jsonl
+
+# --- --global hub: every event names the data-home hopspace ---
+cd $WORK
+exec git config --global hop.events.path $WORK/global.jsonl
+exec git-hop --global $WORK/org/repo.git hubg
+cd $WORK/hubg
+exec git-hop add feat/c
+exec git-hop feat/c
+exec git-hop move feat/c feat/d
+exec git-hop remove feat/d --no-prompt
+grep -count=4 '"hopspace_path":"' $WORK/global.jsonl
+grep -count=4 '"hopspace_path":"[^"]*/data/org/repo"' $WORK/global.jsonl
