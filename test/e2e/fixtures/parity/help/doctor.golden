@@ -1,7 +1,8 @@
 Run diagnostics on git-hop installation and project setup.
 
 Checks:
-- Path configuration (data home, config home, cache home)
+- Path configuration (data home and cache home; the config home is
+  optional until something is configured)
 - Hub configuration and symlinks
 - Hopspace existence and consistency
 - Worktree state (orphaned directories)

@@ -1,0 +1,47 @@
+# doctor does not require git-hop's config directory
+# ($XDG_CONFIG_HOME/git-hop). Nothing needs it until the user configures
+# something, and every writer (config.json, managers.json, hops.json,
+# hooks) creates it on demand, so a missing one is healthy: no issue, no
+# warning, and --fix does not create it.
+#
+# The regression this pins: doctor reported "config directory does not
+# exist" and exited 1 whenever nothing had written a config file yet.
+# The config home is pointed at an empty location after clone and init,
+# since either may register the hub in hops.json there.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/repo.git hub
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+
+env XDG_CONFIG_HOME=$WORK/unconfigured
+
+# --- fresh clone ---
+cd $WORK/hub
+exec git-hop doctor
+stdout 'Config home: '
+! stderr 'config directory'
+stdout 'No issues found'
+exec git-hop doctor --json
+decode json stdout '#' 0
+
+# --- fresh init ---
+cd $WORK/proj
+exec git-hop doctor
+! stderr 'config directory'
+stdout 'No issues found'
+exec git-hop doctor --json
+decode json stdout '#' 0
+
+# --- --fix leaves it to the first writer ---
+exec git-hop doctor --fix
+! exists $WORK/unconfigured/git-hop
