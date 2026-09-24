@@ -17,6 +17,10 @@ Combine --fix with --dry-run to preview every repair without applying any
 of it: no directories created, no worktrees recreated, no dependencies
 touched, no state or hop.json rewritten, and no backup snapshot taken.
 
+Exit status, like git fsck: 0 when healthy or only warnings were found,
+1 when an issue was reported and not fixed. With --fix, 0 only if every
+issue was fixed; with --fix --dry-run, only if every issue would be.
+
 Usage:
   git-hop doctor [flags]
 
