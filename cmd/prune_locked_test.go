@@ -34,8 +34,8 @@ func TestPrune_SkipsLockedMissingWorktree(t *testing.T) {
 			st := stateWithHub(hubPath)
 			repo := st.Repositories["github.com/test/repo"]
 			repo.Worktrees = map[string]*state.WorktreeState{
-				"usb":  {Path: usb, Type: "linked", HubPath: hubPath},
-				"gone": {Path: gone, Type: "linked", HubPath: hubPath},
+				usb:  {Path: usb, Branch: "usb", Type: "linked", HubPath: hubPath},
+				gone: {Path: gone, Branch: "gone", Type: "linked", HubPath: hubPath},
 			}
 			g := mocks.NewMockGit()
 			g.WorktreeListOut = porcelainEntry(usb, "usb", "locked on the usb drive") +
@@ -63,10 +63,10 @@ func TestPrune_SkipsLockedMissingWorktree(t *testing.T) {
 			}
 			assert.ElementsMatch(t, []string{pruneKindHopJSONEntry, pruneKindWorktree}, kinds)
 
-			assert.Contains(t, repo.Worktrees, "usb", "the locked state entry is kept")
+			assert.Contains(t, stateBranches(repo), "usb", "the locked state entry is kept")
 			assert.Contains(t, hubBranchKeys(t, fs, hubPath), "usb", "the locked hop.json row is kept")
 			if !dryRun {
-				assert.NotContains(t, repo.Worktrees, "gone")
+				assert.NotContains(t, stateBranches(repo), "gone")
 				assert.NotContains(t, hubBranchKeys(t, fs, hubPath), "gone")
 			}
 		})
@@ -83,7 +83,7 @@ func TestPrune_UnreadableRegistry_Prunes(t *testing.T) {
 	writePruneHub(t, fs, hubPath, []string{"main", "gone"}, []string{"main"})
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"gone": {Path: worktreeDir(hubPath, "gone"), Type: "linked", HubPath: hubPath},
+		worktreeDir(hubPath, "gone"): {Path: worktreeDir(hubPath, "gone"), Branch: "gone", Type: "linked", HubPath: hubPath},
 	}
 	g := mocks.NewMockGit()
 	g.WorktreeListErr = assert.AnError

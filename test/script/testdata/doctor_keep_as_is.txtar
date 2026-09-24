@@ -38,12 +38,12 @@ stdout 'Kept as-is'
 ! stdout 'Pruning orphaned worktree'
 ! stdout 'Pruning hop.json entry'
 decode json $WORK/hub/hop.json branches.feat.hopspaceBranch feat
-grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+grep '"branch": "feat"' $WORK/.local/state/git-hop/state.json
 
 # --- no answer at all is not a decision to delete ---
 ! exec git-hop doctor --fix
 decode json $WORK/hub/hop.json branches.feat.hopspaceBranch feat
-grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+grep '"branch": "feat"' $WORK/.local/state/git-hop/state.json
 
 # --- 2) Delete the entry: the user's choice goes through. The failed
 # recreate still fails the run ---
@@ -51,7 +51,7 @@ stdin $WORK/delete.txt
 ! exec git-hop doctor --fix
 stdout 'Deleted entry'
 ! decode json $WORK/hub/hop.json branches.feat
-! grep '"feat": \{' $WORK/.local/state/git-hop/state.json
+! grep '"branch": "feat"' $WORK/.local/state/git-hop/state.json
 
 -- keep.txt --
 3

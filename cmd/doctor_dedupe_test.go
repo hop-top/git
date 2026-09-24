@@ -21,7 +21,7 @@ func TestDoctorDryRun_StateEntryRepairedOnce(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"feat/gone": {Path: "/hubs/repo/hops/feat/gone", Type: "linked", HubPath: hubPath},
+		"/hubs/repo/hops/feat/gone": {Path: "/hubs/repo/hops/feat/gone", Branch: "feat/gone", Type: "linked", HubPath: hubPath},
 	}
 	g := mocks.NewMockGit()
 	g.Runner.Responses = map[string]string{hubPath + ":git branch --merged main": "  feat/gone\n* main\n"}

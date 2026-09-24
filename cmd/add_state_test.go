@@ -21,8 +21,9 @@ func TestAddWorktreeToState(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main": {
+					"/path/to/repo": {
 						Path:         "/path/to/repo",
+						Branch:       "main",
 						Type:         "bare",
 						HubPath:      "/path/to/repo",
 						CreatedAt:    time.Now(),
@@ -59,10 +60,10 @@ func TestAddWorktreeToState(t *testing.T) {
 
 	require.NoError(t, err)
 	assert.Len(t, st.Repositories["github.com/test/repo"].Worktrees, 2)
-	assert.Contains(t, st.Repositories["github.com/test/repo"].Worktrees, "feature-x")
 
 	// Verify worktree details
-	addedWorktree := st.Repositories["github.com/test/repo"].Worktrees["feature-x"]
+	addedWorktree, ok := st.Repositories["github.com/test/repo"].Worktree("/path/to/repo", "feature-x")
+	require.True(t, ok)
 	assert.Equal(t, "/path/to/repo/hops/feature-x", addedWorktree.Path)
 	assert.Equal(t, "linked", addedWorktree.Type)
 	assert.Equal(t, "/path/to/repo", addedWorktree.HubPath)

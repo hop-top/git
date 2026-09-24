@@ -26,7 +26,7 @@ func TestDoctorFix_DefaultBranchNeverMerged(t *testing.T) {
 
 	st := stateWithHub(hubPath)
 	st.Repositories["github.com/test/repo"].Worktrees = map[string]*state.WorktreeState{
-		"main": {Path: mainPath, Type: "linked", HubPath: hubPath},
+		mainPath: {Path: mainPath, Branch: "main", Type: "linked", HubPath: hubPath},
 	}
 	require.NoError(t, state.SaveState(fs, st))
 
@@ -41,7 +41,7 @@ func TestDoctorFix_DefaultBranchNeverMerged(t *testing.T) {
 		}
 		loaded, err := state.LoadState(fs)
 		require.NoError(t, err)
-		assert.Contains(t, loaded.Repositories["github.com/test/repo"].Worktrees, "main", "dry-run=%v", opts.dryRun)
+		assert.Contains(t, stateBranches(loaded.Repositories["github.com/test/repo"]), "main", "dry-run=%v", opts.dryRun)
 		assert.Contains(t, hubBranchKeys(t, fs, hubPath), "main", "dry-run=%v", opts.dryRun)
 	}
 }

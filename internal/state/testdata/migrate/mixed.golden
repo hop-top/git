@@ -1,0 +1,70 @@
+{
+  "version": "2.0.0",
+  "lastUpdated": "-",
+  "repositories": {
+    "github.com/work/remote": {
+      "uri": "/w/remote.git",
+      "org": "work",
+      "repo": "remote",
+      "defaultBranch": "main",
+      "worktrees": {
+        "/w/proj/hops/feat": {
+          "path": "/w/proj/hops/feat",
+          "branch": "feat",
+          "type": "linked",
+          "hubPath": "/w/proj",
+          "createdAt": "2026-09-20T09:00:00Z",
+          "lastAccessed": "2026-09-26T08:00:00Z"
+        },
+        "/w/proj/hops/main": {
+          "path": "/w/proj/hops/main",
+          "branch": "main",
+          "type": "bare",
+          "hubPath": "/w/proj",
+          "createdAt": "2026-09-24T17:20:23Z",
+          "lastAccessed": "2026-09-24T18:00:00Z"
+        },
+        "/w/proj2/hops/hotfix": {
+          "path": "/w/proj2/hops/hotfix",
+          "branch": "hotfix",
+          "type": "linked",
+          "hubPath": "/w/proj2",
+          "createdAt": "2026-09-25T09:30:00Z",
+          "lastAccessed": "2026-09-25T09:30:00Z"
+        },
+        "/w/proj2/hops/main": {
+          "path": "/w/proj2/hops/main",
+          "branch": "main",
+          "type": "bare",
+          "hubPath": "/w/proj2",
+          "createdAt": "2026-09-24T17:33:24Z",
+          "lastAccessed": "2026-09-24T17:33:24Z"
+        },
+        "legacy:pathless": {
+          "path": "",
+          "branch": "pathless",
+          "type": "linked",
+          "hubPath": "/w/proj",
+          "createdAt": "2026-09-25T09:45:00Z",
+          "lastAccessed": "2026-09-25T09:45:00Z"
+        }
+      },
+      "hubs": [
+        {
+          "path": "/w/proj",
+          "mode": "local",
+          "createdAt": "2026-09-24T17:20:23Z",
+          "lastAccessed": "2026-09-24T17:20:23Z"
+        },
+        {
+          "path": "/w/proj2",
+          "mode": "local",
+          "createdAt": "2026-09-24T17:33:24Z",
+          "lastAccessed": "2026-09-24T17:33:24Z"
+        }
+      ],
+      "globalHopspace": null
+    }
+  },
+  "orphaned": []
+}

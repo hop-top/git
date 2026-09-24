@@ -155,7 +155,7 @@ var moveCmd = &cobra.Command{
 		if err != nil {
 			st = state.NewState()
 		}
-		_ = st.RemoveWorktree(repoID, oldBranch)
+		_ = st.RemoveWorktreeAt(repoID, actualOldPath)
 		if err := st.AddWorktree(repoID, newBranch, &state.WorktreeState{
 			Path:         actualNewPath,
 			Type:         "linked",

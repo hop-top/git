@@ -115,7 +115,7 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 	} else {
 		repoID := "github.com/test/repo"
 		if repo, exists := globalState.Repositories[repoID]; exists {
-			if _, exists := repo.Worktrees["feature-auth"]; !exists {
+			if !recordsBranch(repo, "feature-auth") {
 				t.Logf("Warning: feature-auth not in global state before removal")
 			}
 		}
@@ -199,7 +199,7 @@ func TestRemoveHubspaceCreatedByMistake(t *testing.T) {
 	} else {
 		repoID := "github.com/test/repo"
 		if repo, exists := globalState.Repositories[repoID]; exists {
-			if _, exists := repo.Worktrees["feature-auth"]; exists {
+			if recordsBranch(repo, "feature-auth") {
 				t.Errorf("feature-auth should be removed from global state")
 			} else {
 				t.Log("✓ Branch removed from global state")

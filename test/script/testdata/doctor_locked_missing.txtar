@@ -50,6 +50,6 @@ exec git-hop doctor --fix
 ! stderr 'error:'
 ! exists $WORK/hub/hops/usb
 decode json $WORK/hub/hop.json branches.usb.hopspaceBranch usb
-grep '"usb": \{' $WORK/.local/state/git-hop/state.json
+grep '"branch": "usb"' $WORK/.local/state/git-hop/state.json
 exec git worktree list --porcelain
 stdout '^locked on the usb drive$'

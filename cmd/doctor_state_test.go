@@ -24,15 +24,17 @@ func TestVerifyStateConsistency(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main": {
+					"/path/to/existing": {
 						Path:         "/path/to/existing",
+						Branch:       "main",
 						Type:         "bare",
 						HubPath:      "/path/to/existing",
 						CreatedAt:    time.Now(),
 						LastAccessed: time.Now(),
 					},
-					"missing": {
+					"/path/to/missing": {
 						Path:         "/path/to/missing",
+						Branch:       "missing",
 						Type:         "linked",
 						HubPath:      "/path/to/existing",
 						CreatedAt:    time.Now(),
@@ -73,8 +75,9 @@ func TestVerifyStateConsistency_AllValid(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main": {
+					"/path/to/existing": {
 						Path:         "/path/to/existing",
+						Branch:       "main",
 						Type:         "bare",
 						HubPath:      "/path/to/existing",
 						CreatedAt:    time.Now(),
@@ -114,15 +117,17 @@ func TestCheckStateInDoctorCommand(t *testing.T) {
 				Repo:          "repo",
 				DefaultBranch: "main",
 				Worktrees: map[string]*state.WorktreeState{
-					"main": {
+					"/path/to/existing": {
 						Path:         "/path/to/existing",
+						Branch:       "main",
 						Type:         "bare",
 						HubPath:      "/path/to/existing",
 						CreatedAt:    time.Now(),
 						LastAccessed: time.Now(),
 					},
-					"feature": {
+					"/path/to/missing": {
 						Path:         "/path/to/missing",
+						Branch:       "feature",
 						Type:         "linked",
 						HubPath:      "/path/to/existing",
 						CreatedAt:    time.Now(),

@@ -583,7 +583,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 	totalDiskUsage := int64(0)
 
 	for _, repo := range st.Repositories {
-		for _, wt := range repo.Worktrees {
+		for _, wt := range repo.SortedWorktrees() {
 			totalWorktrees++
 			exists, _ := afero.DirExists(fs, wt.Path)
 			if exists {
@@ -618,7 +618,8 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 
 	// Count running services by checking docker-compose status
 	for _, repo := range st.Repositories {
-		for branch, wt := range repo.Worktrees {
+		for _, wt := range repo.SortedWorktrees() {
+			branch := wt.Branch
 			composePath := filepath.Join(wt.Path, "docker-compose.yml")
 			if exists, _ := afero.Exists(fs, composePath); exists {
 				// Check if services are running
@@ -656,7 +657,8 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 
 			// Count running services for this repo
 			repoRunning := 0
-			for branch, wt := range repo.Worktrees {
+			for _, wt := range repo.SortedWorktrees() {
+				branch := wt.Branch
 				composePath := filepath.Join(wt.Path, "docker-compose.yml")
 				if exists, _ := afero.Exists(fs, composePath); exists {
 					project := services.ComposeProjectName(repo.Org, repo.Repo, branch)
@@ -717,7 +719,7 @@ func showSystemStatusPlain(fs afero.Fs, d *docker.Docker, st *state.State) {
 	totalWorktrees := 0
 	activeWorktrees := 0
 	for _, repo := range st.Repositories {
-		for _, wt := range repo.Worktrees {
+		for _, wt := range repo.SortedWorktrees() {
 			totalWorktrees++
 			if exists, _ := afero.DirExists(fs, wt.Path); exists {
 				activeWorktrees++

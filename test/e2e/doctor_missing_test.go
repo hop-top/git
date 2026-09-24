@@ -2,6 +2,7 @@ package e2e
 
 import (
 	"encoding/json"
+	"hop.top/git/internal/state"
 	"os"
 	"path/filepath"
 	"strings"
@@ -263,7 +264,18 @@ func stateHasWorktree(t *testing.T, env *TestEnv, branch string) bool {
 		return false
 	}
 	for _, repo := range st.Repositories {
-		if _, ok := repo.Worktrees[branch]; ok {
+		if recordsBranch(repo, branch) {
+			return true
+		}
+	}
+	return false
+}
+
+// recordsBranch reports whether repo records a worktree of branch, in
+// any hub.
+func recordsBranch(repo *state.RepositoryState, branch string) bool {
+	for _, wt := range repo.Worktrees {
+		if wt != nil && wt.Branch == branch {
 			return true
 		}
 	}

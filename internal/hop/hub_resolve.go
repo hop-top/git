@@ -92,11 +92,8 @@ func recordedHubView(hubPath string, repo *state.RepositoryState) *Hub {
 		},
 		Branches: map[string]config.HubBranch{},
 	}
-	for branch, wt := range repo.Worktrees {
-		if wt == nil || resolvePathForCompare(wt.HubPath) != resolvePathForCompare(hubPath) {
-			continue
-		}
-		cfg.Branches[branch] = config.HubBranch{Path: wt.Path, HopspaceBranch: branch}
+	for _, wt := range repo.HubWorktrees(hubPath) {
+		cfg.Branches[wt.Branch] = config.HubBranch{Path: wt.Path, HopspaceBranch: wt.Branch}
 	}
 	return &Hub{
 		Path:   hubPath,

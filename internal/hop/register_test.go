@@ -58,9 +58,9 @@ func TestRegisterNewHub_LinkedWorktrees(t *testing.T) {
 	require.NoError(t, err)
 	wts := st.Repositories["github.com/acme/widget"].Worktrees
 	require.Len(t, wts, 2)
-	assert.Equal(t, "/hub/hops/main", wts["main"].Path)
-	assert.Equal(t, WorktreeTypeBare, wts["main"].Type)
-	assert.Equal(t, "/hub/hops/feature", wts["feature"].Path)
-	assert.Equal(t, "linked", wts["feature"].Type)
-	assert.Equal(t, "/hub", wts["feature"].HubPath)
+	assert.Equal(t, "main", wts["/hub/hops/main"].Branch)
+	assert.Equal(t, WorktreeTypeBare, wts["/hub/hops/main"].Type)
+	assert.Equal(t, "feature", wts["/hub/hops/feature"].Branch)
+	assert.Equal(t, "linked", wts["/hub/hops/feature"].Type)
+	assert.Equal(t, "/hub", wts["/hub/hops/feature"].HubPath)
 }
