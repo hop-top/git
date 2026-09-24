@@ -11,7 +11,9 @@ import (
 // migration wrote and the user never set (see
 // config.GlobalLoader.MigrationDebris), and keys of retired settings in
 // --global and in the current hub's --local config (see
-// config.ConfigScope.StaleRetiredSettings). Under --fix it unsets both.
+// config.ConfigScope.StaleRetiredSettings), and the hub's repository
+// format (checkRepositoryFormat). Under --fix it unsets the keys and
+// raises the format version.
 // The repair runs only here, never on its own: it edits the user's git
 // config. hubPath is "" outside a hub.
 func checkConfig(l *config.GlobalLoader, hubPath string, opts doctorOpts, r *doctorReport) {
@@ -22,6 +24,7 @@ func checkConfig(l *config.GlobalLoader, hubPath string, opts doctorOpts, r *doc
 	if hubPath != "" {
 		if s, ok := config.HubScope(hubPath); ok {
 			scopes = append(scopes, s)
+			checkRepositoryFormat(s, opts, r)
 		}
 	}
 	found := 0

@@ -60,6 +60,9 @@ Checks:
 - Retired hop.* settings (hop.autoEnvStart, hop.bareRepo and the other
   settings git-hop no longer has) in --global or the current hub's
   config, whatever their value: never read; a warning (--fix unsets them)
+- The current hub's repository format: extensions.worktreeConfig on at
+  core.repositoryformatversion 0, which tools other than git may not
+  honour; a warning (--fix sets version 1)
 
 Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows

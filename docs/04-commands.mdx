@@ -768,6 +768,11 @@ git hop doctor --fix --dry-run
   `hop.conversion.autoRollback`, `hop.backup.enabled` and
   `hop.backup.preserveStashes`. Nothing reads them, and earlier releases
   wrote several on their own. They are not counted as migration leftovers
+- The current hub's repository format: `extensions.worktreeConfig` on at
+  `core.repositoryformatversion` 0, as conversions by earlier releases
+  left it, is reported as a warning (exit status unaffected). git honours
+  the extension at version 0; tools that read extensions only at version
+  1 (libgit2, JGit) would miss the hub's per-worktree `core.bare`
 
 ### Output
 
@@ -821,6 +826,8 @@ The `--fix` flag will:
   (only here; git-hop never does it on its own)
 - Unset every retired setting (all values of it) from the scope that holds
   it, `--global` or the current hub's config, and no live key
+- Set the current hub's `core.repositoryformatversion` to 1 when it has
+  `extensions.worktreeConfig` on at version 0
 - Register branches from hub to hopspace
 - Sync hub-hopspace configurations
 - Recreate or clean up worktrees missing on disk (see below)
@@ -1096,7 +1103,7 @@ The keys left out describe the old layout or the old storage format:
 |-----|--------------------|
 | `core.bare` | The hub is bare; it keeps the clone's `true` (in its own `config.worktree` when `extensions.worktreeConfig` is on, see below). |
 | `core.worktree` | Names the old working tree; hub worktrees live under `hops/`. |
-| `core.repositoryformatversion` | The clone sets it to match its own storage. |
+| `core.repositoryformatversion` | The clone sets it to match its own storage, and `init` raises it to 1 when the hub gets `extensions.worktreeConfig`, see below. |
 | `extensions.*` | Repository format declarations (`objectFormat`, `refStorage`, ...); the clone writes its own. `extensions.worktreeConfig=true` is the exception: it carries over, see below. |
 | `include.path`, `includeIf.<cond>.path` with a relative path, or a `gitdir:./` condition | Resolved against the directory of the config file, which moves from `<repo>/.git/` to `<repo>/`. `init` prints a `warning:` for each; set it again with an absolute path. |
 
@@ -1111,7 +1118,9 @@ Per-worktree config (`extensions.worktreeConfig`, which `git
 sparse-checkout` turns on) carries over exactly. The hub gets the
 extension, and its `core.bare=true` moves from the shared config into the
 hub's own `config.worktree`, as git requires: in the shared config it
-would apply to every worktree and break them. The entries of
+would apply to every worktree and break them. Its
+`core.repositoryformatversion` goes to 1, as git sets it when it turns
+the extension on. The entries of
 `.git/config.worktree` (such as `core.sparseCheckout` and
 `core.sparseCheckoutCone`) go to the default worktree's own
 `config.worktree`, the same exclusions applying, and its sparse checkout

@@ -1,0 +1,53 @@
+# doctor warns about a hub with extensions.worktreeConfig on at
+# core.repositoryformatversion 0, which is what conversions made before
+# git-hop raised the version left behind. git honours the extension at 0
+# for compatibility; other implementations read extensions only at 1 and
+# would miss the hub's per-worktree core.bare. It is a warning, so the
+# exit status stays 0, and --fix sets the version to 1, as git does
+# when it turns the extension on.
+
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git config extensions.worktreeConfig true
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+
+# --- a current conversion is at version 1: nothing to report ---
+cd $WORK/proj
+exec git config --file config core.repositoryformatversion
+stdout '^1$'
+exec git-hop doctor --json
+decode json stdout '#' 0
+
+# --- an older hub at version 0: a warning, exit 0 ---
+exec git config --file config core.repositoryformatversion 0
+exec git-hop doctor
+stderr 'warning: .*extensions\.worktreeConfig.*core\.repositoryformatversion'
+stdout 'No issues found'
+exec git-hop doctor --json
+decode json stdout 0.kind warning
+decode json stdout 0.check config
+decode json stdout 0.subject core.repositoryformatversion
+
+# --- found from inside a worktree too ---
+cd $WORK/proj/hops/main
+exec git-hop doctor
+stderr 'core\.repositoryformatversion'
+cd $WORK/proj
+
+# --- --fix --dry-run previews, changes nothing ---
+exec git-hop doctor --fix -n
+stdout 'Would set core\.repositoryformatversion to 1'
+exec git config --file config core.repositoryformatversion
+stdout '^0$'
+
+# --- --fix sets version 1 ---
+exec git-hop doctor --fix
+stdout 'Set core\.repositoryformatversion to 1'
+exec git config --file config core.repositoryformatversion
+stdout '^1$'
+exec git rev-parse --is-bare-repository
+stdout '^true$'
+exec git-hop doctor --json
+decode json stdout '#' 0

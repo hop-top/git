@@ -40,6 +40,8 @@ exec git rev-parse --is-bare-repository
 stdout '^true$'
 exec git config --file config --type=bool extensions.worktreeConfig
 stdout '^true$'
+exec git config --file config core.repositoryformatversion
+stdout '^1$'
 ! exec git config --file config core.bare
 exec git config --file config.worktree --get-all core.bare
 stdout -count=1 '^true$'

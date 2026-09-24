@@ -38,6 +38,8 @@ stdout '^true$'
 ! exec git config --file config core.sparseCheckout
 exec git config --file config --type=bool extensions.worktreeConfig
 stdout '^true$'
+exec git config --file config core.repositoryformatversion
+stdout '^1$'
 
 # --- the default worktree: sparse as before ---
 cd $WORK/proj/hops/main

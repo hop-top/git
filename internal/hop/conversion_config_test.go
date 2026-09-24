@@ -120,6 +120,11 @@ func TestConvertBare_CarriesLocalConfig(t *testing.T) {
 				if ext := strings.TrimSpace(gitOut(t, "-C", repo, "config", "--local", "--type=bool", "extensions.worktreeConfig")); ext != "true" {
 					t.Errorf("extensions.worktreeConfig = %q, want true", ext)
 				}
+				// git raises the format version with any extension it
+				// turns on; tools other than git ignore extensions at 0.
+				if v := strings.TrimSpace(gitOut(t, "-C", repo, "config", "--local", "core.repositoryformatversion")); v != "1" {
+					t.Errorf("core.repositoryformatversion = %q, want 1 with extensions.worktreeConfig", v)
+				}
 			} else {
 				if bare := strings.TrimSpace(string(sharedBare)); sharedErr != nil || bare != "true" {
 					t.Errorf("core.bare = %q (%v), want the hub's own single true", bare, sharedErr)
