@@ -1,0 +1,45 @@
+# `git hop init --dry-run` describes the conversion that would really run:
+# the worktree is named after the repository's current branch, the chosen
+# layout (bare vs --regular) decides what gets created, and a repository
+# without an origin says "Remote: none", as the real run does. (The menu
+# above the plan prints its own Remote line, so the empty form is what
+# pins the plan's.)
+
+# --- bare, default branch not "main" ---
+exec git init -b trunk $WORK/bare
+cd $WORK/bare
+exec git commit --allow-empty -m 'initial'
+exec git-hop init -n --no-prompt --no-hooks
+stdout '^Remote: none$'
+! stdout '^Remote: ?$'
+stdout '^Branch: trunk$'
+stdout '^     - Convert to bare repository$'
+stdout '^     - Create hops/trunk/ worktree for the trunk branch$'
+stdout '^     - Point current at hops/trunk$'
+! stdout 'main/'
+! stdout 'worktrees/'
+! exists $WORK/bare/hop.json
+
+# --- --regular: repo root stays the working tree, no bare, no hops/ ---
+exec git init -b trunk $WORK/regular
+cd $WORK/regular
+exec git commit --allow-empty -m 'initial'
+exec git-hop init -n --no-prompt --regular --no-hooks
+stdout '^Remote: none$'
+! stdout '^Remote: ?$'
+stdout '^     - Keep the repository root as the trunk branch working tree$'
+stdout '^     - Create worktrees/ for future branch worktrees$'
+! stdout 'Convert to bare repository'
+! stdout 'hops/'
+! stdout 'main/'
+! exists $WORK/regular/hop.json
+! exists $WORK/regular/worktrees
+
+# --- with an origin, the remote is named as the menu names it ---
+exec git init -b main $WORK/remote
+cd $WORK/remote
+exec git commit --allow-empty -m 'initial'
+exec git remote add origin https://example.com/acme/widget.git
+exec git-hop init -n --no-prompt --no-hooks
+stdout '^Remote: origin \(https://example.com/acme/widget.git\)$'
+stdout '^     - Create hops/main/ worktree for the main branch$'
