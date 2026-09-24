@@ -27,7 +27,9 @@ import (
 //
 // A repository without the extension is converted as before: git was not
 // reading a config.worktree file it may have, so it is left behind with
-// a warning.
+// a warning. The exception is a sparse checkout configured in the shared
+// config (see conversion_sparse.go): its sparse keys become the default
+// worktree's own, which takes the extension, set up as above.
 
 // readWorktreeConfig lists repoPath's .git/config.worktree entries, in
 // file order, includes not followed. A missing file has no entries.
@@ -50,12 +52,15 @@ func readWorktreeConfig(g git.GitInterface, repoPath string) ([]configEntry, err
 // worktreeGitDir). Runs after carryOverGitDir, which has put
 // info/sparse-checkout in the worktree's git dir.
 func (c *Converter) carryOverWorktreeConfig(plan *LocalConfigPlan, repoPath, bareRepo, worktreePath, worktreeGitDir string) ([]string, error) {
+	var warnings []string
 	if !plan.WorktreeConfig {
 		if _, err := c.fs.Stat(filepath.Join(repoPath, ".git", "config.worktree")); err == nil {
-			return []string{".git/config.worktree: not carried over: extensions.worktreeConfig is off, " +
-				"so git was not reading it"}, nil
+			warnings = append(warnings, ".git/config.worktree: not carried over: extensions.worktreeConfig is off, "+
+				"so git was not reading it")
 		}
-		return nil, nil
+	}
+	if !plan.HubWorktreeConfig() {
+		return warnings, nil
 	}
 
 	shared := filepath.Join(bareRepo, "config")
@@ -81,11 +86,11 @@ func (c *Converter) carryOverWorktreeConfig(plan *LocalConfigPlan, repoPath, bar
 	// full; applying them again removes what the repository did not have.
 	if sparse, err := c.git.Run("git", "-C", worktreePath, "config", "--type=bool", "core.sparseCheckout"); err == nil && sparse == "true" {
 		if _, err := c.git.Run("git", "-C", worktreePath, "sparse-checkout", "reapply"); err != nil {
-			return []string{fmt.Sprintf("sparse checkout not applied to the %s worktree; run 'git sparse-checkout reapply' there: %v",
-				filepath.Base(worktreePath), err)}, nil
+			warnings = append(warnings, fmt.Sprintf("sparse checkout not applied to the %s worktree; run 'git sparse-checkout reapply' there: %v",
+				filepath.Base(worktreePath), err))
 		}
 	}
-	return nil, nil
+	return warnings, nil
 }
 
 // parseConfigList splits `git config --null --list` output into entries.

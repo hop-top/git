@@ -105,6 +105,20 @@ type LocalConfigPlan struct {
 	WorktreeConfig      bool
 	PerWorktree         []configEntry
 	PerWorktreeExcluded []ExcludedConfigEntry
+
+	// SparseToWorktree is true when the repository is a sparse checkout
+	// configured in its shared config, without the extension (git before
+	// `git sparse-checkout`, or set by hand). Its sparse keys are moved
+	// from Carried to PerWorktree: in the hub's shared config they would
+	// make every worktree sparse. See conversion_sparse.go.
+	SparseToWorktree bool
+}
+
+// HubWorktreeConfig reports whether the hub gets extensions.worktreeConfig,
+// with core.bare in its own config.worktree and PerWorktree written to
+// the default worktree's config.worktree.
+func (p *LocalConfigPlan) HubWorktreeConfig() bool {
+	return p.WorktreeConfig || p.SparseToWorktree
 }
 
 const worktreeConfigKey = "extensions.worktreeconfig"
@@ -156,6 +170,8 @@ func PlanLocalConfig(g git.GitInterface, repoPath string) (*LocalConfigPlan, err
 			}
 			plan.PerWorktree = append(plan.PerWorktree, e)
 		}
+	} else {
+		planSparseToWorktree(g, repoPath, plan)
 	}
 	return plan, nil
 }
