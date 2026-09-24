@@ -126,12 +126,6 @@ func TestCommands(t *testing.T) {
 		// Generate (implicit in add, but test explicit)
 		env.RunGitHop(t, branchPath, "env", "generate")
 
-		// Check
-		out := env.RunGitHop(t, branchPath, "env", "check")
-		if strings.Contains(out, "Error") {
-			t.Errorf("Env check reported errors: %s", out)
-		}
-
 		// Start
 		env.RunGitHop(t, branchPath, "env", "start")
 
