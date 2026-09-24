@@ -1,0 +1,97 @@
+# A state.json written before worktrees were keyed by path is migrated:
+# read as it is, rewritten in the current format by the next command that
+# saves state, and backed up byte for byte first. A file that cannot be
+# parsed is never replaced.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+
+# --- replace state with the old format, as an earlier release wrote it ---
+exec sh -c 'sed "s|@HUB@|$WORK/hub|g" $WORK/legacy.json.in > $WORK/.local/state/git-hop/state.json'
+cp $WORK/.local/state/git-hop/state.json $WORK/legacy.json
+
+# --- read-only commands read it and write nothing ---
+exec git-hop list --json
+decode json stdout '#' 1
+decode json stdout 0.branch main
+decode json stdout 0.hub ~/hub$
+cmp $WORK/.local/state/git-hop/state.json $WORK/legacy.json
+! exists $WORK/.local/state/git-hop/backups
+
+# --- the first save migrates it, after backing it up ---
+cd $WORK/hub
+exec git-hop add feat
+grep '"version": "2.0.0"' $WORK/.local/state/git-hop/state.json
+grep '"branch": "main"' $WORK/.local/state/git-hop/state.json
+grep '"branch": "feat"' $WORK/.local/state/git-hop/state.json
+exec sh -c 'ls $WORK/.local/state/git-hop/backups | wc -l | tr -d " "'
+stdout '^1$'
+exec sh -c 'cat $WORK/.local/state/git-hop/backups/state-*.json'
+cmp stdout $WORK/legacy.json
+
+# --- a later save takes no second backup ---
+exec git-hop add fix
+exec sh -c 'ls $WORK/.local/state/git-hop/backups | wc -l | tr -d " "'
+stdout '^1$'
+
+# --- prune --all ages the backup out once past the retention ---
+cd $WORK
+exec git-hop prune --all --dry-run --json
+! stdout state-backup
+exec git -C $WORK/hub config hop.repair.backupRetention 1ns
+exec git-hop prune --all --dry-run --json
+stdout '"kind": "state-backup"'
+stdout '"action": "would-prune"'
+exec sh -c 'ls $WORK/.local/state/git-hop/backups | wc -l | tr -d " "'
+stdout '^1$'
+exec git-hop prune --all
+stdout '1 state backup\(s\)'
+exec sh -c 'ls $WORK/.local/state/git-hop/backups | wc -l | tr -d " "'
+stdout '^0$'
+
+# --- an unreadable state file is never replaced ---
+cp $WORK/garbage.json $WORK/.local/state/git-hop/state.json
+cd $WORK/hub
+exec git-hop add other
+stderr 'state'
+cmp $WORK/.local/state/git-hop/state.json $WORK/garbage.json
+
+-- garbage.json --
+{not json
+-- legacy.json.in --
+{
+  "version": "1.0.0",
+  "lastUpdated": "2026-09-24T17:20:24.384707-04:00",
+  "repositories": {
+    "github.com/org/repo": {
+      "uri": "x",
+      "org": "org",
+      "repo": "repo",
+      "defaultBranch": "main",
+      "worktrees": {
+        "main": {
+          "path": "@HUB@/hops/main",
+          "type": "bare",
+          "hubPath": "@HUB@",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      },
+      "hubs": [
+        {
+          "path": "@HUB@",
+          "mode": "local",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      ],
+      "globalHopspace": null
+    }
+  },
+  "orphaned": []
+}

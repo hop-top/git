@@ -206,10 +206,11 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				output.Fatal("Failed to remove hub directory: %v", err)
 			}
 
-			// Remove from global state
+			// Remove from global state: this hub and its worktrees. The
+			// repository's other hubs, and their worktrees, stay.
 			st, err := state.LoadState(fs)
 			if err == nil {
-				if err := st.RemoveRepository(repoID); err != nil {
+				if err := st.RemoveHub(repoID, targetPath); err != nil {
 					output.Warn("Failed to update state: %v", err)
 				} else {
 					if err := state.SaveState(fs, st); err != nil {

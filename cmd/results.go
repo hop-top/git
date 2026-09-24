@@ -26,7 +26,7 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.5"
+const resultSchemaVersion = "1.6"
 
 // addResult is the result of `git hop add`.
 type addResult struct {
@@ -53,6 +53,7 @@ type statusRecord struct {
 	Status     string          `json:"status" yaml:"status" table:"status" jsonschema:"description=Sync label relative to base (default/synced/N ahead/behind (N)/merged/diverged; optional dirty suffix); - when missing"`
 	Path       string          `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the worktree"`
 	Repository string          `json:"repository,omitempty" yaml:"repository,omitempty" jsonschema:"description=Repository id (host/org/repo); status --all only"`
+	Hub        string          `json:"hub,omitempty" yaml:"hub,omitempty" jsonschema:"description=Absolute path of the hub the worktree belongs to; absent when state does not know it (status --all)"`
 	Ports      map[string]int  `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service; status <branch> only when ports are allocated"`
 	Services   []statusService `json:"services,omitempty" yaml:"services,omitempty" jsonschema:"description=Docker Compose containers of the worktree; status <branch> only when it defines services"`
 }
@@ -76,6 +77,7 @@ type listRecord struct {
 	Path       string `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the worktree"`
 	State      string `json:"state" yaml:"state" table:"state" jsonschema:"description=active when the worktree directory exists; missing otherwise"`
 	Status     string `json:"status" yaml:"status" table:"status" jsonschema:"description=Sync label relative to base (default/synced/N ahead/behind (N)/merged/diverged; optional dirty suffix); - when missing"`
+	Hub        string `json:"hub,omitempty" yaml:"hub,omitempty" jsonschema:"description=Absolute path of the hub the worktree belongs to; absent when state does not know it"`
 }
 
 // doctorRecord is one line of the `git hop doctor` report: a problem a
@@ -106,9 +108,9 @@ func (doctorRecord) JSONSchemaExtend(s *jsonschema.Schema) {
 // would remove.
 type pruneRecord struct {
 	Action     string `json:"action" yaml:"action" table:"action" jsonschema:"enum=pruned,enum=would-prune,enum=skipped,description=pruned; would-prune under --dry-run; skipped: left in place although its path is missing (see reason)"`
-	Kind       string `json:"kind" yaml:"kind" table:"kind" jsonschema:"enum=worktree,enum=hub,enum=hop-json-entry,enum=repair-backup,description=worktree and hub: entries in the state file; hop-json-entry: a hub's hop.json branch entry; repair-backup: an expired repair backup directory"`
-	Repository string `json:"repository" yaml:"repository" table:"repository" jsonschema:"description=Repository id (host/org/repo) the entry belongs to"`
-	Branch     string `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch of a worktree or hop-json-entry; empty for hub and repair-backup"`
+	Kind       string `json:"kind" yaml:"kind" table:"kind" jsonschema:"enum=worktree,enum=hub,enum=hop-json-entry,enum=repair-backup,enum=conversion-backup,enum=state-backup,description=worktree and hub: entries in the state file; hop-json-entry: a hub's hop.json branch entry; repair-backup: an expired repair backup directory; conversion-backup: an expired init conversion backup; state-backup: an expired state.json backup (prune --all)"`
+	Repository string `json:"repository" yaml:"repository" table:"repository" jsonschema:"description=Repository id (host/org/repo) the entry belongs to; empty for state-backup"`
+	Branch     string `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch of a worktree or hop-json-entry; empty for hub and backups"`
 	Path       string `json:"path" yaml:"path" table:"path" jsonschema:"description=Worktree or hub or backup path the entry pointed at"`
 	Reason     string `json:"reason,omitempty" yaml:"reason,omitempty" jsonschema:"description=Why a skipped entry was left in place (a worktree git has locked, with git's lock reason); absent otherwise"`
 }
