@@ -32,6 +32,7 @@ type GitInterface interface {
 	DeleteLocalBranch(dir, branch string) error
 	HasRemoteBranch(dir, branch string) bool
 	DeleteRemoteBranch(dir, branch string) error
+	FetchRemote(dir, remote string) error
 	ListRemoteBranches(dir string) ([]string, error)
 	RunInDir(dir string, cmd string, args ...string) (string, error)
 	Run(cmd string, args ...string) (string, error)
@@ -351,6 +352,13 @@ func (g *Git) HasRemoteBranch(dir, branch string) bool {
 // deadline as HasRemoteBranch.
 func (g *Git) DeleteRemoteBranch(dir, branch string) error {
 	_, err := g.runRemote(dir, "push", "origin", "--delete", branch)
+	return err
+}
+
+// FetchRemote runs `git fetch <remote>`, under the same deadline as
+// HasRemoteBranch.
+func (g *Git) FetchRemote(dir, remote string) error {
+	_, err := g.runRemote(dir, "fetch", remote)
 	return err
 }
 
