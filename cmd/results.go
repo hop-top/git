@@ -69,6 +69,7 @@ func declareOutputSchema(cmd *cobra.Command, shape any) {
 	}); err != nil {
 		panic(err)
 	}
+	output.RegisterResultShape(cmd, shape)
 }
 
 // emitResult renders data as the command's structured result. A render
