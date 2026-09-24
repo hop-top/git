@@ -1,4 +1,17 @@
-Remove a hub, hopspace, or branch
+Remove a hub, hopspace, or branch.
+
+Removing a branch worktree runs a safety gate first. A branch merged into
+the default branch (merge commit, squash, or rebase) with a clean worktree
+is removed silently. Anything else needs explicit flags:
+
+  merged, uncommitted or untracked files   --no-verify
+  not merged, pushed to origin             --force
+  not merged, not pushed                   --force --no-verify
+
+--force covers the not-merged check; --no-verify covers uncommitted or
+untracked files and unpushed commits. Neither implies the other.
+--no-prompt only skips the confirmation prompt; it never satisfies the
+gate. --no-verify does not skip pre-/post-worktree-remove hooks.
 
 Usage:
   git-hop remove [target] [flags]
@@ -11,7 +24,7 @@ Flags:
   -h, --help            help for remove
       --merged          Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)
       --no-prompt       Skip the confirmation prompt only; does NOT bypass the safety gate
-      --no-verify       Allow removal of dirty worktrees or unpushed commits (gate bypass)
+      --no-verify       Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)
 
 Global Flags:
       --config string   config file (default is $XDG_CONFIG_HOME/git-hop/config.json)

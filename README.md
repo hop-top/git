@@ -214,6 +214,7 @@ git hop remove feature-old
 # Force flags for risky removals — see `git hop remove --help`:
 #   --force       allow removal of an unmerged branch
 #   --no-verify   allow removal with dirty worktree or unpushed commits
+#                 (never unlocks an unmerged branch; that needs --force)
 git hop remove feature-old --force --no-verify
 
 # Clean up orphaned worktrees (deleted on filesystem)
