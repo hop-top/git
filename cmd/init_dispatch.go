@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 
@@ -54,4 +55,60 @@ func previewInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, branch st
 	}
 	worktreePath := filepath.Join(repoPath, "hops", branch)
 	cli.PreviewHook(hooks.NewRunner(fs), "post-worktree-add", worktreePath, initRepoID(g, repoPath))
+}
+
+// initHooksHintWidth caps each hint line so the list wraps like the
+// surrounding init output.
+const initHooksHintWidth = 72
+
+// initHooksHintLines lists the hooks a script in .git-hop/hooks/ can
+// implement, derived from the runner so it only names hooks that fire.
+// A pre-/post- pair is folded into "pre/post-<op>".
+func initHooksHintLines() []string {
+	names := hooks.RepoLevelHookNames()
+	have := make(map[string]bool, len(names))
+	for _, n := range names {
+		have[n] = true
+	}
+
+	var items []string
+	for _, n := range names {
+		switch {
+		case strings.HasPrefix(n, "pre-") && have["post-"+strings.TrimPrefix(n, "pre-")]:
+			items = append(items, "pre/post-"+strings.TrimPrefix(n, "pre-"))
+		case strings.HasPrefix(n, "post-") && have["pre-"+strings.TrimPrefix(n, "post-")]:
+			// Folded into its pre- counterpart.
+		default:
+			items = append(items, n)
+		}
+	}
+
+	var lines []string
+	line := ""
+	for i, item := range items {
+		if i < len(items)-1 {
+			item += ","
+		}
+		if line != "" && len(line)+1+len(item) > initHooksHintWidth {
+			lines = append(lines, line)
+			line = ""
+		}
+		if line == "" {
+			line = "  " + item
+		} else {
+			line += " " + item
+		}
+	}
+	if line != "" {
+		lines = append(lines, line)
+	}
+	return lines
+}
+
+// printInitHooksHint prints the hook list under the hooks-dir message.
+func printInitHooksHint() {
+	fmt.Println("Place executable scripts there to hook into git-hop operations:")
+	for _, l := range initHooksHintLines() {
+		fmt.Println(l)
+	}
 }
