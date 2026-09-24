@@ -2,6 +2,7 @@ package output_test
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -209,5 +210,61 @@ func TestWithField(t *testing.T) {
 	logger := output.WithField("key", "value")
 	if logger == nil {
 		t.Error("WithField() returned nil")
+	}
+}
+
+// captureStderr runs fn with os.Stderr redirected and returns what it wrote.
+// The logger is set up inside fn so it binds to the redirected stream.
+func captureStderr(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stderr
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stderr = w
+	defer func() { os.Stderr = old }()
+	fn()
+	w.Close()
+	var buf bytes.Buffer
+	buf.ReadFrom(r)
+	return buf.String()
+}
+
+// Warnings use git's lowercase "warning:" prefix, like Error's "error:".
+func TestWarnHumanUsesGitPrefix(t *testing.T) {
+	got := captureStderr(t, func() {
+		output.SetupLogger(output.ModeHuman, false)
+		output.Warn("disk %s", "low")
+	})
+	if got != "warning: disk low\n" {
+		t.Errorf("Warn stderr = %q, want %q", got, "warning: disk low\n")
+	}
+}
+
+// JSON mode keeps the structured logger: one JSON object per message.
+func TestWarnJSONStaysStructured(t *testing.T) {
+	got := captureStderr(t, func() {
+		output.SetupLogger(output.ModeJSON, false)
+		output.Warn("disk %s", "low")
+	})
+	var rec map[string]any
+	if err := json.Unmarshal([]byte(strings.TrimSpace(got)), &rec); err != nil {
+		t.Fatalf("Warn stderr is not one JSON object: %q (%v)", got, err)
+	}
+	if rec["msg"] != "disk low" || rec["level"] != "warn" {
+		t.Errorf("Warn JSON record = %v, want msg=disk low level=warn", rec)
+	}
+}
+
+func TestWarnSilentInQuietAndPorcelain(t *testing.T) {
+	for _, mode := range []output.Mode{output.ModeQuiet, output.ModePorcelain} {
+		got := captureStderr(t, func() {
+			output.SetupLogger(mode, false)
+			output.Warn("should not appear")
+		})
+		if got != "" {
+			t.Errorf("mode %v: Warn stderr = %q, want empty", mode, got)
+		}
 	}
 }

@@ -68,7 +68,7 @@ func TestRemovePathResolution(t *testing.T) {
 	}
 
 	// The bug shows up as a warning, not a failure
-	if strings.Contains(out, "WARN") && strings.Contains(out, "Failed to remove worktree via git") {
+	if strings.Contains(out, "warning: Failed to remove worktree via git") {
 		// This is expected with the buggy code - log it
 		t.Logf("Warning detected (expected with bug): %s", out)
 		// But the test should still fail if we see path duplication

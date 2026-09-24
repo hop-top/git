@@ -107,16 +107,15 @@ func Error(msg string, args ...interface{}) {
 	}
 }
 
-// Warn prints a warning message.
+// Warn prints a warning with git's lowercase "warning:" prefix on stderr
+// (a structured record in JSON mode). Quiet and porcelain modes drop it.
 func Warn(msg string, args ...interface{}) {
-	if CurrentMode == ModeQuiet {
-		return
-	}
 	formatted := fmt.Sprintf(msg, args...)
-	if CurrentMode == ModeJSON {
+	switch CurrentMode {
+	case ModeJSON:
 		logger.Warn(formatted)
-	} else if CurrentMode == ModeHuman {
-		logger.Warn(formatted)
+	case ModeHuman:
+		fmt.Fprintf(os.Stderr, "warning: %s\n", formatted)
 	}
 }
 

@@ -1,0 +1,29 @@
+# Warnings reach stderr with git's lowercase `warning:` prefix, never a
+# logger level tag. A failing post-worktree-switch hook only warns: the
+# switch itself still succeeds.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/post-hook $WORK/.config/git-hop/hooks/post-worktree-switch
+exec chmod +x $WORK/.config/git-hop/hooks/post-worktree-switch
+
+exec git-hop main
+stdout 'Switched to worktree ''main'''
+stderr '^warning: Hook post-worktree-switch failed'
+! stderr 'WARN'
+
+# Quiet drops the warning.
+exec git-hop -q main
+! stderr 'warning:'
+
+-- post-hook --
+#!/bin/sh
+exit 1
