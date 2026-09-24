@@ -115,6 +115,11 @@ func runPrune(cmd *cobra.Command, args []string) {
 	}
 
 	counts := runPruneAll(fs, g, scoped, dryRun)
+	if all {
+		// State backups belong to no one repository, so only a prune of
+		// every repository ages them out.
+		counts.addStateBackups(pruneStateBackups(fs, g, st, dryRun))
+	}
 
 	if !dryRun && (counts.worktrees > 0 || counts.hubs > 0) {
 		// scoped shares its *RepositoryState pointers with st, so the
@@ -134,11 +139,11 @@ func runPrune(cmd *cobra.Command, args []string) {
 	case counts.total() == 0:
 		output.Success("No orphaned entries found.")
 	case dryRun:
-		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), and %d conversion backup(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups)
+		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), and %d state backup(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups)
 	default:
-		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), and %d conversion backup(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups)
+		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), and %d state backup(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups)
 	}
 }
 
@@ -217,11 +222,19 @@ type pruneCounts struct {
 	repairBackups  int
 	// conversionBackups counts init's conversion backups aged out.
 	conversionBackups int
-	records           []pruneRecord
+	// stateBackups counts state.json backups aged out (prune --all).
+	stateBackups int
+	records      []pruneRecord
 }
 
 func (c pruneCounts) total() int {
-	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups + c.conversionBackups
+	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups + c.conversionBackups + c.stateBackups
+}
+
+// addStateBackups adds the state backups a pass aged out.
+func (c *pruneCounts) addStateBackups(records []pruneRecord) {
+	c.stateBackups += len(records)
+	c.records = append(c.records, records...)
 }
 
 // runPruneAll performs every prune pass against st and returns the
@@ -260,6 +273,9 @@ const (
 	// pruneKindConversionBackup is a backup 'git hop init' took before
 	// converting a repository.
 	pruneKindConversionBackup = "conversion-backup"
+	// pruneKindStateBackup is a copy of state.json taken before a save
+	// migrated it to the current format.
+	pruneKindStateBackup = "state-backup"
 )
 
 // pruneActionSkipped is the action of an entry prune left in place

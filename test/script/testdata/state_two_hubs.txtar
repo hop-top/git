@@ -1,0 +1,78 @@
+# Two hubs of one repository each keep their own worktree of a branch in
+# state. state.json used to key a repository's worktrees by branch, so the
+# second hub's main replaced the first's, and add, move, merge and remove
+# in one hub rewrote or deleted the other hub's entry. Removing a hub
+# dropped the whole repository, with the other hub in it.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/repo.git huba
+exec git-hop $WORK/org/repo.git hubb
+cd $WORK/huba
+exec git-hop add feat
+cd $WORK/hubb
+exec git-hop add feat
+
+# --- both hubs' main and feat are recorded ---
+cd $WORK
+exec git-hop list --json
+decode json stdout '#' 4
+decode json stdout 0.branch feat
+decode json stdout 0.hub ~/huba$
+decode json stdout 1.branch feat
+decode json stdout 1.hub ~/hubb$
+decode json stdout 2.branch main
+decode json stdout 2.hub ~/huba$
+decode json stdout 3.branch main
+decode json stdout 3.hub ~/hubb$
+exec git-hop status --all --json
+decode json stdout '#' 4
+decode json stdout 3.hub ~/hubb$
+
+# --- move in hub b leaves hub a's feat ---
+cd $WORK/hubb
+exec git-hop move feat feat2
+cd $WORK
+exec git-hop list --json
+decode json stdout '#' 4
+decode json stdout 0.branch feat
+decode json stdout 0.hub ~/huba$
+decode json stdout 1.branch feat2
+decode json stdout 1.hub ~/hubb$
+
+# --- merge (which removes the source worktree) in hub b leaves hub a's feat ---
+cd $WORK/hubb
+exec git-hop merge feat2 main
+cd $WORK
+exec git-hop list --json
+decode json stdout '#' 3
+decode json stdout 0.branch feat
+decode json stdout 0.hub ~/huba$
+
+# --- remove in hub b removes only hub b's worktree ---
+cd $WORK/hubb
+exec git-hop add feat
+exec git-hop remove feat --no-prompt
+cd $WORK
+exec git-hop list --json
+decode json stdout '#' 3
+decode json stdout 0.branch feat
+decode json stdout 0.hub ~/huba$
+
+# --- removing hub b keeps hub a and the repository ---
+exec git-hop remove $WORK/hubb --no-prompt
+exec git-hop list --json
+decode json stdout '#' 2
+decode json stdout 0.hub ~/huba$
+decode json stdout 1.hub ~/huba$
+grep -count=1 '"path": ".*/huba",' $WORK/.local/state/git-hop/state.json
+! grep 'hubb' $WORK/.local/state/git-hop/state.json
+
+# --- state.json is written in the current format ---
+grep '"version": "2.0.0"' $WORK/.local/state/git-hop/state.json
+! exists $WORK/.local/state/git-hop/backups

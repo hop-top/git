@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"time"
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
@@ -21,7 +20,6 @@ import (
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/services"
-	"hop.top/git/internal/state"
 	"hop.top/kit/go/core/xdg"
 	"hop.top/kit/go/runtime/bus"
 )
@@ -253,50 +251,7 @@ created or written and no hook runs.`,
 		}
 		recordAddTask(hub, branch, taskID)
 
-		// Update global state
-		st, err := state.LoadState(fs)
-		if err != nil {
-			st = state.NewState()
-		}
-
-		// Ensure repository exists in state
-		if st.Repositories[repoID] == nil {
-			st.AddRepository(repoID, &state.RepositoryState{
-				URI:           hub.Config.Repo.URI,
-				Org:           hub.Config.Repo.Org,
-				Repo:          hub.Config.Repo.Repo,
-				DefaultBranch: hub.Config.Repo.DefaultBranch,
-				Worktrees:     make(map[string]*state.WorktreeState),
-				Hubs:          []*state.HubState{},
-			})
-
-			// Add the hub to state
-			mode := state.HubModeLocal
-			if hub.Config.Repo.Mode == config.RepoModeGlobal {
-				mode = state.HubModeGlobal
-			}
-			st.AddHub(repoID, &state.HubState{
-				Path:         hubPath,
-				Mode:         mode,
-				CreatedAt:    time.Now(),
-				LastAccessed: time.Now(),
-			})
-		}
-
-		// Add worktree to state
-		if err := st.AddWorktree(repoID, branch, &state.WorktreeState{
-			Path:         worktreePath,
-			Type:         "linked",
-			HubPath:      hubPath,
-			CreatedAt:    time.Now(),
-			LastAccessed: time.Now(),
-		}); err != nil {
-			output.Error("Failed to update state: %v", err)
-		} else {
-			if err := state.SaveState(fs, st); err != nil {
-				output.Error("Failed to save state: %v", err)
-			}
-		}
+		recordAddedWorktree(fs, hub, repoID, hubPath, branch, worktreePath)
 
 		// Generate Environment
 		// We need to load ports and volumes config

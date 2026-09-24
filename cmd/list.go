@@ -325,6 +325,7 @@ func listRecords(fs afero.Fs, g git.GitInterface, st *state.State, repoIDs []str
 				Path:       wt.Path,
 				State:      "missing",
 				Status:     "-",
+				Hub:        wt.HubPath,
 			}
 			if exists, _ := afero.DirExists(fs, wt.Path); exists {
 				r.State = "active"

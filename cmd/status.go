@@ -164,6 +164,7 @@ func hubBranchStatusRecord(fs afero.Fs, g git.GitInterface, hub *hop.Hub, name s
 		State:  "Missing",
 		Status: "-",
 		Path:   config.ResolveWorktreePath(b.Path, hub.Path),
+		Hub:    hub.Path,
 	}
 	if _, err := fs.Stat(r.Path); err == nil {
 		r.State = "Linked"

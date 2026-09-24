@@ -72,6 +72,7 @@ func systemStatusRecords(fs afero.Fs, g git.GitInterface) []statusRecord {
 			Status:     l.Status,
 			Path:       l.Path,
 			Repository: l.Repository,
+			Hub:        l.Hub,
 		})
 	}
 	return records

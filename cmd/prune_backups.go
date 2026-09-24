@@ -89,3 +89,46 @@ func retireLegacyRepairDir(fs afero.Fs, hubPath string, dryRun bool) {
 		output.Warn("legacy repair cleanup in %s: %v", hubPath, err)
 	}
 }
+
+// pruneStateBackups removes the state.json backups (state.BackupDir) older
+// than hop.repair.backupRetention, the retention repair backups use;
+// zero or less keeps them all. A backup's age is the time in its name,
+// falling back to its modification time.
+func pruneStateBackups(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
+	retention := repairBackupRetention(g, st)
+	if retention <= 0 {
+		return nil
+	}
+	cutoff := time.Now().Add(-retention)
+	prefix := "Pruning"
+	if dryRun {
+		prefix = "[dry-run] Would prune"
+	}
+	entries, err := afero.ReadDir(fs, state.BackupDir())
+	if err != nil {
+		return nil
+	}
+	var pruned []pruneRecord
+	for _, entry := range entries {
+		if entry.IsDir() || !state.IsBackupName(entry.Name()) {
+			continue
+		}
+		taken, ok := state.BackupTime(entry.Name())
+		if !ok {
+			taken = entry.ModTime()
+		}
+		if taken.After(cutoff) {
+			continue
+		}
+		path := filepath.Join(state.BackupDir(), entry.Name())
+		output.Info("%s state backup: %s", prefix, path)
+		if !dryRun {
+			if err := fs.Remove(path); err != nil {
+				output.Warn("failed to remove %s: %v", path, err)
+				continue
+			}
+		}
+		pruned = append(pruned, newPruneRecord(pruneKindStateBackup, "", "", path, dryRun))
+	}
+	return pruned
+}

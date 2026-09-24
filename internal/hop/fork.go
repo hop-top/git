@@ -210,9 +210,12 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	}
 
 	// Update global state
+	// A state file that cannot be read is not replaced.
 	st, err := state.LoadState(fs)
 	if err != nil {
-		st = state.NewState()
+		output.Warn("Failed to update state: %v", err)
+		output.Info("Successfully attached fork branch as %s", forkBranchName)
+		return nil
 	}
 
 	// Get the main repo ID
@@ -230,9 +233,17 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 		})
 	}
 
+	// The hub the fork's worktree belongs to, when state does not have it.
+	mode := state.HubModeLocal
+	if hub.Config.Repo.Mode == config.RepoModeGlobal {
+		mode = state.HubModeGlobal
+	}
+	_ = st.AddHub(mainRepoID, &state.HubState{Path: hubPath, Mode: mode, CreatedAt: time.Now(), LastAccessed: time.Now()})
+
 	// Add fork worktree to state
-	if err := st.AddWorktree(mainRepoID, forkBranchName, &state.WorktreeState{
+	if err := st.PutWorktree(mainRepoID, &state.WorktreeState{
 		Path:         forkWorktreePath,
+		Branch:       forkBranchName,
 		Type:         "linked",
 		HubPath:      hubPath,
 		CreatedAt:    time.Now(),
