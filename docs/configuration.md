@@ -771,7 +771,7 @@ Tracks shared dependencies across worktrees. See [Dependency Sharing](dependency
 
 ### Location
 
-`$GIT_HOP_DATA_HOME/<org>/<repo>/deps/.registry.json`
+`<hopspace>/deps/.registry.json`: `<hub>/deps/.registry.json` for a default clone, `$GIT_HOP_DATA_HOME/<org>/<repo>/deps/.registry.json` for a `--global` one.
 
 ### Schema
 

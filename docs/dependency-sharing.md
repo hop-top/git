@@ -14,10 +14,12 @@ This provides:
 
 ### Storage Structure
 
-Dependencies are stored centrally per repository:
+Dependencies are stored once per hopspace, in `<hopspace>/deps/`. A default
+clone keeps its hopspace in the hub, so that is `<hub>/deps/`; a `--global`
+clone keeps it in the data home, so that is `$GIT_HOP_DATA_HOME/<org>/<repo>/deps/`:
 
 ```
-$GIT_HOP_DATA_HOME/<org>/<repo>/
+<hopspace>/
 ├── deps/
 │   ├── node_modules.abc123/    # Hash of package-lock.json
 │   ├── node_modules.def456/    # Different lockfile version
@@ -31,10 +33,21 @@ $GIT_HOP_DATA_HOME/<org>/<repo>/
 Each worktree gets a symlink to the shared storage:
 
 ```
-.git/hop/hops/feature-xyz/
-├── node_modules -> $GIT_HOP_DATA_HOME/org/repo/deps/node_modules.abc123
-└── vendor -> $GIT_HOP_DATA_HOME/org/repo/deps/vendor.789ghi
+<hub>/hops/feature-xyz/
+├── node_modules -> <hopspace>/deps/node_modules.abc123
+└── vendor -> <hopspace>/deps/vendor.789ghi
 ```
+
+### Stores from earlier releases
+
+Earlier releases put the store of a hub whose path was longer than the data
+home at `$GIT_HOP_DATA_HOME/<end of the hub path>/deps/`: the hub path with
+as many leading characters dropped as the data home path has. Worktrees that link there keep working: an install found there is reused, by
+existing links and by new worktrees with the same lockfile, and nothing is
+reinstalled for it. New installs go to `<hopspace>/deps/`, so worktrees move
+over as their lockfiles change. `git hop env gc` and `git hop doctor --fix`
+never delete from the old store; remove it by hand once no worktree links
+into it.
 
 ### Lockfile Hashing
 

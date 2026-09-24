@@ -118,7 +118,7 @@ silently cancelling.`,
 			}
 
 			// Get size of this specific deps
-			depsPath := filepath.Join(hopspacePath, "deps", depsKey)
+			depsPath := filepath.Join(services.DepsStorePath(hopspacePath), depsKey)
 			size := getDirSize(fs, depsPath)
 			sizeMB := float64(size) / 1024 / 1024
 
@@ -168,7 +168,7 @@ func envGCRecords(fs afero.Fs, registry *services.DepsRegistry, hopspacePath str
 
 	records := make([]envGCRecord, 0, len(keys))
 	for _, key := range keys {
-		path := filepath.Join(hopspacePath, "deps", key)
+		path := filepath.Join(services.DepsStorePath(hopspacePath), key)
 		r := envGCRecord{
 			Action: "would-delete",
 			Key:    key,
@@ -198,7 +198,7 @@ func deletedEnvGCRecords(preview []envGCRecord, deleted []string, hopspacePath s
 	for _, key := range keys {
 		r, ok := byKey[key]
 		if !ok {
-			r = envGCRecord{Key: key, Path: filepath.Join(hopspacePath, "deps", key)}
+			r = envGCRecord{Key: key, Path: filepath.Join(services.DepsStorePath(hopspacePath), key)}
 		}
 		r.Action = "deleted"
 		records = append(records, r)
