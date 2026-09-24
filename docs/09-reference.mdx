@@ -32,26 +32,36 @@ Complete reference for git-hop commands, configuration, and APIs.
 
 ### git hop `&lt;uri&gt;`
 
-Create a new hub and hopspace.
+Clone a repository into a new hub and hopspace.
 
 **Synopsis:**
 ```bash
-git hop &lt;uri&gt; [flags]
+git hop [flags] &lt;uri&gt; [&lt;path&gt;]
 ```
+
+`&lt;uri&gt;` is a git URL (`git@host:org/repo.git`, `https://...`, anything
+ending in `.git`) or an `org/repo` shorthand, expanded to
+`git@&lt;domain&gt;:org/repo.git`. Inside a hub, a word that names a registered
+worktree switches to it instead. `&lt;path&gt;` is the hub directory to create
+(default: the repository name, in the current directory); it must not exist.
 
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--hub &lt;name&gt;` | Set custom hub name |
-| `--config &lt;key=value&gt;` | Set config option |
+| `--git-domain &lt;domain&gt;` | Host for expanding an `org/repo` shorthand (default: `defaults.gitDomain` in the global config, else `github.com`) |
+| `--hooks &lt;mode&gt;` | Mirror committed `.git-hop/hooks/` into the hopspace: `symlink`, `copy`, `prompt` or `none`. Falls back to `$GIT_HOP_HOOKS`, then `git config hop.hooks.installMode`, then `prompt`; without a terminal, `prompt` installs nothing |
+| `--hooks-overwrite` | Overwrite a hopspace hook whose content differs (`symlink` and `copy` modes) |
+| `--branch &lt;name&gt;` | Inside an existing hub: attach `&lt;uri&gt;` as a fork and check out `&lt;name&gt;` from it, instead of cloning a new hub |
+
+[Global flags](#global-flags) apply; `-g, --global` puts the hopspace under
+`$GIT_HOP_DATA_HOME`. Clone has no preview, so `-n, --dry-run` is refused.
 
 **Exit Codes:**
 | Code | Description |
 |------|-------------|
 | 0 | Success |
-| 1 | General error |
-| 2 | Invalid URI |
-| 3 | Hub already exists |
+| 1 | Clone failed: repository unreachable, `&lt;path&gt;` already exists, or a `pre-clone` hook aborted |
+| 129 | Usage error: unknown flag, bad flag value, or `--dry-run`. Prints `error:` (or `fatal:` for `--dry-run`) on stderr |
 
 ### git hop add
 
