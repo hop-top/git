@@ -3,6 +3,7 @@ package cmd
 import (
 	"strings"
 
+	"github.com/invopop/jsonschema"
 	"github.com/spf13/cobra"
 	kitcli "hop.top/kit/go/console/cli"
 
@@ -25,7 +26,7 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.4"
+const resultSchemaVersion = "1.5"
 
 // addResult is the result of `git hop add`.
 type addResult struct {
@@ -82,9 +83,23 @@ type listRecord struct {
 // A healthy run reports no records.
 type doctorRecord struct {
 	Kind    string `json:"kind" yaml:"kind" table:"kind" jsonschema:"enum=issue,enum=warning,enum=fixed,enum=would-fix,enum=failed,description=issue: a problem that makes the installation unhealthy; warning: reported but harmless; fixed: repaired by --fix; would-fix: --fix --dry-run would repair it; failed: --fix could not repair it"`
-	Check   string `json:"check" yaml:"check" table:"check" jsonschema:"enum=paths,enum=hub,enum=dependencies,enum=worktrees,enum=state,description=Check that produced the record"`
+	Check   string `json:"check" yaml:"check" table:"check" jsonschema:"description=Check that produced the record"`
 	Subject string `json:"subject" yaml:"subject" table:"subject" jsonschema:"description=What the record is about: a path / branch / repository:branch / dependency key"`
 	Message string `json:"message" yaml:"message" table:"message" jsonschema:"description=Human-readable description"`
+}
+
+// JSONSchemaExtend sets the schema's check enum from doctorChecks, so
+// the schema lists every check doctor emits and a new one cannot be left
+// out.
+func (doctorRecord) JSONSchemaExtend(s *jsonschema.Schema) {
+	check, ok := s.Properties.Get("check")
+	if !ok {
+		return
+	}
+	check.Enum = make([]any, len(doctorChecks))
+	for i, name := range doctorChecks {
+		check.Enum[i] = name
+	}
 }
 
 // pruneRecord is one entry `git hop prune` removed or, with --dry-run,
