@@ -127,9 +127,8 @@ func TestHopspaceShape_AfterClone(t *testing.T) {
 	if err := os.MkdirAll(outsideDir, 0755); err != nil {
 		t.Fatalf("create outside dir: %v", err)
 	}
-	if out := env.RunGitHop(t, outsideDir, env.BareRepoPath); !strings.Contains(out, "Successfully cloned") {
-		t.Fatalf("git hop clone failed; output:\n%s", out)
-	}
+	// RunGitHop fails the test on a non-zero exit.
+	env.RunGitHop(t, outsideDir, env.BareRepoPath)
 
 	repoName := strings.TrimSuffix(filepath.Base(env.BareRepoPath), ".git")
 	hubPath := filepath.Join(outsideDir, repoName)

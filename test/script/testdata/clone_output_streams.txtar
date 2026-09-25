@@ -1,0 +1,51 @@
+# A clone follows git clone's streams: its progress and the next steps
+# go to stderr, never stdout, and clone reports no result on stdout. -q
+# leaves only errors, and the structured modes carry no human text.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- human: progress and hints on stderr, nothing on stdout ---
+exec git-hop $WORK/org/repo.git hub-human
+! stdout .
+stderr '^Cloning .*/org/repo\.git\.\.\.$'
+stderr '^Project root: .*/hub-human$'
+stderr '^Default branch: main$'
+stderr '^Creating bare repository\.\.\.$'
+stderr '^Created local configuration \(hub\+hopspace\) at .*/hub-human/hop\.json$'
+stderr '^Registered in global registry: org/repo:main$'
+stderr '^Successfully cloned to .*/hub-human$'
+stderr '^Project structure:$'
+stderr '^hint: You can now:$'
+stderr '^hint:   cd .*/hub-human/hops/main +# Work on current branch$'
+stderr '^hint:   git hop add <branch> +# Add new branch$'
+exists $WORK/hub-human/hops/main
+
+# --- global hopspace: its line is progress too ---
+exec git-hop -g $WORK/org/repo.git hub-global
+! stdout .
+stderr '^Initialized hopspace globally at '
+
+# --- -q: only errors, and there are none ---
+exec git-hop -q $WORK/org/repo.git hub-quiet
+! stdout .
+! stderr .
+exists $WORK/hub-quiet/hops/main
+
+# --- --porcelain: no progress, no hints ---
+exec git-hop --porcelain $WORK/org/repo.git hub-porcelain
+! stdout .
+! stderr .
+exists $WORK/hub-porcelain/hops/main
+
+# --- --json: no human text on either stream ---
+exec git-hop --json $WORK/org/repo.git hub-json
+! stdout .
+! stderr '^Cloning '
+! stderr '^Successfully cloned'
+! stderr '^hint:'
+exists $WORK/hub-json/hops/main
