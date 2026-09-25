@@ -70,10 +70,29 @@ func setUpWorktreeDeps(fs afero.Fs, t EnvTarget, globalConfig *config.GlobalConf
 	return true
 }
 
+// PublishCreated emits worktree.created for the set-up worktree of the
+// hub at repoPath, then deps.installed when SetUpWorktree installed
+// dependencies: the order every command that creates a worktree publishes
+// them in. It is separate from SetUpWorktree so each command publishes
+// once the worktree is registered.
+func (s WorktreeSetup) PublishCreated(ctx context.Context, b bus.Bus, repoPath string) {
+	if b == nil {
+		return
+	}
+	_ = b.Publish(ctx, bus.NewEvent(
+		events.WorktreeCreated, events.Source,
+		events.WorktreeEvent{
+			Path:         s.Target.Root,
+			Branch:       s.Target.Branch,
+			HopspacePath: s.Target.HopspacePath,
+			RepoPath:     repoPath,
+		},
+	))
+	s.PublishDepsInstalled(ctx, b)
+}
+
 // PublishDepsInstalled emits deps.installed on b when SetUpWorktree
-// installed dependencies. It is separate from SetUpWorktree so add can
-// keep publishing it after worktree.created, once the worktree is
-// registered.
+// installed dependencies. PublishCreated calls it after worktree.created.
 func (s WorktreeSetup) PublishDepsInstalled(ctx context.Context, b bus.Bus) {
 	if !s.DepsInstalled || b == nil {
 		return

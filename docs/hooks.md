@@ -267,7 +267,8 @@ The `.env` and override exist only for a worktree with a Docker environment (a c
 pre-clone
   ↓  (clone; hopspace init; state; current symlink)
 committed-hook mirror
-  ↓  (environment set-up: ports, volumes, .env, compose override, shared deps)
+  ↓  (environment set-up: ports, volumes, .env, compose override, shared deps;
+      then events: hopspace.initialized, worktree.created, deps.installed)
 post-worktree-add
   ↓
 post-clone
@@ -276,7 +277,7 @@ post-clone
 
 Dispatched from `internal/hop/clone_worktree.go`. Because `internal/hooks` already imports `internal/hop` (for `LooksLikeGitCheckout`), `internal/hop` cannot import `internal/hooks` back without an import cycle — so the dispatch is injected as callbacks (`HookDispatchOptions`), built by `BuildHookDispatch` in `internal/cli/root.go`. `git hop init` reuses the same builder — see [Init hooks](#init-hooks).
 
-The environment is set up before `post-worktree-add` through the same function as `git hop add` (`services.SetUpWorktree`), so both `post-worktree-add` and `post-clone` can read the allocated ports from the worktree's `.env` and find its shared deps linked. A set-up failure is reported and the clone continues; both hooks still fire. The set-up is injected like the hooks (`HookDispatchOptions.SetUpEnv`) and is not itself a hook. The [behaviour change](#add-hooks) noted for add applies here too.
+The environment is set up before `post-worktree-add` through the same function as `git hop add` (`services.SetUpWorktree`), so both `post-worktree-add` and `post-clone` can read the allocated ports from the worktree's `.env` and find its shared deps linked. A set-up failure is reported and the clone continues; both hooks still fire. The set-up is injected like the hooks (`HookDispatchOptions.SetUpEnv`) and is not itself a hook. The [behaviour change](#add-hooks) noted for add applies here too. The [lifecycle events](#lifecycle-events) of the hub and its initial worktree are published right after the set-up, in the order add publishes its own; the hub and worktree are registered by then, but unlike add's, these events precede `post-worktree-add`.
 
 ### Why mirror-then-fire
 
@@ -959,14 +960,14 @@ to a JSONL file.
 
 | Topic | Published by | Payload keys |
 |---|---|---|
-| `git.runtime.worktree.created` | `git hop add` | `path`, `branch`, `hopspace_path`, `repo_path` |
+| `git.runtime.worktree.created` | `git hop add`, and `git hop clone` for the initial worktree (after `hopspace.initialized`) | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.worktree.removed` | `git hop remove` | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.worktree.merged` | `git hop merge` (the source worktree, which merge also removes) | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.worktree.moved` | `git hop move` (new path and branch) | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.worktree.switched` | `git hop <branch>` | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.env.started` / `git.runtime.env.stopped` | `git hop env start` / `stop` | `action`, `root`, `branch` |
-| `git.runtime.hopspace.initialized` | `git hop init` | `path`, `org`, `repo` |
-| `git.runtime.deps.installed` | `git hop add` (after `worktree.created`) and `git hop clone`, after dependency install | `worktree_path`, `branch` |
+| `git.runtime.hopspace.initialized` | `git hop init` and `git hop clone`, for the hub they register (`path` is the hub) | `path`, `org`, `repo` |
+| `git.runtime.deps.installed` | `git hop add` and `git hop clone`, after dependency install and after `worktree.created` | `worktree_path`, `branch` |
 
 `hopspace_path` is the same for every worktree event of a hub: the hub
 itself for a default clone (so it equals `repo_path`), or

@@ -22,8 +22,8 @@ exec git-hop add feat/a
 exec git-hop feat/a
 exec git-hop move feat/a feat/b
 exec git-hop remove feat/b --no-prompt
-grep -count=4 '"hopspace_path":"' $WORK/local.jsonl
-grep -count=4 '"hopspace_path":"[^"]*/hub"' $WORK/local.jsonl
+grep -count=5 '"hopspace_path":"' $WORK/local.jsonl
+grep -count=5 '"hopspace_path":"[^"]*/hub"' $WORK/local.jsonl
 
 # --- --global hub: every event names the data-home hopspace ---
 cd $WORK
@@ -34,5 +34,5 @@ exec git-hop add feat/c
 exec git-hop feat/c
 exec git-hop move feat/c feat/d
 exec git-hop remove feat/d --no-prompt
-grep -count=4 '"hopspace_path":"' $WORK/global.jsonl
-grep -count=4 '"hopspace_path":"[^"]*/data/org/repo"' $WORK/global.jsonl
+grep -count=5 '"hopspace_path":"' $WORK/global.jsonl
+grep -count=5 '"hopspace_path":"[^"]*/data/org/repo"' $WORK/global.jsonl
