@@ -57,6 +57,9 @@ worktree switches to it instead. `&lt;path&gt;` is the hub directory to create
 
 [Global flags](#global-flags) apply; `-g, --global` puts the hopspace under
 `$GIT_HOP_DATA_HOME`. Clone has no preview, so `-n, --dry-run` is refused.
+With `--json`, `--format` or `--porcelain` a clone prints the
+[root command's result](#root-command) (`action: cloned`, or
+`fork-attached` with `--branch`) and nothing else on stdout.
 
 **Exit Codes:**
 | Code | Description |
@@ -316,7 +319,7 @@ Rules:
   So is an unknown format or an unknown `--cols` column.
 - Every result is a list of records, except `add`, `init`, `move`,
   `merge`, `env start`, `env stop`, `env generate` and the root command
-  (`git hop <branch>`), which return one object. An empty result is `[]` (and no lines under `--porcelain`),
+  (`git hop <branch>`, `git hop <uri>`), which return one object. An empty result is `[]` (and no lines under `--porcelain`),
   never empty stdout.
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
@@ -457,18 +460,25 @@ Columns: `source into result commit source_removed branch_deleted remote_deleted
 
 ### root command
 
-`git hop <branch>` (switch) renders one object, told apart by `action`.
-The root command carries one result shape whatever it does. On exit 93
+`git hop <branch>` (switch), `git hop <uri> [<path>]` (clone) and
+`git hop <uri> --branch <b>` inside a hub (fork-attach) render one
+object, told apart by `action`. The root command carries one result
+shape whatever it does: the columns every action fills, and json/yaml
+only fields that one action fills and the others leave out. Only switch
+has a preview; clone and fork-attach refuse `--dry-run` (exit 129). On exit 93
 (a `post-worktree-switch` hook navigated itself) the switch succeeded
 and the result still prints. The bare `git hop` prints help and no
 result.
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `action` | string | `switched`: an existing worktree became current |
-| `branch` | string | Branch of the worktree the run landed on |
+| `action` | string | `switched`: an existing worktree became current; `cloned`: a new hub and its default branch's worktree were created; `fork-attached`: a fork's branch was attached to the current hub |
+| `branch` | string | Branch of the worktree the run landed on: the one switched to, the default branch (`cloned`), or the hub branch the fork's branch became, `<branch>-fork-<owner>` (`fork-attached`) |
 | `path` | string | Absolute path of that worktree |
-| `hub` | string | Absolute path of the hub |
+| `hub` | string | Absolute path of the hub (the new one for `cloned`) |
+| `uri` | string | *json/yaml only*; `cloned`: the origin cloned; `fork-attached`: the fork's URI |
+| `default_branch` | string | *json/yaml only*; `cloned` only: the origin's default branch |
+| `fork_branch` | string | *json/yaml only*; `fork-attached` only: the fork's branch that was attached |
 | `current_updated` | bool | *json/yaml only*; `switched` only: `true` when the hub's `current` symlink now points at the worktree (or, under `--dry-run`, would); `false` when writing it failed |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 

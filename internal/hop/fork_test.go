@@ -30,7 +30,7 @@ func TestForkAttach_FindsMainRepoFromHubRelativePath(t *testing.T) {
 
 	g := mocks.NewMockGit()
 	uri := "https://github.com/forker/repo.git"
-	err = hop.ForkAttach(fs, g, uri, "feat", hubPath)
+	_, err = hop.ForkAttach(fs, g, uri, "feat", hubPath)
 	if err != nil {
 		assert.NotContains(t, err.Error(), "could not find main repository")
 	}
@@ -59,7 +59,7 @@ func TestForkAttach_SkipsFileAtWorktreePath(t *testing.T) {
 
 	g := mocks.NewMockGit()
 	uri := "https://github.com/forker/repo.git"
-	_ = hop.ForkAttach(fs, g, uri, "feat", hubPath)
+	_, _ = hop.ForkAttach(fs, g, uri, "feat", hubPath)
 
 	fetch := forkFetch(uri, "feat")
 	assert.False(t, g.Runner.CalledWith(occupied+fetch),
@@ -81,7 +81,7 @@ func TestForkAttach_FileAtOnlyWorktreePath_NoMainRepo(t *testing.T) {
 	require.NoError(t, afero.WriteFile(fs, filepath.Join(hubPath, "hops", "main"), []byte("not a worktree"), 0o644))
 
 	g := mocks.NewMockGit()
-	err = hop.ForkAttach(fs, g, "https://github.com/forker/repo.git", "feat", hubPath)
+	_, err = hop.ForkAttach(fs, g, "https://github.com/forker/repo.git", "feat", hubPath)
 
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not find main repository")
