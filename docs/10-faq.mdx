@@ -93,9 +93,13 @@ git-hop automatically detects conflicts and allocates alternative ports. Run `gi
 # Remove a specific branch
 git hop remove feature-x
 
-# Prune all orphaned hopspaces
+# Drop the records of worktrees and hubs whose directories are gone
 git hop prune
 ```
+
+Neither stops or removes the branch's containers: run `git hop env stop`
+in the worktree first (see
+[Orphaned Resources](./08-advanced-usage#orphaned-resources)).
 
 ### How do I clean up all merged branches?
 
@@ -120,9 +124,11 @@ They sound similar but solve different problems:
 - **`git hop prune`** — removes orphan **state entries** (worktrees
   and hubs whose paths are gone), repair backups older than
   `hop.repair.backupRetention`, and `git hop init` conversion backups
-  beyond `hop.backup.maxBackups` / `hop.backup.cleanupAgeDays`. It does not touch existing worktrees.
+  beyond `hop.backup.maxBackups` / `hop.backup.cleanupAgeDays`. It does not touch existing worktrees,
+  and never runs Docker.
 - **`git hop remove`** — removes a specific worktree (or all merged
-  ones with `--merged`). Touches the worktree on disk plus its state.
+  ones with `--merged`). Touches the worktree on disk plus its state,
+  not its containers: `git hop env stop` stops those.
 - **`git hop env gc`** — reclaims orphaned dependency directories
   (e.g. `node_modules` snapshots no longer used by any branch).
 - **`git hop doctor --fix`** — repairs inconsistent state: missing

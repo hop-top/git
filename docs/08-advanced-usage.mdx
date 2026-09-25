@@ -146,14 +146,49 @@ find "$GIT_HOP_DATA_HOME" -name "hop.json" -exec dirname {} \;
 
 ### Orphaned Resources
 
-Clean up orphaned containers and volumes:
+`git hop prune` drops records, nothing else: state entries and `hop.json`
+rows of worktrees and hubs whose directories are gone, the `ports.json`
+and `volumes.json` entries of a pruned `--global` hub, and aged-out
+backups (see [`git hop prune`](./04-commands#git-hop-prune)). It never
+runs Docker, so the containers, networks and Docker volumes of those
+worktrees are left as they are, and it never deletes volume directories.
 
 ```bash
 # Dry run first
 git hop prune --dry-run
 
-# Actual cleanup
+# Drop the records
 git hop prune
+```
+
+Neither does `git hop remove`. Stop a worktree's environment before
+removing it, while `git hop env stop` can still find it:
+
+```bash
+cd hops/feature-x
+git hop env stop                    # docker compose stop: the containers stop but stay
+docker compose -p <project> down    # removes the containers and their network as well
+```
+
+`<project>` is the `project` of the worktree's `ports.json` entry
+([Ports Configuration](./configuration.md#ports-configuration)). Once
+the worktree and its entry are gone, ask Docker for the projects left
+behind:
+
+```bash
+docker compose ls --all
+docker compose -p <project> down    # add -v to delete its Docker named volumes too
+```
+
+Volume directories (`hop_<branch>_<name>` under the hopspace's
+`volumes/`, see [Volumes Configuration](./configuration.md#volumes-configuration))
+stay when a branch is removed. Removing a hub
+moves them aside to `$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/`
+unless you ask for them to go with it
+([Volume data](./04-commands#volume-data)):
+
+```bash
+git hop remove <hub-path> --delete-volumes
 ```
 
 ### Port Conflicts
