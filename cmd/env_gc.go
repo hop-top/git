@@ -84,6 +84,15 @@ silently cancelling.`,
 
 		output.Info("  Found %d worktree(s)", len(worktrees))
 
+		// An install an earlier release left in the old layout may be
+		// linked from another hub's worktree; gc checks all of them
+		// before removing one, and without them keeps it.
+		if _, scope, err := depsLinkScope(fs, hubPath); err != nil {
+			output.Warn("Cannot list every hub's worktrees, keeping old-layout dependencies: %v", err)
+		} else {
+			depsManager.SetLinkScope(scope)
+		}
+
 		// Run garbage collection
 		orphaned, totalSize, err := depsManager.GarbageCollect(worktrees, true)
 		if err != nil {

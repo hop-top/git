@@ -376,11 +376,31 @@ func (pm *PackageManager) FindLockfile(fs afero.Fs, worktreePath string) (string
 	return "", fmt.Errorf("no lockfile found for %s in %s", pm.Name, worktreePath)
 }
 
-// GetDepsKey returns the deps directory key (e.g., "node_modules.abc123")
+// GetDepsKey returns the key of the install for a lockfile hash, which is
+// also its path under the deps store: "<hash>/<DepsDir>", e.g.
+// "abc123/node_modules". The install directory is thus named like the
+// DepsDir it stands in for. Node needs that: it looks for a package's
+// dependencies in the directories named node_modules above the package's
+// real path, so an install named anything else cannot resolve its own
+// packages from one another.
 func (pm *PackageManager) GetDepsKey(hash string) string {
-	// Remove path separators from depsDir for the key
+	return hash + "/" + filepath.ToSlash(pm.DepsDir)
+}
+
+// flatDepsKey returns the key earlier releases gave the install for a
+// lockfile hash, e.g. "node_modules.abc123": a directory of that name held
+// the install itself. Such installs are still linked from worktrees made
+// before, but no longer reused or written (see DepsManager.linkDeps).
+func (pm *PackageManager) flatDepsKey(hash string) string {
 	depsName := strings.ReplaceAll(pm.DepsDir, string(filepath.Separator), "_")
 	return fmt.Sprintf("%s.%s", depsName, hash)
+}
+
+// isFlatDepsKey reports whether key names an install in the layout
+// earlier releases wrote (flatDepsKey): one path element, no hash
+// directory above it.
+func isFlatDepsKey(key string) bool {
+	return !strings.Contains(key, "/")
 }
 
 // ApplyOverride creates a new PackageManager with overridden install command

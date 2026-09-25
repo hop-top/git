@@ -21,12 +21,20 @@ clone keeps it in the data home, so that is `$GIT_HOP_DATA_HOME/<org>/<repo>/dep
 ```
 <hopspace>/
 ├── deps/
-│   ├── node_modules.abc123/    # Hash of package-lock.json
-│   ├── node_modules.def456/    # Different lockfile version
-│   ├── vendor.789ghi/          # Hash of go.sum
+│   ├── abc123/node_modules/    # Hash of package-lock.json
+│   ├── def456/node_modules/    # Different lockfile version
+│   ├── 789ghi/vendor/          # Hash of composer.lock
 │   └── .registry.json          # Tracks which branches use which deps
 └── hop.json
 ```
+
+Each install sits in a directory named like the one it stands in for
+(`node_modules`, `vendor`, `vendor/bundle`), under a directory named by the
+lockfile hash. Node needs this: it resolves a package's imports from the
+package's real path, symlinks followed, by looking in each directory named
+`node_modules` above it. An install in a directory named anything else could
+not import its own packages from one another (`ERR_MODULE_NOT_FOUND` from
+inside the store, e.g. under vitest).
 
 ### Worktree Symlinks
 
@@ -34,18 +42,34 @@ Each worktree gets a symlink to the shared storage:
 
 ```
 <hub>/hops/feature-xyz/
-├── node_modules -> <hopspace>/deps/node_modules.abc123
-└── vendor -> <hopspace>/deps/vendor.789ghi
+├── node_modules -> <hopspace>/deps/abc123/node_modules
+└── vendor -> <hopspace>/deps/789ghi/vendor
 ```
+
+### Installs from earlier releases
+
+Earlier releases named each install after the directory and the hash,
+`deps/node_modules.abc123/`, holding the packages directly. Node cannot
+resolve from that layout, so those installs are no longer reused:
+
+- `git hop add` installs into the current layout once per lockfile, even
+  when an old install for the same lockfile exists. Links other worktrees
+  hold into the old install are left alone.
+- A worktree still linked to an old install is relinked by its next install
+  (`git hop env start`) or by `git hop doctor --fix`, and only once the
+  install in the current layout is in place: if the install fails, the
+  worktree keeps its old link. The old install itself is never written.
+- `git hop doctor` reports such links as warnings.
+- `git hop env gc` removes an old install once no worktree of any hub
+  git-hop records links into it.
 
 ### Stores from earlier releases
 
 Earlier releases put the store of a hub whose path was longer than the data
 home at `$GIT_HOP_DATA_HOME/<end of the hub path>/deps/`: the hub path with
-as many leading characters dropped as the data home path has. Worktrees that link there keep working: an install found there is reused, by
-existing links and by new worktrees with the same lockfile, and nothing is
-reinstalled for it. New installs go to `<hopspace>/deps/`, so worktrees move
-over as their lockfiles change.
+as many leading characters dropped as the data home path has. Worktrees that
+link there keep working until relinked, as above; their installs are not
+reused, and nothing there is written. New installs go to `<hopspace>/deps/`.
 
 Hubs whose paths end the same way could share one old store, so an old
 store is only unused once no worktree of any hub git-hop records links
@@ -55,11 +79,12 @@ anything). A store any worktree still links into is kept.
 
 ### Lockfile Hashing
 
-Dependencies are identified by the SHA256 hash (first 6 characters) of the lockfile:
+Dependencies are identified by the SHA256 hash (first 6 characters) of the
+lockfile. The registry keys each install by its path under the store:
 
 ```json
 {
-  "node_modules.abc123": {
+  "abc123/node_modules": {
     "lockfileHash": "abc123",
     "lockfilePath": "package-lock.json",
     "usedBy": ["main", "feature-x"],
@@ -227,8 +252,8 @@ The lockfile is **always** used for dependency cache keys, regardless of install
 
 ```
 # Both use the same cached dependencies if package-lock.json is identical
-main:        npm install --legacy-peer-deps  → node_modules.abc123/
-feature-x:   npm install --force             → node_modules.abc123/  (same!)
+main:        npm install --legacy-peer-deps  → abc123/node_modules/
+feature-x:   npm install --force             → abc123/node_modules/  (same!)
 ```
 
 The install command only affects **how** dependencies are installed when the cache key doesn't exist yet.
@@ -321,8 +346,8 @@ Running dependency audit...
   ✓ Updated dependency registry
 
 Orphaned dependencies:
-  node_modules.def456  (last used: 7 days ago)  ~120MB
-  venv.jkl012         (last used: 2 days ago)   ~45MB
+  def456/node_modules  (last used: 7 days ago)  ~120MB
+  jkl012/venv         (last used: 2 days ago)   ~45MB
 
 Total reclaimable: 165MB
 
@@ -393,12 +418,12 @@ and are audited normally.
 Example output:
 ```
 Dependencies Status:
-  ✓ node_modules.abc123 used by: main, feature-x
-  ✓ vendor.789ghi used by: main
-  ⚠ venv.jkl012 orphaned (no branches use it) - run 'git hop env gc' to clean
+  ✓ abc123/node_modules used by: main, feature-x
+  ✓ 789ghi/vendor used by: main
+  ⚠ jkl012/venv orphaned (no branches use it) - run 'git hop env gc' to clean
   ✗ feature-y: broken symlink node_modules -> (missing abc999)
   ⚠ feature-z: has local node_modules (720MB) instead of symlink
-  warn: main: stale symlink node_modules -> node_modules.old123 (lockfile changed to abc456); refreshed by the next install
+  warn: main: stale symlink node_modules -> old123/node_modules (lockfile changed to abc456); refreshed by the next install
 
 Recommendations:
   - Run 'git hop doctor --fix' to restore shared deps
@@ -436,16 +461,16 @@ Example output:
 ```
 Dependency Issues:
   ⚠ feature-x: local node_modules (720MB) instead of symlink
-  ✗ feature-y: broken symlink → deps/node_modules.xyz999 (missing)
-  warn: main: stale symlink node_modules → node_modules.old123 (lockfile changed to abc456); refreshed by the next install
+  ✗ feature-y: broken symlink → deps/xyz999/node_modules (missing)
+  warn: main: stale symlink node_modules → old123/node_modules (lockfile changed to abc456); refreshed by the next install
 
 Fix these issues? [y/N]: y
-  ✓ feature-x: trashed local folder, created symlink → deps/node_modules.abc123
-  ✓ feature-y: removed broken symlink, installed deps, created symlink → deps/node_modules.abc123
-  ✓ main: removed stale symlink, created symlink → deps/vendor.abc456
+  ✓ feature-x: trashed local folder, created symlink → deps/abc123/node_modules
+  ✓ feature-y: removed broken symlink, installed deps, created symlink → deps/abc123/node_modules
+  ✓ main: removed stale symlink, created symlink → deps/abc456/vendor
 
 Reclaimed: 720MB
-Orphaned: vendor.old123 (45MB) - run 'git hop env gc' to clean
+Orphaned: old123/vendor (45MB) - run 'git hop env gc' to clean
 ```
 
 ## Common Scenarios
@@ -537,7 +562,7 @@ Some tools may not work correctly with symlinked dependencies. If you encounter 
 For developers interested in the implementation:
 
 - **Package manager detection**: `internal/services/package_managers.go`
-- **Dependency management**: `internal/services/deps_manager.go`
+- **Dependency management**: `internal/services/deps_manager.go`, `internal/services/deps_link.go`
 - **Registry tracking**: `internal/services/deps_registry.go`
 - **Trash utility**: `internal/services/trash.go`
 - **Command integration**: `cmd/env.go`, `cmd/env_gc.go`, `cmd/doctor.go`

@@ -28,7 +28,7 @@ exec git-hop $WORK/org/repo.git a-hub-path-longer-than-the-data-home
 cd $WORK/a-hub-path-longer-than-the-data-home
 exec git-hop add feat/x
 exec readlink hops/feat/x/node_modules
-stdout '/a-hub-path-longer-than-the-data-home/deps/node_modules\.[0-9a-f]{6}$'
+stdout '/a-hub-path-longer-than-the-data-home/deps/[0-9a-f]{6}/node_modules$'
 exists hops/feat/x/node_modules/installed
 exists deps/.registry.json
 exec find $WORK/data -name deps

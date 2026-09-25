@@ -155,14 +155,8 @@ func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees map[string]st
 				if err != nil || target == "" {
 					continue
 				}
-				// Verify the symlink target actually lives inside our managed deps
-				// directory by round-tripping: compute the canonical path for a key
-				// derived from the target and check that it matches the target itself.
-				// This uses the same path logic as symlink creation so it remains
-				// correct even for non-standard repoPath values.
-				actualDepsKey := filepath.Base(target)
-				if getDepsPath(repoPath, actualDepsKey) == target {
-					r.AddUsage(actualDepsKey, branch)
+				if key, ok := depsKeyOf(repoPath, target, pm); ok {
+					r.AddUsage(key, branch)
 				}
 			}
 		}
@@ -214,9 +208,33 @@ func DepsStorePath(hopspacePath string) string {
 	return filepath.Join(hopspacePath, "deps")
 }
 
-// getDepsPath returns the full path to a specific deps installation
+// getDepsPath returns the full path to a specific deps installation: the
+// key is its path under the store (see PackageManager.GetDepsKey).
 func getDepsPath(repoPath, depsKey string) string {
-	return filepath.Join(DepsStorePath(repoPath), depsKey)
+	return filepath.Join(DepsStorePath(repoPath), filepath.FromSlash(depsKey))
+}
+
+// depsKeyOf returns the key of the install a symlink target names, in
+// either layout, if the target is one of pm's installs in repoPath's
+// store: "<hash>/<DepsDir>" (GetDepsKey) or a single "<name>.<hash>"
+// element (flatDepsKey). The target must be written exactly as links are
+// made (getDepsPath), so a link to anything else is never counted.
+func depsKeyOf(repoPath, target string, pm PackageManager) (string, bool) {
+	rel, err := filepath.Rel(DepsStorePath(repoPath), target)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return "", false
+	}
+	key := filepath.ToSlash(rel)
+	if !isFlatDepsKey(key) {
+		hash, ok := strings.CutSuffix(key, "/"+filepath.ToSlash(pm.DepsDir))
+		if !ok || hash == "" || strings.Contains(hash, "/") {
+			return "", false
+		}
+	}
+	if getDepsPath(repoPath, key) != target {
+		return "", false
+	}
+	return key, true
 }
 
 // legacyDepsStorePath returns where earlier releases put a hopspace's deps
@@ -224,7 +242,9 @@ func getDepsPath(repoPath, depsKey string) string {
 // hopspace path at the data home's length without checking the hopspace
 // was inside the data home, so a hub path longer than the data home got
 // <data>/<tail of hub path>/deps. Worktrees still link there; the store is
-// read, never written or collected (see DepsManager.resolveDepsPath). The
+// never written, its installs never reused (they are in the layout Node
+// cannot resolve from, see DepsManager.linkDeps), and it is removed whole
+// once nothing links into it (FindLegacyDepsStores). The
 // slicing is reproduced verbatim on purpose: it is the only way to find
 // those stores.
 func legacyDepsStorePath(hopspacePath string) string {

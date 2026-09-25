@@ -365,7 +365,7 @@ func TestPackageManager_GetDepsKey_WithHashes(t *testing.T) {
 	tests := []struct {
 		name           string
 		pm             services.PackageManager
-		expectedPrefix string
+		expectedSuffix string
 	}{
 		{
 			name: "npm with short hash",
@@ -373,7 +373,7 @@ func TestPackageManager_GetDepsKey_WithHashes(t *testing.T) {
 				Name:    "npm",
 				DepsDir: "node_modules",
 			},
-			expectedPrefix: "node_modules.",
+			expectedSuffix: "/node_modules",
 		},
 		{
 			name: "bundler with nested path",
@@ -381,7 +381,7 @@ func TestPackageManager_GetDepsKey_WithHashes(t *testing.T) {
 				Name:    "bundler",
 				DepsDir: "vendor/bundle",
 			},
-			expectedPrefix: "vendor_bundle.",
+			expectedSuffix: "/vendor/bundle",
 		},
 	}
 
@@ -394,18 +394,8 @@ func TestPackageManager_GetDepsKey_WithHashes(t *testing.T) {
 
 			depsKey := tt.pm.GetDepsKey(hash)
 
-			// Verify key format
-			if len(depsKey) < len(tt.expectedPrefix)+6 {
-				t.Errorf("GetDepsKey() = %s, too short", depsKey)
-			}
-
-			// Verify prefix
-			if len(depsKey) < len(tt.expectedPrefix) || depsKey[:len(tt.expectedPrefix)] != tt.expectedPrefix {
-				t.Errorf("GetDepsKey() = %s, want prefix %s", depsKey, tt.expectedPrefix)
-			}
-
-			// Verify hash suffix
-			expectedKey := tt.expectedPrefix + hash
+			// The hash directory, then the install named like DepsDir.
+			expectedKey := hash + tt.expectedSuffix
 			if depsKey != expectedKey {
 				t.Errorf("GetDepsKey() = %s, want %s", depsKey, expectedKey)
 			}

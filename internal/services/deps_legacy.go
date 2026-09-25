@@ -102,6 +102,21 @@ func RemoveLegacyDepsStore(fs afero.Fs, store LegacyDepsStore) error {
 // collectLegacyLinks walks root and records every symlink pointing into
 // one of stores. A root that is gone has nothing to record.
 func collectLegacyLinks(fs afero.Fs, root string, stores map[string]*LegacyDepsStore) error {
+	dirs := make([]string, 0, len(stores))
+	for path := range stores {
+		dirs = append(dirs, path)
+	}
+	return collectLinks(fs, root, dirs, func(dir, link string) {
+		stores[dir].Links = append(stores[dir].Links, link)
+	})
+}
+
+// collectLinks walks root (symlinks not followed, .git skipped) and calls
+// found(dir, link) for every symlink below it that points into one of
+// dirs. A root that is gone has nothing to find; any other part of it
+// that cannot be walked or read is an error, since a link there would go
+// unseen.
+func collectLinks(fs afero.Fs, root string, dirs []string, found func(dir, link string)) error {
 	if _, err := lstat(fs, root); errors.Is(err, os.ErrNotExist) {
 		return nil
 	}
@@ -114,7 +129,7 @@ func collectLegacyLinks(fs afero.Fs, root string, stores map[string]*LegacyDepsS
 			if errors.Is(err, os.ErrNotExist) {
 				return nil
 			}
-			return fmt.Errorf("cannot check %s for links into old dependency stores: %w", path, err)
+			return fmt.Errorf("cannot check %s for links into old dependency installs: %w", path, err)
 		}
 		if info.IsDir() && info.Name() == ".git" {
 			return filepath.SkipDir
@@ -129,9 +144,9 @@ func collectLegacyLinks(fs afero.Fs, root string, stores map[string]*LegacyDepsS
 		if !filepath.IsAbs(target) {
 			target = filepath.Join(filepath.Dir(path), target)
 		}
-		for storePath, s := range stores {
-			if pointsInto(target, storePath) {
-				s.Links = append(s.Links, path)
+		for _, dir := range dirs {
+			if pointsInto(target, dir) {
+				found(dir, path)
 			}
 		}
 		return nil
