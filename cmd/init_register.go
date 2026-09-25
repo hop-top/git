@@ -88,7 +88,7 @@ func hubFromConfig(fs afero.Fs, hub *hop.Hub) hop.NewHub {
 	}
 	for branch := range hub.Config.Branches {
 		path := hub.BranchPath(branch)
-		if !worktreeDirPresent(fs, path) {
+		if !hop.WorktreeDirPresent(fs, path) {
 			continue
 		}
 		if branch != repo.DefaultBranch {
