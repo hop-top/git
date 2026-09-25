@@ -350,14 +350,19 @@ Start services for current worktree.
 git hop env start
 ```
 
-Output:
+Output (all of it on stderr: start has no result, only progress, so
+stdout stays empty in every output mode):
 
 ```
-Starting environment for branch: feature-x
-  ✓ api started on port 11500
-  ✓ db started on port 11501
-  ✓ cache started on port 11502
+Environment Manager: docker-compose
+Ensuring dependencies...
+Dependencies ready.
+  Starting services: docker-compose
+  Environment started successfully
 ```
+
+The manager's hook output and the lifecycle command's own output (for
+example `docker compose up -d`) go to stderr as well.
 
 #### stop
 
@@ -367,13 +372,12 @@ Stop services for current worktree.
 git hop env stop
 ```
 
-Output:
+Output (on stderr, like `start`'s):
 
 ```
-Stopping environment...
-  ✓ api stopped
-  ✓ db stopped
-  ✓ cache stopped
+Environment Manager: docker-compose
+  Stopping services: docker-compose
+  Environment stopped successfully
 ```
 
 #### restart

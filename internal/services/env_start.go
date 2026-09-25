@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"os"
 
 	"github.com/spf13/afero"
@@ -24,6 +26,24 @@ type EnvTarget struct {
 	Branch       string
 	HopspacePath string
 	Hub          *config.HubConfig
+	// Progress, when set, receives everything a start or stop says: the
+	// status lines, the manager's steps, hook output and the lifecycle
+	// command's stdout. `git hop env start/stop` set it to stderr, having
+	// no result of their own. Nil keeps the caller's streams: status via
+	// output.Info, the rest on stdout, or stderr under a structured result.
+	Progress io.Writer
+}
+
+// status prints one status line of a start: on t.Progress, for a person
+// at a terminal, when set; through output.Info otherwise.
+func (t EnvTarget) status(format string, args ...any) {
+	if t.Progress == nil {
+		output.Info(format, args...)
+		return
+	}
+	if output.IsModeHuman() {
+		fmt.Fprintf(t.Progress, format+"\n", args...)
+	}
 }
 
 // ResolveEnv picks the environment manager for t and the compose override
@@ -40,7 +60,10 @@ func ResolveEnv(t EnvTarget, globalConfig *config.GlobalConfig) (*EnvironmentMan
 	}
 	// Results carry stdout alone when a structured result is requested;
 	// otherwise the manager's chatter goes where the hooks' does.
-	if output.IsStructured() {
+	switch {
+	case t.Progress != nil:
+		manager.Out = t.Progress
+	case output.IsStructured():
 		manager.Out = os.Stderr
 	}
 
@@ -69,17 +92,17 @@ func StartEnv(fs afero.Fs, t EnvTarget, globalConfig *config.GlobalConfig, b bus
 		return ErrNoEnvironment
 	}
 
-	output.Info("Environment Manager: %s", manager.Name)
+	t.status("Environment Manager: %s", manager.Name)
 
 	if t.HopspacePath != "" && t.Branch != "" {
-		output.Info("Ensuring dependencies...")
+		t.status("Ensuring dependencies...")
 		depsManager, err := NewDepsManager(fs, t.HopspacePath, globalConfig)
 		if err != nil {
 			output.Warn("Failed to initialize dependency manager: %v", err)
 		} else if err := depsManager.EnsureDeps(t.Root, t.Branch); err != nil {
 			output.Warn("Failed to ensure dependencies: %v", err)
 		} else {
-			output.Info("Dependencies ready.")
+			t.status("Dependencies ready.")
 		}
 	}
 
