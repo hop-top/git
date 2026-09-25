@@ -39,7 +39,7 @@ decode json stdout 0.path ~/hub/hop-config-123456789\.tmp$
 exists $WORK/hub/hop-config-123456789.tmp
 
 exec git-hop prune
-stdout 'Pruned 0 worktree\(s\), 0 hub\(s\), 0 hop.json entry\(ies\), 0 repair backup\(s\), 0 conversion backup\(s\), 0 state backup\(s\), and 1 temp file\(s\)'
+stdout 'Pruned 0 worktree\(s\), 0 hub\(s\), 0 hop.json entry\(ies\), 0 hopspace record\(s\), 0 ports entry\(ies\), 0 volumes entry\(ies\), 0 repair backup\(s\), 0 conversion backup\(s\), 0 state backup\(s\), and 1 temp file\(s\)'
 ! exists $WORK/hub/hop-config-123456789.tmp
 exists $STATE/state.json.123456789.tmp
 

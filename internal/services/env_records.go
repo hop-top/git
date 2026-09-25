@@ -363,48 +363,8 @@ func DropEnvEntry(fs afero.Fs, hopspacePath, hubPath, worktreePath, branch strin
 	if !found {
 		return nil
 	}
-	return dropEnvEntries(fs, hopspacePath, func(key string, _ config.BranchPorts) bool { return key == self.Key })
-}
-
-// DropHubEnvEntries removes from hopspacePath the entries recorded for
-// the hub at hubPath, for a hub removed from a hopspace other hubs keep.
-func DropHubEnvEntries(fs afero.Fs, hopspacePath, hubPath string) error {
-	return dropEnvEntries(fs, hopspacePath, func(_ string, e config.BranchPorts) bool {
-		return e.Hub != "" && state.SamePath(e.Hub, hubPath)
-	})
-}
-
-// dropEnvEntries removes the ports.json entries drop selects, and the
-// volumes.json entries under the same keys.
-func dropEnvEntries(fs afero.Fs, hopspacePath string, drop func(string, config.BranchPorts) bool) error {
-	loader, writer := config.NewLoader(fs), config.NewWriter(fs)
-	ports, err := loader.LoadPortsConfig(hopspacePath)
-	if err != nil {
-		return nil
-	}
-	var keys []string
-	for k, e := range ports.Branches {
-		if drop(k, e) {
-			keys = append(keys, k)
-		}
-	}
-	if len(keys) == 0 {
-		return nil
-	}
-	for _, k := range keys {
-		delete(ports.Branches, k)
-	}
-	if err := writer.WritePortsConfig(hopspacePath, ports); err != nil {
-		return err
-	}
-	vols, err := loader.LoadVolumesConfig(hopspacePath)
-	if err != nil {
-		return nil
-	}
-	for _, k := range keys {
-		delete(vols.Branches, k)
-	}
-	return writer.WriteVolumesConfig(hopspacePath, vols)
+	_, err := dropEnvEntries(fs, hopspacePath, func(key string, _ config.BranchPorts) bool { return key == self.Key })
+	return err
 }
 
 // VolumeConflict is a volume directory a worktree records that an

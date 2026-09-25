@@ -93,7 +93,7 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 	default:
 		output.Info("Keeping hopspace data at %s: %s", d.path, d.reason())
 		dropHubHopspaceRecords(fs, d, hubPath)
-		if err := services.DropHubEnvEntries(fs, d.path, hubPath); err != nil {
+		if _, err := services.DropHubEnvEntries(fs, d.path, hubPath); err != nil {
 			output.Warn("Failed to update ports and volumes: %v", err)
 		}
 		output.Hint("it is removed along with the last hub that uses it")

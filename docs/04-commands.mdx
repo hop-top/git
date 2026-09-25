@@ -802,13 +802,20 @@ as `repository not found`.
 
 ### What It Does
 
-For the repositories in scope, `prune` cleans up six classes of stale
+For the repositories in scope, `prune` cleans up seven classes of stale
 data, and with `--all` two more:
 
 - **Orphan worktrees** — state entries whose paths no longer exist on
   disk. Common when a worktree dir was `rm -rf`'d manually.
 - **Orphan hubs** — hub entries whose directories are gone. Same idea
   one tier up.
+- **Records of an orphan `--global` hub** — the entries the hopspace it
+  shared with the repository's other `--global` hubs
+  (`$GIT_HOP_DATA_HOME/<org>/<repo>`) keeps for its worktrees: their
+  records in that hopspace's `hop.json` (dropped under its lock) and
+  their `ports.json` and `volumes.json` entries, freeing the ports. Only
+  the records go: the volume directories they name, and the data in
+  them, are left alone. The other hubs' records stay.
 - **Orphan `hop.json` entries** — branch rows in a hub's `hop.json`
   whose worktree directory is gone. These are the rows
   [`git hop status`](#git-hop-status) renders as `State: Missing`;
@@ -870,7 +877,7 @@ the next prune removes the entries.
 
 `prune` does **not** remove merged branches that still exist on disk —
 for that, use [`git hop remove --merged`](#git-hop-remove). It also
-does not touch containers, volumes, or symlinks; those go through
+does not touch containers, volume directories, or symlinks; those go through
 [`git hop env gc`](#gc) and [`git hop doctor --fix`](#git-hop-doctor).
 
 ## git hop doctor
@@ -920,8 +927,9 @@ git hop doctor --fix --dry-run
   to an unmarked hub is reported as a warning and left alone
 - Records in a `--global` hopspace of worktrees of a hub that no longer
   exists: state does not record it and its directory is gone (deleted by
-  hand, then pruned). Nothing reads them: a warning, and `--fix` drops
-  them from the hopspace's `hop.json`
+  hand, then taken out of state by `doctor --fix` or by a `prune` of an
+  earlier release; `prune` now drops them with the hub). Nothing reads
+  them: a warning, and `--fix` drops them from the hopspace's `hop.json`
 - Hopspaces of `--global` hubs left at the path another `hop.dataLayout`
   builds (`<org>/<repo>` after switching to `{host}/{org}/{repo}`, or the
   reverse), as the layout in effect for each hub resolves it: a warning.

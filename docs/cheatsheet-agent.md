@@ -182,7 +182,8 @@ exits 0 without prompting.
 /usr/bin/git hop prune --all          # sweep every registered repo (+ aged state backups, state.json temp files); state removals are not undoable
 /usr/bin/git hop prune --dry-run --json  # [{action, kind, repository, branch, path, reason?}]
 # action: pruned | would-prune | skipped (locked worktree kept; reason says why)
-# kind: worktree | hub | hop-json-entry | repair-backup | conversion-backup | state-backup | temp-file
+# kind: worktree | hub | hop-json-entry | hopspace-record | ports-entry | volumes-entry | repair-backup | conversion-backup | state-backup | temp-file
+# hopspace-record/ports-entry/volumes-entry = orphaned --global hub's records in the shared hopspace; volume dirs kept
 # conversion-backup = init backup beyond hop.backup.maxBackups (3) / cleanupAgeDays (30)
 # temp-file = hop.json (or, --all, state.json) temp file an interrupted save left, 1h+ old; kept while a save holds the lock
 /usr/bin/git hop repair -n --json     # plan: [{status, path, kind, old, new, reason}]
@@ -231,7 +232,7 @@ Structured output rules:
 
 ## Result Shapes
 
-Result schema 1.13 (MINOR = fields or enum values added, MAJOR = renamed or
+Result schema 1.14 (MINOR = fields or enum values added, MAJOR = renamed or
 removed). Columns = `csv`, `text`, `--porcelain` order; other fields are
 json/yaml only.
 
