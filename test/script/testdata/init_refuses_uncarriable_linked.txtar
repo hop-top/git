@@ -1,0 +1,62 @@
+# A bare conversion refuses, before any backup and before the dry-run
+# plan, a linked worktree it cannot carry: an operation paused there
+# (whose hints run in that worktree, with git -C), or a branch checked
+# out twice. --force does not change it. Nothing moves; --regular, which
+# keeps .git in place, is offered for the second.
+
+exec git init -q $WORK/p
+cd $WORK/p
+cp $WORK/a.txt a.txt
+exec git add a.txt
+exec git commit -q -m initial
+exec git branch feat
+cp $WORK/main.txt a.txt
+exec git commit -q -am main
+exec git worktree add -q $WORK/ext/wt feat
+cd $WORK/ext/wt
+cp $WORK/feat.txt a.txt
+exec git commit -q -am feat
+! exec git rebase main
+cd $WORK/p
+
+# --- a paused rebase in the linked worktree ---
+! exec git-hop init --no-prompt --no-hooks --force
+stderr '^fatal: a rebase is in progress in the linked worktree .*/ext/wt; converting would abandon it$'
+stderr 'hint: finish the rebase with ''git -C .*/ext/wt rebase --continue'' or abort it with ''git -C .*/ext/wt rebase --abort'''
+stderr 'hint: then run git hop init --no-prompt --force --no-hooks again'
+! exec git-hop init --no-prompt --no-hooks -n
+stderr 'a rebase is in progress in the linked worktree'
+! stdout 'Conversion plan'
+! exists $WORK/p/hop.json
+exec git -C $WORK/p rev-parse --is-bare-repository
+stdout '^false$'
+
+exec git -C $WORK/ext/wt rebase --abort
+
+# --- the same branch checked out twice ---
+exec git worktree add -q -f $WORK/ext/twice main
+! exec git-hop init --no-prompt --no-hooks
+stderr '^error: .*/ext/twice: branch main is also checked out at .*/p; a hub has one worktree per branch$'
+stderr 'hint: To convert to the regular layout instead, which keeps .git in place:'
+stderr 'git hop init --no-prompt --regular --no-hooks'
+stderr '^fatal: linked worktrees cannot be carried into the hub$'
+! exec git-hop init --no-prompt --no-hooks -n
+stderr 'branch main is also checked out'
+! exists $WORK/p/hop.json
+! exists $WORK/p/hops
+exec git -C $WORK/ext/twice rev-parse --absolute-git-dir
+stdout '/p/\.git/worktrees/twice$'
+
+# --- resolved, the conversion goes ahead ---
+exec git worktree remove $WORK/ext/twice
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+exec git -C $WORK/ext/wt rev-parse --abbrev-ref HEAD
+stdout '^feat$'
+
+-- a.txt --
+base
+-- main.txt --
+main
+-- feat.txt --
+feat

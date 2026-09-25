@@ -26,6 +26,26 @@ func (op GitOperation) Hint() string {
 	return fmt.Sprintf("finish the %s with '%s' or abort it with '%s'", op.Name, op.Continue, op.Abort)
 }
 
+// hintIn is Hint for an operation paused in the worktree at dir, its
+// commands run there with `git -C <dir>`.
+func (op GitOperation) hintIn(dir string) string {
+	in := func(cmd string) string {
+		if rest, ok := strings.CutPrefix(cmd, "git "); ok {
+			return "git -C " + shellQuote(dir) + " " + rest
+		}
+		return cmd
+	}
+	return GitOperation{Name: op.Name, Continue: in(op.Continue), Abort: in(op.Abort)}.Hint()
+}
+
+// shellQuote quotes s for a POSIX shell when it needs it.
+func shellQuote(s string) string {
+	if s != "" && !strings.ContainsAny(s, " \t\n'\"\\$`!*?[]{}()<>|&;#~") {
+		return s
+	}
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 var (
 	opMerge      = GitOperation{"merge", "git merge --continue", "git merge --abort"}
 	opRebase     = GitOperation{"rebase", "git rebase --continue", "git rebase --abort"}
@@ -130,6 +150,9 @@ func InProgressOperations(fs afero.Fs, gitDir string) []GitOperation {
 // operation is in progress.
 type InProgressError struct {
 	Ops []GitOperation
+	// Worktree is the linked worktree the operations are paused in;
+	// empty for the main worktree.
+	Worktree string
 }
 
 func (e *InProgressError) Error() string {
@@ -137,10 +160,14 @@ func (e *InProgressError) Error() string {
 	for i, op := range e.Ops {
 		names[i] = op.Name
 	}
-	if len(names) == 1 {
-		return fmt.Sprintf("a %s is in progress; converting would abandon it", names[0])
+	where, verb, it := "", "is", "it"
+	if len(names) > 1 {
+		verb, it = "are", "them"
 	}
-	return fmt.Sprintf("a %s are in progress; converting would abandon them", strings.Join(names, " and a "))
+	if e.Worktree != "" {
+		where = " in the linked worktree " + e.Worktree
+	}
+	return fmt.Sprintf("a %s %s in progress%s; converting would abandon %s", strings.Join(names, " and a "), verb, where, it)
 }
 
 // Hints returns one hint per operation, then to run retry, the caller's
@@ -148,6 +175,10 @@ func (e *InProgressError) Error() string {
 func (e *InProgressError) Hints(retry string) []string {
 	hints := make([]string, 0, len(e.Ops)+1)
 	for _, op := range e.Ops {
+		if e.Worktree != "" {
+			hints = append(hints, op.hintIn(e.Worktree))
+			continue
+		}
 		hints = append(hints, op.Hint())
 	}
 	return append(hints, "then run "+retry+" again")
@@ -155,13 +186,20 @@ func (e *InProgressError) Hints(retry string) []string {
 
 // CheckNoOperationInProgress refuses a bare conversion of repoPath while
 // a merge, rebase, am, cherry-pick, revert or bisect is in progress
-// there. The operation's state belongs to the git dir the conversion
-// replaces, so converting would silently abandon it; --force does not
-// override this, since it consents to carrying files, not to losing a
-// paused operation.
+// there, or in one of its linked worktrees. The operation's state
+// belongs to the git dir the conversion replaces, so converting would
+// silently abandon it; --force does not override this, since it
+// consents to carrying files, not to losing a paused operation. The main
+// worktree is checked first, then the linked ones by id; the first with
+// an operation is reported.
 func CheckNoOperationInProgress(fs afero.Fs, repoPath string) error {
 	if ops := InProgressOperations(fs, filepath.Join(repoPath, ".git")); len(ops) > 0 {
 		return &InProgressError{Ops: ops}
+	}
+	for _, a := range liveLinkedAdmins(fs, repoPath) {
+		if ops := InProgressOperations(fs, a.dir); len(ops) > 0 {
+			return &InProgressError{Ops: ops, Worktree: a.path()}
+		}
 	}
 	return nil
 }

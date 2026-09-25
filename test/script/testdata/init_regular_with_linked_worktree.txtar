@@ -2,8 +2,8 @@
 # still a regular repository: git does not call it bare, and it is not a
 # git-hop hub. `git hop init` offers to convert it rather than reporting a
 # bare-worktree hub and registering it as-is. A bare conversion would
-# disconnect the linked worktree from its repository, so it is refused
-# before anything moves; --regular keeps .git in place and works.
+# carry the linked worktree into the hub (see
+# init_carries_linked_worktrees.txtar); --regular keeps .git in place.
 
 exec git init $WORK/p
 cd $WORK/p
@@ -11,14 +11,13 @@ exec git commit --allow-empty -m 'initial'
 exec git worktree add -q $WORK/p-feat -b feat
 
 # --- offered conversion, not "already initialized" ---
-! exec git-hop init --no-prompt --no-hooks
+exec git-hop init --no-prompt --no-hooks -n
 stdout 'Current repository: Standard git repository'
 ! stdout 'already initialized'
 ! stdout 'Structure: bare-worktree'
-stderr 'Conversion failed: linked worktrees present'
-stdout 'linked worktree\(s\) \(.*/p-feat\)'
+stdout 'Carry linked worktree .*/p-feat \(feat\), where it is'
 
-# --- refused before anything moved ---
+# --- the dry run moved nothing ---
 exists $WORK/p/.git/config
 ! exists $WORK/p/hop.json
 ! exists $WORK/p/hops

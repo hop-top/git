@@ -2,9 +2,10 @@
 # on that repository, as git commands run from a linked worktree do. The
 # repository is not a hub yet, so init offers it the conversion rather
 # than reporting it "already initialized" and writing hop.json into it.
-# A bare conversion is refused (the linked worktree would be
-# disconnected); --regular converts it. hop.json never lands in the
-# linked worktree.
+# --regular converts it with .git in place; a bare conversion carries
+# the linked worktree, which keeps working where it is, the directory
+# init was run from included. hop.json never lands in the linked
+# worktree.
 
 exec git init $WORK/p
 cd $WORK/p
@@ -20,18 +21,14 @@ stdout '^Repository: .*/p$'
 ! exists $WORK/p/hop.json
 ! exists $WORK/p-feat/hop.json
 
-# --- not "already initialized"; the bare conversion is refused ---
-! exec git-hop init --no-prompt --no-hooks
+# --- not "already initialized": the bare conversion is offered ---
+exec git-hop init --no-prompt --no-hooks -n
 ! stdout 'already initialized'
 ! stdout 'Created missing hop.json'
 stdout 'Current repository: Standard git repository'
-stderr 'Conversion failed: linked worktrees present'
-stderr '^hint:   git hop init --no-prompt --regular --no-hooks$'
+stdout 'Carry linked worktree .*/p-feat \(feat\), where it is'
 ! exists $WORK/p/hop.json
 ! exists $WORK/p-feat/hop.json
-! exists $WORK/p/hops
-exec git -C $WORK/p rev-parse --is-bare-repository
-stdout '^false$'
 
 # --- --regular converts the repository, not the linked worktree ---
 exec git-hop init --no-prompt --no-hooks --regular
@@ -47,3 +44,20 @@ exec git-hop init --no-prompt --no-hooks
 stdout 'already initialized'
 stdout 'Structure: worktree-child$'
 ! exists $WORK/p-feat/hop.json
+
+# --- a bare conversion run from the linked worktree carries it ---
+exec git init $WORK/q
+cd $WORK/q
+exec git commit -q --allow-empty -m 'initial'
+exec git worktree add -q $WORK/q-feat -b feat
+cd $WORK/q-feat
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+stdout 'Linked worktrees carried into the hub:'
+exec git rev-parse --absolute-git-dir
+stdout '/q/worktrees/q-feat$'
+exec git status --short --branch
+stdout '^## feat$'
+exec git -C $WORK/q rev-parse --is-bare-repository
+stdout '^true$'
+! exists $WORK/q-feat/hop.json

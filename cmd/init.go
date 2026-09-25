@@ -169,6 +169,10 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 		refuseOperationInProgress(fs, repoPath)
 	}
 	refuseDetachedHead(fs, g, repoPath)
+	var linked *hop.LinkedCarryPlan
+	if useBare {
+		linked = planInitLinkedCarry(fs, g, repoPath)
+	}
 
 	converter := hop.NewConverter(fs, g)
 	converter.DryRun = dryRunFlag
@@ -185,7 +189,7 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
 	converter.BackupRoot = backupRoot
 
 	if !dryRunFlag && !forceFlag {
-		status, _ := g.RunInDir(repoPath, "git", "status", "--porcelain")
+		status, _ := g.RunInDir(repoPath, "git", hop.StatusPorcelainArgs(linked, repoPath)...)
 		if status != "" {
 			output.Error("Repository has uncommitted changes")
 			output.Hint(`Please commit or stash changes before converting:
@@ -212,7 +216,7 @@ staged and unstaged as they are:
 		fmt.Printf("Branch: %s\n", branch)
 
 		// Without optional locks: status would otherwise refresh the index.
-		status, _ := g.RunInDir(repoPath, "git", "--no-optional-locks", "status", "--porcelain")
+		status, _ := g.RunInDir(repoPath, "git", append([]string{"--no-optional-locks"}, hop.StatusPorcelainArgs(linked, repoPath)...)...)
 		if status == "" {
 			fmt.Println("Status: clean")
 		} else {
@@ -220,7 +224,7 @@ staged and unstaged as they are:
 		}
 
 		fmt.Println("\nConversion plan:")
-		for _, step := range initConversionPlan(backupRoot, branch, useBare) {
+		for _, step := range initConversionPlan(backupRoot, branch, useBare, linked) {
 			fmt.Println(step)
 		}
 		previewLocalConfig(g, repoPath, branch, useBare)
@@ -269,9 +273,10 @@ staged and unstaged as they are:
 	var isRegularRepo bool
 
 	if err == nil {
-		// Find current branch worktree
-		for name, branch := range hub.Config.Branches {
-			currentBranchName = name
+		// The default branch's worktree: hop.json also lists the linked
+		// worktrees a bare conversion carried.
+		currentBranchName = hub.Config.Repo.DefaultBranch
+		if branch, ok := hub.Config.Branches[currentBranchName]; ok {
 			if branch.Path == "." {
 				// Regular repo - current branch is in repo root
 				mainWorktreePath = repoPath
@@ -280,7 +285,6 @@ staged and unstaged as they are:
 				mainWorktreePath = config.ResolveWorktreePath(branch.Path, repoPath)
 				isRegularRepo = false
 			}
-			break
 		}
 	}
 
@@ -333,6 +337,7 @@ staged and unstaged as they are:
 		fmt.Printf("      %s/              (worktree for %s branch)\n", currentBranchName, currentBranchName)
 		fmt.Printf("    current -> hops/%s  (symlink)\n", currentBranchName)
 	}
+	printCarriedWorktrees(result.Carried)
 
 	for _, warning := range result.Warnings {
 		output.Warn("%s", warning)

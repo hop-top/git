@@ -14,7 +14,10 @@ import (
 // registry and state, as clone does for a new hub, so list, status --all
 // and prune see it without a `git hop add` first. The initial worktree is
 // hops/<branch> for a bare conversion and the repository root for a
-// regular one. Never called on a dry run, which returns before converting.
+// regular one. The linked worktrees a bare conversion carried are
+// recorded too, as registerAdoptedHub records a hub's existing ones:
+// quietly, since the conversion did not create them. Never called on a
+// dry run, which returns before converting.
 func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, branch string, isRegular bool) {
 	if hub == nil || worktreePath == "" {
 		return
@@ -22,6 +25,15 @@ func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, bra
 	wtType := hop.WorktreeTypeBare
 	if isRegular {
 		wtType = hop.WorktreeTypeMain
+	}
+	linked := map[string]string{}
+	for b := range hub.Config.Branches {
+		if b == branch {
+			continue
+		}
+		if path := hub.BranchPath(b); hop.WorktreeDirPresent(fs, path) {
+			linked[b] = path
+		}
 	}
 	hop.RegisterNewHub(fs, hop.NewHub{
 		URI:           hub.Config.Repo.URI,
@@ -31,6 +43,7 @@ func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, bra
 		HubPath:       repoPath,
 		WorktreePath:  worktreePath,
 		WorktreeType:  wtType,
+		Linked:        linked,
 	})
 }
 
