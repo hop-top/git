@@ -243,6 +243,7 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	checkPaths(fs, opts, &r)
 	hubPath, hubKept := checkHub(fs, g, cwd, opts, &r)
 	checkDependencies(fs, hubPath, opts, &r)
+	checkLegacyDepsStores(fs, hubPath, &r)
 	checkWorktreeState(fs, g, hubPath, opts, &r)
 	checkState(fs, g, hubPath, hubKept, opts, &r)
 	checkConfig(config.NewGlobalLoader(), hubPath, opts, &r)
