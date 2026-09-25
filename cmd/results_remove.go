@@ -25,6 +25,10 @@ type removeRecord struct {
 	RemoteDeleted bool   `json:"remote_deleted" yaml:"remote_deleted" table:"remote_deleted" jsonschema:"description=True when the branch was deleted on origin (--delete-remote); with --dry-run true when --delete-remote would try (origin is not probed)"`
 	Reason        string `json:"reason,omitempty" yaml:"reason,omitempty" jsonschema:"description=Why the entry was left in place: the safety gate's refusal / a failure / a --merged skip / the hopspace still in use; absent when removed"`
 	DryRun        bool   `json:"dry_run,omitempty" yaml:"dry_run,omitempty" jsonschema:"description=True under --dry-run: the record is what the run would produce; absent otherwise"`
+	// Volumes and VolumePaths say what a hub or hopspace removal did
+	// with the volume data in it.
+	Volumes     string   `json:"volumes,omitempty" yaml:"volumes,omitempty" jsonschema:"enum=kept,enum=deleted,description=Hub and hopspace records: what the removal did (with --dry-run: would do) with the volume data in it. kept is the default: moved aside to $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/<name>-<UTC> or left in place when it cannot be moved or the hopspace stays; deleted is --delete-volumes; absent when it holds none"`
+	VolumePaths []string `json:"volume_paths,omitempty" yaml:"volume_paths,omitempty" jsonschema:"description=Where the kept volume data is now or where the deleted data was; with --dry-run where it is now"`
 }
 
 const (

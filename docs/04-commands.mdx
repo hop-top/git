@@ -527,6 +527,11 @@ cd ..
 git hop remove my-project
 ```
 
+```bash tab="Remove Hub and Its Volume Data"
+cd ..
+git hop remove my-project --delete-volumes
+```
+
 ```bash tab="Unmerged Branch"
 git hop remove feature-x --force
 ```
@@ -614,7 +619,8 @@ git hop remove feature-x --no-prompt   # ✗ refuses
 ```
 
 For hub removal, only `--no-prompt` matters (there is no gate; the
-prompt is the only confirmation).
+prompt is the only confirmation). The prompt says whether the hub's
+volume data is kept or, with `--delete-volumes`, deleted.
 
 ### Non-interactive runs
 
@@ -636,6 +642,10 @@ Piping an answer works as expected, so `yes | git hop remove …` and
 - Containers
 - Networks
 - Local branch
+
+The volume directories themselves, and the data in them, stay: removing a
+branch drops its entry from `volumes.json` only. See
+[Volume data](#volume-data) for removing a hub.
 
 The branch on `origin` is **not** touched. Removal is a local
 operation and never contacts the network unless you ask it to.
@@ -670,6 +680,48 @@ hopspace loses the removed hub's entries: its worktrees' records in
 
 `--dry-run` says whether the hopspace would be kept or deleted, and
 why, and how many of the hub's `hop.json` records a kept one would lose.
+
+### Volume data
+
+Removing a hub never deletes volume data unless you ask. The volume
+directories in the hub (`volumes/`, plus any `basePath` or directory its
+`volumes.json` records inside the hub), and those of a `--global`
+hopspace removed with it, are moved aside before anything is deleted, to
+
+```text
+$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/<hub-key>-<UTC>/   # the hub's
+$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/hopspace-<UTC>/    # the hopspace's
+```
+
+keeping each directory's path, so `volumes/hop_main_db` lands in
+`<...>-<UTC>/volumes/hop_main_db`. `<UTC>` is the second of the removal
+(`20260925T120000Z`); a directory already there is never reused or
+overwritten (`-1`, `-2`, ... follow). The hub directory then goes
+entirely, so a later `git hop clone` into the same path works, and a
+re-created hub starts with empty volumes instead of silently picking up
+the old data. A `hint:` names where the data is; delete it by hand once
+it is no longer needed. A directory that holds nothing is not volume
+data and goes with the hub.
+
+The move is a rename. When that fails (the data home is on another
+filesystem), the data stays where it was, with a `warning:`, and so does
+the directory leading to it: the hub directory then holds only
+`volumes/`. Nothing is copied.
+
+A hopspace other hubs keep stays, and the removed hub's volumes in it
+(`volumes/<hub-key>/`) stay with it.
+
+`--delete-volumes` deletes all of that volume data with the hub instead,
+after the same confirmation as the removal itself. It applies only to
+removing a hub; with a branch or `--merged` it is a usage error (exit
+129). `--dry-run` says which it would do, and the result's `hub` and
+`hopspace` records say `volumes: kept` or `volumes: deleted` and where
+(`volume_paths`).
+
+Docker named volumes are Docker's: `git hop` never runs
+`docker compose down -v` or `docker volume rm`, so they survive every
+removal, with or without `--delete-volumes`. `git hop env stop` runs
+`docker compose stop`.
 
 ### `--delete-remote`
 

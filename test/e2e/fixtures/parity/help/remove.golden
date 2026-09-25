@@ -18,6 +18,11 @@ first, but its worktree must be clean whatever the flags.
 --no-prompt only skips the confirmation prompt; it never satisfies the
 gate. --no-verify does not skip pre-/post-worktree-remove hooks.
 
+Removing a hub keeps its volume data: the volume directories in the hub,
+and in a --global hopspace removed with it, are moved aside to
+$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
+--delete-volumes deletes them with the hub instead.
+
 Usage:
   git-hop remove [target] [flags]
 
@@ -25,11 +30,12 @@ Aliases:
   remove, rm, delete, del
 
 Flags:
-      --delete-remote   Also delete the branch on origin; without it removal stays local and never contacts the network
-  -h, --help            help for remove
-      --merged          Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)
-      --no-prompt       Skip the confirmation prompt only; does NOT bypass the safety gate
-      --no-verify       Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)
+      --delete-remote    Also delete the branch on origin; without it removal stays local and never contacts the network
+      --delete-volumes   Removing a hub, also delete its volume data; without it the data is kept, moved aside under the data home
+  -h, --help             help for remove
+      --merged           Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)
+      --no-prompt        Skip the confirmation prompt only; does NOT bypass the safety gate
+      --no-verify        Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)
 
 Global Flags:
   -n, --dry-run         preview changes without applying

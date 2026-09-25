@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spf13/afero"
 
@@ -21,7 +22,13 @@ import (
 // other hubs keep that, the hub's records in it. It returns one record per
 // worktree in branch order, then the hub's, then the hopspace's when there
 // is one.
-func removeHub(fs afero.Fs, hubPath string) []removeRecord {
+//
+// Volume data is kept unless deleteVolumes (--delete-volumes): the
+// volume directories in the hub, and in a hopspace removed with it, are
+// moved aside to the data home's orphaned-volumes directory first (or,
+// when they cannot be moved, left where they are), and a hub's volumes in
+// a hopspace other hubs keep stay there.
+func removeHub(fs afero.Fs, hubPath string, deleteVolumes bool) []removeRecord {
 	output.Info("Removing hub at %s...", hubPath)
 
 	// Load hub to get repo info
@@ -31,6 +38,11 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 	}
 
 	repoID := repoid.For(hubPath, hub.Config.Repo)
+	ref := hop.RepoRefFor(hubPath, hub.Config.Repo)
+
+	// The volume data goes aside before anything is deleted.
+	hubVols := newVolumeMove(fs, hubPath, hubPath, ref, services.HubKey(hubPath), deleteVolumes)
+	hubKept, leave := hubVols.moveAside(fs, time.Now())
 
 	// Remove all worktrees
 	recs := make([]removeRecord, 0, len(hub.Config.Branches)+2)
@@ -39,7 +51,7 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 		output.Info("Removing worktree for branch %s...", branchName)
 
 		rec := removeRecord{Kind: removeKindWorktree, Branch: branchName, Path: worktreePath, Removed: true}
-		if err := fs.RemoveAll(worktreePath); err != nil {
+		if err := removeAllExcept(fs, worktreePath, leave); err != nil {
 			output.Warn("Failed to remove worktree %s: %v", branchName, err)
 			rec.Removed = false
 			rec.Reason = fmt.Sprintf("failed to remove worktree: %v", err)
@@ -50,10 +62,11 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 
 	// Remove hub directory
 	output.Info("Removing hub directory...")
-	if err := fs.RemoveAll(hubPath); err != nil {
+	if err := removeAllExcept(fs, hubPath, leave); err != nil {
+		hintKeptVolumes(hubKept)
 		output.Fatal("Failed to remove hub directory: %v", err)
 	}
-	recs = append(recs, removeRecord{Kind: removeKindHub, Path: hubPath, Removed: true})
+	recs = append(recs, volumesRecord(removeRecord{Kind: removeKindHub, Path: hubPath, Removed: true}, hubVols, hubKept))
 
 	// Remove from global state: this hub and its worktrees. The
 	// repository's other hubs, and their worktrees, stay.
@@ -79,12 +92,16 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 	// --global hub's is the repository's data-home hopspace, which other
 	// hubs of the repository may share.
 	d := dataHomeHopspaceFor(fs, st, stErr, hub, hubPath)
+	kept := hubKept
 	switch {
 	case !d.exists:
 	case d.remove():
 		output.Info("Cleaning up hopspace data...")
-		rec := d.record(true)
-		if err := fs.RemoveAll(d.path); err != nil {
+		vols := newVolumeMove(fs, d.path, d.path, ref, "hopspace", deleteVolumes)
+		hsKept, hsLeave := vols.moveAside(fs, time.Now())
+		kept = append(kept, hsKept...)
+		rec := volumesRecord(d.record(true), vols, hsKept)
+		if err := removeAllExcept(fs, d.path, hsLeave); err != nil {
 			output.Warn("Failed to remove hopspace data: %v", err)
 			rec.Removed = false
 			rec.Reason = fmt.Sprintf("failed to remove hopspace data: %v", err)
@@ -92,16 +109,58 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 		recs = append(recs, rec)
 	default:
 		output.Info("Keeping hopspace data at %s: %s", d.path, d.reason())
+		rec := d.record(false)
+		if d.ofHub {
+			rec, kept = keepOrDeleteHubVolumes(fs, rec, d.path, hubPath, deleteVolumes, kept)
+		}
 		dropHubHopspaceRecords(fs, d, hubPath)
 		if _, err := services.DropHubEnvEntries(fs, d.path, hubPath); err != nil {
 			output.Warn("Failed to update ports and volumes: %v", err)
 		}
 		output.Hint("it is removed along with the last hub that uses it")
-		recs = append(recs, d.record(false))
+		recs = append(recs, rec)
 	}
+	hintKeptVolumes(kept)
 
 	output.Success("Successfully removed hub: %s", hubPath)
 	return recs
+}
+
+// volumesRecord adds to rec what the removal did with the volume data v
+// found: kept at kept, or deleted.
+func volumesRecord(rec removeRecord, v volumeMove, kept []string) removeRecord {
+	rec.Volumes = v.state()
+	switch rec.Volumes {
+	case volumesKept:
+		rec.VolumePaths = kept
+	case volumesDeleted:
+		rec.VolumePaths = v.paths
+	}
+	return rec
+}
+
+// keepOrDeleteHubVolumes deals with the volumes of the hub at hubPath in
+// the hopspace at hopspacePath, which other hubs keep: they stay, unless
+// deleteVolumes. It returns rec with what was done, and kept with the
+// directory added when it stays.
+func keepOrDeleteHubVolumes(fs afero.Fs, rec removeRecord, hopspacePath, hubPath string, deleteVolumes bool, kept []string) (removeRecord, []string) {
+	dir := hubVolumesIn(fs, hopspacePath, hubPath)
+	if dir == "" {
+		return rec, kept
+	}
+	rec.VolumePaths = []string{dir}
+	if !deleteVolumes {
+		rec.Volumes = volumesKept
+		return rec, append(kept, dir)
+	}
+	if err := fs.RemoveAll(dir); err != nil {
+		output.Warn("Failed to delete volume data %s: %v", dir, err)
+		rec.Volumes = volumesKept
+		return rec, append(kept, dir)
+	}
+	output.Info("Deleted volume data %s", dir)
+	rec.Volumes = volumesDeleted
+	return rec, kept
 }
 
 // dropHubHopspaceRecords removes the worktree records of the hub removed

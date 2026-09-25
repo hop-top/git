@@ -36,8 +36,8 @@ func TestRemoveHub_LocalHubLeavesSharedRecords(t *testing.T) {
 	before, err := afero.ReadFile(fs, hopJSON)
 	require.NoError(t, err)
 
-	captureRemoveOutput(t, func() { previewRemoveHub(fs, local, true) })
-	stdout, stderr := captureRemoveOutput(t, func() { removeHub(fs, local) })
+	captureRemoveOutput(t, func() { previewRemoveHub(fs, local, true, false) })
+	stdout, stderr := captureRemoveOutput(t, func() { removeHub(fs, local, false) })
 
 	after, err := afero.ReadFile(fs, hopJSON)
 	require.NoError(t, err)

@@ -63,7 +63,7 @@ func TestRemoveHub_GlobalHopspaceKeptWhileAnotherHubUsesIt(t *testing.T) {
 	hubFixture(t, fs, g2, true)
 	hopspacePath := sharedHopspaceFixture(t, fs, map[string]bool{g1: true, g2: true})
 
-	stdout, stderr := captureRemoveOutput(t, func() { removeHub(fs, g1) })
+	stdout, stderr := captureRemoveOutput(t, func() { removeHub(fs, g1, false) })
 
 	exists, _ := afero.DirExists(fs, hopspacePath)
 	require.True(t, exists, "the hopspace g2 uses must survive g1's removal")
@@ -75,7 +75,7 @@ func TestRemoveHub_GlobalHopspaceKeptWhileAnotherHubUsesIt(t *testing.T) {
 	gone, _ := afero.DirExists(fs, g1)
 	assert.False(t, gone, "g1 itself is removed")
 
-	removeHub(fs, g2)
+	removeHub(fs, g2, false)
 
 	exists, _ = afero.DirExists(fs, hopspacePath)
 	assert.False(t, exists, "the last hub's removal deletes the hopspace")
@@ -91,13 +91,13 @@ func TestPreviewRemoveHub_SaysWhetherHopspaceIsKept(t *testing.T) {
 	hubFixture(t, fs, g2, true)
 	hopspacePath := sharedHopspaceFixture(t, fs, map[string]bool{g1: true, g2: true})
 
-	stdout, stderr := captureRemoveOutput(t, func() { previewRemoveHub(fs, g1, true) })
+	stdout, stderr := captureRemoveOutput(t, func() { previewRemoveHub(fs, g1, true, false) })
 	assert.Contains(t, stdout+stderr, "Would keep hopspace data at "+hopspacePath)
 	assert.Contains(t, stdout+stderr, "still used by "+g2)
 	assert.NotContains(t, stdout+stderr, "Would remove hopspace data")
 
 	sharedHopspaceFixture(t, fs, map[string]bool{g1: true})
-	stdout, stderr = captureRemoveOutput(t, func() { previewRemoveHub(fs, g1, true) })
+	stdout, stderr = captureRemoveOutput(t, func() { previewRemoveHub(fs, g1, true, false) })
 	assert.Contains(t, stdout+stderr, "Would remove hopspace data at "+hopspacePath)
 	assert.Contains(t, stdout+stderr, "no other hub uses it")
 
@@ -119,7 +119,7 @@ func TestRemoveHub_HopspaceUsers(t *testing.T) {
 		hubFixture(t, fs, g1, true)
 		hopspacePath := sharedHopspaceFixture(t, fs, map[string]bool{g1: true, "/hubs/gone": true})
 
-		removeHub(fs, g1)
+		removeHub(fs, g1, false)
 
 		exists, _ := afero.DirExists(fs, hopspacePath)
 		assert.False(t, exists, "a hub that is gone does not keep the hopspace")
@@ -132,7 +132,7 @@ func TestRemoveHub_HopspaceUsers(t *testing.T) {
 		hubFixture(t, fs, local, false)
 		hopspacePath := sharedHopspaceFixture(t, fs, map[string]bool{g1: true, local: false})
 
-		removeHub(fs, g1)
+		removeHub(fs, g1, false)
 
 		exists, _ := afero.DirExists(fs, hopspacePath)
 		assert.False(t, exists, "a local hub keeps its hopspace in itself")
@@ -145,7 +145,7 @@ func TestRemoveHub_HopspaceUsers(t *testing.T) {
 		require.NoError(t, afero.WriteFile(fs, filepath.Join(g2, "hop.json"), []byte("{not json"), 0o644))
 		hopspacePath := sharedHopspaceFixture(t, fs, map[string]bool{g1: true, g2: true})
 
-		removeHub(fs, g1)
+		removeHub(fs, g1, false)
 
 		exists, _ := afero.DirExists(fs, hopspacePath)
 		assert.True(t, exists, "state's mode stands in for the marker it cannot read")
@@ -158,7 +158,7 @@ func TestRemoveHub_HopspaceUsers(t *testing.T) {
 		hopspacePath := sharedHopspaceFixture(t, fs, map[string]bool{g1: true})
 		require.NoError(t, afero.WriteFile(fs, filepath.Join(state.GetStateHome(), "state.json"), []byte("{not json"), 0o644))
 
-		stdout, stderr := captureRemoveOutput(t, func() { removeHub(fs, g1) })
+		stdout, stderr := captureRemoveOutput(t, func() { removeHub(fs, g1, false) })
 
 		exists, _ := afero.DirExists(fs, hopspacePath)
 		assert.True(t, exists, "which hubs use the hopspace is unknown, so it is kept")
@@ -172,7 +172,7 @@ func TestRemoveHub_HopspaceUsers(t *testing.T) {
 		hubFixture(t, fs, local, false)
 		hopspacePath := sharedHopspaceFixture(t, fs, map[string]bool{g1: true, local: false})
 
-		removeHub(fs, local)
+		removeHub(fs, local, false)
 
 		exists, _ := afero.DirExists(fs, hopspacePath)
 		assert.True(t, exists, "g1 still uses the data-home hopspace")

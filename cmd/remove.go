@@ -30,9 +30,12 @@ func removeArgs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	merged, _ := cmd.Flags().GetBool("merged")
+	deleteVolumes, _ := cmd.Flags().GetBool("delete-volumes")
 	switch {
 	case merged && len(args) > 0:
 		return errors.New("cannot pass both a target and --merged")
+	case merged && deleteVolumes:
+		return errors.New("--delete-volumes applies only to removing a hub")
 	case !merged && len(args) == 0:
 		return errors.New("requires a target, or --merged")
 	}
@@ -61,7 +64,12 @@ With hop.gitflow.enabled, a branch git flow finish handles skips the
 not-merged and unpushed checks, since finish merges it into its parent
 first, but its worktree must be clean whatever the flags.
 --no-prompt only skips the confirmation prompt; it never satisfies the
-gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
+gate. --no-verify does not skip pre-/post-worktree-remove hooks.
+
+Removing a hub keeps its volume data: the volume directories in the hub,
+and in a --global hopspace removed with it, are moved aside to
+$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
+--delete-volumes deletes them with the hub instead.`,
 	Args: removeArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		noPrompt, _ := cmd.Flags().GetBool("no-prompt")
@@ -70,6 +78,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 		deleteRemote, _ := cmd.Flags().GetBool("delete-remote")
 		force, _ := cmd.Root().PersistentFlags().GetBool("force")
 		dryRun, _ := cmd.Flags().GetBool("dry-run")
+		deleteVolumes, _ := cmd.Flags().GetBool("delete-volumes")
 
 		fs := afero.NewOsFs()
 		g := git.New()
@@ -114,6 +123,9 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 
 			// Check if target is a branch in the hub
 			if _, ok := hub.Config.Branches[target]; ok {
+				if deleteVolumes {
+					output.FatalCode(exitUsage, "--delete-volumes applies only to removing a hub")
+				}
 				// Guard: cannot remove the default branch
 				if target == hub.Config.Repo.DefaultBranch {
 					output.Fatal("Cannot remove the default branch '%s'.", target)
@@ -181,7 +193,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 		// Check if target is a hub
 		if hop.IsHub(fs, targetPath) {
 			if dryRun {
-				emitRemoveResult(cmd, markDryRun(previewRemoveHub(fs, targetPath, noPrompt)))
+				emitRemoveResult(cmd, markDryRun(previewRemoveHub(fs, targetPath, noPrompt, deleteVolumes)))
 				return
 			}
 			if !noPrompt {
@@ -194,6 +206,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 						{Key: "Type", Value: "Hub"},
 						{Key: "Branches", Value: fmt.Sprintf("%d", branchCount)},
 						{Key: "Repository", Value: fmt.Sprintf("%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)},
+						volumesCardField(deleteVolumes),
 					})
 					if !resolveConfirmation(confirmed, err) {
 						return
@@ -202,6 +215,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 					// Fallback if we can't load hub config
 					confirmed, err := output.ConfirmDeletionAnswer(targetPath, []output.CardField{
 						{Key: "Type", Value: "Hub"},
+						volumesCardField(deleteVolumes),
 					})
 					if !resolveConfirmation(confirmed, err) {
 						return
@@ -209,7 +223,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				}
 			}
 
-			emitRemoveResult(cmd, removeHub(fs, targetPath))
+			emitRemoveResult(cmd, removeHub(fs, targetPath, deleteVolumes))
 			return
 		}
 
@@ -223,6 +237,15 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 // asked for interactive confirmation in an environment that cannot
 // supply one, and the caller fixes it by passing --no-prompt.
 const exitPromptUnanswerable = 129
+
+// volumesCardField says, on the hub removal's confirmation card, what
+// happens to its volume data.
+func volumesCardField(deleteVolumes bool) output.CardField {
+	if deleteVolumes {
+		return output.CardField{Key: "Volume data", Value: "deleted (--delete-volumes)"}
+	}
+	return output.CardField{Key: "Volume data", Value: "kept (moved aside)"}
+}
 
 // resolveConfirmation collapses a prompt result into a single "proceed?"
 // decision.
@@ -645,5 +668,6 @@ func init() {
 	removeCmd.Flags().Bool("no-verify", false, "Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)")
 	removeCmd.Flags().Bool("merged", false, "Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)")
 	removeCmd.Flags().Bool("delete-remote", false, "Also delete the branch on origin; without it removal stays local and never contacts the network")
+	removeCmd.Flags().Bool("delete-volumes", false, "Removing a hub, also delete its volume data; without it the data is kept, moved aside under the data home")
 	removeCmd.ValidArgsFunction = completeBranchNames
 }
