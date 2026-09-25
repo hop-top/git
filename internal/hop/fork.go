@@ -66,14 +66,20 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 		b := hub.Config.Branches[name]
 		if b.Fork == nil { // Not a fork, likely part of main repo
 			// hop.json records paths absolute (add) or hub-relative
-			// (init); WorktreePaths resolves both against the hub.
+			// (init); WorktreePaths resolves both against the hub. Only
+			// a worktree directory qualifies: a file at the path is not
+			// a repo to fetch into.
 			worktreePath := worktreePaths[name]
-			if _, err := fs.Stat(worktreePath); err == nil {
+			presence := WorktreeAt(fs, worktreePath)
+			if presence == WorktreePresent {
 				output.Info("Found candidate main repo at %s (branch %s)", worktreePath, name)
 				mainRepoPath = worktreePath
 				break
+			}
+			if presence == WorktreeOccupied {
+				output.Info("Worktree path for %s is not a directory: %s", name, worktreePath)
 			} else {
-				output.Info("Worktree not found for %s at %s: %v", name, worktreePath, err)
+				output.Info("Worktree not found for %s at %s", name, worktreePath)
 			}
 		} else {
 			output.Info("Skipping fork branch %s", name)
