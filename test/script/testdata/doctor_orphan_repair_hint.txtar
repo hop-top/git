@@ -30,10 +30,12 @@ decode json out 0.subject '~/hub/hops/tidy$'
 decode json out 0.message '~^orphaned directory holds a worktree git has registered \(.*/hub/hops/tidy\); record it with ''git hop repair'' or remove it'
 ! grep 'force-dirty' out
 
-# --- the plain command records it ---
+# --- the plain command records it, in hop.json and state alike ---
 exec git-hop repair
-! exec git-hop doctor
+exec git-hop doctor
 ! stderr '  - tidy'
+! stderr 'without worktree'
+stdout 'No issues found'
 
 # --- a dirty registered worktree hop.json does not record ---
 exec git worktree add hops/wip -b wip
@@ -53,8 +55,9 @@ decode json out 0.message '~^orphaned directory holds a worktree git has registe
 stderr 'use --force-dirty'
 exec git-hop repair --force-dirty
 cmp hops/wip/keep.txt $WORK/keep.txt
-! exec git-hop doctor
+exec git-hop doctor
 ! stderr '  - wip'
+! stderr 'without worktree'
 
 -- keep.txt --
 uncommitted work

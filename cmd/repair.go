@@ -273,7 +273,10 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 		}
 	}
 
-	// 10. post-repair hook (advisory, ignore exit).
+	// 10. Record the worktrees hop.json gained in state, as add does.
+	recordRepairedWorktrees(fs, hubPath, plan)
+
+	// 11. post-repair hook (advisory, ignore exit).
 	_ = firePostRepairHook(fs, hubPath)
 
 	if backupID != "" {
