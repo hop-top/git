@@ -98,5 +98,7 @@ func resolveCurrentWorktree(fs afero.Fs, dir string) (string, bool) {
 }
 
 func init() {
+	// Shell-integration plumbing: a bare path the wrapper reads, not a result.
+	cli.ExemptFromResult(currentPathCmd)
 	cli.RootCmd.AddCommand(currentPathCmd)
 }

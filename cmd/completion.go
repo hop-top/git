@@ -54,6 +54,8 @@ Fish:
 
 func init() {
 	completionCmd.Hidden = true
+	// A shell script, not a result.
+	cli.ExemptFromResult(completionCmd)
 	cli.RootCmd.AddCommand(completionCmd)
 }
 

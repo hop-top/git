@@ -333,8 +333,13 @@ Rules:
 - A refusal or failure keeps its exit status and reports on stderr (the
   JSON error record under `--json`); stdout then carries no result,
   except where a shape below says otherwise.
-- Commands not listed here have no structured result: the output flags
-  only switch their log format.
+- A command with no result shape refuses `--json`, `--porcelain` and a
+  structured `--format` with exit 129, before it does anything, rather
+  than print prose (or nothing) where a result is expected. Only
+  `upgrade` and `upgrade preamble` have none. The read-only helpers
+  whose output is not a result -- `completion`, `help` and the
+  shell-integration plumbing `__current-path` and `__notify-chdir` --
+  accept the output flags and print what they always print.
 
 ### add
 
@@ -762,7 +767,7 @@ which apply where.
 | 0 | Success |
 | 1 | Operation failure: every `fatal:` or `error:` not listed below (not found, refused, failed) |
 | 128 | Fatal repository or environment error: `git hop repair` cannot lock or find the hub, structured `status` outside a hub, `$GIT_HOP_AUTO_ENV_START` not a boolean |
-| 129 | Usage error: unknown flag or subcommand, wrong arguments, `--dry-run` on a command that cannot preview, contradictory or unknown output options, or a confirmation prompt with no readable stdin (`remove`, `env gc`, `init`; pass `--no-prompt`) |
+| 129 | Usage error: unknown flag or subcommand, wrong arguments, `--dry-run` on a command that cannot preview, contradictory or unknown output options, structured output asked of a command with no result shape, or a confirmation prompt with no readable stdin (`remove`, `env gc`, `init`; pass `--no-prompt`) |
 | 93 | `git hop <branch>` succeeded and a `post-worktree-switch` hook reported that it handled navigation itself. The shell wrapper turns this into 0 and skips its `cd`. Not a failure |
 
 ## What's Next?

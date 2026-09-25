@@ -129,6 +129,6 @@ func structuredOutputRequested(cmd *cobra.Command, args []string) bool {
 // here too.
 func jsonUsageErrorRequested(cmd *cobra.Command, args []string) bool {
 	req := requestedOutput(cmd, args)
-	format, _, err := req.resultFormat(declaresResult(cmd))
+	format, _, err := req.resultFormat(cmd)
 	return err == nil && req.mode(format) == output.ModeJSON
 }

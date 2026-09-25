@@ -1,0 +1,44 @@
+# A command with no structured result refuses --json, --porcelain and a
+# structured --format with exit 129, before it does anything: it would
+# otherwise print its human view, or nothing, where a script expects a
+# result. The human formats stay accepted. Read-only helpers whose
+# output is not a result (completion scripts, shell-integration
+# plumbing, help) keep accepting the flags.
+
+# --- no result: refused, nothing written ---
+exec sh -c 'git-hop upgrade preamble --install --json; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^fatal: --json is not supported by ''git hop upgrade preamble'': it has no structured result$'
+! exists $WORK/.config/git-hop/skills/upgrade-preamble.md
+exec sh -c 'git-hop upgrade preamble --install --porcelain; echo "exit=$?"'
+stdout 'exit=129'
+stderr '--porcelain is not supported by ''git hop upgrade preamble'''
+! exists $WORK/.config/git-hop/skills/upgrade-preamble.md
+exec sh -c 'git-hop upgrade preamble --install --format yaml; echo "exit=$?"'
+stdout 'exit=129'
+stderr '--format=yaml is not supported by ''git hop upgrade preamble'''
+! exists $WORK/.config/git-hop/skills/upgrade-preamble.md
+exec sh -c 'git-hop upgrade --json; echo "exit=$?"'
+stdout 'exit=129'
+stderr '--json is not supported by ''git hop upgrade'''
+
+# --- the human formats are not a structured request ---
+exec git-hop upgrade preamble --format human
+stdout .
+exec git-hop upgrade preamble --format table
+stdout .
+exec git-hop upgrade preamble --json=false
+stdout .
+
+# --- exempt helpers keep accepting the output flags ---
+exec git-hop completion bash --json
+stdout 'bash completion'
+exec git-hop completion zsh --porcelain
+stdout .
+exec git-hop help add --format yaml
+stdout 'Usage:'
+exec sh -c 'git-hop __current-path --json; echo "exit=$?"'
+! stderr 'no structured result'
+exec sh -c 'git-hop __notify-chdir $WORK --porcelain; echo "exit=$?"'
+stdout 'exit=0'
+! stderr 'no structured result'
