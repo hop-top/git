@@ -1,0 +1,53 @@
+# `git hop repair` reports progress the way git does: on stderr, shown by
+# default only when stderr is a terminal, forced on by --progress and off
+# by --no-progress, the last of the two winning. The script's stderr is
+# never a terminal, so the default here is off.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# Every run below has one thing to fix: the origin fetch refspec.
+
+# Default (auto) off stderr's terminal: no progress.
+exec git config --unset-all remote.origin.fetch
+exec git-hop repair
+stdout 'restore-fetch-refspec'
+! stderr 'Applying repairs'
+
+# --progress forces it, on stderr only, closed git-style with ", done.".
+exec git config --unset-all remote.origin.fetch
+exec git-hop repair --progress
+stderr 'Checking worktrees: 100% \(1/1\), done\.'
+stderr 'Applying repairs: 100% \(\d+/\d+\), done\.'
+! stdout 'Applying repairs'
+
+# --progress outranks -q, as it does for git.
+exec git config --unset-all remote.origin.fetch
+exec git-hop repair -q --progress
+stderr 'Applying repairs: 100%'
+
+# Last one wins.
+exec git config --unset-all remote.origin.fetch
+exec git-hop repair --progress --no-progress
+! stderr 'Applying repairs'
+exec git config --unset-all remote.origin.fetch
+exec git-hop repair --no-progress --progress
+stderr 'Applying repairs: 100%'
+
+# A dry run applies nothing, so it has no apply progress to show.
+exec git config --unset-all remote.origin.fetch
+exec git-hop repair -n --progress
+! stderr 'Applying repairs'
+
+# Structured output keeps stdout a single document; forced progress goes
+# to stderr beside it.
+exec git-hop repair --json --progress
+decode json stdout .
+stderr 'Applying repairs: 100%'

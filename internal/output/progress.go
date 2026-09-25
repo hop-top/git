@@ -218,14 +218,5 @@ func SimpleProgress(current, total int, message string) {
 		return
 	}
 
-	percent := 100.0
-	if total > 0 {
-		percent = float64(current) / float64(total) * 100
-	}
-	fmt.Fprintf(os.Stderr, "\r%s: %3.0f%% (%d/%d)",
-		message, percent, current, total)
-
-	if current >= total {
-		fmt.Fprintln(os.Stderr, ", done.")
-	}
+	writeProgressLine(os.Stderr, current, total, message)
 }

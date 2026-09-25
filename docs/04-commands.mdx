@@ -1022,7 +1022,7 @@ git hop repair -n --porcelain
 | `--no-backup` | Skip the safety backup (requires `-f`) |
 | `--force-dirty` | Allow repair when worktrees have uncommitted changes |
 | `-f`, `--force` | Bypass safety checks (combined with `--no-backup`) |
-| `--progress` / `--no-progress` | Force progress on/off (default: auto) |
+| `--[no-]progress` | Progress on stderr while checking the worktrees to repair and applying the fixes, in git's `<step>: NN% (x/y)` form. By default shown only when stderr is a terminal, and never under `-q` or a structured format. `--progress` forces it on (even with `-q`), `--no-progress` off; the last one given wins |
 | `--color[=<when>]` | Colour of the human output: `always` (also bare `--color`), `auto` (default: only on a terminal, off under `NO_COLOR`) or `never`. Any other value is refused with exit 129. The global `--no-color` wins over it |
 
 ### Where repair keeps its state
