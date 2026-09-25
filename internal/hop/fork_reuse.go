@@ -11,11 +11,12 @@ import (
 	"hop.top/git/internal/output"
 )
 
-// AttachRefusal is why ForkAttach would not reuse a worktree already at
-// the path an attach puts one: it is on another branch, is not a worktree
-// of the repository, holds work of its own, or has local changes the
-// update would overwrite. Nothing in that worktree was changed. Hint says
-// how to get past it.
+// AttachRefusal is why ForkAttach refused: the fork's branch shares no
+// history with the hub, or a worktree already at the path an attach puts
+// one is on another branch, is not a worktree of the repository, holds
+// work of its own, or has local changes the update would overwrite.
+// Nothing in that worktree was changed. Hint, when set, says how to get
+// past it; fork-attach reads no flag that overrides a refusal.
 type AttachRefusal struct {
 	Msg  string
 	Hint string
@@ -107,17 +108,26 @@ func reuseForkWorktree(g git.GitInterface, repoDir, path, branch string) error {
 	if strings.TrimSpace(own) != "" {
 		return &AttachRefusal{
 			Msg:  fmt.Sprintf("branch %s in the fork's worktree at %s has commits on no branch of the fork (unpushed, or the fork rewrote %s)", branch, path, branch),
-			Hint: fmt.Sprintf("push them, or keep them on another branch and reset %s to origin/%s there, then attach again", branch, branch),
+			Hint: fmt.Sprintf("push them to the fork, or keep them on another branch (git -C %s branch <new-branch>) and move %s back to the fork's (git -C %s reset --keep origin/%s), then attach again", path, branch, path, branch),
 		}
 	}
 	output.Info("Reusing the fork's worktree at %s", path)
 	if _, err := g.RunInDir(path, "git", "checkout", "-B", branch, "refs/remotes/origin/"+branch); err != nil {
-		return &AttachRefusal{
-			Msg:  fmt.Sprintf("cannot update the fork's worktree at %s: %v", path, err),
-			Hint: fmt.Sprintf("commit or stash the changes in %s, then attach again", path),
-		}
+		return updateRefusal(path, err)
 	}
 	return nil
+}
+
+// updateRefusal is the refusal of a checkout in the worktree at path that
+// failed with err. Local changes the checkout would overwrite are stashed
+// to get past it; committing them only leaves work of the worktree's own
+// that the next attach refuses in turn.
+func updateRefusal(path string, err error) *AttachRefusal {
+	r := &AttachRefusal{Msg: fmt.Sprintf("cannot update the fork's worktree at %s: %v", path, err)}
+	if strings.Contains(err.Error(), "would be overwritten") {
+		r.Hint = fmt.Sprintf("stash the local changes (git -C %s stash --include-untracked), then attach again", path)
+	}
+	return r
 }
 
 // checkHubForkWorktree reports what is already at path, where the hub's
@@ -142,17 +152,25 @@ func checkHubForkWorktree(fs afero.Fs, g git.GitInterface, mainRepoPath, path st
 	if !wt.Detached {
 		return nil, &AttachRefusal{
 			Msg:  fmt.Sprintf("the fork's worktree at %s is %s; an attach leaves it detached at the fork's commit", path, describeHead(wt)),
-			Hint: fmt.Sprintf("push or move that branch's work, detach it (git -C %s switch --detach), then attach again", path),
+			Hint: fmt.Sprintf("branch %s keeps its work: remove the worktree (%s), then attach again", wt.Branch, removeWorktreeCmd(mainRepoPath, path)),
 		}
 	}
 	return &wt, nil
 }
 
-// updateHubForkWorktree moves the detached worktree wt to commit when
-// that is a fast forward. Any other move would leave commits made there
-// behind, so it is refused, as is one that would overwrite local changes.
-// hubBranch is the hub branch the worktree is registered as.
-func updateHubForkWorktree(g git.GitInterface, wt *listedWorktree, commit, hubBranch string) error {
+// removeWorktreeCmd is the command that removes the hub's worktree at
+// path from the repository at repoDir. git keeps every branch and refuses
+// a worktree with local changes, so nothing is lost; the attach that
+// follows adds the worktree again.
+func removeWorktreeCmd(repoDir, path string) string {
+	return fmt.Sprintf("git -C %s worktree remove %s", repoDir, path)
+}
+
+// updateHubForkWorktree moves the detached worktree wt of the repository
+// at repoDir to commit when that is a fast forward. Any other move would
+// leave commits made there behind, so it is refused, as is one that would
+// overwrite local changes.
+func updateHubForkWorktree(g git.GitInterface, repoDir string, wt *listedWorktree, commit string) error {
 	output.Info("Reusing the fork's worktree at %s", wt.Path)
 	if wt.Head == commit {
 		return nil
@@ -161,14 +179,11 @@ func updateHubForkWorktree(g git.GitInterface, wt *listedWorktree, commit, hubBr
 	if err != nil || strings.TrimSpace(base) != wt.Head {
 		return &AttachRefusal{
 			Msg:  fmt.Sprintf("the fork's worktree at %s is at %s, which the fork's branch does not contain", wt.Path, shortSHA(wt.Head)),
-			Hint: fmt.Sprintf("keep any work there on a branch, remove the worktree (git hop remove %s), then attach again", hubBranch),
+			Hint: fmt.Sprintf("keep any work there on a branch (git -C %s branch <new-branch>), remove the worktree (%s), then attach again", wt.Path, removeWorktreeCmd(repoDir, wt.Path)),
 		}
 	}
 	if _, err := g.RunInDir(wt.Path, "git", "checkout", "--detach", commit); err != nil {
-		return &AttachRefusal{
-			Msg:  fmt.Sprintf("cannot update the fork's worktree at %s: %v", wt.Path, err),
-			Hint: fmt.Sprintf("commit or stash the changes in %s, then attach again", wt.Path),
-		}
+		return updateRefusal(wt.Path, err)
 	}
 	return nil
 }

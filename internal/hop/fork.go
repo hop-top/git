@@ -124,7 +124,10 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 	// git merge-base HEAD FETCH_HEAD
 	_, err = g.MergeBase(mainRepoPath, *compareBranch, "FETCH_HEAD")
 	if err != nil {
-		return ForkAttachment{}, fmt.Errorf("fork validation failed: branch %s from %s does not share history with %s (use --force to override)", branch, uri, *compareBranch)
+		return ForkAttachment{}, &AttachRefusal{
+			Msg:  fmt.Sprintf("fork validation failed: branch %s from %s does not share history with %s", branch, uri, *compareBranch),
+			Hint: fmt.Sprintf("only a fork of this hub's repository (%s) can be attached; check the URI and --branch", hub.Config.Repo.URI),
+		}
 	}
 
 	output.Info("Fork ancestry verified.")
@@ -240,7 +243,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 	commitHash = strings.TrimSpace(commitHash)
 
 	if existingHub != nil {
-		if err := updateHubForkWorktree(g, existingHub, commitHash, forkBranchName); err != nil {
+		if err := updateHubForkWorktree(g, mainRepoPath, existingHub, commitHash); err != nil {
 			return ForkAttachment{}, err
 		}
 	} else if _, err := g.RunInDir(mainRepoPath, "git", "worktree", "add", "--detach", forkWorktreePath, commitHash); err != nil {

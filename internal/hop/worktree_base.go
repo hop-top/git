@@ -2,6 +2,7 @@ package hop
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -33,7 +34,7 @@ func (m *WorktreeManager) findBase(hopspace *Hopspace, hubPath string) worktreeB
 	if repo, ok := hubRepository(m.git, hubPath); ok {
 		return worktreeBase{base: repoWorktree(m.fs, m.git, repo), addDir: repo}
 	}
-	base := hopspaceWorktreeIn(hopspace, hubPath)
+	base := hopspaceWorktreeIn(m.fs, hopspace, hubPath)
 	return worktreeBase{base: base, addDir: worktreeAddDir(m.fs, m.git, base)}
 }
 
@@ -96,19 +97,42 @@ func repoWorktree(fs afero.Fs, g git.GitInterface, repo string) string {
 }
 
 // hopspaceWorktreeIn returns a worktree the hopspace records at or
-// below hubPath, hubPath itself when it records none there.
-func hopspaceWorktreeIn(hopspace *Hopspace, hubPath string) string {
+// below hubPath, hubPath itself when it records none there. One on disk
+// wins over one that is not (moved away, removed with git, never
+// finished), which no git command can run in; with none on disk it is
+// the first recorded. Candidates go in a fixed order, the default
+// branch first, then by name, so the pick never depends on how a walk
+// of the branch map falls.
+func hopspaceWorktreeIn(fs afero.Fs, hopspace *Hopspace, hubPath string) string {
 	if hopspace == nil || hopspace.Config == nil {
 		return hubPath
 	}
-	for _, b := range hopspace.Config.Branches {
-		if !b.Exists || b.Path == "" {
+	names := make([]string, 0, len(hopspace.Config.Branches))
+	for name := range hopspace.Config.Branches {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if def := hopspace.Config.Repo.DefaultBranch; def != "" {
+		names = append([]string{def}, names...)
+	}
+	var recorded []string
+	for _, name := range names {
+		b, ok := hopspace.Config.Branches[name]
+		if !ok || !b.Exists || b.Path == "" {
 			continue
 		}
 		p := config.ResolveWorktreePath(b.Path, hubPath)
 		if samePath(p, hubPath) || isStrictlyUnder(p, hubPath) {
+			recorded = append(recorded, p)
+		}
+	}
+	for _, p := range recorded {
+		if WorktreeAt(fs, p) == WorktreePresent {
 			return p
 		}
+	}
+	if len(recorded) > 0 {
+		return recorded[0]
 	}
 	return hubPath
 }
