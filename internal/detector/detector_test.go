@@ -32,8 +32,12 @@ func (m *mockGitForDetector) GetConfigRegex(repoPath, pattern string) (map[strin
 	return m.configRegexVals[pattern], nil
 }
 
-func (m *mockGitForDetector) RunGitFlowStart(repoPath, branchType, name string) error {
+func (m *mockGitForDetector) RunGitFlowStart(dir, branchType, name, base string) error {
 	return m.flowStartErr
+}
+
+func (m *mockGitForDetector) RunInDir(dir, cmd string, args ...string) (string, error) {
+	return "", nil
 }
 
 func (m *mockGitForDetector) RunGitFlowFinish(repoPath, branchType, name string) error {

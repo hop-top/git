@@ -6,7 +6,6 @@ import (
 	"github.com/spf13/afero"
 
 	"hop.top/git/internal/cli"
-	"hop.top/git/internal/detector"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
 )
@@ -61,16 +60,14 @@ func previewBranchDeletion(branch string, local, remote bool) {
 }
 
 // previewDetector reports the git-flow action a real run would take for
-// branch; action is the git-flow verb ("start" on add, "finish" on
-// remove). Detection only reads git config; the generic detector's actions
-// are no-ops, so git-flow is the one detector with an effect worth naming,
-// and only when hop.gitflow.enabled lets it run.
+// branch; action is the git-flow verb (remove's "finish"; add previews its
+// start with previewGitflowStart). Detection only reads git config; the
+// generic detector's actions are no-ops, so git-flow is the one detector
+// with an effect worth naming, and only when hop.gitflow.enabled lets it
+// run.
 func previewDetector(g git.GitInterface, branch, hubPath, action string) error {
 	gitflow := newGitflowDetector(g, hubPath)
-	mgr := detector.NewManager(afero.NewOsFs(), g)
-	mgr.Register(gitflow)
-	mgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
-	info, err := mgr.DetectBranch(branch, hubPath)
+	info, err := branchDetectors(afero.NewOsFs(), g, gitflow).DetectBranch(branch, hubPath)
 	if err != nil || info == nil || info.Source != gitflow.Name() {
 		return err
 	}

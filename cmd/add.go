@@ -11,6 +11,7 @@ import (
 	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/detector"
 	"hop.top/git/internal/docker"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
@@ -176,12 +177,11 @@ created or written and no hook runs.`,
 			fetchOrigin(g, hubPath, fetch)
 		}
 
-		// Create detector manager and register detectors
-		detectorMgr := newBranchDetectors(fs, g, hubPath)
-
-		// Execute pre-add (detector OnAdd)
-		detectorCtx := context.Background()
-		branchInfo, err := detectorMgr.ExecutePreAdd(detectorCtx, branch, hubPath, worktreePath)
+		// Detect the branch type; its action runs once the worktree exists.
+		gitflow := newGitflowDetector(g, hubPath, detector.WithStartBase(
+			gitflowStartBase(g, hubPath, addFromFlag, hub.Config.Repo.DefaultBranch)))
+		detectorMgr := branchDetectors(fs, g, gitflow)
+		branchInfo, err := detectorMgr.DetectBranch(branch, hubPath)
 		if err != nil {
 			output.Fatal("Branch type detector failed: %v", err)
 		}
@@ -196,6 +196,14 @@ created or written and no hook runs.`,
 		// Probed before creation: afterwards the branch exists either way.
 		branchExisted := localBranchExists(g, hubPath, branch)
 
+		// A new git-flow branch is created by git flow start, run in its
+		// worktree: git-hop creates that worktree detached and leaves the
+		// branch to git-flow, so it is created once and the hub, a bare
+		// repository git-flow cannot run in, is never its working
+		// directory.
+		gitflowStarts := gitflowStartsNewBranch(g, gitflow, branchInfo, hubPath, branch)
+		wm.Detach = gitflowStarts
+
 		// Create Worktree in the current hub
 		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, hub.Config.Repo.DefaultBranch, startPoint)
 		if err != nil {
@@ -207,6 +215,22 @@ created or written and no hook runs.`,
 				os.Exit(1)
 			}
 			output.Fatal("Failed to create worktree: %v", err)
+		}
+
+		// The detector's add action: git flow start for a new git-flow
+		// branch, the opt-in hint when git-flow actions are off. An
+		// existing branch has nothing to start.
+		if gitflowStarts || !gitflow.StartsBranch(branchInfo) {
+			err := detectorMgr.ExecuteAdd(context.Background(), branchInfo, hubPath, worktreePath)
+			if err == nil && gitflowStarts {
+				err = checkGitflowStarted(g, worktreePath, branch)
+			}
+			if err != nil {
+				if gitflowStarts {
+					undoGitflowWorktree(fs, g, hubPath, worktreePath, branch)
+				}
+				output.Fatal("Branch type detector failed: %v", err)
+			}
 		}
 
 		// Seed the new worktree with the ignored local state (.env files,

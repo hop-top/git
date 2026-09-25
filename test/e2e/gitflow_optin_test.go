@@ -8,9 +8,8 @@ import (
 )
 
 // gitflowEnv is a hub whose repo is set up for git-flow-next (a feature/
-// branch type), with a stub `git-flow` on PATH that appends each call to
-// flowLog instead of touching the repo, and pre-worktree hooks that record
-// the branch-type variables they receive.
+// branch type), with a stub `git-flow` on PATH (see gitflowStub), and
+// pre-worktree hooks that record the branch-type variables they receive.
 type gitflowEnv struct {
 	*TestEnv
 	flowLog   string
@@ -32,7 +31,7 @@ func setupGitflowEnv(t *testing.T) *gitflowEnv {
 		t.Fatal(err)
 	}
 	flowLog := filepath.Join(env.RootDir, "gitflow.log")
-	WriteFile(t, filepath.Join(binDir, "git-flow"), "#!/bin/sh\necho \"$*\" >> '"+flowLog+"'\n")
+	WriteFile(t, filepath.Join(binDir, "git-flow"), strings.ReplaceAll(gitflowStub, "@LOG@", flowLog))
 	if err := os.Chmod(filepath.Join(binDir, "git-flow"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -65,6 +64,50 @@ func setupGitflowEnv(t *testing.T) *gitflowEnv {
 	}
 
 	return &gitflowEnv{TestEnv: env, flowLog: flowLog, markerDir: filepath.Join(env.RootDir, "markers")}
+}
+
+// gitflowStub stands in for git-flow-next as far as git hop relies on it.
+// It appends each call's arguments to @LOG@ and, to @LOG@.where, the
+// directory it ran in and the branch checked out there ("-" when
+// detached). Like git-flow-next 2.1 it refuses to run outside a work tree
+// (exit 3), and `start` creates <prefix><name> from its base (the [base]
+// argument, else the type's parent) and checks it out where it runs.
+// `finish` only records the call. A start fails while @LOG@.fail exists,
+// and creates the branch without checking it out while @LOG@.nocheckout
+// does.
+const gitflowStub = `#!/bin/sh
+echo "$*" >> '@LOG@'
+echo "$(pwd -P) $(git branch --show-current 2>/dev/null | grep . || echo -)" >> '@LOG@.where'
+if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != true ]; then
+	echo "Error: failed to open repository: $(pwd) is not inside a git work tree" >&2
+	exit 3
+fi
+if [ "$2" = start ]; then
+	[ -e '@LOG@.fail' ] && { echo "Error: start failed" >&2; exit 1; }
+	prefix=$(git config "gitflow.branch.$1.prefix")
+	base=$4
+	case "$base" in ''|-*) base=$(git config "gitflow.branch.$1.parent") ;; esac
+	if [ -e '@LOG@.nocheckout' ]; then
+		git branch "$prefix$3" "$base" || exit 1
+	else
+		git checkout -q -b "$prefix$3" "$base" || exit 1
+	fi
+	git config "gitflow.branch.$prefix$3.base" "$base"
+fi
+`
+
+// flowWhere returns, per recorded git-flow call, the directory it ran in
+// and the branch checked out there, as "<dir> <branch>".
+func (e *gitflowEnv) flowWhere(t *testing.T) []string {
+	t.Helper()
+	data, err := os.ReadFile(e.flowLog + ".where")
+	if os.IsNotExist(err) {
+		return nil
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.Split(strings.TrimSpace(string(data)), "\n")
 }
 
 func (e *gitflowEnv) enable(t *testing.T) {
@@ -145,7 +188,7 @@ func TestGitflowOptIn_EnabledRunsStartAndFinish(t *testing.T) {
 	_, addErr := e.gitHop(t, "add", "feature/x", "--verbose")
 	_, rmErr := e.gitHop(t, "remove", "feature/x", "--no-prompt", "--verbose")
 
-	want := []string{"feature start x", "feature finish x"}
+	want := []string{"feature start x --no-worktree", "feature finish x"}
 	if got := e.flowCalls(t); strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("git-flow calls = %q, want %q", got, want)
 	}
