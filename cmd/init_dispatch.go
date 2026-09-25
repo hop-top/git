@@ -58,7 +58,7 @@ func initRemoteURL(g git.GitInterface, repoPath string) string {
 // clone.
 func dispatchInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, worktreePath, branch string) {
 	repoID := initRepoID(g, repoPath)
-	if err := cli.BuildHookDispatch(fs, initRemoteURL(g, repoPath)).PostWorktreeAdd(worktreePath, repoID, branch); err != nil {
+	if err := cli.BuildHookDispatch(fs, initRemoteURL(g, repoPath), repoPath).PostWorktreeAdd(worktreePath, repoID, branch); err != nil {
 		output.Warn("post-worktree-add hook failed: %v", err)
 	}
 }
@@ -104,7 +104,7 @@ func previewInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, branch st
 		return
 	}
 	worktreePath := initWorktreePath(repoPath, branch, useBare)
-	cli.PreviewHook(hooks.NewRunner(fs).ForRepo(initRemoteURL(g, repoPath)), "post-worktree-add", worktreePath, initRepoID(g, repoPath))
+	cli.PreviewHook(hooks.NewRunner(fs).ForRepo(initRemoteURL(g, repoPath), repoPath), "post-worktree-add", worktreePath, initRepoID(g, repoPath))
 }
 
 // initHooksHintWidth caps each hint line so the list wraps like the

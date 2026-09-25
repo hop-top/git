@@ -118,7 +118,8 @@ $GIT_HOP_DATA_HOME/<org>/<repo>/
 
 `<org>/<repo>` is the default of `hop.dataLayout`; set it to
 `{host}/{org}/{repo}` to keep repositories apart by host
-(`git config --global hop.dataLayout '{host}/{org}/{repo}'`).
+(`git config --global hop.dataLayout '{host}/{org}/{repo}'`, or
+`git config hop.dataLayout ...` inside a hub for that repository alone).
 
 Default `$GIT_HOP_DATA_HOME` by OS:
 - **Linux/Unix**: `~/.local/share/git-hop`

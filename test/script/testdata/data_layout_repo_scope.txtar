@@ -1,0 +1,45 @@
+# hop.dataLayout resolves like any git setting: a repository's own value
+# overrides --global, and `git -c` overrides both. Before a --global clone
+# there is no repository yet, so only --global and `git -c` count.
+#
+# A local origin has no host, so {host} expands to hop.gitDomain
+# (github.com).
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- `git -c` reaches a clone that has no repository yet ---
+env GIT_CONFIG_COUNT=1
+env GIT_CONFIG_KEY_0=hop.dataLayout
+env GIT_CONFIG_VALUE_0={host}/{org}/{repo}
+exec git-hop --global $WORK/org/repo.git hub
+exists $WORK/data/github.com/org/repo/hop.json
+! exists $WORK/data/org/repo/hop.json
+env GIT_CONFIG_COUNT=0
+
+# --- the hub's own value decides for that hub, over --global ---
+exec git config --global hop.dataLayout '{org}/{repo}'
+exec git -C $WORK/hub config hop.dataLayout '{host}/{org}/{repo}'
+cd $WORK/hub
+exec git-hop add feat/x
+decode json $WORK/data/github.com/org/repo/hop.json branches.feat/x.exists true
+! exists $WORK/data/org/repo/hop.json
+
+# --- with no value of its own, a hub follows --global ---
+cd $WORK
+exec git-hop --global $WORK/org/repo.git hub2
+exists $WORK/data/org/repo/hop.json
+
+# --- an unusable repository value falls back to --global; doctor names it ---
+exec git -C $WORK/hub2 config hop.dataLayout '{repo}'
+cd $WORK/hub2
+exec git-hop add feat/y
+decode json $WORK/data/org/repo/hop.json branches.feat/y.exists true
+exec git-hop doctor --json
+stdout 'hop.dataLayout'
+stdout '\(local config\) is invalid'
+stdout 'using \{org\}/\{repo\}'

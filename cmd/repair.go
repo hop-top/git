@@ -431,7 +431,7 @@ func firePostRepairHook(fs afero.Fs, hubPath string) error {
 // makes the pre/post asymmetry fall out naturally: pre-repair reads the
 // possibly-damaged hub config, post-repair reads the repaired one.
 func runRepairHook(fs afero.Fs, name, hubPath string) error {
-	_, err := hooks.NewRunner(fs).ForRepo(repairHookRepoURI(fs, hubPath)).
+	_, err := hooks.NewRunner(fs).ForRepo(repairHookRepoURI(fs, hubPath), hubPath).
 		ExecuteHook(name, hubPath, repairHookRepoID(fs, hubPath), "")
 	return err
 }

@@ -104,7 +104,7 @@ func LoadEnvRecords(fs afero.Fs, currentHub string) (*EnvRecords, error) {
 				h.Branches[branch] = config.ResolveWorktreePath(hub.Config.Branches[branch].Path, path)
 			}
 		} else if mode == state.HubModeGlobal {
-			hopspace = hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.NewRepoRef(uri, org, repo))
+			hopspace = hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.NewRepoRef(uri, org, repo).In(path))
 		}
 		h.Hopspace = state.ResolvePath(hopspace)
 		r.Hubs = append(r.Hubs, h)

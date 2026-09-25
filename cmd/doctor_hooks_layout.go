@@ -19,25 +19,36 @@ import (
 const legacyHooksHost = "github.com"
 
 // checkDataLayout warns about an invalid hop.dataLayout and about hopspace
-// hooks left where releases before hop.dataLayout mirrored them.
-func checkDataLayout(fs afero.Fs, opts doctorOpts, r *doctorReport) {
-	checkDataLayoutSetting(r)
+// hooks left where releases before hop.dataLayout mirrored them. It runs
+// before the hub check, which would otherwise create a hopspace where one
+// moved here belongs.
+func checkDataLayout(fs afero.Fs, cwd string, opts doctorOpts, r *doctorReport) {
+	hubPath, _ := hop.FindHub(fs, cwd)
+	checkDataLayoutSetting(hubPath, r)
 	checkLegacyHooksDirs(fs, opts, r)
 }
 
-// checkDataLayoutSetting reports a --global hop.dataLayout git-hop cannot
-// use; hop.DataLayout falls back to the default for it.
-func checkDataLayoutSetting(r *doctorReport) {
+// checkDataLayoutSetting reports a hop.dataLayout git-hop cannot use: the
+// --global value, which every repository without its own falls back on,
+// and the value in effect for the hub at hubPath ("" outside a hub) when
+// another scope (the repository, `git -c`) sets it. Each warning names
+// the scope and the layout used instead.
+func checkDataLayoutSetting(hubPath string, r *doctorReport) {
 	key := config.KeyDataLayout
-	raw, err := config.NewGlobalGitConfig().GetString(key)
-	if err != nil {
-		return
+	if raw, err := config.NewGlobalGitConfig().GetString(key); err == nil {
+		if verr := hop.ValidateDataLayout(raw); verr != nil {
+			warnInvalidDataLayout(r, "global", raw, verr, config.Default(key))
+		}
 	}
-	if verr := hop.ValidateDataLayout(raw); verr != nil {
-		def := config.Default(key)
-		output.Warn("%s %q is invalid (%v); using %s", key, raw, verr, def)
-		r.record(doctorKindWarning, doctorCheckConfig, key, "%q is invalid (%v); using %s", raw, verr, def)
+	if s := hop.ResolveDataLayout(hubPath); s.Err != nil && s.Scope != "global" {
+		warnInvalidDataLayout(r, s.Scope, s.Raw, s.Err, s.Layout)
 	}
+}
+
+func warnInvalidDataLayout(r *doctorReport, scope, raw string, err error, using string) {
+	key := config.KeyDataLayout
+	output.Warn("%s %q (%s config) is invalid (%v); using %s", key, raw, scope, err, using)
+	r.record(doctorKindWarning, doctorCheckConfig, key, "%q (%s config) is invalid (%v); using %s", raw, scope, err, using)
 }
 
 // checkLegacyHooksDirs finds <data>/github.com/<org>/<repo>/hooks dirs that
@@ -48,12 +59,19 @@ func checkDataLayoutSetting(r *doctorReport) {
 // Nothing is ever deleted or overwritten.
 func checkLegacyHooksDirs(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 	dataHome := hop.GetGitHopDataHome()
-	uris := stateRepoURIs(fs)
+	repos := stateRepos(fs)
 	for _, legacy := range findLegacyHooksDirs(fs, dataHome) {
 		org := filepath.Base(filepath.Dir(filepath.Dir(legacy)))
 		repo := filepath.Base(filepath.Dir(legacy))
 		repoID := legacyHooksHost + "/" + org + "/" + repo
-		newDir := hop.HopspaceHooksDir(hop.NewRepoRef(uris[repoID], org, repo))
+		var uri, hubDir string
+		if st := repos[repoID]; st != nil {
+			uri = st.URI
+			if len(st.Hubs) > 0 && st.Hubs[0] != nil {
+				hubDir = st.Hubs[0].Path
+			}
+		}
+		newDir := hop.HopspaceHooksDir(hop.NewRepoRef(uri, org, repo).In(hubDir))
 		if filepath.Clean(newDir) == filepath.Clean(legacy) {
 			continue
 		}
@@ -164,18 +182,13 @@ func hookDirsConflict(fs afero.Fs, a, b string) bool {
 	return false
 }
 
-// stateRepoURIs maps each repo ID in state to its origin URL; empty when
-// state cannot be read, in which case the host falls back to hop.gitDomain.
-func stateRepoURIs(fs afero.Fs) map[string]string {
-	uris := map[string]string{}
+// stateRepos returns the repositories state records, by repo ID; empty
+// when state cannot be read, in which case the host falls back to
+// hop.gitDomain and hop.dataLayout to the --global value.
+func stateRepos(fs afero.Fs) map[string]*state.RepositoryState {
 	st, err := state.LoadState(fs)
-	if err != nil {
-		return uris
+	if err != nil || st.Repositories == nil {
+		return map[string]*state.RepositoryState{}
 	}
-	for id, repo := range st.Repositories {
-		if repo != nil {
-			uris[id] = repo.URI
-		}
-	}
-	return uris
+	return st.Repositories
 }

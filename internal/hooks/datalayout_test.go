@@ -65,7 +65,7 @@ func TestFindHookFile_DefaultLayoutFindsOrgRepoHooks(t *testing.T) {
 	hook := filepath.Join("/data", "acme", "widgets", "hooks", "pre-worktree-add")
 	writeFile(t, fs, hook, "#!/bin/sh\n")
 
-	if got := NewRunner(fs).ForRepo(gitlabURI).FindHookFile("pre-worktree-add", "/nowhere", layoutRepoID); got != hook {
+	if got := NewRunner(fs).ForRepo(gitlabURI, "").FindHookFile("pre-worktree-add", "/nowhere", layoutRepoID); got != hook {
 		t.Fatalf("FindHookFile() = %q, want %q", got, hook)
 	}
 }
@@ -79,7 +79,7 @@ func TestFindHookFile_LegacyLocationStillResolves(t *testing.T) {
 	legacy := filepath.Join("/data", "github.com", "acme", "widgets", "hooks", "pre-worktree-add")
 	writeFile(t, fs, legacy, "#!/bin/sh\n")
 
-	if got := NewRunner(fs).ForRepo(gitlabURI).FindHookFile("pre-worktree-add", "/nowhere", layoutRepoID); got != legacy {
+	if got := NewRunner(fs).ForRepo(gitlabURI, "").FindHookFile("pre-worktree-add", "/nowhere", layoutRepoID); got != legacy {
 		t.Fatalf("FindHookFile() = %q, want the legacy hook %q", got, legacy)
 	}
 }
@@ -115,7 +115,44 @@ func TestHostLayout_NonGitHubOriginEndToEnd(t *testing.T) {
 	if ok, _ := afero.Exists(fs, want); !ok {
 		t.Fatalf("hook not mirrored to %s", want)
 	}
-	if got := NewRunner(fs).ForRepo(gitlabURI).FindHookFile("post-worktree-add", "/nowhere", layoutRepoID); got != want {
+	if got := NewRunner(fs).ForRepo(gitlabURI, "").FindHookFile("post-worktree-add", "/nowhere", layoutRepoID); got != want {
+		t.Fatalf("FindHookFile() = %q, want %q", got, want)
+	}
+}
+
+// gitRepoWithLayout creates a real repository whose own config sets
+// hop.dataLayout to layout.
+func gitRepoWithLayout(t *testing.T, layout string) string {
+	t.Helper()
+	dir := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	if out, err := exec.Command("git", "-C", dir, "config", "hop.dataLayout", layout).CombinedOutput(); err != nil {
+		t.Fatalf("git config: %v\n%s", err, out)
+	}
+	return dir
+}
+
+// A repository's own hop.dataLayout decides where its hooks are mirrored
+// and looked up, over --global.
+func TestRepoLayout_OverridesGlobalForMirrorAndLookup(t *testing.T) {
+	withGlobalGitConfig(t, map[string]string{"hop.dataLayout": "{org}/{repo}"})
+	repo := gitRepoWithLayout(t, "{host}/{org}/{repo}")
+	fs := afero.NewMemMapFs()
+	withDataHome(t, "/data")
+	writeHook(t, fs, repo, "post-worktree-add", "#!/bin/sh\n", 0o755)
+
+	if _, err := MirrorCommittedHooks(fs, MirrorOpts{
+		WorktreePath: repo, RepoID: layoutRepoID, RepoURI: gitlabURI, Mode: ModeCopy,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join("/data", "gitlab.example.com", "acme", "widgets", "hooks", "post-worktree-add")
+	if ok, _ := afero.Exists(fs, want); !ok {
+		t.Fatalf("hook not mirrored to %s", want)
+	}
+	if got := NewRunner(fs).ForRepo(gitlabURI, repo).FindHookFile("post-worktree-add", "/nowhere", layoutRepoID); got != want {
 		t.Fatalf("FindHookFile() = %q, want %q", got, want)
 	}
 }

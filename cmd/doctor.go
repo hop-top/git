@@ -257,7 +257,7 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	}
 
 	checkPaths(fs, opts, &r)
-	checkDataLayout(fs, opts, &r)
+	checkDataLayout(fs, cwd, opts, &r)
 	hubPath, hubKept := checkHub(fs, g, cwd, opts, &r)
 	checkDependencies(fs, hubPath, opts, &r)
 	checkLegacyDepsStores(fs, hubPath, &r)

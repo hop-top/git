@@ -19,6 +19,7 @@ import (
 type Runner struct {
 	fs      afero.Fs
 	repoURI string
+	repoDir string
 }
 
 // NewRunner creates a new hook runner
@@ -26,11 +27,14 @@ func NewRunner(fs afero.Fs) *Runner {
 	return &Runner{fs: fs}
 }
 
-// ForRepo sets the origin URL of the repository whose hooks r runs, and
-// returns r. The URL supplies the host of the hopspace hooks directory
-// when hop.dataLayout names {host}; without it that host is hop.gitDomain.
-func (r *Runner) ForRepo(uri string) *Runner {
+// ForRepo sets the repository whose hooks r runs, and returns r. uri is
+// its origin URL, which supplies the host of the hopspace hooks directory
+// when hop.dataLayout names {host} (without it that host is
+// hop.gitDomain). dir is its hub, whose git config decides
+// hop.dataLayout; "" when there is no repository yet (pre-clone).
+func (r *Runner) ForRepo(uri, dir string) *Runner {
 	r.repoURI = uri
+	r.repoDir = dir
 	return r
 }
 
@@ -202,7 +206,7 @@ func (r *Runner) hopspaceHookDirs(repoID string) []string {
 	if !ok {
 		return nil
 	}
-	dirs := []string{hop.HopspaceHooksDir(ref)}
+	dirs := []string{hop.HopspaceHooksDir(ref.In(r.repoDir))}
 	if legacy := hop.LegacyHooksDir(repoID); legacy != "" && legacy != dirs[0] {
 		dirs = append(dirs, legacy)
 	}

@@ -302,7 +302,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	}
 
 	// Execute pre-worktree-remove hook with detector env vars
-	hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
+	hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI, hubPath)
 	detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
 	if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-remove", worktreePath, repoID, branch, detectorEnv); err != nil {
 		return rec, fmt.Errorf("hook pre-worktree-remove failed: %v", err)
