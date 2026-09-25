@@ -115,7 +115,7 @@ git hop status --all
 
 🔧 Configuration
   Data Home /Users/user/.local/share/git-hop
-  Config /Users/user/.config/git-hop/config.json
+  Settings git config hop.*
   Version git-hop
 
 📦 Resources

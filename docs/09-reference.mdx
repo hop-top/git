@@ -22,7 +22,7 @@ Complete reference for git-hop commands, configuration, and APIs.
 | `--verbose, -V` | count | Increase log verbosity; repeatable (`-V` debug, `-VV` trace) |
 | `--force` | bool | Bypass safety checks (use with caution) |
 | `--global, -g` | bool | Use the global hopspace in `$GIT_HOP_DATA_HOME` (default: local) |
-| `--config, -c &lt;file&gt;` | string array | Config file to read instead of `$XDG_CONFIG_HOME/git-hop/config.json`, or `&lt;key&gt;=&lt;value&gt;` to override one setting; repeatable. A file that does not exist is a usage error (exit 129). Not git's `-c`: in `git -c &lt;name&gt;=&lt;value&gt; hop ...` git consumes the option itself |
+| `--config, -c &lt;value&gt;` | string array | Ignored, with a `warning:` on stderr that `-q` does not drop; accepted so old scripts still run, and not listed in `--help`. Settings live in git config `hop.*`. For a one-off setting use git's own `-c`: `git -c hop.&lt;key&gt;=&lt;value&gt; hop ...` |
 | `--dry-run, -n` | bool | Show what would happen without making changes |
 | `--no-color` | bool | Disable ANSI color |
 | `--no-hints` | bool | Suppress next-step hints after command output |
@@ -398,7 +398,7 @@ matching `fixed` (or `would-fix`) record, or any repair `failed`; see
 | Field | Type | Meaning |
 |-------|------|---------|
 | `kind` | string | `issue` (makes the installation unhealthy), `warning` (reported, harmless), `fixed` (repaired by `--fix`), `would-fix` (`--fix --dry-run` would repair it), `failed` (`--fix` could not repair it) |
-| `check` | string | `paths`, `hub`, `hopspace` (a stale data-home hopspace copy beside a default hub), `dependencies`, `worktrees`, `state` or `config` (a broken `managers.json`, a `--global` `hop.*` key left by the old `global.json` migration, a retired `hop.*` setting, or the current hub's repository format). The published output schema lists all seven |
+| `check` | string | `paths`, `hub`, `hopspace` (a stale data-home hopspace copy beside a default hub), `dependencies`, `worktrees`, `state` or `config` (a broken `managers.json`, a leftover `config.json` git-hop does not read, a `--global` `hop.*` key left by the old `global.json` migration, a retired `hop.*` setting, or the current hub's repository format). The published output schema lists all seven |
 | `subject` | string | What the record is about: a path, a branch, a dependency directory, or a git config key. `state` records about a worktree name the worktree's path (two hubs can each have a worktree of the same branch); only an entry without a path, kept from a state file an earlier release wrote, is named `repository:branch` |
 | `message` | string | Human-readable description; for repairs, the repair itself (`create data directory`) |
 
