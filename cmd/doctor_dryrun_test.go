@@ -168,7 +168,7 @@ func doctorHub(t *testing.T, fs afero.Fs, hubPath string, branches, present []st
 	hub.Config.Repo.Mode = config.RepoModeGlobal
 	require.NoError(t, hub.Save())
 
-	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), "test", "repo")
+	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.RepoRef{Org: "test", Repo: "repo"})
 	hopspace, err := hop.InitHopspace(fs, hopspacePath,
 		"git@github.com:test/repo.git", "test", "repo", "main")
 	require.NoError(t, err)

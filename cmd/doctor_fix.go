@@ -222,14 +222,14 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 
 			output.Info("\nMissing worktree: %s:%s (was at %s)", repoID, branch, wt.Path)
 
-			if _, locked := stateWorktreeLock(fs, g, repoID, wt); locked {
+			if _, locked := stateWorktreeLock(fs, g, repoID, repo.URI, wt); locked {
 				output.Info("  Worktree is locked in git; keeping entry.")
 				kept.add(wt.Path)
 				continue
 			}
 			// Try to determine a git dir to run branch-merged check.
 			// Prefer the hub path recorded in state; fall back to hopspace.
-			gitDir := findGitDirForRepo(fs, repoID, wt.HubPath)
+			gitDir := findGitDirForRepo(fs, repoID, repo.URI, wt.HubPath)
 			merged := gitDir != "" && mergedIntoDefault(g, gitDir, branch, repo.DefaultBranch)
 
 			if dryRun {
@@ -304,19 +304,17 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 
 // findGitDirForRepo returns a usable git directory for running git commands
 // against the given repository. It tries the hub path first, then falls back
-// to the hopspace derived from the repoID.
-func findGitDirForRepo(fs afero.Fs, repoID, hubPath string) string {
+// to the data-home hopspace of the repoID's org/repo (the host, when the data
+// layout names one, comes from uri).
+func findGitDirForRepo(fs afero.Fs, repoID, uri, hubPath string) string {
 	if hubPath != "" {
 		if exists, _ := afero.DirExists(fs, hubPath); exists {
 			return hubPath
 		}
 	}
 
-	// repoID is typically "github.com/org/repo" — extract org/repo suffix.
-	parts := strings.SplitN(repoID, "/", 3)
-	if len(parts) == 3 {
-		dataHome := hop.GetGitHopDataHome()
-		hopspacePath := hop.GetHopspacePath(dataHome, parts[1], parts[2])
+	if ref, ok := hop.RepoRefFromID(repoID, uri); ok {
+		hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), ref)
 		if exists, _ := afero.DirExists(fs, hopspacePath); exists {
 			return hopspacePath
 		}

@@ -23,7 +23,7 @@ func unlinkedLegacyDepsStores(fs afero.Fs, hubPath string) ([]services.LegacyDep
 	}
 
 	var hopspaces, worktrees []string
-	addHub := func(path, mode, org, repo string) {
+	addHub := func(path, mode string, ref hop.RepoRef) {
 		if hub, err := hop.LoadHub(fs, path); err == nil {
 			hopspaces = append(hopspaces, hop.ResolveHopspacePath(path, hub.Config.Repo))
 			for _, wt := range hub.WorktreePaths() {
@@ -32,7 +32,7 @@ func unlinkedLegacyDepsStores(fs afero.Fs, hubPath string) ([]services.LegacyDep
 			return
 		}
 		if mode == state.HubModeGlobal {
-			hopspaces = append(hopspaces, hop.GetHopspacePath(hop.GetGitHopDataHome(), org, repo))
+			hopspaces = append(hopspaces, hop.GetHopspacePath(hop.GetGitHopDataHome(), ref))
 			return
 		}
 		hopspaces = append(hopspaces, path)
@@ -42,11 +42,11 @@ func unlinkedLegacyDepsStores(fs afero.Fs, hubPath string) ([]services.LegacyDep
 			worktrees = append(worktrees, wt.Path)
 		}
 		for _, h := range repo.Hubs {
-			addHub(h.Path, h.Mode, repo.Org, repo.Repo)
+			addHub(h.Path, h.Mode, hop.NewRepoRef(repo.URI, repo.Org, repo.Repo))
 		}
 	}
 	if hubPath != "" {
-		addHub(hubPath, "", "", "")
+		addHub(hubPath, "", hop.RepoRef{})
 	}
 
 	stores, err := services.FindLegacyDepsStores(fs, hopspaces, worktrees)

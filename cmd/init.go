@@ -581,7 +581,7 @@ func installInitHooks(fs afero.Fs, repoPath, mainWorktreePath string, isRegularR
 
 // mirrorInitHooks scans <worktreePath>/.git-hop/hooks/ for committed hook
 // scripts and mirrors them into the user's hopspace at
-// $XDG_DATA_HOME/git-hop/<host>/<org>/<repo>/hooks/. Mode resolution:
+// <data home>/<hop.dataLayout>/hooks/ (hop.HopspaceHooksDir). Mode resolution:
 // CLI flag → GIT_HOP_HOOKS env → hop.hooks.installMode git config → "prompt".
 // If --no-hooks was passed and --hooks was not, this is a no-op.
 func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath string, flagMode string, overwrite, noHooks bool) {
@@ -626,6 +626,7 @@ func initMirrorOpts(g git.GitInterface, worktreePath, repoPath string, flagMode 
 	mopts := hooks.MirrorOpts{
 		WorktreePath: worktreePath,
 		RepoID:       repoID,
+		RepoURI:      initRemoteURL(g, repoPath),
 		Mode:         resolved,
 		Overwrite:    overwrite,
 	}

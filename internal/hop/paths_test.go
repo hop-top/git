@@ -191,7 +191,7 @@ func TestGetHopspacePath(t *testing.T) {
 	org := "test-org"
 	repo := "test-repo"
 
-	result := hop.GetHopspacePath(dataHome, org, repo)
+	result := hop.GetHopspacePath(dataHome, hop.RepoRef{Org: org, Repo: repo})
 	expected := filepath.Join("/data", "test-org", "test-repo")
 
 	if result != expected {
@@ -210,7 +210,7 @@ func TestPathsIntegration(t *testing.T) {
 	os.Unsetenv("GIT_HOP_DATA_HOME")
 
 	dataHome := hop.GetGitHopDataHome()
-	hopspacePath := hop.GetHopspacePath(dataHome, "org", "repo")
+	hopspacePath := hop.GetHopspacePath(dataHome, hop.RepoRef{Org: "org", Repo: "repo"})
 
 	// Verify structure
 	if !filepath.IsAbs(hopspacePath) {

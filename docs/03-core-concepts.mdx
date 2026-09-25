@@ -101,8 +101,12 @@ A *hopspace* is the canonical storage location for all worktrees of a single rep
 Hopspaces are stored at:
 
 ```
-$GIT_HOP_DATA_HOME/<server>/<org>/<repo>/
+$GIT_HOP_DATA_HOME/<org>/<repo>/
 ```
+
+`<org>/<repo>` is the default of `hop.dataLayout`; set it to
+`{host}/{org}/{repo}` to keep repositories apart by host
+(`git config --global hop.dataLayout '{host}/{org}/{repo}'`).
 
 Default `$GIT_HOP_DATA_HOME` by OS:
 - **Linux/Unix**: `~/.local/share/git-hop`

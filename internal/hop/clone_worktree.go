@@ -146,7 +146,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 
 		// Initialize hopspace in data directory
 		dataHome := GetGitHopDataHome()
-		hopspacePath := GetHopspacePath(dataHome, org, repo)
+		hopspacePath := GetHopspacePath(dataHome, NewRepoRef(uri, org, repo))
 		if err := initializeHopspace(fs, hopspacePath, uri, org, repo, defaultBranch, absMainWorktreePath, true); err != nil {
 			return fmt.Errorf("failed to initialize hopspace: %v", err)
 		}

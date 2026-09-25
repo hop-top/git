@@ -29,7 +29,7 @@ func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) {
 		refuse(fmt.Errorf("detector failed: %v", err))
 	}
 
-	runner := hooks.NewRunner(fs)
+	runner := hooks.NewRunner(fs).ForRepo(p.hub.Config.Repo.URI)
 	cli.PreviewHook(runner, "pre-worktree-move", p.oldPath, p.repoID)
 
 	if g.LocalBranchExists(p.oldPath, p.newBranch) {

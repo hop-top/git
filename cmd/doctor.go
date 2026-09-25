@@ -52,6 +52,11 @@ Checks:
   optional until something is written there)
 - Hub configuration and symlinks
 - Hopspace existence and consistency
+- Hopspace hooks left at the pre-hop.dataLayout location
+  ($GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks): they still fire,
+  a warning (--fix moves the directory to the hop.dataLayout location
+  when nothing is there yet; with hooks at both, nothing is moved), and
+  an invalid hop.dataLayout value, a warning
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
 - The current hub's record in state: a hub with hop.json that state does
@@ -243,6 +248,7 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	}
 
 	checkPaths(fs, opts, &r)
+	checkDataLayout(fs, opts, &r)
 	hubPath, hubKept := checkHub(fs, g, cwd, opts, &r)
 	checkDependencies(fs, hubPath, opts, &r)
 	checkLegacyDepsStores(fs, hubPath, &r)
@@ -411,7 +417,7 @@ func inspectState(fs afero.Fs, g git.GitInterface, r *doctorReport) (*state.Stat
 	var stateIssues []stateIssue
 	for _, issue := range missingStateWorktrees(fs, st) {
 		wt := st.Repositories[issue.repoID].Worktrees[issue.key]
-		if reason, locked := stateWorktreeLock(fs, g, issue.repoID, wt); locked {
+		if reason, locked := stateWorktreeLock(fs, g, issue.repoID, st.Repositories[issue.repoID].URI, wt); locked {
 			warnLockedWorktree(r, doctorCheckState, stateWorktreeSubject(issue.repoID, issue.branch, issue.path), issue.path, reason)
 			continue
 		}

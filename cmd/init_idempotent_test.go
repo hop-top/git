@@ -44,10 +44,11 @@ func isolateDataHome(t *testing.T) string {
 }
 
 // hopspaceHooksDirs returns the hopspace hook dirs the mirror step
-// created under dataHome (<dataHome>/<host>/<org>/<repo>/hooks).
+// created under dataHome (<dataHome>/<org>/<repo>/hooks, the default
+// hop.dataLayout).
 func hopspaceHooksDirs(t *testing.T, dataHome string) []string {
 	t.Helper()
-	dirs, err := filepath.Glob(filepath.Join(dataHome, "*", "*", "*", "hooks"))
+	dirs, err := filepath.Glob(filepath.Join(dataHome, "*", "*", "hooks"))
 	require.NoError(t, err)
 	return dirs
 }

@@ -66,8 +66,8 @@ func checkDryRunSupported(cmd *cobra.Command) error {
 
 // previewSwitch reports what switching to branch would do without doing
 // any of it: no hook runs and the `current` symlink is not written.
-func previewSwitch(fs afero.Fs, repoID, branch, worktreePath string) {
-	runner := hooks.NewRunner(fs)
+func previewSwitch(fs afero.Fs, uri, repoID, branch, worktreePath string) {
+	runner := hooks.NewRunner(fs).ForRepo(uri)
 	output.Info("[dry-run] Would switch to worktree '%s'", branch)
 	PreviewHook(runner, "pre-worktree-switch", worktreePath, repoID)
 	output.Info("[dry-run] Would point 'current' at %s", worktreePath)

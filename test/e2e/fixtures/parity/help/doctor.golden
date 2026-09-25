@@ -5,6 +5,11 @@ Checks:
   optional until something is written there)
 - Hub configuration and symlinks
 - Hopspace existence and consistency
+- Hopspace hooks left at the pre-hop.dataLayout location
+  ($GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks): they still fire,
+  a warning (--fix moves the directory to the hop.dataLayout location
+  when nothing is there yet; with hooks at both, nothing is moved), and
+  an invalid hop.dataLayout value, a warning
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
 - The current hub's record in state: a hub with hop.json that state does

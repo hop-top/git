@@ -89,7 +89,7 @@ type EnvRecords struct {
 func LoadEnvRecords(fs afero.Fs, currentHub string) (*EnvRecords, error) {
 	r := &EnvRecords{}
 	seen := map[string]bool{}
-	add := func(path string, created time.Time, mode, org, repo string) {
+	add := func(path string, created time.Time, mode, org, repo, uri string) {
 		key := state.ResolvePath(path)
 		if path == "" || seen[key] {
 			return
@@ -104,7 +104,7 @@ func LoadEnvRecords(fs afero.Fs, currentHub string) (*EnvRecords, error) {
 				h.Branches[branch] = config.ResolveWorktreePath(hub.Config.Branches[branch].Path, path)
 			}
 		} else if mode == state.HubModeGlobal {
-			hopspace = hop.GetHopspacePath(hop.GetGitHopDataHome(), org, repo)
+			hopspace = hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.NewRepoRef(uri, org, repo))
 		}
 		h.Hopspace = state.ResolvePath(hopspace)
 		r.Hubs = append(r.Hubs, h)
@@ -115,12 +115,12 @@ func LoadEnvRecords(fs afero.Fs, currentHub string) (*EnvRecords, error) {
 		for _, repo := range st.Repositories {
 			for _, h := range repo.Hubs {
 				if h != nil {
-					add(h.Path, h.CreatedAt, h.Mode, repo.Org, repo.Repo)
+					add(h.Path, h.CreatedAt, h.Mode, repo.Org, repo.Repo, repo.URI)
 				}
 			}
 		}
 	}
-	add(currentHub, unknownHubCreated, "", "", "")
+	add(currentHub, unknownHubCreated, "", "", "", "")
 	sort.SliceStable(r.Hubs, func(i, j int) bool {
 		a, b := r.Hubs[i], r.Hubs[j]
 		if !a.Created.Equal(b.Created) {

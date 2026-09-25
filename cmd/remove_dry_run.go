@@ -49,7 +49,7 @@ func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath,
 func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) {
 	worktreePath := config.ResolveWorktreePath(hub.Config.Branches[branch].Path, hubPath)
 	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
-	runner := hooks.NewRunner(fs)
+	runner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
 
 	if err := previewDetector(g, branch, hubPath, "finish"); err != nil {
 		refuseDryRun(fmt.Sprintf("remove '%s'", branch), fmt.Errorf("branch type detector failed: %v", err))

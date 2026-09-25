@@ -38,8 +38,8 @@ func gitWorktreeLock(g git.GitInterface, gitDir, path string) (reason string, lo
 // git is asked in the worktree's hub, or the repository's hopspace when
 // the hub is gone (findGitDirForRepo). No repository to ask answers not
 // locked.
-func stateWorktreeLock(fs afero.Fs, g git.GitInterface, repoID string, wt *state.WorktreeState) (reason string, locked bool) {
-	gitDir := findGitDirForRepo(fs, repoID, wt.HubPath)
+func stateWorktreeLock(fs afero.Fs, g git.GitInterface, repoID, uri string, wt *state.WorktreeState) (reason string, locked bool) {
+	gitDir := findGitDirForRepo(fs, repoID, uri, wt.HubPath)
 	if gitDir == "" {
 		return "", false
 	}

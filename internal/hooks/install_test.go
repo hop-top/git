@@ -45,8 +45,10 @@ func writeHook(t *testing.T, fs afero.Fs, worktree, name, content string, mode o
 	_ = fs.Chmod(path, mode)
 }
 
+// hopspaceHookPath is where the default hop.dataLayout ({org}/{repo})
+// mirrors a hook of testRepoID.
 func hopspaceHookPath(dataHome, name string) string {
-	return filepath.Join(dataHome, "github.com", "test-org", "test-repo", "hooks", name)
+	return filepath.Join(dataHome, "test-org", "test-repo", "hooks", name)
 }
 
 func TestMirror_ModeNone(t *testing.T) {

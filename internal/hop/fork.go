@@ -27,14 +27,14 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	}
 
 	// 2. Determine Fork Hopspace
-	// $GIT_HOP_DATA_HOME/<fork-org>/<fork-repo>/
+	// $GIT_HOP_DATA_HOME/<hop.dataLayout for the fork>/
 	org, repo := ParseRepoFromURL(uri)
 	if org == "" || repo == "" {
 		return fmt.Errorf("could not parse org/repo from URI: %s", uri)
 	}
 
 	dataHome := GetGitHopDataHome()
-	forkHopspacePath := GetHopspacePath(dataHome, org, repo)
+	forkHopspacePath := GetHopspacePath(dataHome, NewRepoRef(uri, org, repo))
 
 	output.Info("Attaching fork branch %s from %s...", branch, uri)
 	output.Info("Fork Hopspace: %s", forkHopspacePath)

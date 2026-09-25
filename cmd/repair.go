@@ -431,8 +431,20 @@ func firePostRepairHook(fs afero.Fs, hubPath string) error {
 // makes the pre/post asymmetry fall out naturally: pre-repair reads the
 // possibly-damaged hub config, post-repair reads the repaired one.
 func runRepairHook(fs afero.Fs, name, hubPath string) error {
-	_, err := hooks.NewRunner(fs).ExecuteHook(name, hubPath, repairHookRepoID(fs, hubPath), "")
+	_, err := hooks.NewRunner(fs).ForRepo(repairHookRepoURI(fs, hubPath)).
+		ExecuteHook(name, hubPath, repairHookRepoID(fs, hubPath), "")
 	return err
+}
+
+// repairHookRepoURI is the origin URL in the hub config at the moment of
+// the call, "" when it cannot be read. The runner takes the host of the
+// hopspace hooks directory from it.
+func repairHookRepoURI(fs afero.Fs, hubPath string) string {
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil {
+		return ""
+	}
+	return hub.Config.Repo.URI
 }
 
 // repairHookRepoID builds the 3-part repo identifier hooks.Runner needs

@@ -31,7 +31,7 @@ func hubFixture(t *testing.T, fs afero.Fs, path string, global bool) {
 // state recording hubs (path -> global?) as the repository's hubs.
 func sharedHopspaceFixture(t *testing.T, fs afero.Fs, hubs map[string]bool) string {
 	t.Helper()
-	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), "test", "repo")
+	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.RepoRef{Org: "test", Repo: "repo"})
 	_, err := hop.InitHopspace(fs, hopspacePath, "git@github.com:test/repo.git", "test", "repo", "main")
 	require.NoError(t, err)
 

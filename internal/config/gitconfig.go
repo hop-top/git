@@ -19,6 +19,7 @@ type GitConfig struct {
 // Known hop.* config keys with their defaults.
 const (
 	KeyGitDomain              = "hop.gitDomain"
+	KeyDataLayout             = "hop.dataLayout"
 	KeyEnvAutoStart           = "hop.env.autoStart"
 	KeyWorktreeLocation       = "hop.worktreeLocation"
 	KeyAddDefaultStartPoint   = "hop.add.defaultStartPoint"
@@ -41,6 +42,7 @@ const (
 // is derived from it. A key missing here defaults to its zero value.
 var defaults = map[string]string{
 	KeyGitDomain:              "github.com",
+	KeyDataLayout:             "{org}/{repo}",
 	KeyEnvAutoStart:           "false",
 	KeyWorktreeLocation:       "{hubPath}/hops/{branch}",
 	KeyAddDefaultStartPoint:   "default-branch",
@@ -224,6 +226,11 @@ func (gc *GitConfig) GetSizeOrDefault(key string) int64 {
 		return n
 	}
 	return 0
+}
+
+// Default returns the compiled default for key, or "" when it has none.
+func Default(key string) string {
+	return defaults[key]
 }
 
 // GetBoolOrDefault returns the value for key, falling back to the

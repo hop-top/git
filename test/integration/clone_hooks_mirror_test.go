@@ -58,7 +58,7 @@ func TestMirrorCommittedHooks_Symlink_RealFs(t *testing.T) {
 		t.Fatalf("expected Installed=1, got %+v", res)
 	}
 
-	dst := filepath.Join(dataHome, "github.com", "testorg", "testrepo",
+	dst := filepath.Join(dataHome, "testorg", "testrepo",
 		"hooks", "post-worktree-add")
 
 	target, err := os.Readlink(dst)
@@ -110,7 +110,7 @@ func TestMirrorCommittedHooks_NonInteractivePromptDegrades(t *testing.T) {
 	if res.Installed != 0 {
 		t.Fatalf("non-interactive prompt should not install: %+v", res)
 	}
-	dst := filepath.Join(dataHome, "github.com", "testorg", "testrepo",
+	dst := filepath.Join(dataHome, "testorg", "testrepo",
 		"hooks", "post-worktree-add")
 	if _, err := os.Stat(dst); !os.IsNotExist(err) {
 		t.Errorf("expected dst not to exist; got err=%v", err)

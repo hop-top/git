@@ -17,12 +17,21 @@ import (
 
 // Runner handles hook execution following the priority system
 type Runner struct {
-	fs afero.Fs
+	fs      afero.Fs
+	repoURI string
 }
 
 // NewRunner creates a new hook runner
 func NewRunner(fs afero.Fs) *Runner {
 	return &Runner{fs: fs}
+}
+
+// ForRepo sets the origin URL of the repository whose hooks r runs, and
+// returns r. The URL supplies the host of the hopspace hooks directory
+// when hop.dataLayout names {host}; without it that host is hop.gitDomain.
+func (r *Runner) ForRepo(uri string) *Runner {
+	r.repoURI = uri
+	return r
 }
 
 // ValidHookNames is the list of valid hook names
@@ -145,9 +154,11 @@ func hasRepoLevel(hookName string) bool {
 }
 
 // FindHookFile finds the hook file following the priority system:
-// 1. Repo override (.git-hop/hooks/<hook-name>)
-// 2. Hopspace hook ($GIT_HOP_DATA_HOME/<host>/<org>/<repo>/hooks/<hook-name>)
-// 3. Global hook ($XDG_CONFIG_HOME/git-hop/hooks/<hook-name>)
+//  1. Repo override (.git-hop/hooks/<hook-name>)
+//  2. Hopspace hook (<hopspace>/hooks/<hook-name>, the hopspace being
+//     $GIT_HOP_DATA_HOME/<hop.dataLayout>; then the pre-layout location
+//     $GIT_HOP_DATA_HOME/<repo-ID host>/<org>/<repo>/hooks/<hook-name>)
+//  3. Global hook ($XDG_CONFIG_HOME/git-hop/hooks/<hook-name>)
 //
 // For repo-level hooks, we also search parent directories to find hooks
 // at the hub level (useful for sharing hooks across worktrees). Hooks
@@ -165,9 +176,8 @@ func (r *Runner) FindHookFile(hookName string, worktreePath string, repoID strin
 		}
 	}
 
-	parts := strings.Split(repoID, "/")
-	if len(parts) >= 3 {
-		hopspaceHook := filepath.Join(hop.GetGitHopDataHome(), parts[0], parts[1], parts[2], "hooks", hookName)
+	for _, dir := range r.hopspaceHookDirs(repoID) {
+		hopspaceHook := filepath.Join(dir, hookName)
 		if exists, _ := afero.Exists(r.fs, hopspaceHook); exists {
 			return hopspaceHook
 		}
@@ -181,6 +191,22 @@ func (r *Runner) FindHookFile(hookName string, worktreePath string, repoID strin
 
 	// No hook found
 	return ""
+}
+
+// hopspaceHookDirs returns the hopspace hook directories of repoID in
+// lookup order: the hop.dataLayout location, then the one releases before
+// it mirrored to, which doctor --fix moves. None for a repo ID of fewer
+// than three parts.
+func (r *Runner) hopspaceHookDirs(repoID string) []string {
+	ref, ok := hop.RepoRefFromID(repoID, r.repoURI)
+	if !ok {
+		return nil
+	}
+	dirs := []string{hop.HopspaceHooksDir(ref)}
+	if legacy := hop.LegacyHooksDir(repoID); legacy != "" && legacy != dirs[0] {
+		dirs = append(dirs, legacy)
+	}
+	return dirs
 }
 
 // findHookInParentDirs searches for a hook in parent directories

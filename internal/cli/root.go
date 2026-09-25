@@ -307,9 +307,9 @@ Worktree Mode:
 			hookOpts := hop.HookMirrorOptions{
 				Mode:      hooksMode,
 				Overwrite: hooksOverwrite,
-				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite),
+				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite, expandedArg),
 			}
-			dispatch := BuildHookDispatch(fs)
+			dispatch := BuildHookDispatch(fs, expandedArg)
 			dispatch.SetUpEnv = func(hubPath string) { setUpClonedWorktree(fs, hubPath, globalCfg) }
 			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, globalConfig, hookOpts, dispatch); err != nil {
 				output.Fatal("Clone failed: %v", err)
@@ -345,7 +345,7 @@ Worktree Mode:
 			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 			if dryRun {
-				previewSwitch(fs, repoID, arg, worktreePath)
+				previewSwitch(fs, hub.Config.Repo.URI, repoID, arg, worktreePath)
 				return
 			}
 
@@ -365,7 +365,7 @@ Worktree Mode:
 			// The symlink is the load-bearing step: os.Chdir below only moves
 			// this process, while the shell wrapper navigates by resolving
 			// `current` after the binary exits.
-			hookRunner := hooks.NewRunner(fs)
+			hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
 			if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
 				output.Fatal("Hook pre-worktree-switch failed: %v", err)
 			}
@@ -628,11 +628,12 @@ func loadConfig(v *viper.Viper, paths []string, overrides map[string]any, defaul
 
 // buildHookMirrorRun returns a closure that resolves the hooks install
 // mode (flag → env → git config → default "prompt") and invokes
-// hooks.MirrorCommittedHooks against the freshly-cloned worktree.
+// hooks.MirrorCommittedHooks against the freshly-cloned worktree. uri is
+// the clone's origin URL.
 //
 // Lives here (not in internal/hop) because internal/hooks already imports
 // internal/hop; flipping the dependency would create an import cycle.
-func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(string, string) error {
+func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool, uri string) func(string, string) error {
 	return func(worktreePath, repoID string) error {
 		envMode := os.Getenv("GIT_HOP_HOOKS")
 		var configured string
@@ -644,6 +645,7 @@ func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(strin
 		mopts := hooks.MirrorOpts{
 			WorktreePath: worktreePath,
 			RepoID:       repoID,
+			RepoURI:      uri,
 			Mode:         mode,
 			Overwrite:    overwrite,
 		}
@@ -673,8 +675,9 @@ func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(strin
 // Lives here for the same reason as buildHookMirrorRun: internal/hooks
 // already imports internal/hop, so internal/hop cannot call the hook
 // runner directly without creating an import cycle. The caller injects.
-func BuildHookDispatch(fs afero.Fs) hop.HookDispatchOptions {
-	runner := hooks.NewRunner(fs)
+// uri is the repository's origin URL (see hooks.Runner.ForRepo).
+func BuildHookDispatch(fs afero.Fs, uri string) hop.HookDispatchOptions {
+	runner := hooks.NewRunner(fs).ForRepo(uri)
 	dispatchTo := func(hookName string) func(string, string, string) error {
 		return func(path, repoID, branch string) error {
 			_, err := runner.ExecuteHook(hookName, path, repoID, branch)

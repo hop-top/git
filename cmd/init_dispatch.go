@@ -23,10 +23,8 @@ import (
 // path (matches registerAsIs). Returns "" when neither yields a name.
 func initRepoID(g git.GitInterface, repoPath string) string {
 	org, repo := "", ""
-	if g != nil {
-		if remoteURL, err := g.GetRemoteURL(repoPath); err == nil && remoteURL != "" {
-			org, repo = hop.ParseRepoFromURL(remoteURL)
-		}
+	if remoteURL := initRemoteURL(g, repoPath); remoteURL != "" {
+		org, repo = hop.ParseRepoFromURL(remoteURL)
 	}
 	if org == "" || repo == "" {
 		abs, err := filepath.Abs(repoPath)
@@ -41,13 +39,26 @@ func initRepoID(g git.GitInterface, repoPath string) string {
 	return fmt.Sprintf("github.com/%s/%s", org, repo)
 }
 
+// initRemoteURL is the remote URL of the repository init converts, "" when
+// it has none. Hooks take the host of the hopspace hooks directory from it.
+func initRemoteURL(g git.GitInterface, repoPath string) string {
+	if g == nil {
+		return ""
+	}
+	remoteURL, err := g.GetRemoteURL(repoPath)
+	if err != nil {
+		return ""
+	}
+	return remoteURL
+}
+
 // dispatchInitWorktreeAdd fires post-worktree-add for the conversion's
 // initial worktree (see initWorktreePath), through the same dispatch clone
 // uses. A failing hook warns and does not undo the conversion, matching
 // clone.
 func dispatchInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, worktreePath, branch string) {
 	repoID := initRepoID(g, repoPath)
-	if err := cli.BuildHookDispatch(fs).PostWorktreeAdd(worktreePath, repoID, branch); err != nil {
+	if err := cli.BuildHookDispatch(fs, initRemoteURL(g, repoPath)).PostWorktreeAdd(worktreePath, repoID, branch); err != nil {
 		output.Warn("post-worktree-add hook failed: %v", err)
 	}
 }
@@ -96,7 +107,7 @@ func previewInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, branch st
 		return
 	}
 	worktreePath := initWorktreePath(repoPath, branch, useBare)
-	cli.PreviewHook(hooks.NewRunner(fs), "post-worktree-add", worktreePath, initRepoID(g, repoPath))
+	cli.PreviewHook(hooks.NewRunner(fs).ForRepo(initRemoteURL(g, repoPath)), "post-worktree-add", worktreePath, initRepoID(g, repoPath))
 }
 
 // initHooksHintWidth caps each hint line so the list wraps like the
