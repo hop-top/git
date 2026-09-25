@@ -747,6 +747,8 @@ With it on, for a branch whose prefix matches a git-flow type:
 1. `git hop add feature/my-feature`, for a new branch, runs the `pre-worktree-add` hook, creates the worktree on a detached HEAD, then runs `git flow feature start my-feature --no-worktree` in it. git-flow creates the branch (from the type's start point, or from `--from` given as its `[base]`; finish still merges into the type's parent), records its base and checks it out there; git-hop never creates the branch itself. A branch that already exists, locally or on origin, is checked out as usual and not started. If the start fails, the worktree is removed again.
 2. `git hop remove feature/my-feature` runs `git flow feature finish my-feature` in the branch's own worktree before the `pre-worktree-remove` hook, then removes the worktree. git-flow merges into the type's parent in the worktree that has it checked out. When no worktree has it, git-hop first detaches the branch's worktree, so git-flow checks the target out there, in the worktree about to be removed, and no other worktree changes branch.
 
+3. `git hop move feature/a feature/b` runs no `git flow` command, but moves git-flow's per-branch config with the branch: every `gitflow.branch.feature/a.*` key (such as the `base` start records) becomes `gitflow.branch.feature/b.*`, as `git branch -m` does for `branch.feature/a.*`. If `feature/b` already has such keys, move leaves both sets alone and warns.
+
 git-flow-next needs a work tree, and the hub git-hop clones or converts a repository into is a bare repository, so git-hop never runs git-flow in the hub.
 
 A failing git-flow command aborts the add or remove. `--dry-run` shows the `Would run 'git flow ...'` step only when a real run would run it. With the setting off, `--verbose` prints one `hint:` line per command when a git-flow action was skipped.
@@ -809,7 +811,7 @@ exit 0
 | `git hop remove feature/my-feature` | `git flow feature finish my-feature` | None | Removes worktree |
 | `git hop add release/v1.0.0` | `git flow release start v1.0.0` | None | Creates worktree |
 | `git hop remove release/v1.0.0` | `git flow release finish v1.0.0` | None | Removes worktree |
-| `git hop move feature/a feature/b` | None | None | Renames branch and worktree |
+| `git hop move feature/a feature/b` | Moves `gitflow.branch.feature/a.*` to `gitflow.branch.feature/b.*` | None | Renames branch and worktree |
 
 In every row the branch type is detected and passed to hooks as `GIT_HOP_BRANCH_*`.
 
