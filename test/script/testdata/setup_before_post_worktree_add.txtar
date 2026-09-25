@@ -1,6 +1,6 @@
 # add and clone set up the environment of the worktree they create before
 # post-worktree-add fires: ports, volumes, .env and compose override, then
-# (for add) the shared dependencies. Every hook of the worktree finds them.
+# the shared dependencies. Every hook of the worktree finds them.
 # The optional environment start runs last: after post-worktree-add for an
 # add, after post-clone for a clone. A failed set-up is reported; the hook
 # still fires and the command succeeds.
@@ -36,9 +36,10 @@ exec git commit -am 'other lockfile'
 exec git push origin other-lock
 cd $WORK
 
-# --- clone: set-up, post-worktree-add, post-clone, then the start ---
+# --- clone: set-up (environment and deps), post-worktree-add, post-clone,
+# then the start ---
 exec git-hop $WORK/org/repo.git hub --env-start --hooks=none
-grep '\Apost-worktree-add main HOP_PORT_WEB=[0-9]+ override (deps|no-deps)\npost-clone main HOP_PORT_WEB=[0-9]+ override (deps|no-deps)\nup\n\z' $WORK/events.log
+grep '\Apost-worktree-add main HOP_PORT_WEB=[0-9]+ override deps\npost-clone main HOP_PORT_WEB=[0-9]+ override deps\nup\n\z' $WORK/events.log
 
 # --- add: set-up (environment and deps), post-worktree-add, then the start ---
 rm $WORK/events.log
@@ -73,7 +74,7 @@ rm $WORK/events.log
 cd $WORK
 exec git-hop $WORK/org/repo.git hub-broken --hooks=none
 stderr 'Failed to generate environment'
-grep '\Apost-worktree-add main no-env no-override (deps|no-deps)\npost-clone main no-env no-override (deps|no-deps)\n\z' $WORK/events.log
+grep '\Apost-worktree-add main no-env no-override deps\npost-clone main no-env no-override deps\n\z' $WORK/events.log
 exists $WORK/hub-broken/hop.json
 
 -- compose.yml --
