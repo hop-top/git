@@ -42,6 +42,7 @@ func (o doctorOpts) planning() bool { return o.fix && o.dryRun }
 var doctorCmd = &cobra.Command{
 	Use:     "doctor",
 	Args:    cobra.NoArgs,
+	GroupID: cli.GroupManagement,
 	Aliases: []string{"check"},
 	Short:   "Check and repair the environment",
 	Long: `Run diagnostics on git-hop installation and project setup.

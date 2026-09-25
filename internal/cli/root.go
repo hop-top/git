@@ -157,6 +157,7 @@ func Execute() error {
 	}()
 	installUsageErrors(RootCmd)
 	args := os.Args[1:]
+	applyGroupVisibility(args)
 	err := checkUnknownSubcommand(RootCmd, args)
 	if err == nil {
 		err = RootCmd.Execute()
@@ -609,7 +610,9 @@ func printAdminHelp(cmd *cobra.Command) {
 	fmt.Println("Admin commands:")
 	fmt.Println()
 	for _, sub := range cmd.Commands() {
-		if sub.Hidden && sub.Name() != "" {
+		// A grouped command is hidden only from this run's help (see
+		// applyGroupVisibility); it is not an admin command.
+		if sub.Hidden && sub.Name() != "" && sub.GroupID == "" {
 			fmt.Printf("  %-20s %s\n", sub.Name(), sub.Short)
 		}
 	}

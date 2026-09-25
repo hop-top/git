@@ -13,7 +13,7 @@ stdout 'test'
 
 # Real command tree, not a stub.
 exec git-hop --help
-stdout 'repair'
+stdout 'merge'
 stdout 'status'
 
 # Unknown subcommands are a usage error, so the exit status is meaningful

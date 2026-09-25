@@ -29,9 +29,10 @@ var (
 )
 
 var repairCmd = &cobra.Command{
-	Use:   "repair [<pathspec>...]",
-	Args:  cobra.ArbitraryArgs,
-	Short: "Safely repair stale worktree metadata",
+	Use:     "repair [<pathspec>...]",
+	Args:    cobra.ArbitraryArgs,
+	GroupID: cli.GroupManagement,
+	Short:   "Safely repair stale worktree metadata",
 	Long: `Repair stale worktree metadata (gitdir pointers, hop.json, git registry)
 in a recoverable way: detects issues, takes a backup, applies fixes,
 verifies post-state with doctor, and supports --undo.
