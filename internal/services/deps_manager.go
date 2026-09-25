@@ -37,6 +37,11 @@ const (
 	// in the layout earlier releases wrote (flatDepsKey), where Node
 	// cannot resolve the install's packages from one another.
 	IssueOldLayout IssueType = "old_layout"
+	// IssueDamagedInstall marks a link to a store install that is missing
+	// entries it was installed with: emptied through a worktree's link
+	// (npm ci, rm -rf node_modules/*), which breaks every worktree
+	// linked to it.
+	IssueDamagedInstall IssueType = "damaged_install"
 )
 
 // Severity classifies how much attention an Issue deserves.
@@ -557,6 +562,8 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 			switch {
 			case !targetExists:
 				issueType = IssueBrokenSymlink
+			case m.damagedStoreInstall(pm, currentTarget):
+				issueType = IssueDamagedInstall
 			case currentTarget == expectedDepsPath:
 				continue
 			case slices.Contains(m.flatDepsPaths(pm, expectedHash), currentTarget):
@@ -593,7 +600,7 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 		}
 
 		switch issue.Type {
-		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps:
+		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps, IssueDamagedInstall:
 		default:
 			continue
 		}

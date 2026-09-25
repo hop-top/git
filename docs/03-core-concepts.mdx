@@ -320,6 +320,7 @@ This checks for:
 - Broken symlinks (pointing to missing deps)
 - Stale symlinks (lockfile changed but symlink outdated)
 - Local folders (user ran `rm -rf node_modules && npm install`)
+- Damaged shared installs (emptied through a link, e.g. by `npm ci` in another worktree)
 - Orphaned dependencies (no branches using them)
 
 #### Auto-fix Issues
@@ -332,6 +333,7 @@ Automatically repairs:
 - Recreates missing dependencies
 - Updates stale symlinks
 - Replaces local folders with shared symlinks
+- Reinstalls a shared install emptied through a link (e.g. by `npm ci`)
 
 #### Clean Up Orphaned Dependencies
 

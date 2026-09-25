@@ -27,15 +27,16 @@ func (m *DepsManager) linkDeps(worktreePath, branch string, pm PackageManager, h
 	depsPath := m.getDepsPath(depsKey)
 	symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
 
-	// "Populated" means the install directory has at least one entry; an
-	// empty one (crashed mid-install) is treated as missing and refilled.
-	populated, err := dirHasEntries(m.fs, depsPath)
+	// An install missing entries it was made with (emptied through a
+	// worktree's link, or crashed mid-install) is treated as missing and
+	// reinstalled, which repairs every worktree linked to it.
+	intact, err := m.installIntact(depsPath)
 	if err != nil {
 		return fmt.Errorf("failed to check deps existence: %w", err)
 	}
 
 	previous, linked := readSymlink(m.fs, symlinkPath)
-	if linked && previous == depsPath && populated {
+	if linked && previous == depsPath && intact {
 		m.Registry.AddUsage(depsKey, branch)
 		return nil
 	}
@@ -44,9 +45,12 @@ func (m *DepsManager) linkDeps(worktreePath, branch string, pm PackageManager, h
 		return err
 	}
 
-	if !populated {
+	if !intact {
 		if err := m.installDeps(depsPath, worktreePath, pm); err != nil {
 			return m.relinkAfterFailure(fmt.Errorf("failed to install deps: %w", err), symlinkPath, previous, linked)
+		}
+		if err := m.writeInstallManifest(depsPath); err != nil {
+			return m.relinkAfterFailure(err, symlinkPath, previous, linked)
 		}
 		m.Registry.UpdateEntryMetadata(depsKey, hash, filepath.Base(lockfilePath))
 	}
@@ -164,6 +168,9 @@ func (m *DepsManager) removeInstall(depsKey string) error {
 	}
 	if isFlatDepsKey(depsKey) {
 		return nil
+	}
+	if err := m.fs.Remove(InstallManifestPath(path)); err != nil && !os.IsNotExist(err) {
+		return err
 	}
 	store := DepsStorePath(m.RepoPath)
 	for dir := filepath.Dir(path); isBelow(dir, store); dir = filepath.Dir(dir) {
