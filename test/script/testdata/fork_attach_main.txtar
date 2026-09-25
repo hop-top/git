@@ -1,0 +1,82 @@
+# `git hop <fork-uri> --branch main` attaches a branch from a *different*
+# repository into an existing hub, parking it under a synthetic name so it
+# cannot collide with the hub's own branch of the same name.
+#
+# Ported from the ForkAttachMain case in the Go e2e suite.
+#
+# The interesting case is deliberately `main`: the hub already has a
+# worktree called main, so a naive attach would either clobber it or fail.
+# The synthetic `main-fork-<org>` name is what makes both repositories'
+# main coexist, and the assertions below pin exactly that -- the fork lands
+# under its own directory AND the hub's own main is untouched.
+#
+# The org suffix is derived from the fork URI's parent directory, which is
+# $WORK and therefore differs per script run. Assertions match the
+# `main-fork-` prefix rather than a fixed name, the same way the Go test
+# scanned hops/ for that prefix.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+
+# Real content. The fork attach verifies ancestry between the fork and a
+# candidate worktree in the hub, so the history has to be a real shared
+# history rather than a chain of empty commits.
+cp $WORK/base.txt base.txt
+exec git add base.txt
+exec git commit -m 'initial'
+exec git push origin main
+
+exec git checkout -b feature-1
+cp $WORK/feature.txt feature.txt
+exec git add feature.txt
+exec git commit -m 'feature work'
+exec git push origin feature-1
+cd $WORK
+
+# The fork is a bare clone of the seed, so it shares the seed's history --
+# which is the precondition the ancestry check looks for.
+exec git clone --bare $WORK/seed $WORK/fork.git
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature-1
+
+# Record the hub's own main before the attach, so "untouched" below is a
+# comparison rather than an assumption.
+exists $WORK/hub/hops/main
+exists $WORK/hub/hops/main/base.txt
+
+# --- attach main from the fork ---
+exec git-hop $WORK/fork.git --branch main
+stdout 'Fork ancestry verified\.'
+stdout 'Successfully attached fork branch as main-fork-'
+
+# The fork worktree exists on disk under the synthetic name, and it is a
+# real checked-out worktree rather than an empty directory.
+exec ls $WORK/hub/hops
+stdout '^main-fork-\w'
+stdout '^main$'
+stdout '^feature-1$'
+stdout -count=3 '^[\w-]+$'
+
+# --- the hub's own main is unaffected ---
+# This is the collision the synthetic name exists to prevent. If the attach
+# had reused the `main` slot, this worktree would now be the fork's.
+exists $WORK/hub/hops/main/base.txt
+cd $WORK/hub/hops/main
+exec git rev-parse --abbrev-ref HEAD
+stdout '^main$'
+cd $WORK/hub
+
+# --- the fork worktree is registered, not just present on disk ---
+# `status` reads the hub config, so a row here proves the attach wrote the
+# entry rather than only creating a directory.
+exec git-hop status
+stdout 'main-fork-\S+\s+main\s+Linked'
+stdout 'main\s+main\s+Linked\s+default'
+
+-- base.txt --
+base line
+-- feature.txt --
+feature line

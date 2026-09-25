@@ -1,0 +1,79 @@
+# `git hop remove` deletes the worktree directory AND drops the hub entry,
+# so the branch stops appearing in every status view.
+#
+# Ported from the Remove case in the Go e2e suite.
+#
+# Spec (docs/stories/011-remove-missing-worktrees.md): a successful remove
+# de-registers the branch. "Missing" is reserved for worktrees whose
+# directory was deleted out-of-band while the hub entry survived -- see
+# remove_missing_test.go for that path. Asserting the branch is absent from
+# BOTH `status` and `status --all`, and that the Missing count stays 0, is
+# what separates "removed" from "went missing".
+#
+# The branch is genuinely merged into main before removal. That is not
+# incidental: `git hop remove` gates on merged/pushed state, and an unmerged
+# branch is refused without --force. The Go test's fixture built its branch
+# from empty commits, which merge into main as a no-op and therefore read as
+# already-merged -- the gate never fired, so the test proved nothing about
+# it. Here the branch carries real content and is really merged, so the
+# removal exercises the gate's success arm rather than dodging it.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/base.txt base.txt
+exec git add base.txt
+exec git commit -m 'initial'
+exec git push origin main
+
+# shipped: real content, merged into main by a merge commit and pushed.
+exec git checkout -b shipped
+cp $WORK/shipped.txt shipped.txt
+exec git add shipped.txt
+exec git commit -m 'shipped work'
+exec git push origin shipped
+exec git checkout main
+exec git merge --no-ff shipped -m 'merge shipped'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add shipped
+exists $WORK/hub/hops/shipped
+
+# The branch is registered before the removal, so the absence assertions
+# below are testing a change rather than a state that was never there.
+exec git-hop status
+stdout 'shipped\s+main\s+Linked'
+
+# --- remove ---
+# --no-prompt suppresses the y/n confirmation only; it does not bypass the
+# safety gate. The gate passes here on its own merits because the branch is
+# merged, pushed and clean.
+exec git-hop remove shipped --no-prompt
+stdout 'Successfully removed shipped'
+
+# The directory is physically gone, not merely unregistered.
+! exists $WORK/hub/hops/shipped
+exists $WORK/hub/hops/main
+
+# --- the hub entry is gone too ---
+exec git-hop status
+! stdout 'shipped'
+stdout 'main\s+main\s+Linked\s+default'
+
+# --- and the system view agrees ---
+# One worktree left, and crucially the Missing count does NOT go up:
+# removal de-registers the entry rather than leaving a dangling one behind,
+# which is the whole distinction this script exists to pin.
+exec git-hop status --all
+! stdout 'shipped'
+stdout 'Tracking 1 worktrees across 1 repositories'
+stdout 'Total Worktrees\s+1$'
+stdout 'Missing\s+0$'
+
+-- base.txt --
+base line
+-- shipped.txt --
+shipped line

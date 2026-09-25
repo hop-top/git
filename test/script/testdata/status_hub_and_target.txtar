@@ -1,0 +1,86 @@
+# `git hop status` has three shapes, and this script pins all three plus the
+# out-of-context case:
+#
+#   - no argument, inside a hub   -> the branch table (Branch/Base/State/…)
+#   - a branch argument           -> that worktree's detail view
+#   - --all                       -> the cross-repo system summary
+#   - anywhere else               -> "Not in a hub or worktree."
+#
+# Ported from the Status / StatusAll / StatusOutsideHub cases in the Go e2e
+# suite. Those asserted bare substrings on captured output ("feature-1",
+# "Linked", "Worktree", "Repositories", "Active"), which pass as long as the
+# word appears anywhere. Here the branch table is matched row-wise, so a row
+# for the wrong branch or a state of anything but Linked fails.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+
+# Real content, not --allow-empty. Status labels a branch merged when
+# merging it into its base would add nothing, so an all-empty-commit branch
+# reads as merged and the "1 ahead" assertion below would pass vacuously.
+cp $WORK/base.txt base.txt
+exec git add base.txt
+exec git commit -m 'initial'
+exec git push origin main
+
+exec git checkout -b feature-1
+cp $WORK/feature.txt feature.txt
+exec git add feature.txt
+exec git commit -m 'feature work'
+exec git push origin feature-1
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature-1
+
+# --- hub view: the branch table ---
+# Both rows are matched whole, so the assertion pins which branch carries
+# which base and state rather than just "the words appear somewhere".
+exec git-hop status
+stdout 'Hub:'
+stdout 'feature-1\s+main\s+Linked\s+1 ahead'
+stdout 'main\s+main\s+Linked\s+default'
+
+# The hub view is a table, not the target detail view. Asserting the
+# absence keeps the two shapes from silently collapsing into one.
+! stdout 'Worktree:'
+
+# --- target view: status <branch> from the hub ---
+exec git-hop status feature-1
+stdout 'Environment: feature-1'
+stdout 'Worktree: .*/hub/hops/feature-1'
+# ...and it is the detail view, not the table.
+! stdout 'Linked'
+
+# --- --all: the system summary ---
+# The Go test asserted the literal data-home path appeared somewhere in the
+# output, plus the bare words "Repositories" and "Active". Here the counts
+# are asserted alongside their labels, so the section has to report the
+# right numbers and not merely render its headings.
+#
+# Settings come from git config alone (no settings file is read), and the
+# section says so rather than naming a file.
+exec git-hop status --all
+stdout 'Data Home\s+'${WORK@R}'/data$'
+stdout 'Settings\s+git config hop\.\*$'
+stdout 'Repositories\s+1$'
+stdout 'Total Worktrees\s+2$'
+stdout 'Active\s+2$'
+stdout 'Missing\s+0$'
+stdout 'Tracking 2 worktrees across 1 repositories'
+
+# --- outside any hub or worktree ---
+# $WORK itself is a plain directory: it holds the hub and the seed clone but
+# is neither. Exit status is 0 -- this is an informational answer, not an
+# error -- so the message is the whole assertion.
+cd $WORK
+exec git-hop status
+stdout 'Not in a hub or worktree\.'
+! stdout 'Hub:'
+
+-- base.txt --
+base line
+-- feature.txt --
+feature line
