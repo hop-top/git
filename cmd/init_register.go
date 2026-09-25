@@ -5,6 +5,7 @@ import (
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
@@ -102,4 +103,17 @@ func hubFromConfig(fs afero.Fs, hub *hop.Hub) hop.NewHub {
 		}
 	}
 	return h
+}
+
+// restoreAdoptedFetchRefspec gives a hub init just adopted the origin
+// fetch refspec that a plain `git clone --bare` leaves out, as clone
+// does for its hubs; without it origin/* never moves on fetch.
+func restoreAdoptedFetchRefspec(g git.GitInterface, hubPath string) {
+	restored, err := hop.RestoreOriginFetchRefspec(g, hubPath)
+	switch {
+	case err != nil:
+		output.Warn("failed to set remote.origin.fetch at %s: %v", hubPath, err)
+	case restored:
+		output.Note("Set remote.origin.fetch to %s.", hop.OriginFetchRefspec)
+	}
 }

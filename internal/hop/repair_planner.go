@@ -137,7 +137,7 @@ func (p *Planner) Build(hubPath string, pathspec []string) (*Plan, error) {
 			plan.Actions = append(plan.Actions, Action{
 				Kind:         ActionRestoreFetchRefspec,
 				WorktreePath: hubPath,
-				NewValue:     "+refs/heads/*:refs/remotes/origin/*",
+				NewValue:     OriginFetchRefspec,
 				Reason:       "missing fetch refspec on origin (pre-cc5def4 clone)",
 			})
 		} else {
@@ -150,25 +150,12 @@ func (p *Planner) Build(hubPath string, pathspec []string) (*Plan, error) {
 	return plan, nil
 }
 
-// detectMissingFetchRefspec returns true when the hub has a configured
-// remote.origin.url but no remote.origin.fetch entries. That combination
-// is the local fingerprint of `git clone --bare` minus the post-clone
-// refspec restore that landed in cc5def4. Repos without an origin remote
-// (purely local hubs) are not flagged — there is no upstream to fetch
-// from, so the missing refspec is by design.
+// detectMissingFetchRefspec reports a hub with an origin URL but no
+// origin fetch refspec, the local fingerprint of `git clone --bare`
+// minus the post-clone refspec restore that landed in cc5def4. See
+// MissingOriginFetchRefspec.
 func (p *Planner) detectMissingFetchRefspec(hubPath string) bool {
-	urlOut, err := p.git.GetConfig(hubPath, "remote.origin.url")
-	if err != nil || strings.TrimSpace(urlOut) == "" {
-		// No origin configured — local-only hub, nothing to repair.
-		return false
-	}
-	fetchOut, err := p.git.GetConfig(hubPath, "remote.origin.fetch")
-	if err != nil {
-		// `git config --get` exits non-zero when the key is absent;
-		// that's the defect we're looking for.
-		return true
-	}
-	return strings.TrimSpace(fetchOut) == ""
+	return MissingOriginFetchRefspec(p.git, hubPath)
 }
 
 // classifyBranch decides what (if anything) to do with one hub branch.

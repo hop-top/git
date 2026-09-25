@@ -834,6 +834,12 @@ git hop doctor --fix --dry-run
   directories are shown but optional: whatever writes to them creates
   them, and whatever reads them treats a missing one as empty
 - Hub configuration and symlinks
+- The current hub's origin fetch refspec: an origin with a URL but no
+  `remote.origin.fetch`, as a plain `git clone --bare` leaves it, is an
+  issue: `git fetch origin` then updates `FETCH_HEAD` only and
+  `refs/remotes/origin/*` never moves. `--fix` leaves it; run
+  [`git hop repair`](#git-hop-repair) to restore
+  `+refs/heads/*:refs/remotes/origin/*`
 - Hopspace consistency: the hub itself for a default clone, or
   `$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
   (marked `repo.mode: "global"` in its `hop.json`); a data-home copy next
@@ -1191,8 +1197,11 @@ Run in a hub (a bare repository, a regular repository with `hop.json`,
 or one of their worktrees), `init` reports it as already initialized.
 A bare repository git-hop did not create (made with `git clone --bare`,
 say) has no `hop.json` yet: `init` writes one listing its worktrees and
-records the hub in git-hop's state, as a conversion does. Otherwise it
-changes nothing. Any other repository is offered a conversion, including
+records the hub in git-hop's state, as a conversion does. When origin
+has no fetch refspec, which `git clone --bare` leaves out, `init` also
+sets `remote.origin.fetch` to `+refs/heads/*:refs/remotes/origin/*`, as
+a clone's hub has it, so the next `git fetch origin` fills
+`refs/remotes/origin/*`. Otherwise it changes nothing. Any other repository is offered a conversion, including
 a regular one with linked worktrees from `git worktree add`: git does
 not consider it bare, so it is not a hub yet.
 
