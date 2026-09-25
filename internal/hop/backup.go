@@ -95,7 +95,7 @@ func (b *BackupManager) CreateBackup(repoPath string) error {
 		return fmt.Errorf("failed to write backup metadata: %w", err)
 	}
 
-	fmt.Printf("Backup created: %s\n", b.backupDir)
+	fmt.Fprintf(output.ReportOut(), "Backup created: %s\n", b.backupDir)
 	return nil
 }
 
@@ -140,7 +140,7 @@ func (b *BackupManager) Restore(targetPath string) error {
 		}
 	}
 
-	fmt.Printf("Restored from backup: %s\n", b.backupDir)
+	fmt.Fprintf(output.ReportOut(), "Restored from backup: %s\n", b.backupDir)
 	return nil
 }
 
@@ -153,7 +153,7 @@ func (b *BackupManager) Cleanup() error {
 		return fmt.Errorf("failed to remove backup directory: %w", err)
 	}
 
-	fmt.Printf("Backup cleaned up: %s\n", b.backupDir)
+	fmt.Fprintf(output.ReportOut(), "Backup cleaned up: %s\n", b.backupDir)
 	return nil
 }
 

@@ -1,0 +1,189 @@
+# `git hop init` honours the structured output modes. Every init mode
+# renders one object: action says what init did (converted, adopted,
+# already-initialized, restored), dry_run marks a preview. stdout carries
+# that object and nothing else: the menu, the plan, the project tree,
+# the backup lines and hook output never reach it.
+#
+# The regression this pins: init printed its human report (menu, plan,
+# "Conversion successful", "Backup created") on stdout under --json,
+# --format and --porcelain, and no result at all.
+
+# A global post-worktree-add hook that writes to stdout: in a structured
+# mode its output goes to stderr.
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/post-worktree-add $WORK/.config/git-hop/hooks/post-worktree-add
+chmod 0755 $WORK/.config/git-hop/hooks/post-worktree-add
+
+# --- bare conversion, --json ---
+exec git init $WORK/p1
+cd $WORK/p1
+exec git commit -q --allow-empty -m 'initial'
+exec git-hop init --no-prompt --json
+decode json stdout action converted
+decode json stdout hub '~/p1$'
+decode json stdout layout bare
+decode json stdout default_branch main
+decode json stdout 'worktrees.#' 1
+decode json stdout worktrees.0.branch main
+decode json stdout worktrees.0.path '~/p1/hops/main$'
+decode json stdout backup '~/\.cache/git-hop/.+-p1/'
+! decode json stdout backup_kept
+decode json stdout registered true
+! decode json stdout dry_run
+! stdout 'Conversion successful'
+! stdout 'Backup created'
+! stdout 'Structure Options'
+! stdout 'hook-says-hi'
+stderr 'hook-says-hi'
+exists $WORK/p1/hops/main
+
+# --- already initialized, --dry-run: the same result, dry_run set ---
+exec git-hop init --no-prompt --no-hooks -n --json
+decode json stdout action already-initialized
+decode json stdout dry_run true
+decode json stdout layout bare
+decode json stdout default_branch main
+decode json stdout 'worktrees.#' 0
+! decode json stdout registered
+! stdout 'DRY RUN'
+
+# --- already initialized: nothing created ---
+exec git-hop init --no-prompt --no-hooks --json
+decode json stdout action already-initialized
+decode json stdout hub '~/p1$'
+decode json stdout layout bare
+decode json stdout default_branch main
+decode json stdout 'worktrees.#' 0
+! decode json stdout registered
+! stdout 'already initialized'
+
+# --- regular conversion, --format yaml, backup kept ---
+exec git init $WORK/p2
+cd $WORK/p2
+exec git commit -q --allow-empty -m 'initial'
+exec git-hop init --no-prompt --regular --no-hooks --keep-backup --format yaml
+decode yaml stdout action converted
+decode yaml stdout layout regular
+decode yaml stdout default_branch main
+decode yaml stdout worktrees.0.path '~/p2$'
+decode yaml stdout backup_kept true
+decode yaml stdout registered true
+! stdout 'Backup preserved'
+exists $WORK/p2/hop.json
+
+# --- --porcelain: one line, action hub layout default_branch backup ---
+exec git init $WORK/p3
+cd $WORK/p3
+exec git commit -q --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks --porcelain
+stdout -count=1 '\n'
+stdout '^converted\t\S+/p3\tbare\tmain\t\S+/\.cache/git-hop/\S+-p3/\S+$'
+
+# --- --dry-run: the would-be result, nothing written ---
+exec git init $WORK/p4
+cd $WORK/p4
+exec git commit -q --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks --dry-run --json
+decode json stdout dry_run true
+decode json stdout action converted
+decode json stdout hub '~/p4$'
+decode json stdout layout bare
+decode json stdout default_branch main
+decode json stdout worktrees.0.path '~/p4/hops/main$'
+decode json stdout backup ''
+decode json stdout registered true
+! stdout 'DRY RUN'
+! stdout 'Conversion plan'
+! exists $WORK/p4/hop.json
+exists $WORK/p4/.git
+
+exec git-hop init --no-prompt --regular --no-hooks -n --porcelain
+stdout -count=1 '\n'
+stdout '^converted\t\S+/p4\tregular\tmain\t$'
+! exists $WORK/p4/hop.json
+
+# --- adopted: a bare clone made with plain git gets hop.json ---
+exec git init --bare $WORK/remotes/acme/widget.git
+exec git clone -q $WORK/remotes/acme/widget.git $WORK/seed
+cd $WORK/seed
+exec git commit -q --allow-empty -m 'initial'
+exec git push -q origin main
+exec git clone -q --bare $WORK/remotes/acme/widget.git $WORK/acme/widget.git
+cd $WORK/acme/widget.git
+exec git-hop init --no-prompt --no-hooks -n --json
+decode json stdout action adopted
+decode json stdout dry_run true
+decode json stdout hub '~/acme/widget.git$'
+decode json stdout layout bare
+decode json stdout default_branch main
+decode json stdout registered true
+! stdout 'DRY RUN'
+! exists $WORK/acme/widget.git/hop.json
+exec git-hop init --no-prompt --no-hooks --json
+decode json stdout action adopted
+decode json stdout hub '~/acme/widget.git$'
+decode json stdout layout bare
+decode json stdout default_branch main
+decode json stdout registered true
+decode json stdout 'worktrees.#' 0
+! stdout 'Created missing hop.json'
+exists $WORK/acme/widget.git/hop.json
+
+# --- restore: the kept backup of p2 goes back over the hub ---
+# The backup is found by its metadata and moved to a known path; restore
+# reads the original location from that metadata, not from the path.
+exec sh -c 'mv "$(dirname "$(find "$WORK/.cache" -name backup-info.json -path "*-p2/*")")" "$WORK/restore-me"'
+cd $WORK
+# Without --force the occupied target is refused, dry run or not.
+! exec git-hop init --restore $WORK/restore-me -n --json
+! stdout .
+stderr 'Restore refused'
+exec git-hop init --restore $WORK/restore-me --force -n --json
+decode json stdout action restored
+decode json stdout dry_run true
+decode json stdout hub '~/p2$'
+decode json stdout backup '~/restore-me$'
+decode json stdout moved_aside '~/p2\.pre-restore-'
+! stdout 'DRY RUN'
+exists $WORK/p2/hop.json
+exec git-hop init --restore $WORK/restore-me --force --json
+! decode json stdout dry_run
+decode json stdout action restored
+decode json stdout hub '~/p2$'
+decode json stdout backup '~/restore-me$'
+decode json stdout moved_aside '~/p2\.pre-restore-'
+! stdout 'Restore successful'
+! exists $WORK/p2/hop.json
+
+# --- refusals: exit status, nothing on stdout, nothing converted ---
+exec git init $WORK/p5
+cd $WORK/p5
+exec git commit -q --allow-empty -m 'initial'
+! exec git-hop init --no-prompt --json --porcelain
+stderr 'mutually exclusive'
+! stdout .
+! exists $WORK/p5/hop.json
+! exec git-hop init --no-prompt --format xml
+stderr 'unknown output format'
+! exists $WORK/p5/hop.json
+! exec git-hop init --no-prompt --porcelain --cols nope
+stderr 'unknown column'
+! exists $WORK/p5/hop.json
+
+# A structured run has no prompt channel: without --no-prompt it stops
+# (129) before converting, and the menu stays off stdout.
+! exec git-hop init --json
+stderr 'cannot prompt'
+! stdout .
+! exists $WORK/p5/hop.json
+
+# A dirty tree is refused (1), with no result.
+cp $WORK/post-worktree-add $WORK/p5/wip.txt
+! exec git-hop init --no-prompt --no-hooks --json
+stderr 'uncommitted changes'
+! stdout .
+! exists $WORK/p5/hop.json
+
+-- post-worktree-add --
+#!/bin/sh
+echo hook-says-hi

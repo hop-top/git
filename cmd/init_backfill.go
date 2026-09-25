@@ -104,14 +104,7 @@ func backfillHubConfigIfMissing(fs afero.Fs, g git.GitInterface, hubPath string)
 		org = filepath.Base(filepath.Dir(abs))
 	}
 
-	// Default branch. Empty/error → "main".
-	defaultBranch := "main"
-	if out, err := g.RunInDir(hubPath, "git", "symbolic-ref", "HEAD"); err == nil {
-		v := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "refs/heads/"))
-		if v != "" {
-			defaultBranch = v
-		}
-	}
+	defaultBranch := backfillDefaultBranch(g, hubPath)
 
 	// Worktrees.
 	porcelain, err := g.WorktreeListPorcelain(hubPath)
@@ -149,6 +142,18 @@ func backfillHubConfigIfMissing(fs afero.Fs, g git.GitInterface, hubPath string)
 		return false, fmt.Errorf("write hop.json: %w", err)
 	}
 	return true, nil
+}
+
+// backfillDefaultBranch is the default branch a back-filled hop.json
+// records for the hub at hubPath: the branch HEAD names, "main" when
+// that cannot be read (matching CreateHub).
+func backfillDefaultBranch(g git.GitInterface, hubPath string) string {
+	if out, err := g.RunInDir(hubPath, "git", "symbolic-ref", "HEAD"); err == nil {
+		if v := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(out), "refs/heads/")); v != "" {
+			return v
+		}
+	}
+	return "main"
 }
 
 // resolveBackfillRoot decides where to write hop.json given the

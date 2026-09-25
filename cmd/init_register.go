@@ -17,10 +17,11 @@ import (
 // regular one. The linked worktrees a bare conversion carried are
 // recorded too, as registerAdoptedHub records a hub's existing ones:
 // quietly, since the conversion did not create them. Never called on a
-// dry run, which returns before converting.
-func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, branch string, isRegular bool) {
+// dry run, which returns before converting. It reports whether state now
+// records the hub.
+func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, branch string, isRegular bool) bool {
 	if hub == nil || worktreePath == "" {
-		return
+		return false
 	}
 	wtType := hop.WorktreeTypeBare
 	if isRegular {
@@ -35,7 +36,7 @@ func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, bra
 			linked[b] = path
 		}
 	}
-	hop.RegisterNewHub(fs, hop.NewHub{
+	_, err := hop.RegisterNewHub(fs, hop.NewHub{
 		URI:           hub.Config.Repo.URI,
 		Org:           hub.Config.Repo.Org,
 		Repo:          hub.Config.Repo.Repo,
@@ -45,6 +46,7 @@ func registerConvertedHub(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, bra
 		WorktreeType:  wtType,
 		Linked:        linked,
 	})
+	return err == nil
 }
 
 // registerAsIsHub records a repository registered as-is (init menu option
@@ -70,14 +72,16 @@ func registerAsIsHub(fs afero.Fs, uri, org, repo, branch, repoPath string) {
 
 // registerAdoptedHub records a hub whose hop.json init just back-filled,
 // i.e. one git-hop did not create (a bare clone made with plain git), the
-// way clone and conversion record theirs.
-func registerAdoptedHub(fs afero.Fs, hubPath string) {
+// way clone and conversion record theirs. It reports whether state now
+// records the hub.
+func registerAdoptedHub(fs afero.Fs, hubPath string) bool {
 	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
 		output.Warn("failed to read hop.json at %s: %v", hubPath, err)
-		return
+		return false
 	}
-	_, _ = hop.RegisterNewHub(fs, hubFromConfig(fs, hub))
+	_, err = hop.RegisterNewHub(fs, hubFromConfig(fs, hub))
+	return err == nil
 }
 
 // hubFromConfig describes the hub at hub.Path, as its hop.json lists it,
