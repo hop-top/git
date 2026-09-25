@@ -195,10 +195,10 @@ func TestEnsureDeps_PopulatesSharedCache(t *testing.T) {
 
 	require.NoError(t, dm.EnsureDeps(worktreeDir, "feature"))
 
-	// The worktree path must be a symlink (the sharing contract).
-	symlinkPath := filepath.Join(worktreeDir, "node_modules")
-	target, err := os.Readlink(symlinkPath)
-	require.NoError(t, err, "worktree/node_modules should be a symlink after EnsureDeps")
+	// The worktree's entries must link into the store (the sharing contract).
+	link, err := os.Readlink(filepath.Join(worktreeDir, "node_modules", "marker"))
+	require.NoError(t, err, "worktree/node_modules/marker should be a link after EnsureDeps")
+	target := filepath.Dir(link)
 
 	// The cache target must be populated with the install command's output.
 	// This is the regression: the marker file lives in the worktree dir the
@@ -263,9 +263,10 @@ func TestEnsureDeps_StaleSymlinkClearedBeforeInstall(t *testing.T) {
 	require.NoError(t, err, "old cache contents must be preserved")
 	assert.Equal(t, "old", string(contents))
 
-	// The new symlink target must be a real dir containing new-marker.
-	target, err := os.Readlink(symlinkPath)
+	// The new links must point into a real dir containing new-marker.
+	link, err := os.Readlink(filepath.Join(symlinkPath, "new-marker"))
 	require.NoError(t, err)
+	target := filepath.Dir(link)
 	info, err := os.Lstat(target)
 	require.NoError(t, err)
 	assert.True(t, info.IsDir() && info.Mode()&os.ModeSymlink == 0, "new cache target must be a real directory, not a symlink")

@@ -45,12 +45,13 @@ func TestDepsLayout_LinkTargetNamedLikeDepsDir(t *testing.T) {
 
 			require.NoError(t, dm.EnsureDeps(wt, "main"))
 
-			target, err := os.Readlink(filepath.Join(wt, depsDir))
-			require.NoError(t, err, "worktree %s must be a symlink", depsDir)
-			assert.Equal(t, filepath.Base(depsDir), filepath.Base(target),
-				"the install a link points at is named like the link")
-			assert.Equal(t, filepath.Join(services.DepsStorePath(hopspace), hash, depsDir), target)
-			assert.FileExists(t, filepath.Join(target, "marker"))
+			link, err := os.Readlink(filepath.Join(wt, depsDir, "marker"))
+			require.NoError(t, err, "worktree %s/marker must be a link", depsDir)
+			install := filepath.Dir(link)
+			assert.Equal(t, filepath.Base(depsDir), filepath.Base(install),
+				"the install the links point into is named like the worktree's directory")
+			assert.Equal(t, filepath.Join(services.DepsStorePath(hopspace), hash, depsDir), install)
+			assert.FileExists(t, link)
 			assert.Contains(t, dm.Registry.Entries, key)
 			assert.Equal(t, []string{"main"}, dm.Registry.Entries[key].UsedBy)
 		})
@@ -280,7 +281,7 @@ func TestDepsLayout_GCRemovesHashDirectory(t *testing.T) {
 	dm := newStoreManager(t, hopspace, installLoggingPM(log))
 	wt, key := newWorktree(t, filepath.Join(hopspace, "hops", "main"), "lockfileVersion: 6\n")
 	require.NoError(t, dm.EnsureDeps(wt, "main"))
-	require.NoError(t, os.Remove(filepath.Join(wt, "node_modules")))
+	require.NoError(t, os.RemoveAll(filepath.Join(wt, "node_modules")))
 
 	orphaned, _, err := dm.GarbageCollect(map[string]string{"main": wt}, false)
 	require.NoError(t, err)

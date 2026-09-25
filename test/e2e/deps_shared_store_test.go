@@ -96,10 +96,10 @@ func runHop(t *testing.T, env *TestEnv, args ...string) string {
 	return stdout + stderr
 }
 
-// npm ci in a worktree linked to the shared store removes every entry of
-// node_modules through the link, emptying the install every other worktree
-// links to. doctor reports each worktree left linked to it, and --fix
-// reinstalls it.
+// A worktree an earlier release left with a single link to the shared
+// install: npm ci there removes every entry of node_modules through the
+// link, emptying the install every other worktree links into. doctor
+// reports each worktree left linked to it, and --fix reinstalls it.
 func TestDeps_NpmCiThroughLink_DoctorReportsFixReinstalls(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
@@ -117,20 +117,23 @@ func TestDeps_NpmCiThroughLink_DoctorReportsFixReinstalls(t *testing.T) {
 	main := filepath.Join(env.HubPath, "hops", "main")
 	feat := filepath.Join(env.HubPath, "hops", "feat")
 	fix := filepath.Join(env.HubPath, "hops", "fix")
-	install, err := os.Readlink(filepath.Join(main, "node_modules"))
-	if err != nil {
-		t.Fatalf("main node_modules should link into the store: %v", err)
-	}
+	install := installOf(t, main)
 	const script = `console.log(require("a"))`
 	for _, wt := range []string{main, feat, fix} {
 		if got := nodeOutput(t, env, wt, script); got != "a" {
 			t.Fatalf("%s before npm ci: %s", wt, got)
 		}
 	}
+	if err := os.RemoveAll(filepath.Join(feat, "node_modules")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(install, filepath.Join(feat, "node_modules")); err != nil {
+		t.Fatal(err)
+	}
 
 	env.RunCommand(t, feat, "npm", "ci")
 	if got := nodeOutput(t, env, main, script); got == "a" {
-		t.Fatalf("expected npm ci in feat to empty main's install at %s", install)
+		t.Fatalf("expected npm ci through feat's link to empty the install at %s", install)
 	}
 
 	// doctor exits 1 while it finds issues.
@@ -144,8 +147,8 @@ func TestDeps_NpmCiThroughLink_DoctorReportsFixReinstalls(t *testing.T) {
 
 	runHop(t, env, "doctor", "--fix")
 	for _, wt := range []string{main, feat, fix} {
-		if got, err := os.Readlink(filepath.Join(wt, "node_modules")); err != nil || got != install {
-			t.Errorf("%s node_modules = %q (%v), want link to %q", wt, got, err, install)
+		if got := installOf(t, wt); got != install {
+			t.Errorf("%s links into %q, want %q", wt, got, install)
 		}
 		if got := nodeOutput(t, env, wt, script); got != "a" {
 			t.Errorf("%s after doctor --fix: %s", wt, got)
