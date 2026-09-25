@@ -277,5 +277,5 @@ npm run deploy
 ## See Also
 
 - [Shell Integration Guide](./shell-integration.md) - Automatic directory switching
-- [Command Reference](./commands.md) - All git-hop commands
+- [Command Reference](./04-commands.mdx) - All git-hop commands
 - [Configuration Guide](./configuration.md) - Customize git-hop behavior

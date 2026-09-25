@@ -41,5 +41,10 @@ fmt:
 	go fmt ./...
 
 # Requires lychee installed: brew install lychee (or cargo install lychee)
+# The docs site (fumadocs) serves each page at its file name without the
+# extension, so the .mdx pages link to each other extensionless
+# (./02-quick-start); --fallback-extensions resolves such a link to its
+# page file the way the site does.
 lint-links:
-	lychee --offline --no-progress --exclude-path vendor 'docs/**/*.md' 'internal/**/*.md' '*.md'
+	lychee --offline --no-progress --exclude-path vendor --fallback-extensions md,mdx \
+		'docs/**/*.md' 'docs/**/*.mdx' 'internal/**/*.md' '*.md'

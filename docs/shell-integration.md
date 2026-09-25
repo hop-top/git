@@ -354,4 +354,4 @@ A: The current symlink works on Windows with WSL. Native Windows (without WSL) h
 
 - [Main README](../README.md) - Full git-hop documentation
 - [Configuration Guide](./configuration.md) - Global and local config options
-- [Command Reference](./commands.md) - All git-hop commands
+- [Command Reference](./04-commands.mdx) - All git-hop commands
