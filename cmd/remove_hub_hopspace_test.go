@@ -23,8 +23,10 @@ func hubFixture(t *testing.T, fs afero.Fs, path string, global bool) {
 	}
 	hub, err := hop.LoadHub(fs, path)
 	require.NoError(t, err)
-	hub.Config.Repo.Mode = config.RepoModeGlobal
-	require.NoError(t, hub.Save())
+	require.NoError(t, hub.Update(func(cfg *config.HubConfig) error {
+		cfg.Repo.Mode = config.RepoModeGlobal
+		return nil
+	}))
 }
 
 // sharedHopspaceFixture writes the data-home hopspace of test/repo and a

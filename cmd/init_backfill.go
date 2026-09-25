@@ -82,7 +82,7 @@ func parseWorktreeListPorcelain(s string) []porcelainWorktree {
 // qa) so a backfilled hub behaves identically to a freshly-initialized
 // one.
 func backfillHubConfigIfMissing(fs afero.Fs, g git.GitInterface, hubPath string) (bool, error) {
-	if exists, _ := afero.Exists(fs, filepath.Join(hubPath, "hop.json")); exists {
+	if hubConfigExists(fs, hubPath) {
 		return false, nil
 	}
 
@@ -137,11 +137,25 @@ func backfillHubConfigIfMissing(fs afero.Fs, g git.GitInterface, hubPath string)
 		},
 	}
 
-	writer := config.NewWriter(fs)
-	if err := writer.WriteHubConfig(hubPath, cfg); err != nil {
+	// Another run may have written hop.json since the check above; that
+	// one wins.
+	written := false
+	err = hop.WithHopJSONLock(fs, hubPath, func() error {
+		if hubConfigExists(fs, hubPath) {
+			return nil
+		}
+		written = true
+		return config.NewWriter(fs).WriteHubConfig(hubPath, cfg)
+	})
+	if err != nil {
 		return false, fmt.Errorf("write hop.json: %w", err)
 	}
-	return true, nil
+	return written, nil
+}
+
+func hubConfigExists(fs afero.Fs, hubPath string) bool {
+	exists, _ := afero.Exists(fs, filepath.Join(hubPath, "hop.json"))
+	return exists
 }
 
 // backfillDefaultBranch is the default branch a back-filled hop.json

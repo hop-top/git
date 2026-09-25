@@ -152,11 +152,7 @@ func TestDoctorFixesMissingHopspace(t *testing.T) {
 	hopspacePath := hop.GetHopspacePath(dataHome, hop.RepoRef{Org: org, Repo: repo})
 
 	// Register branch in hub config directly (skip symlink for unit test)
-	hub.Config.Branches[defaultBranch] = config.HubBranch{
-		Path:           defaultBranch,
-		HopspaceBranch: defaultBranch,
-	}
-	if err := hub.Save(); err != nil {
+	if err := hub.AddBranch(defaultBranch, defaultBranch, defaultBranch); err != nil {
 		t.Fatalf("Failed to save hub config: %v", err)
 	}
 
@@ -225,20 +221,14 @@ func TestHubHopspaceConsistency(t *testing.T) {
 		worktreePath := filepath.Join(hopspacePath, branch)
 
 		// Add to hub config directly (skip symlink for unit test)
-		hub.Config.Branches[branch] = config.HubBranch{
-			Path:           branch,
-			HopspaceBranch: branch,
+		if err := hub.AddBranch(branch, branch, branch); err != nil {
+			t.Fatalf("Failed to add branch %s to hub: %v", branch, err)
 		}
 
 		// Add to hopspace
 		if err := hopspace.RegisterBranch(branch, worktreePath); err != nil {
 			t.Fatalf("Failed to register branch %s in hopspace: %v", branch, err)
 		}
-	}
-
-	// Save hub config
-	if err := hub.Save(); err != nil {
-		t.Fatalf("Failed to save hub config: %v", err)
 	}
 
 	// Reload both

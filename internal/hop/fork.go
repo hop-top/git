@@ -164,8 +164,10 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 			Exists:   true,
 		}
 
-		writer := config.NewWriter(fs)
-		if err := writer.WriteHopspaceConfig(forkHopspacePath, hsCfg); err != nil {
+		err := WithHopJSONLock(fs, forkHopspacePath, func() error {
+			return config.NewWriter(fs).WriteHopspaceConfig(forkHopspacePath, hsCfg)
+		})
+		if err != nil {
 			return ForkAttachment{}, fmt.Errorf("failed to write fork hopspace config: %v", err)
 		}
 		sourceWorktreePath = worktreePath
@@ -227,14 +229,15 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 	}
 
 	// 5. Update Hub Config
-	hub.Config.Branches[forkBranchName] = config.HubBranch{
-		Path:           forkWorktreePath,
-		HopspaceBranch: branch,
-		Fork:           &org,
-	}
-
-	writer := config.NewWriter(fs)
-	if err := writer.WriteHubConfig(hubPath, hub.Config); err != nil {
+	err = hub.Update(func(cfg *config.HubConfig) error {
+		cfg.Branches[forkBranchName] = config.HubBranch{
+			Path:           forkWorktreePath,
+			HopspaceBranch: branch,
+			Fork:           &org,
+		}
+		return nil
+	})
+	if err != nil {
 		return ForkAttachment{}, fmt.Errorf("failed to update hub config: %v", err)
 	}
 	attached := ForkAttachment{Branch: forkBranchName, Path: forkWorktreePath}

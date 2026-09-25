@@ -1,6 +1,7 @@
 package hop
 
 import (
+	"errors"
 	"path/filepath"
 	"time"
 
@@ -62,11 +63,6 @@ func InitHopspace(fs afero.Fs, path, repoURI, org, repo, defaultBranch string) (
 		return nil, err
 	}
 
-	// Check if already exists
-	if exists, _ := afero.Exists(fs, filepath.Join(path, "hop.json")); exists {
-		return LoadHopspace(fs, path)
-	}
-
 	cfg := &config.HopspaceConfig{
 		Repo: config.RepoConfig{
 			URI:           repoURI,
@@ -78,9 +74,19 @@ func InitHopspace(fs afero.Fs, path, repoURI, org, repo, defaultBranch string) (
 		Forks:    make(map[string]config.HopspaceFork),
 	}
 
-	writer := config.NewWriter(fs)
-	if err := writer.WriteHopspaceConfig(path, cfg); err != nil {
+	existed := false
+	err := WithHopJSONLock(fs, path, func() error {
+		if exists, _ := afero.Exists(fs, filepath.Join(path, "hop.json")); exists {
+			existed = true
+			return nil
+		}
+		return config.NewWriter(fs).WriteHopspaceConfig(path, cfg)
+	})
+	if err != nil {
 		return nil, err
+	}
+	if existed {
+		return LoadHopspace(fs, path)
 	}
 
 	return &Hopspace{
@@ -90,46 +96,70 @@ func InitHopspace(fs afero.Fs, path, repoURI, org, repo, defaultBranch string) (
 	}, nil
 }
 
+// Update applies fn to the hopspace's hop.json as it is on disk now and
+// writes the result under its lock; see Hub.Update.
+func (h *Hopspace) Update(fn func(cfg *config.HopspaceConfig) error, opts ...config.WriteOption) error {
+	return WithHopJSONLock(h.fs, h.Path, func() error {
+		cfg, err := config.NewLoader(h.fs).LoadHopspaceConfig(h.Path)
+		if err != nil {
+			return err
+		}
+		if cfg.Branches == nil {
+			cfg.Branches = make(map[string]config.HopspaceBranch)
+		}
+		err = fn(cfg)
+		if err == nil {
+			err = config.NewWriter(h.fs).WriteHopspaceConfig(h.Path, cfg, opts...)
+		}
+		if err != nil && !errors.Is(err, errUnchanged) {
+			return err
+		}
+		if h.Config == nil {
+			h.Config = cfg
+		} else {
+			*h.Config = *cfg
+		}
+		return nil
+	})
+}
+
 // RegisterBranch adds a branch to the hopspace config
 func (h *Hopspace) RegisterBranch(branch, worktreePath string) error {
-	h.Config.Branches[branch] = config.HopspaceBranch{
-		Exists:   true,
-		Path:     worktreePath,
-		LastSync: time.Now(),
-	}
-	return h.Save()
+	return h.Update(func(cfg *config.HopspaceConfig) error {
+		cfg.Branches[branch] = config.HopspaceBranch{
+			Exists:   true,
+			Path:     worktreePath,
+			LastSync: time.Now(),
+		}
+		return nil
+	})
 }
 
 // UnregisterBranch removes a branch from the hopspace config
 func (h *Hopspace) UnregisterBranch(branch string) error {
-	if _, exists := h.Config.Branches[branch]; !exists {
-		// Branch doesn't exist in hopspace - this is not an error since it may have
-		// already been cleaned up or only existed in the hub config
+	return h.Update(func(cfg *config.HopspaceConfig) error {
+		if _, exists := cfg.Branches[branch]; !exists {
+			// Branch doesn't exist in hopspace - this is not an error since it may have
+			// already been cleaned up or only existed in the hub config
+			return errUnchanged
+		}
+		delete(cfg.Branches, branch)
 		return nil
-	}
-	delete(h.Config.Branches, branch)
-	return h.Save()
+	})
 }
 
 // RenameBranch rekeys oldBranch's entry to newBranch at newPath; the rest
 // of the entry carries over.
 func (h *Hopspace) RenameBranch(oldBranch, newBranch, newPath string) error {
-	entry, exists := h.Config.Branches[oldBranch]
-	if !exists {
-		// Not in hopspace — silently skip (same pattern as UnregisterBranch)
+	return h.Update(func(cfg *config.HopspaceConfig) error {
+		entry, exists := cfg.Branches[oldBranch]
+		if !exists {
+			// Not in hopspace — silently skip (same pattern as UnregisterBranch)
+			return errUnchanged
+		}
+		entry.Path = newPath
+		delete(cfg.Branches, oldBranch)
+		cfg.Branches[newBranch] = entry
 		return nil
-	}
-	entry.Path = newPath
-	delete(h.Config.Branches, oldBranch)
-	h.Config.Branches[newBranch] = entry
-	return h.save(config.RenamedBranch(oldBranch, newBranch))
-}
-
-// Save persists the hopspace config
-func (h *Hopspace) Save() error {
-	return h.save()
-}
-
-func (h *Hopspace) save(opts ...config.WriteOption) error {
-	return config.NewWriter(h.fs).WriteHopspaceConfig(h.Path, h.Config, opts...)
+	}, config.RenamedBranch(oldBranch, newBranch))
 }

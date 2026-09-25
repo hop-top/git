@@ -299,8 +299,6 @@ func ensureWorktreeHooksDir(fs afero.Fs, worktreePath string) error {
 }
 
 func createProjectConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch string) error {
-	cfgPath := filepath.Join(projectRoot, "hop.json")
-
 	cfg := map[string]any{
 		"repo": map[string]any{
 			"uri":           uri,
@@ -327,7 +325,7 @@ func createProjectConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := afero.WriteFile(fs, cfgPath, data, 0644); err != nil {
+	if err := writeHopJSONLocked(fs, projectRoot, data); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
@@ -368,7 +366,7 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 		return fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	if err := afero.WriteFile(fs, cfgPath, data, 0644); err != nil {
+	if err := writeHopJSONLocked(fs, projectRoot, data); err != nil {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 

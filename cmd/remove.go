@@ -393,9 +393,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	}
 
 	// Remove branch from hub config so it no longer appears in status
-	delete(hub.Config.Branches, branch)
-	writer := config.NewWriter(fs)
-	if err := writer.WriteHubConfig(hubPath, hub.Config); err != nil {
+	if err := hub.RemoveBranch(branch); err != nil {
 		output.Warn("Failed to update hub config: %v", err)
 	}
 

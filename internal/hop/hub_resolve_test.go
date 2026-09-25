@@ -43,7 +43,7 @@ func TestResolveHub_RecordedHub(t *testing.T) {
 
 	ref, err := ResolveHub(fs, st, "/w/local/plain")
 	require.NoError(t, err)
-	assert.Error(t, ref.Save(), "a recorded hub's view must not write hop.json")
+	assert.Error(t, ref.AddBranch("x", "x", "/w/local/plain/hops/x"), "a recorded hub's view must not write hop.json")
 	exists, _ := afero.Exists(fs, "/w/local/plain/hop.json")
 	assert.False(t, exists)
 }
