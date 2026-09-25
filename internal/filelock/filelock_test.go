@@ -1,4 +1,4 @@
-package hop
+package filelock
 
 import (
 	"os"
@@ -6,11 +6,11 @@ import (
 	"testing"
 )
 
-func TestFileLock_AcquireRelease(t *testing.T) {
+func TestLock_AcquireRelease(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.lock")
 
-	l := NewFileLock(path)
+	l := New(path)
 	ok, err := l.TryAcquire()
 	if err != nil {
 		t.Fatalf("TryAcquire: %v", err)
@@ -24,18 +24,18 @@ func TestFileLock_AcquireRelease(t *testing.T) {
 	}
 }
 
-func TestFileLock_SecondAcquireFails(t *testing.T) {
+func TestLock_SecondAcquireFails(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.lock")
 
-	l1 := NewFileLock(path)
+	l1 := New(path)
 	ok, err := l1.TryAcquire()
 	if err != nil || !ok {
 		t.Fatalf("first acquire: ok=%v err=%v", ok, err)
 	}
 	defer l1.Release()
 
-	l2 := NewFileLock(path)
+	l2 := New(path)
 	ok2, err := l2.TryAcquire()
 	if err != nil {
 		t.Fatalf("second TryAcquire returned error: %v", err)
@@ -45,11 +45,11 @@ func TestFileLock_SecondAcquireFails(t *testing.T) {
 	}
 }
 
-func TestFileLock_ReleaseAndReacquire(t *testing.T) {
+func TestLock_ReleaseAndReacquire(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "test.lock")
 
-	l1 := NewFileLock(path)
+	l1 := New(path)
 	ok, _ := l1.TryAcquire()
 	if !ok {
 		t.Fatal("first acquire failed")
@@ -58,7 +58,7 @@ func TestFileLock_ReleaseAndReacquire(t *testing.T) {
 		t.Fatalf("release: %v", err)
 	}
 
-	l2 := NewFileLock(path)
+	l2 := New(path)
 	ok2, err := l2.TryAcquire()
 	if err != nil {
 		t.Fatalf("reacquire: %v", err)
@@ -69,18 +69,18 @@ func TestFileLock_ReleaseAndReacquire(t *testing.T) {
 	_ = l2.Release()
 }
 
-func TestFileLock_ReleaseUnacquired(t *testing.T) {
-	l := NewFileLock("/tmp/never-acquired.lock")
+func TestLock_ReleaseUnacquired(t *testing.T) {
+	l := New("/tmp/never-acquired.lock")
 	if err := l.Release(); err != nil {
 		t.Errorf("Release on never-acquired lock returned error: %v", err)
 	}
 }
 
-func TestFileLock_CreatesParentDir(t *testing.T) {
+func TestLock_CreatesParentDir(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "subdir", "test.lock")
 
-	l := NewFileLock(path)
+	l := New(path)
 	ok, err := l.TryAcquire()
 	if err != nil {
 		t.Fatalf("TryAcquire with nested parent: %v", err)
@@ -91,14 +91,14 @@ func TestFileLock_CreatesParentDir(t *testing.T) {
 	_ = l.Release()
 }
 
-// TestFileLock_ReleaseRemovesFile pins the contract that a released lock
+// TestLock_ReleaseRemovesFile pins the contract that a released lock
 // leaves nothing on disk: the lock file is unlinked, not merely unlocked.
 // A lingering 0-byte lock file is what other tools mistake for state.
-func TestFileLock_ReleaseRemovesFile(t *testing.T) {
+func TestLock_ReleaseRemovesFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "nested", "test.lock")
 
-	l := NewFileLock(path)
+	l := New(path)
 	ok, err := l.TryAcquire()
 	if err != nil || !ok {
 		t.Fatalf("TryAcquire: ok=%v err=%v", ok, err)
@@ -111,10 +111,10 @@ func TestFileLock_ReleaseRemovesFile(t *testing.T) {
 	}
 }
 
-// TestFileLock_HeldReportsLiveLockOnly: Held probes an existing lock file
+// TestLock_HeldReportsLiveLockOnly: Held probes an existing lock file
 // without creating it or its parent directory, so a cleanup pass can ask
 // "is this stale?" without leaving a footprint.
-func TestFileLock_HeldReportsLiveLockOnly(t *testing.T) {
+func TestLock_HeldReportsLiveLockOnly(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "absent", "test.lock")
 
@@ -126,7 +126,7 @@ func TestFileLock_HeldReportsLiveLockOnly(t *testing.T) {
 	}
 
 	live := filepath.Join(dir, "live.lock")
-	l := NewFileLock(live)
+	l := New(live)
 	if ok, err := l.TryAcquire(); err != nil || !ok {
 		t.Fatalf("TryAcquire: ok=%v err=%v", ok, err)
 	}
