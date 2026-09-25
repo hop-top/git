@@ -206,5 +206,7 @@ func isUnder(abs, root string) bool {
 }
 
 func init() {
+	// Shell-integration plumbing the wrapper runs on cd; no result.
+	cli.ExemptFromResult(notifyChdirCmd)
 	cli.RootCmd.AddCommand(notifyChdirCmd)
 }

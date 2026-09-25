@@ -741,7 +741,7 @@ func setupOutputMode(cmd *cobra.Command) {
 		req.formatExplicit = f.Changed
 	}
 
-	format, formatOpts, err := req.resultFormat(declaresResult(cmd))
+	format, formatOpts, err := req.resultFormat(cmd)
 	if err != nil {
 		output.FatalCode(129, "%v", err)
 	}
@@ -793,12 +793,14 @@ func declaresResult(cmd *cobra.Command) bool {
 	return ok
 }
 
-// resultFormat decides which structured format, if any, a command
-// renders its result in. It returns "" for the human view.
+// resultFormat decides which structured format, if any, cmd renders its
+// result in. It returns "" for the human view.
 //
-// Only commands that declare a result take part. For the others the
-// output flags keep their previous meaning -- --json and --porcelain only
-// switch the logger mode -- until each is given a result of its own.
+// Only commands that declare a result take part. Any other command
+// refuses --json, --porcelain and a structured --format, so it cannot
+// print its human view (or nothing) where a script expects a result;
+// only one exempt by ExemptFromResult keeps them, as a switch of the
+// logger mode alone.
 //
 // --json is --format json. --porcelain is kit's text format in its
 // lines style: one tab-separated record per line, no header, columns in
@@ -807,9 +809,9 @@ func declaresResult(cmd *cobra.Command) bool {
 //
 // Every rejection happens here, in the pre-run, so a contradictory or
 // unknown mode fails before the command mutates anything.
-func (r outputRequest) resultFormat(declared bool) (format string, formatOpts []string, err error) {
-	if !declared {
-		return "", nil, nil
+func (r outputRequest) resultFormat(cmd *cobra.Command) (format string, formatOpts []string, err error) {
+	if !declaresResult(cmd) {
+		return "", nil, r.checkResultDeclared(cmd)
 	}
 
 	switch {

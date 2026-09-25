@@ -207,9 +207,14 @@ func TestJSONUsageErrorRequested(t *testing.T) {
 	type record struct {
 		Name string `json:"name"`
 	}
-	if err := kitcli.SetOutputSchema(show, kitcli.OutputSchema{Type: &record{}, Version: "1.0"}); err != nil {
-		t.Fatal(err)
+	for _, c := range []*cobra.Command{root, show} {
+		if err := kitcli.SetOutputSchema(c, kitcli.OutputSchema{Type: &record{}, Version: "1.0"}); err != nil {
+			t.Fatal(err)
+		}
 	}
+	exempt := &cobra.Command{Use: "helper", Run: func(*cobra.Command, []string) {}}
+	ExemptFromResult(exempt)
+	root.AddCommand(exempt)
 	cases := []struct {
 		cmd  *cobra.Command
 		args []string
@@ -220,7 +225,11 @@ func TestJSONUsageErrorRequested(t *testing.T) {
 		{show, []string{"show", "--format=json", "--bogus"}, true},
 		{show, []string{"show", "--format", "json", "a", "b"}, true},
 		{show, []string{"show", "--json", "--format=json", "-Z"}, true},
-		{plain, []string{"plain", "--json", "extra"}, true}, // --json alone selects JSON logging
+		// A command with no result refuses --json in the pre-run, in
+		// plain text; its usage error reports in plain text too.
+		{plain, []string{"plain", "--json", "extra"}, false},
+		// An exempt helper keeps --json as a switch to JSON logging.
+		{exempt, []string{"helper", "--json", "extra"}, true},
 		{root, []string{"--json", "--bogus"}, true},
 		// Not a JSON mode: plain text, as operation failures report.
 		{show, []string{"show", "--porcelain", "--bogus"}, false},
