@@ -220,6 +220,9 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		case services.IssueMissingDeps:
 			output.Error("  %s: missing %s", issue.Branch, issue.PM.DepsDir)
 			msg = fmt.Sprintf("missing %s", issue.PM.DepsDir)
+		case services.IssueDamagedInstall:
+			msg = fmt.Sprintf("shared install %s is missing entries (emptied through a link, e.g. by npm ci); every worktree linked to it is broken", issue.TargetName())
+			output.Error("  %s: %s", issue.Branch, msg)
 		}
 		// Only error-severity issues make the installation unhealthy, and
 		// --fix repairs every one (fixDependencies). Stale and old-layout
