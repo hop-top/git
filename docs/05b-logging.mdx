@@ -72,9 +72,10 @@ JSON:
 {"level":"error","msg":"failed to create worktree"}
 ```
 
-For commands that have a result (`add`, `status`, `list`, `doctor`,
-`prune`, `env gc`, `repair`) it also renders that result as one JSON
-document on stdout, with nothing else mixed in:
+Every command that does something has a result, and `--json` also
+renders it as one JSON document on stdout, with nothing else mixed in. A
+command with no result (`upgrade`) refuses `--json` with exit 129 instead
+of printing prose where JSON is expected:
 
 ```bash
 git hop doctor --json
