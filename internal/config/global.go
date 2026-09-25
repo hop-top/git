@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"hop.top/git/internal/output"
@@ -21,7 +20,7 @@ const (
 	KeyBackupCleanupAgeDays = "hop.backup.cleanupAgeDays"
 )
 
-// GlobalLoader handles loading and saving global configuration.
+// GlobalLoader handles loading global configuration.
 // Reads scalar preferences from git config hop.* keys;
 // complex arrays (PackageManagers, EnvironmentManagers) from
 // a managers.json sidecar file.
@@ -60,24 +59,6 @@ func (l *GlobalLoader) Load() (*GlobalConfig, error) {
 	cfg.EnvironmentManagers = mgrs.EnvironmentManagers
 
 	return cfg, nil
-}
-
-// Write persists scalar fields to git config --global and
-// complex arrays to managers.json.
-func (l *GlobalLoader) Write(cfg *GlobalConfig) error {
-	if err := l.writeToGitConfig(cfg); err != nil {
-		return fmt.Errorf("write git config: %w", err)
-	}
-
-	mgrs := managersFile{
-		PackageManagers:     cfg.PackageManagers,
-		EnvironmentManagers: cfg.EnvironmentManagers,
-	}
-	if err := l.saveManagers(&mgrs); err != nil {
-		return fmt.Errorf("write managers: %w", err)
-	}
-
-	return nil
 }
 
 // GetDefaults returns the default global configuration: what Load returns
@@ -122,36 +103,10 @@ func readFromGitConfig(gc *GitConfig) *GlobalConfig {
 	}
 }
 
-// writeToGitConfig persists all scalar fields to git config --global.
-func (l *GlobalLoader) writeToGitConfig(cfg *GlobalConfig) error {
-	gc := l.gc
-	sets := []struct {
-		key string
-		val string
-	}{
-		{KeyGitDomain, cfg.Defaults.GitDomain},
-		{KeyWorktreeLocation, cfg.Defaults.WorktreeLocation},
-		{KeyAddDefaultStartPoint, cfg.Defaults.DefaultStartPoint},
-		{KeyHooksInstallMode, cfg.Defaults.HooksInstallMode},
-
-		{KeyBackupKeepBackup, strconv.FormatBool(cfg.Backup.KeepBackup)},
-		{KeyBackupMaxBackups, strconv.Itoa(cfg.Backup.MaxBackups)},
-		{KeyBackupCleanupAgeDays, strconv.Itoa(cfg.Backup.CleanupAgeDays)},
-	}
-
-	for _, s := range sets {
-		if err := gc.Set(s.key, s.val); err != nil {
-			return fmt.Errorf("set %s: %w", s.key, err)
-		}
-	}
-	return l.WriteShellIntegration(cfg.ShellIntegration)
-}
-
 // WriteShellIntegration persists the shell integration state, and only
-// that, to git config --global. Shell integration install, uninstall and
-// status changes use it rather than Write: writing every scalar pinned
-// each hop.* default in --global, where it shadowed later default changes
-// and read as the user's own choice.
+// that, to git config --global. There is deliberately no whole-config
+// writer: writing every scalar pinned each hop.* default in --global, where
+// it shadowed later default changes and read as the user's own choice.
 func (l *GlobalLoader) WriteShellIntegration(s ShellIntegrationSettings) error {
 	sets := []configEntry{
 		{KeyShellIntegrationStatus, s.Status},

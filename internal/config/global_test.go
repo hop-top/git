@@ -98,55 +98,6 @@ func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	}
 }
 
-func TestWriteAndReadRoundTrip(t *testing.T) {
-	store := map[string]string{}
-	gc := fakeGitConfig(store)
-	loader := config.NewGlobalLoaderWithGitConfig(gc)
-
-	original := &config.GlobalConfig{
-		Defaults: config.DefaultSettings{
-			EnvAutoStart:     false,
-			GitDomain:        "bitbucket.org",
-			WorktreeLocation: "/my/path/{branch}",
-		},
-		ShellIntegration: config.ShellIntegrationSettings{
-			Status:         "approved",
-			InstalledShell: "fish",
-			InstalledPath:  "/home/me/.config/fish/config.fish",
-		},
-		Backup: config.BackupSettings{
-			KeepBackup:     true,
-			MaxBackups:     5,
-			CleanupAgeDays: 7,
-		},
-	}
-
-	if err := loader.Write(original); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-
-	// Verify values landed in the fake store
-	if store["hop.gitDomain"] != "bitbucket.org" {
-		t.Errorf("store[hop.gitDomain] = %q, want %q",
-			store["hop.gitDomain"], "bitbucket.org")
-	}
-
-	// Read back
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() after Write() error = %v", err)
-	}
-
-	if cfg.Defaults.GitDomain != "bitbucket.org" {
-		t.Errorf("roundtrip GitDomain = %q, want %q",
-			cfg.Defaults.GitDomain, "bitbucket.org")
-	}
-	if cfg.Backup.MaxBackups != 5 {
-		t.Errorf("roundtrip Backup.MaxBackups = %d, want 5",
-			cfg.Backup.MaxBackups)
-	}
-}
-
 func TestMigration_JSONToGitConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	originalHome := os.Getenv("HOME")
