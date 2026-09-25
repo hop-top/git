@@ -15,7 +15,6 @@ import (
 	kitcli "hop.top/kit/go/console/cli"
 	kitout "hop.top/kit/go/console/output"
 	"hop.top/kit/go/core/upgrade"
-	"hop.top/kit/go/core/xdg"
 	"hop.top/kit/go/runtime/bus"
 
 	"hop.top/git/internal/config"
@@ -185,7 +184,9 @@ func init() {
 			// kit registers --dry-run (Bool) unconditionally; it collides
 			// with git-hop's own -n/--dry-run and its per-command support
 			// guard. Suppress kit's so git-hop keeps those semantics.
-			// kit's -c/--config is adopted as is; initConfig consumes it.
+			// kit's -c/--config stays registered (hidden, as kit leaves
+			// it) so old scripts still parse; warnIgnoredConfigFlag says
+			// it is ignored.
 			// NOTE: kit v0.4 has no Disable.Verbose opt-out, so git-hop
 			// adopts kit's --verbose -V Count flag instead (was --verbose
 			// -v Bool in v0.3). See verboseEnabled() above.
@@ -195,16 +196,15 @@ func init() {
 			// Direct assignment to RootCmd.PersistentPreRunE silently
 			// overwrites kit's built-in chain (chdir → identity → peer
 			// init). The Hooks slot composes additively. Order matters:
-			// setupOutputMode initializes output.Verbose via SetupLogger
-			// so initConfig's Debug call can actually emit.
+			// setupOutputMode initializes the output mode first so the
+			// -c/--config warning renders in it.
 			PrePersistentRunE: func(cmd *cobra.Command, args []string) error {
 				setupOutputMode(cmd)
 				if err := checkDryRunSupported(cmd); err != nil {
 					output.FatalCode(exitUsage, "%s", err)
 				}
-				if err := initConfig(); err != nil {
-					return asUsageError(cmd, err)
-				}
+				warnIgnoredConfigFlag(cmd)
+				bindEnv(Root.Viper)
 				attachEventSinks(cmd)
 				if cmd.Name() != "upgrade" {
 					upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
@@ -414,12 +414,10 @@ Worktree Mode:
 	}
 
 	pf := RootCmd.PersistentFlags()
-	// --config -c is kit's (see initConfig). kit hides it from --help as
-	// plumbing; git-hop has always listed it, so keep it visible.
+	// --config -c is kit's, left hidden as kit registers it: git-hop
+	// ignores it (see warnIgnoredConfigFlag).
 	if f := pf.Lookup("config"); f != nil {
-		f.Hidden = false
-		f.Usage = "config file (default is $XDG_CONFIG_HOME/git-hop/config.json) " +
-			"or key=value override (repeatable)"
+		f.Usage = "ignored; git-hop settings live in git config hop.*"
 	}
 	pf.BoolVar(&jsonOut, "json", false, "output in JSON format")
 	pf.BoolVar(&porcelain, "porcelain", false, "machine-readable output")
@@ -571,56 +569,27 @@ func printAdminHelp(cmd *cobra.Command) {
 	}
 }
 
-// initConfig loads Root.Viper's config from kit's -c/--config tokens.
+// warnIgnoredConfigFlag warns, once, when kit's -c/--config was given.
 //
-// A bare path names a config file to read in place of the default
-// $XDG_CONFIG_HOME/git-hop/config.json; repeated paths layer in order. A
-// key=value token overrides one setting above every file. kit rejects a
-// path that does not exist, and that is reported as a bad flag value.
-func initConfig() error {
-	paths, overrides, err := Root.ConfigArgs()
-	if err != nil {
-		return fmt.Errorf("invalid -c/--config flag: %w", err)
+// git-hop reads its settings from git config hop.* only: neither the files
+// nor the key=value overrides this flag names, nor
+// $XDG_CONFIG_HOME/git-hop/config.json, are read. The flag is still
+// accepted so scripts that pass it keep running with their exit status
+// unchanged. -q does not drop the warning: a setting silently ignored is
+// what it exists to prevent.
+func warnIgnoredConfigFlag(cmd *cobra.Command) {
+	if f := cmd.Flags().Lookup("config"); f == nil || !f.Changed {
+		return
 	}
-	configDir, err := xdg.ConfigDir("git-hop")
-	if err != nil {
-		configDir = filepath.Join(os.Getenv("HOME"), ".config", "git-hop")
-	}
-	loadConfig(Root.Viper, paths, overrides, configDir)
-	return nil
+	output.WarnAlways("-c/--config is ignored; git-hop settings live in git config hop.* " +
+		"(for a one-off override: git -c hop.<key>=<value> hop ...)")
 }
 
-// loadConfig reads paths into v, or config.json under defaultDir when
-// paths is empty, then merges overrides on top. The environment
-// (GIT_HOP_*) and flags still win over both, per viper's precedence.
-// A file that cannot be read is skipped, as it always has been.
-func loadConfig(v *viper.Viper, paths []string, overrides map[string]any, defaultDir string) {
+// bindEnv lets GIT_HOP_* environment variables stand in for settings read
+// from v after the pre-run, as they always have.
+func bindEnv(v *viper.Viper) {
 	v.SetEnvPrefix("GIT_HOP")
 	v.AutomaticEnv()
-
-	read := func(merge bool) {
-		readIn := v.ReadInConfig
-		if merge {
-			readIn = v.MergeInConfig
-		}
-		if err := readIn(); err == nil && verboseEnabled() {
-			output.Debug("using config file: %s", v.ConfigFileUsed())
-		}
-	}
-	if len(paths) == 0 {
-		v.AddConfigPath(defaultDir)
-		v.SetConfigName("config")
-		v.SetConfigType("json")
-		read(false)
-	}
-	for i, p := range paths {
-		v.SetConfigFile(p)
-		read(i > 0)
-	}
-
-	if len(overrides) > 0 {
-		_ = v.MergeConfigMap(overrides)
-	}
 }
 
 // buildHookMirrorRun returns a closure that resolves the hooks install

@@ -590,12 +590,10 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 
 	// Configuration section
 	dataHome := hop.GetGitHopDataHome()
-	configHome := hop.GetConfigHome()
-	configPath := filepath.Join(configHome, "git-hop", "config.json")
 
 	configInfo := output.Section("Configuration", []string{
 		output.RenderKeyValue("Data Home", output.RenderPath(dataHome)),
-		output.RenderKeyValue("Config", output.RenderPath(configPath)),
+		output.RenderKeyValue("Settings", settingsSource),
 		output.RenderKeyValue("Version", "git-hop"),
 	})
 	fmt.Println(configInfo)
@@ -730,14 +728,16 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 	}
 }
 
+// settingsSource is where git-hop reads its settings from, as status --all
+// reports it.
+const settingsSource = "git config hop.*"
+
 func showSystemStatusPlain(fs afero.Fs, d *docker.Docker, st *state.State) {
 	dataHome := hop.GetGitHopDataHome()
-	configHome := hop.GetConfigHome()
-	configPath := filepath.Join(configHome, "git-hop", "config.json")
 
 	output.Info("Configuration:")
 	output.Info("  Data Home: %s", dataHome)
-	output.Info("  Config: %s", configPath)
+	output.Info("  Settings: %s", settingsSource)
 	output.Info("")
 
 	totalWorktrees := 0
