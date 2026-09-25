@@ -46,34 +46,55 @@ exec git config --global hop.env.autoStart true
 exec git-hop add feat/auto
 grep -count=1 '^up ' $WORK/up.log
 grep '^up compose -p org-repo-feat-auto up -d in .*/hub/hops/feat/auto on feat/auto$' $WORK/up.log
-stdout 'stub-compose-up-stdout'
 ! stderr 'warning:'
+
+# --- the start is progress, not add's result: all of it goes to stderr,
+# as `git hop env start` sends it; stdout carries add's own lines only ---
+stdout '^Worktree: '
+! stdout 'Environment'
+! stdout 'Dependencies'
+! stdout 'Starting services'
+! stdout 'stub-compose-up'
+stderr '^Environment Manager: docker-compose$'
+stderr '^Dependencies ready\.$'
+stderr '^  Starting services: docker-compose$'
+stderr '^stub-compose-up-stdout$'
+stderr '^stub-compose-up-stderr$'
+stderr '^  Environment started successfully$'
+
+# --- -q: the start's own progress lines are dropped; stdout stays empty ---
+exec git-hop add feat/quiet -q
+grep ' on feat/quiet$' $WORK/up.log
+! stdout .
+! stderr 'Environment'
+! stderr 'Dependencies'
+! stderr 'Starting services'
 
 # --- --no-env-start overrides hop.env.autoStart=true ---
 exec git-hop add feat/off --no-env-start
-grep -count=1 '^up ' $WORK/up.log
+grep -count=2 '^up ' $WORK/up.log
 
 # --- GIT_HOP_AUTO_ENV_START=false overrides hop.env.autoStart=true ---
 env GIT_HOP_AUTO_ENV_START=false
 exec git-hop add feat/env-off
-grep -count=1 '^up ' $WORK/up.log
+grep -count=2 '^up ' $WORK/up.log
 
 # --- --env-start overrides GIT_HOP_AUTO_ENV_START=false ---
 exec git-hop add feat/flag-on --env-start
-grep -count=2 '^up ' $WORK/up.log
+grep -count=3 '^up ' $WORK/up.log
 grep ' on feat/flag-on$' $WORK/up.log
 env GIT_HOP_AUTO_ENV_START=
 
 # --- --env-start overrides hop.env.autoStart=false ---
 exec git config --global hop.env.autoStart false
 exec git-hop add feat/on --env-start
-grep -count=3 '^up ' $WORK/up.log
+grep -count=4 '^up ' $WORK/up.log
 grep ' on feat/on$' $WORK/up.log
 
 # --- GIT_HOP_AUTO_ENV_START=true overrides hop.env.autoStart=false ---
 env GIT_HOP_AUTO_ENV_START=true
 exec git-hop add feat/env-on
-grep -count=4 '^up ' $WORK/up.log
+grep -count=5 '^up ' $WORK/up.log
 grep ' on feat/env-on$' $WORK/up.log
 
 # --- a value git would not read as a boolean is fatal, before any write ---
@@ -87,7 +108,7 @@ env GIT_HOP_AUTO_ENV_START=
 exec git config --global hop.env.autoStart true
 exec git-hop add plain
 ! exists $WORK/hub/hops/plain/docker-compose.yml
-grep -count=4 '^up ' $WORK/up.log
+grep -count=5 '^up ' $WORK/up.log
 ! stdout 'Environment'
 ! stderr 'warning:'
 
@@ -99,7 +120,7 @@ stderr '^hint: .*git hop env start'
 exists $WORK/hub/hops/feat/broken/docker-compose.yml
 grep '"feat/broken"' $WORK/hub/hop.json
 env STUB_UP_FAIL=
-grep -count=5 '^up ' $WORK/up.log
+grep -count=6 '^up ' $WORK/up.log
 
 # --- --dry-run previews the start, and only when it would happen ---
 exec git-hop add feat/preview --dry-run
@@ -107,14 +128,15 @@ stdout '^\[dry-run\] Would start environment'
 ! exists $WORK/hub/hops/feat/preview
 exec git-hop add feat/preview --dry-run --no-env-start
 ! stdout 'Would start environment'
-grep -count=5 '^up ' $WORK/up.log
+grep -count=6 '^up ' $WORK/up.log
 
 # --- structured: env_started reported; compose chatter kept off stdout ---
 exec git-hop add feat/json --json
 decode json stdout env_started true
 decode json stdout branch feat/json
 stderr 'stub-compose-up-stdout'
-grep -count=6 '^up ' $WORK/up.log
+! stderr 'Starting services'
+grep -count=7 '^up ' $WORK/up.log
 exec git-hop add feat/json-off --json --no-env-start
 ! decode json stdout env_started
 decode json stdout branch feat/json-off
@@ -122,7 +144,7 @@ decode json stdout branch feat/json-off
 # --- env start goes through the same path ---
 cd $WORK/hub/hops/feat/default
 exec git-hop env start
-grep -count=7 '^up ' $WORK/up.log
+grep -count=8 '^up ' $WORK/up.log
 grep ' in .*/hub/hops/feat/default on feat/default$' $WORK/up.log
 
 -- compose.yml --
@@ -139,6 +161,7 @@ case " $* " in
 		exit 1
 	fi
 	echo "stub-compose-up-stdout"
+	echo "stub-compose-up-stderr" >&2
 	exit 0
 	;;
 *" config "*)

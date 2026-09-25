@@ -44,10 +44,31 @@ stderr 'Environment stopped successfully'
 exec git-hop env start --json
 ! stdout .
 stderr 'stub-compose-stdout'
+! stderr 'Starting services'
+! stderr 'Environment started'
 exec git-hop env stop --porcelain
 ! stdout .
+! stderr 'Stopping services'
+! stderr 'Environment stopped'
+
+# --- -q: the manager's step lines are progress and are dropped ---
 exec git-hop env start -q
 ! stdout .
+! stderr 'Environment'
+! stderr 'Dependencies'
+! stderr 'Starting services'
+exec git-hop env stop -q
+! stdout .
+! stderr 'Environment'
+! stderr 'Stopping services'
+
+# --- -q never drops an error ---
+env STUB_FAIL=1
+! exec git-hop env start -q
+! stdout .
+stderr '^fatal: .*start command failed'
+! stderr 'Starting services'
+env STUB_FAIL=
 
 # --- no environment: the skip notice is progress as well ---
 cd $WORK/hub
@@ -73,6 +94,10 @@ case " $* " in
 	exit 1
 	;;
 esac
+if [ -n "$STUB_FAIL" ]; then
+	echo "stub: failed" >&2
+	exit 1
+fi
 echo "stub-compose-stdout $*"
 echo "stub-compose-stderr" >&2
 exit 0

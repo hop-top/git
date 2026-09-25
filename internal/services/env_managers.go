@@ -11,6 +11,7 @@ import (
 
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
+	"hop.top/git/internal/output"
 )
 
 // ComposeProjectName builds a stable, hop-scoped, compose-safe project name
@@ -77,7 +78,7 @@ type EnvironmentManager struct {
 	DetectFiles []string
 	Commands    EnvCommands
 	Hooks       EnvHooks
-	// Out receives the progress lines, hook output and the lifecycle
+	// Out receives the step lines, hook output and the lifecycle
 	// command's stdout; nil means os.Stdout. The command's stderr always
 	// goes to os.Stderr.
 	Out io.Writer
@@ -88,6 +89,13 @@ func (m *EnvironmentManager) out() io.Writer {
 		return os.Stdout
 	}
 	return m.Out
+}
+
+// step prints one of the manager's step lines on its Out. Steps are
+// progress for a person at a terminal, so they follow output.Note: -q and
+// the structured formats drop them.
+func (m *EnvironmentManager) step(format string, args ...any) {
+	output.NoteTo(m.out(), format, args...)
 }
 
 // EnvCommands defines lifecycle commands for an environment manager
@@ -206,14 +214,14 @@ func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoCo
 
 	// Execute preStart hooks
 	if len(allPreStartHooks) > 0 {
-		fmt.Fprintf(m.out(), "  Running preStart hooks...\n")
+		m.step("  Running preStart hooks...")
 		if err := ExecuteHooksWithTimeout(allPreStartHooks, ctx, 5*time.Minute); err != nil {
 			return fmt.Errorf("preStart hook failed: %w", err)
 		}
 	}
 
 	// Execute start command
-	fmt.Fprintf(m.out(), "  Starting services: %s\n", m.Name)
+	m.step("  Starting services: %s", m.Name)
 	org, repo := repoIdentity(repoConfig)
 	startCmd := m.buildComposeCommand(m.Commands.Start, worktreePath, overridePath, org, repo, branch)
 	if err := m.executeCommand(startCmd, worktreePath); err != nil {
@@ -222,13 +230,13 @@ func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoCo
 
 	// Execute postStart hooks
 	if len(allPostStartHooks) > 0 {
-		fmt.Fprintf(m.out(), "  Running postStart hooks...\n")
+		m.step("  Running postStart hooks...")
 		if err := ExecuteHooksWithTimeout(allPostStartHooks, ctx, 5*time.Minute); err != nil {
 			return fmt.Errorf("postStart hook failed: %w", err)
 		}
 	}
 
-	fmt.Fprintf(m.out(), "  Environment started successfully\n")
+	m.step("  Environment started successfully")
 	return nil
 }
 
@@ -254,14 +262,14 @@ func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoCon
 
 	// Execute preStop hooks
 	if len(allPreStopHooks) > 0 {
-		fmt.Fprintf(m.out(), "  Running preStop hooks...\n")
+		m.step("  Running preStop hooks...")
 		if err := ExecuteHooksWithTimeout(allPreStopHooks, ctx, 5*time.Minute); err != nil {
 			return fmt.Errorf("preStop hook failed: %w", err)
 		}
 	}
 
 	// Execute stop command
-	fmt.Fprintf(m.out(), "  Stopping services: %s\n", m.Name)
+	m.step("  Stopping services: %s", m.Name)
 	org, repo := repoIdentity(repoConfig)
 	stopCmd := m.buildComposeCommand(m.Commands.Stop, worktreePath, overridePath, org, repo, branch)
 	if err := m.executeCommand(stopCmd, worktreePath); err != nil {
@@ -270,13 +278,13 @@ func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoCon
 
 	// Execute postStop hooks
 	if len(allPostStopHooks) > 0 {
-		fmt.Fprintf(m.out(), "  Running postStop hooks...\n")
+		m.step("  Running postStop hooks...")
 		if err := ExecuteHooksWithTimeout(allPostStopHooks, ctx, 5*time.Minute); err != nil {
 			return fmt.Errorf("postStop hook failed: %w", err)
 		}
 	}
 
-	fmt.Fprintf(m.out(), "  Environment stopped successfully\n")
+	m.step("  Environment stopped successfully")
 	return nil
 }
 
