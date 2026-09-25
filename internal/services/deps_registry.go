@@ -150,14 +150,16 @@ func (r *DepsRegistry) RebuildFromWorktrees(fs afero.Fs, worktrees map[string]st
 		for _, pm := range detectedPMs {
 			symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
 
-			if linker, ok := fs.(afero.Symlinker); ok {
-				target, err := linker.ReadlinkIfPossible(symlinkPath)
-				if err != nil || target == "" {
-					continue
-				}
+			if target, ok := readSymlink(fs, symlinkPath); ok {
 				if key, ok := depsKeyOf(repoPath, target, pm); ok {
 					r.AddUsage(key, branch)
 				}
+				continue
+			}
+			// A DepsDir linked entry by entry uses every install it
+			// links into.
+			for _, key := range entryLinkedKeys(fs, repoPath, symlinkPath, pm) {
+				r.AddUsage(key, branch)
 			}
 		}
 	}
