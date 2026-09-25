@@ -935,9 +935,12 @@ them, so one command never undoes another's change. Allocating ports also
 holds `port-allocation.lock` in git-hop's state directory, beside
 `state.json`, while it reads every hub's ports and records its own, so two
 commands allocating at once, in one hub or in two, never pick the same
-ports. Neither lock is held while docker compose runs. Each save writes a
-temporary file of its own beside the file and renames it over the file,
-so a reader always sees a whole file. The lock files exist only while a
+ports. `git hop doctor --fix`, moving a `--global` hopspace to where
+`hop.dataLayout` puts it, holds the hopspace's `hop.json.lock` and then its
+`ports.json.lock` while it renames the directory, so a change in progress
+moves with it and a later one waits. Neither lock is held while docker
+compose runs. Each save writes a temporary file of its own beside the file
+and renames it over the file, so a reader always sees a whole file. The lock files exist only while a
 change is being written; a lock belongs to the process holding it and goes
 away when that process exits. A command that waits more than 30 seconds
 for a lock fails.

@@ -36,11 +36,16 @@ import (
 //     allocation could pick twice, so they do not take it.
 //
 // Lock order: port-allocation.lock, then ports.json.lock. Neither is held
-// with hop.json.lock or state.json.lock: hop.json and state.json are only
-// read under them (whole files, replaced by rename), and no writer of
-// either takes these. Both are held only around the load-modify-save:
-// never across docker or compose calls, hooks, git commands or anything
-// else that may run git-hop, which would wait on the lock this run holds.
+// with state.json.lock, nor with hop.json.lock but in one place: hop.json
+// and state.json are only read under them (whole files, replaced by
+// rename), and no writer of either takes these. The exception is doctor
+// --fix moving a hopspace directory: it holds that hopspace's
+// hop.json.lock, then its ports.json.lock, around the rename, so no
+// writer of any of its files runs meanwhile (cmd/doctor_hopspace_lock.go).
+// Nothing else holds both, so that order cannot deadlock. Both are held
+// only around the load-modify-save (or that rename): never across docker
+// or compose calls, hooks, git commands or anything else that may run
+// git-hop, which would wait on the lock this run holds.
 //
 // Saves go through config.Writer: a temp file named config.IsTempName
 // next to the file, renamed over it, the same as hop.json, so prune
@@ -67,10 +72,11 @@ var ErrEnvLocked = errors.New("ports.json and volumes.json are locked by another
 // past the timeout.
 var ErrAllocationLocked = errors.New("port allocation is locked by another git-hop process")
 
-// withEnvLock runs fn while holding the lock on ports.json and
+// WithEnvLock runs fn while holding the lock on ports.json and
 // volumes.json in hopspacePath. fn loads them afresh and must not take
-// the same lock again.
-func withEnvLock(fs afero.Fs, hopspacePath string, fn func() error) error {
+// the same lock again. Outside this package only doctor takes it, to
+// move a hopspace (see the lock order above).
+func WithEnvLock(fs afero.Fs, hopspacePath string, fn func() error) error {
 	return filelock.Guard{
 		Path:    filepath.Join(hopspacePath, PortsLockName),
 		Timeout: envLockTimeout,
@@ -87,6 +93,6 @@ func withAllocationLock(fs afero.Fs, hopspacePath string, fn func() error) error
 		Timeout: envLockTimeout,
 		Busy:    ErrAllocationLocked,
 	}.Do(fs, func() error {
-		return withEnvLock(fs, hopspacePath, fn)
+		return WithEnvLock(fs, hopspacePath, fn)
 	})
 }

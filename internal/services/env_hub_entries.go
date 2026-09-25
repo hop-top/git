@@ -57,7 +57,7 @@ func dropEnvEntries(fs afero.Fs, hopspacePath string, drop func(string, config.B
 		return nil, nil
 	}
 	var entries []EnvEntry
-	err := withEnvLock(fs, hopspacePath, func() error {
+	err := WithEnvLock(fs, hopspacePath, func() error {
 		var err error
 		entries, err = dropEnvEntriesLocked(fs, hopspacePath, drop)
 		return err

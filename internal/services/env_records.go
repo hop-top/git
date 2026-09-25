@@ -304,7 +304,7 @@ func RekeyEnvEntry(fs afero.Fs, hopspacePath, hubPath, oldPath, newPath, oldBran
 			return nil
 		}
 	}
-	return withEnvLock(fs, hopspacePath, func() error {
+	return WithEnvLock(fs, hopspacePath, func() error {
 		return rekeyEnvEntryLocked(fs, hopspacePath, hubPath, oldPath, newPath, oldBranch, newBranch)
 	})
 }
@@ -377,7 +377,7 @@ func DropEnvEntry(fs afero.Fs, hopspacePath, hubPath, worktreePath, branch strin
 	if !hasPortsFile(fs, hopspacePath) {
 		return nil
 	}
-	return withEnvLock(fs, hopspacePath, func() error {
+	return WithEnvLock(fs, hopspacePath, func() error {
 		recs, _ := LoadEnvRecords(fs, hubPath)
 		self, found := recs.Self(hopspacePath, hubPath, worktreePath, branch)
 		if !found {
