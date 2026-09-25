@@ -382,3 +382,36 @@ func TestCollectMergedCandidates_RealGit_MergedFeature(t *testing.T) {
 		assert.NotEqual(t, "main", c.Branch, "default branch must never be reported as skipped")
 	}
 }
+
+// TestRemoveMerged_MissingPathSkipMessageOnce: the skip line for a
+// branch whose worktree is gone names the branch once, in the real run
+// and in the preview alike, and the record's reason carries no prefix.
+func TestRemoveMerged_MissingPathSkipMessageOnce(t *testing.T) {
+	for name, run := range map[string]func(afero.Fs, git.GitInterface, string) []removeRecord{
+		"run": func(fs afero.Fs, g git.GitInterface, cwd string) []removeRecord {
+			recs, _ := runRemoveMerged(fs, g, cwd, false, false, true, false)
+			return recs
+		},
+		"preview": func(fs afero.Fs, g git.GitInterface, cwd string) []removeRecord {
+			recs, _ := previewRemoveMerged(fs, g, cwd, false, false, true, false)
+			return recs
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fs := afero.NewMemMapFs()
+			hubPath := "/h"
+			newHubWithBranches(t, fs, hubPath, []string{"main", "feature"}, map[string]bool{"feature": true})
+
+			var recs []removeRecord
+			stdout, stderr := captureRemoveOutput(t, func() {
+				recs = run(fs, mocks.NewMockGit(), hubPath)
+			})
+			all := stdout + stderr
+
+			assert.Contains(t, all, "Skipping feature: worktree path missing; run 'git hop prune' first")
+			assert.Equal(t, 1, strings.Count(strings.ToLower(all), "skipping feature"), all)
+			require.Len(t, recs, 1)
+			assert.Equal(t, "worktree path missing; run 'git hop prune' first", recs[0].Reason)
+		})
+	}
+}

@@ -1263,7 +1263,10 @@ removes the leftover `.hop/` once it is empty.
 6. Snapshot to `<state-dir>/backups/repair-<UTC-timestamp>/`
 7. Apply each action; verify post-state predicate
 8. Re-plan; auto-restore from backup if new issues appeared
-9. Fire `post-repair` hook
+9. Record in `state.json` each worktree `hop.json` gained, as
+   [`git hop add`](#git-hop-add) records one (keyed by path, with its
+   branch and hub), so `list`, `status --all` and `doctor` see it
+10. Fire `post-repair` hook
 
 ### Porcelain v1 format
 

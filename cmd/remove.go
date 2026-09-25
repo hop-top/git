@@ -525,7 +525,7 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 				Branch:       branch,
 				WorktreePath: worktreePath,
 				Skip:         true,
-				Reason:       fmt.Sprintf("skipping %s: worktree path missing; run 'git hop prune' first", branch),
+				Reason:       "worktree path missing; run 'git hop prune' first",
 			})
 			continue
 		}
