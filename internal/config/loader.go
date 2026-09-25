@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 
 	"github.com/spf13/afero"
-	"github.com/spf13/viper"
 )
 
 // Loader handles loading configuration from various sources
@@ -55,14 +54,4 @@ func loadConfig[T any](fs afero.Fs, path string) (*T, error) {
 	}
 
 	return &config, nil
-}
-
-// GetGlobalString returns a string from global config (viper)
-func GetGlobalString(key string) string {
-	return viper.GetString(key)
-}
-
-// GetGlobalStringSlice returns a string slice from global config (viper)
-func GetGlobalStringSlice(key string) []string {
-	return viper.GetStringSlice(key)
 }

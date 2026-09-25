@@ -213,23 +213,6 @@ type ShellIntegrationSettings struct {
 	InstalledAt    time.Time `json:"installedAt,omitempty"`
 }
 
-// UserConfig represents global config.json (legacy)
-type UserConfig struct {
-	Defaults UserDefaults `json:"defaults"`
-	Paths    UserPaths    `json:"paths"`
-}
-
-type UserDefaults struct {
-	CompareBranch  *string  `json:"compareBranch,omitempty"`
-	EnvPatterns    []string `json:"envPatterns"`
-	AllocationMode string   `json:"allocationMode"`
-}
-
-type UserPaths struct {
-	DataHome  *string `json:"dataHome,omitempty"`
-	CacheHome *string `json:"cacheHome,omitempty"`
-}
-
 type StructureType string
 
 const (

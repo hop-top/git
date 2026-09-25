@@ -1,50 +1,84 @@
-# --config/-c is kit's config flag. A bare path names the config file to
-# read in place of $XDG_CONFIG_HOME/git-hop/config.json; a key=value token
-# overrides one setting and leaves file resolution alone. An explicit file
-# that does not exist is a bad flag value: a usage error, status 129.
+# git-hop settings live in git config hop.* only. -c/--config is still
+# accepted, so scripts that pass it keep running, but it is ignored: one
+# warning on stderr, which -q does not drop, and the command's own exit
+# status. $XDG_CONFIG_HOME/git-hop/config.json is never read.
 #
 # `git -c <name>=<value> hop ...` never reaches this flag: git consumes its
 # own -c before it runs git-hop.
 
-# --- no flag: the default file is read ---
-exec git-hop -V list
-stderr '^debug: using config file: .*/\.config/git-hop/config\.json$'
+# --- no flag: no warning ---
+exec git-hop list
+! stderr 'warning:'
 
-# --- --config names the file read instead of the default ---
-exec git-hop -V --config other.json list
-stderr '^debug: using config file: other\.json$'
-! stderr 'git-hop/config\.json'
+# --- a path is ignored, with a warning ---
+exec git-hop --config other.json list
+stderr -count=1 '^warning: -c/--config is ignored; git-hop settings live in git config hop\.\* \(for a one-off override: git -c hop\.<key>=<value> hop \.\.\.\)$'
 
-# --- -c is the same flag, before or after the subcommand ---
-exec git-hop -V -c other.json list
-stderr '^debug: using config file: other\.json$'
-! stderr 'git-hop/config\.json'
+# --- -c is the same flag, before or after the subcommand; key=value too ---
+exec git-hop -c other.json list
+stderr '^warning: -c/--config is ignored; '
 
-exec git-hop list -V -c other.json
-stderr '^debug: using config file: other\.json$'
+exec git-hop list -c some.key=1
+stderr '^warning: -c/--config is ignored; '
 
-# --- a key=value override keeps the default file ---
-exec git-hop -V -c some.key=1 list
-stderr '^debug: using config file: .*/\.config/git-hop/config\.json$'
+# --- repeated: still one warning ---
+exec git-hop -c a=1 -c b=2 --config other.json list
+stderr -count=1 '^warning: '
 
-# --- a missing explicit file is a usage error; nothing runs ---
+# --- a file that does not exist is no longer an error ---
 exec sh -c 'git-hop --config missing.json list; echo "exit=$?"'
-stdout 'exit=129'
-! stdout 'No worktrees'
-stderr '^error: invalid -c/--config flag: -c "missing\.json": not a key=value pair and no such file$'
-stderr '^usage: git hop list'
+stdout 'exit=0'
+! stderr '^error:'
+! stderr '^usage:'
+stderr '^warning: -c/--config is ignored; '
 
-exec sh -c 'git-hop -c missing.json list; echo "exit=$?"'
-stdout 'exit=129'
-stderr '^error: invalid -c/--config flag: '
+# --- -q does not drop the warning ---
+exec git-hop -q -c missing.json list
+stderr '^warning: -c/--config is ignored; '
 
-# --- help advertises the flag with its shorthand ---
+# --- structured output is untouched; the warning stays on stderr ---
+exec git-hop --format json -c x=1 list
+stdout '^\[\]$'
+stderr 'ignored'
+
+# --- the exit status is the command's own ---
+exec sh -c 'git-hop -c x=1 env start; echo "exit=$?"'
+stdout 'exit=1'
+stderr '^warning: -c/--config is ignored; '
+
+# --- config.json is never read, even with keys that would change output ---
+# "output" would send the result to a file and "verbose" would raise the
+# log level, were the file read.
+mkdir .config/git-hop
+cp config.json .config/git-hop/config.json
+exec git-hop list --format json
+stdout '^\[\]$'
+! exists out.json
+! stderr .
+exec git-hop -V list
+! stderr 'config file'
+
+# --- -c naming the file changes nothing either ---
+exec git-hop -c .config/git-hop/config.json list --format json
+stdout '^\[\]$'
+! exists out.json
+
+# --- status --all points at git config, not config.json ---
+exec git-hop status --all
+stdout 'Settings.*git config hop\.\*'
+! stdout 'config\.json'
+
+exec git-hop status --all --porcelain
+! stdout 'config\.json'
+! stderr 'config\.json'
+
+# --- help does not list the flag ---
 exec git-hop --help
-stdout '^  -c, --config stringArray '
+! stdout '[-]-config'
 exec git-hop list --help
-stdout '^  -c, --config stringArray '
+! stdout '[-]-config'
 
--- .config/git-hop/config.json --
-{}
 -- other.json --
 {}
+-- config.json --
+{"output": "out.json", "verbose": 2}
