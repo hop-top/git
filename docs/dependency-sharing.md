@@ -52,6 +52,39 @@ Each worktree gets a symlink to the shared storage:
 └── vendor -> <hopspace>/deps/789ghi/vendor
 ```
 
+### Installs that stay in the worktree
+
+Package managers link some dependencies instead of copying them into
+`node_modules`: `file:` directories, `link:` dependencies and workspace
+packages. Those links are relative, and a relative link resolves from the
+directory it sits in. Moved into the store, it would resolve from the store,
+not the worktree; and shared, every worktree would get the workspace
+packages of the worktree that installed it.
+
+So after each install, git-hop looks for links in the new `node_modules`
+that lead out of it by a relative path, or into the worktree by any path.
+An install with one stays in the worktree that made it (a local install):
+nothing is moved to the store, and `node_modules` is a real directory
+holding a `.git-hop-local` file with the lockfile hash. This works the same
+for every package manager, including custom ones. Each worktree then
+resolves exactly what running the package manager there would give: its
+own workspace packages, and `file:` paths relative to its own location,
+even where that path does not exist.
+
+The cost is one full install per worktree for such repositories.
+
+- `git hop doctor` accepts a local install marked for the current lockfile,
+  and `--fix` leaves it alone.
+- One marked for an older lockfile is a warning; the next install refreshes
+  it in place, where the package manager updates it.
+- `npm ci` removes the marker with the rest of `node_modules`. An unmarked
+  install that could not be shared anyway is a warning too, and the next
+  install (or `doctor --fix`) marks it again. An unmarked `node_modules`
+  that could be shared is still reported as a local folder.
+- A worktree linked to a store install with such links, made by an earlier
+  release, is an error: `doctor --fix` gives the worktree its own install,
+  and `git hop env gc` removes the store install once nothing links to it.
+
 ### Installs from earlier releases
 
 Earlier releases named each install after the directory and the hash,
@@ -125,7 +158,9 @@ When you create or switch to a branch, git-hop automatically:
 2. Computes the hash of each lockfile
 3. Checks if dependencies are already installed for that hash
 4. If installed: creates a symlink to the shared storage
-5. If not installed: installs to shared storage, then creates symlink
+5. If not installed: installs in the worktree, moves the install to shared
+   storage, then creates the symlink; an install that cannot be shared stays
+   in the worktree (see [Installs that stay in the worktree](#installs-that-stay-in-the-worktree))
 
 No manual intervention required!
 
@@ -401,6 +436,11 @@ It detects:
 - **Missing dependencies** that should exist — error
 - **Damaged shared installs**: a link to an install missing entries it was
   made with, e.g. emptied by `npm ci` in another worktree — error
+- **Links to unshareable store installs**: a store install with links out
+  of it (`file:`, `link:`, workspace packages), made by an earlier
+  release — error
+- **Local installs for an older lockfile**, or not marked by git-hop but
+  unshareable anyway — warning
 - **Stale symlinks** pointing to old lockfile versions — warning
 
 Stale symlinks are reported as warnings, not errors: the dependencies are
@@ -465,6 +505,9 @@ This automatically repairs:
 
 4. **Damaged shared install:**
    - Reinstalls it in place, which repairs every worktree linked to it
+
+5. **Link to an unshareable store install:**
+   - Installs in the worktree and keeps it there (a local install)
 
 `--fix` never touches Go `vendor/` unless vendor mode is active (see above),
 so it cannot create the directory in a repository that gitignores it.

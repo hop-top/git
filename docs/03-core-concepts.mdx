@@ -321,6 +321,12 @@ This checks for:
 - Stale symlinks (lockfile changed but symlink outdated)
 - Local folders (user ran `rm -rf node_modules && npm install`)
 - Damaged shared installs (emptied through a link, e.g. by `npm ci` in another worktree)
+- Links to store installs that cannot be shared (links out of `node_modules`)
+
+An install with `file:`, `link:` or workspace dependencies has links out of
+`node_modules` that only resolve from the worktree that made it, so it stays
+in that worktree (marked with `node_modules/.git-hop-local`) instead of the
+store. `doctor` accepts it and `--fix` leaves it alone.
 - Orphaned dependencies (no branches using them)
 
 #### Auto-fix Issues

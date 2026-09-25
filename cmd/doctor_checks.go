@@ -220,6 +220,16 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		case services.IssueMissingDeps:
 			output.Error("  %s: missing %s", issue.Branch, issue.PM.DepsDir)
 			msg = fmt.Sprintf("missing %s", issue.PM.DepsDir)
+		case services.IssueStaleLocal:
+			if issue.CurrentHash != "" {
+				msg = fmt.Sprintf("local %s was installed for an older lockfile (now %s); refreshed by the next install", issue.PM.DepsDir, issue.ExpectedHash[:6])
+			} else {
+				msg = fmt.Sprintf("local %s was not installed by git-hop and cannot be shared: %s; refreshed by the next install", issue.PM.DepsDir, issue.LocalReason)
+			}
+			output.Warn("  %s: %s", issue.Branch, msg)
+		case services.IssueNeedsLocal:
+			msg = fmt.Sprintf("%s links to shared install %s, which cannot be shared: %s", issue.PM.DepsDir, issue.TargetName(), issue.LocalReason)
+			output.Error("  %s: %s", issue.Branch, msg)
 		case services.IssueDamagedInstall:
 			msg = fmt.Sprintf("shared install %s is missing entries (emptied through a link, e.g. by npm ci); every worktree linked to it is broken", issue.TargetName())
 			output.Error("  %s: %s", issue.Branch, msg)

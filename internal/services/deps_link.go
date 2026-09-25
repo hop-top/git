@@ -10,7 +10,10 @@ import (
 )
 
 // linkDeps links worktreePath/<DepsDir> to the store's install for hash
-// (GetDepsKey), installing it first when the store has none populated.
+// (GetDepsKey), installing it first when the store has none intact and
+// shareable. An install that cannot be shared (localReasonOf) stays in the
+// worktree as a local install instead, marked with hash; one already
+// marked with hash is left as it is.
 //
 // An install in the layout earlier releases wrote (flatDepsKey) is never
 // reused or written: Node cannot resolve its packages from one another.
@@ -19,40 +22,65 @@ import (
 //
 // The install command writes ./<DepsDir> of the worktree, so whatever is
 // there goes first (cleanWorktreeDepsPath): a link would let the install
-// write into, or wipe, the install it points to. If the install or the
-// link then fails, the link taken down is put back, so a failed attempt
-// leaves the worktree linked as it was.
+// write into, or wipe, the install it points to. A local install stays:
+// the package manager updates it in place. If the install or the link
+// then fails, the link taken down is put back, so a failed attempt leaves
+// the worktree linked as it was.
 func (m *DepsManager) linkDeps(worktreePath, branch string, pm PackageManager, hash, lockfilePath string) error {
 	depsKey := pm.GetDepsKey(hash)
 	depsPath := m.getDepsPath(depsKey)
 	symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
 
+	local := m.isLocalInstall(symlinkPath, worktreePath)
+	if marked, ok := readLocalMarker(m.fs, symlinkPath); local && ok && marked == hash {
+		return nil
+	}
+
 	// An install missing entries it was made with (emptied through a
 	// worktree's link, or crashed mid-install) is treated as missing and
-	// reinstalled, which repairs every worktree linked to it.
-	intact, err := m.installIntact(depsPath)
+	// reinstalled, which repairs every worktree linked to it. One that
+	// must not be shared is never linked again.
+	shareable, err := m.installIntact(depsPath)
 	if err != nil {
 		return fmt.Errorf("failed to check deps existence: %w", err)
 	}
+	if shareable {
+		reason, err := m.storeLocalReason(depsPath)
+		if err != nil {
+			return fmt.Errorf("failed to check %s for links: %w", depsPath, err)
+		}
+		shareable = reason == ""
+	}
 
 	previous, linked := readSymlink(m.fs, symlinkPath)
-	if linked && previous == depsPath && intact {
+	if linked && previous == depsPath && shareable {
 		m.Registry.AddUsage(depsKey, branch)
 		return nil
 	}
 
-	if err := m.cleanWorktreeDepsPath(symlinkPath); err != nil {
-		return err
+	if !local {
+		if err := m.cleanWorktreeDepsPath(symlinkPath); err != nil {
+			return err
+		}
 	}
 
-	if !intact {
-		if err := m.installDeps(depsPath, worktreePath, pm); err != nil {
+	if !shareable {
+		stayed, err := m.installDeps(depsKey, worktreePath, pm, hash)
+		if err != nil {
 			return m.relinkAfterFailure(fmt.Errorf("failed to install deps: %w", err), symlinkPath, previous, linked)
+		}
+		if stayed {
+			return nil
 		}
 		if err := m.writeInstallManifest(depsPath); err != nil {
 			return m.relinkAfterFailure(err, symlinkPath, previous, linked)
 		}
 		m.Registry.UpdateEntryMetadata(depsKey, hash, filepath.Base(lockfilePath))
+	} else if local {
+		// The store has this install; the local one gives way to it.
+		if err := m.cleanWorktreeDepsPath(symlinkPath); err != nil {
+			return err
+		}
 	}
 
 	if err := m.createSymlink(depsPath, symlinkPath); err != nil {
@@ -60,6 +88,20 @@ func (m *DepsManager) linkDeps(worktreePath, branch string, pm PackageManager, h
 	}
 	m.Registry.AddUsage(depsKey, branch)
 	return nil
+}
+
+// isLocalInstall reports whether depsDir is a local install: a real
+// directory git-hop marked (LocalInstallMarker), or one that could not be
+// shared anyway (localReasonOf).
+func (m *DepsManager) isLocalInstall(depsDir, worktreePath string) bool {
+	if !isRealDir(m.fs, depsDir) {
+		return false
+	}
+	if _, ok := readLocalMarker(m.fs, depsDir); ok {
+		return true
+	}
+	reason, err := localReasonOf(m.fs, depsDir, worktreePath)
+	return err == nil && reason != ""
 }
 
 // relinkAfterFailure puts back the link linkDeps took down before a step

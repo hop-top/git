@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"slices"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
@@ -42,6 +41,13 @@ const (
 	// (npm ci, rm -rf node_modules/*), which breaks every worktree
 	// linked to it.
 	IssueDamagedInstall IssueType = "damaged_install"
+	// IssueStaleLocal marks a local install (LocalInstallMarker) made
+	// from an older lockfile, or not marked but unshareable anyway. The
+	// next install refreshes it in place.
+	IssueStaleLocal IssueType = "stale_local"
+	// IssueNeedsLocal marks a link to a store install that must not be
+	// shared (LocalReason), made before such installs were kept local.
+	IssueNeedsLocal IssueType = "needs_local"
 )
 
 // Severity classifies how much attention an Issue deserves.
@@ -62,9 +68,11 @@ const (
 // warnings: a worktree that has not re-run its installer since the
 // lockfile changed still has working deps, so calling it an error
 // overstated the problem and made `doctor` look broken on healthy repos.
-// Old-layout links are warnings too: the next install relinks them.
+// Old-layout links are warnings too: the next install relinks them. So
+// are local installs made from an older lockfile: the next install
+// refreshes them in place.
 func (t IssueType) Severity() Severity {
-	if t == IssueStaleSymlink || t == IssueOldLayout {
+	if t == IssueStaleSymlink || t == IssueOldLayout || t == IssueStaleLocal {
 		return SeverityWarning
 	}
 	return SeverityError
@@ -81,6 +89,9 @@ type Issue struct {
 	DepsKey       string
 	SymlinkTarget string
 	Size          int64
+	// LocalReason says why the install must stay in the worktree
+	// (IssueNeedsLocal, and IssueStaleLocal for an unmarked install).
+	LocalReason LocalReason
 }
 
 // NewDepsManager creates a new dependency manager
@@ -358,50 +369,84 @@ func copyFile(fs afero.Fs, src, dst string, mode os.FileMode) error {
 	return out.Close()
 }
 
-// installDeps installs dependencies to the shared cache at targetDir.
+// installDeps runs pm's install for worktreePath and puts the result in
+// the store at depsKey, or, when it cannot be shared, leaves it in the
+// worktree as a local install marked with hash. It reports whether the
+// install stayed local.
 //
 // Package managers fall into two camps:
 //
 //  1. cwd-relative writers — npm ci, pnpm install, go mod vendor, composer
 //     install, bundle install: they ignore any target-dir argument and
 //     write to ./<DepsDir> of cwd. For these, we run with cwd=worktreePath
-//     and then relocate worktreePath/<DepsDir> into targetDir.
+//     and then relocate worktreePath/<DepsDir> into the store, unless it
+//     has links out of it (localReasonOf).
 //  2. target-dir writers — pip: `python -m venv <targetDir>` populates
-//     targetDir directly, so no worktree-local DepsDir is produced.
+//     the store's directory directly, so no worktree-local DepsDir is
+//     produced.
 //
 // After install, exactly one of the two must be populated:
-//   - worktreePath/<DepsDir> exists → relocate it into targetDir.
-//   - targetDir has content (from a target-dir writer) → nothing to do.
+//   - worktreePath/<DepsDir> exists → keep it local or relocate it.
+//   - the store's directory has content (from a target-dir writer) →
+//     nothing to do.
 //   - neither → install silently produced nothing; error out rather than
 //     leave an empty cache entry behind.
 //
+// A store directory this call did not create (an install found damaged
+// or unshareable) is left alone unless the install replaces it: other
+// worktrees may still link to it.
+//
 // See https://github.com/hop-top/git/issues/11 and PR #13 review.
-func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageManager) error {
-	// Create target directory
+func (m *DepsManager) installDeps(depsKey, worktreePath string, pm PackageManager, hash string) (bool, error) {
+	targetDir := m.getDepsPath(depsKey)
+	existed, err := afero.Exists(m.fs, targetDir)
+	if err != nil {
+		return false, fmt.Errorf("failed to check target directory: %w", err)
+	}
+	dropCreated := func() {
+		if !existed {
+			_ = m.removeInstall(depsKey)
+		}
+	}
 	if err := m.fs.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create target directory: %w", err)
+		return false, fmt.Errorf("failed to create target directory: %w", err)
 	}
 
-	// Run install command
 	if err := pm.Install(targetDir, worktreePath); err != nil {
-		// Clean up on failure
-		m.fs.RemoveAll(targetDir)
-		return fmt.Errorf("failed to run install: %w", err)
+		dropCreated()
+		return false, fmt.Errorf("failed to run install: %w", err)
 	}
 
-	// Case 1: install wrote into worktreePath/<DepsDir>. Relocate it into
-	// the shared cache. ensurePMDeps guarantees this path was clean before
-	// the install ran, so anything here now was produced by the install
+	// Case 1: install wrote into worktreePath/<DepsDir>. linkDeps
+	// guarantees this path held nothing but a local install before the
+	// install ran, so anything here now was produced by the install
 	// command (not a stale symlink/dir).
 	worktreeDeps := filepath.Join(worktreePath, pm.DepsDir)
 	if exists, err := afero.DirExists(m.fs, worktreeDeps); err != nil {
-		return fmt.Errorf("failed to check worktree deps dir: %w", err)
+		return false, fmt.Errorf("failed to check worktree deps dir: %w", err)
 	} else if exists {
+		reason, err := localReasonOf(m.fs, worktreeDeps, worktreePath)
+		if err != nil {
+			dropCreated()
+			return false, fmt.Errorf("failed to check %s for links: %w", worktreeDeps, err)
+		}
+		if reason != "" {
+			dropCreated()
+			if err := writeLocalMarker(m.fs, worktreeDeps, hash); err != nil {
+				return false, fmt.Errorf("failed to mark local install %s: %w", worktreeDeps, err)
+			}
+			return true, nil
+		}
+		// A local install refreshed in place may now be shareable; its
+		// marker must not travel into the store.
+		if err := m.fs.Remove(filepath.Join(worktreeDeps, LocalInstallMarker)); err != nil && !os.IsNotExist(err) {
+			return false, fmt.Errorf("failed to unmark %s: %w", worktreeDeps, err)
+		}
 		if err := RelocateDir(m.fs, worktreeDeps, targetDir); err != nil {
 			m.fs.RemoveAll(targetDir)
-			return fmt.Errorf("failed to relocate %s into shared cache: %w", pm.DepsDir, err)
+			return false, fmt.Errorf("failed to relocate %s into shared cache: %w", pm.DepsDir, err)
 		}
-		return nil
+		return false, nil
 	}
 
 	// Case 2: target-dir writer (pip). Verify the install actually put
@@ -410,13 +455,14 @@ func (m *DepsManager) installDeps(targetDir, worktreePath string, pm PackageMana
 	// caching the emptiness.
 	populated, err := dirHasEntries(m.fs, targetDir)
 	if err != nil {
-		return fmt.Errorf("failed to inspect target directory: %w", err)
+		return false, fmt.Errorf("failed to inspect target directory: %w", err)
 	}
 	if !populated {
 		m.fs.RemoveAll(targetDir)
-		return fmt.Errorf("install for package manager %q produced no deps (neither %s/%s nor %s was populated)", pm.Name, worktreePath, pm.DepsDir, targetDir)
+		dropCreated()
+		return false, fmt.Errorf("install for package manager %q produced no deps (neither %s/%s nor %s was populated)", pm.Name, worktreePath, pm.DepsDir, targetDir)
 	}
-	return nil
+	return false, nil
 }
 
 // dirHasEntries reports whether path is a directory containing at least
@@ -469,121 +515,16 @@ func (m *DepsManager) Audit(worktrees map[string]string) ([]Issue, error) {
 
 	// Scan each worktree for issues
 	for branch, worktreePath := range worktrees {
-
-		// Detect package managers
 		detectedPMs, err := DetectPackageManagers(m.fs, worktreePath, m.PackageManagers)
 		if err != nil {
 			continue
 		}
-
 		for _, pm := range detectedPMs {
-			// Go vendor/ is only ours to audit when vendor mode is active.
-			// Skipping here mirrors the create path (see ensurePMDeps and
-			// IsGoVendorActive); without it doctor reported "missing
-			// vendor" for every Go repo that gitignores vendor/, and
-			// --fix materialised the unwanted directory.
-			if skipGoVendor(m.fs, pm, worktreePath) {
-				continue
+			if issue, ok := m.auditDeps(branch, worktreePath, pm); ok {
+				issues = append(issues, issue)
 			}
-
-			// Find lockfile
-			lockfilePath, err := pm.FindLockfile(m.fs, worktreePath)
-			if err != nil {
-				continue
-			}
-
-			// Compute expected hash
-			expectedHash, err := pm.HashLockfile(m.fs, lockfilePath)
-			if err != nil {
-				continue
-			}
-
-			expectedDepsKey := pm.GetDepsKey(expectedHash)
-			expectedDepsPath := m.getDepsPath(expectedDepsKey)
-			symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
-
-			// Check what's at the symlink path.
-			// ReadlinkIfPossible is checked first because afero.Exists follows
-			// symlinks and returns false for dangling symlinks, which would
-			// incorrectly classify them as IssueMissingDeps.
-			isSymlink := false
-			var currentTarget string
-			if linker, ok := m.fs.(afero.Symlinker); ok {
-				target, err := linker.ReadlinkIfPossible(symlinkPath)
-				if err == nil && target != "" {
-					isSymlink = true
-					currentTarget = target
-				}
-			}
-
-			if !isSymlink {
-				// Not a symlink - check if a real path exists
-				symlinkExists, err := afero.Exists(m.fs, symlinkPath)
-				if err != nil {
-					continue
-				}
-
-				if !symlinkExists {
-					// Missing deps
-					issues = append(issues, Issue{
-						Type:         IssueMissingDeps,
-						WorktreePath: worktreePath,
-						Branch:       branch,
-						PM:           pm,
-						ExpectedHash: expectedHash,
-						DepsKey:      expectedDepsKey,
-					})
-					continue
-				}
-
-				// Local folder instead of symlink
-				size := m.getDirSize(symlinkPath)
-				issues = append(issues, Issue{
-					Type:         IssueLocalFolder,
-					WorktreePath: worktreePath,
-					Branch:       branch,
-					PM:           pm,
-					ExpectedHash: expectedHash,
-					DepsKey:      expectedDepsKey,
-					Size:         size,
-				})
-				continue
-			}
-
-			// It's a symlink - check if it points to the right place.
-			// Errors from Exists are intentionally ignored here: a failure to stat
-			// the target (e.g., permission denied) is treated the same as missing,
-			// which is conservative — we'd rather report a broken symlink than
-			// silently skip a genuinely inaccessible target. A link to the
-			// right install whose directory is gone (e.g. collected while
-			// the link still referenced it) is broken too.
-			targetExists, _ := afero.Exists(m.fs, currentTarget)
-			var issueType IssueType
-			switch {
-			case !targetExists:
-				issueType = IssueBrokenSymlink
-			case m.damagedStoreInstall(pm, currentTarget):
-				issueType = IssueDamagedInstall
-			case currentTarget == expectedDepsPath:
-				continue
-			case slices.Contains(m.flatDepsPaths(pm, expectedHash), currentTarget):
-				issueType = IssueOldLayout
-			default:
-				// Points to an install for an older lockfile.
-				issueType = IssueStaleSymlink
-			}
-			issues = append(issues, Issue{
-				Type:          issueType,
-				WorktreePath:  worktreePath,
-				Branch:        branch,
-				PM:            pm,
-				ExpectedHash:  expectedHash,
-				DepsKey:       expectedDepsKey,
-				SymlinkTarget: currentTarget,
-			})
 		}
 	}
-
 	return issues, nil
 }
 
@@ -600,7 +541,7 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 		}
 
 		switch issue.Type {
-		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps, IssueDamagedInstall:
+		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps, IssueDamagedInstall, IssueStaleLocal, IssueNeedsLocal:
 		default:
 			continue
 		}
