@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/spf13/afero"
 )
 
 // Docker wraps docker command execution
@@ -116,7 +118,8 @@ func (d *Docker) ComposeUp(dir, project string, detached bool, overridePath ...s
 
 	// If override path provided, use explicit -f flags
 	if len(overridePath) > 0 && overridePath[0] != "" {
-		composeFile := FindComposeFile(dir)
+		// docker compose reads dir on the real disk, so look there.
+		composeFile := FindComposeFile(afero.NewOsFs(), dir)
 		if composeFile != "" {
 			args = append(args, "-f", composeFile)
 			args = append(args, "-f", overridePath[0])

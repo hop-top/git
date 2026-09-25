@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
 	"hop.top/git/internal/output"
@@ -383,8 +384,8 @@ func (m *EnvironmentManager) buildComposeCommand(cmdParts []string, worktreePath
 	}
 
 	if overridePath != "" {
-		// Find the compose file in the worktree
-		composeFile := docker.FindComposeFile(worktreePath)
+		// docker compose reads the worktree on the real disk, so look there.
+		composeFile := docker.FindComposeFile(afero.NewOsFs(), worktreePath)
 		if composeFile != "" {
 			result = append(result, "-f", composeFile)
 			result = append(result, "-f", overridePath)

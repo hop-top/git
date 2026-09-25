@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -66,11 +65,11 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 	var overridePath string
 
 	// Try to read raw compose file content to detect hardcoded ports
-	composeFileName := docker.FindComposeFile(worktreePath)
+	composeFileName := docker.FindComposeFile(m.fs, worktreePath)
 	var composeContent []byte
 	if composeFileName != "" {
 		var err error
-		composeContent, err = os.ReadFile(filepath.Join(worktreePath, composeFileName))
+		composeContent, err = afero.ReadFile(m.fs, filepath.Join(worktreePath, composeFileName))
 		if err != nil {
 			composeContent = nil
 		}
@@ -93,10 +92,10 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 			} else {
 				// Write override file
 				overrideDir := filepath.Dir(overridePath)
-				if err := os.MkdirAll(overrideDir, 0755); err != nil {
+				if err := m.fs.MkdirAll(overrideDir, 0755); err != nil {
 					return nil, nil, "", fmt.Errorf("failed to create override cache dir: %w", err)
 				}
-				if err := os.WriteFile(overridePath, overrideYAML, 0644); err != nil {
+				if err := afero.WriteFile(m.fs, overridePath, overrideYAML, 0644); err != nil {
 					return nil, nil, "", fmt.Errorf("failed to write override file: %w", err)
 				}
 
@@ -178,7 +177,7 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 
 func (m *EnvManager) needsRegeneration(composeContent []byte, org, repo, branch string) bool {
 	metaPath := hop.GetOverrideMetaCachePath(org, repo, branch)
-	metaData, err := os.ReadFile(metaPath)
+	metaData, err := afero.ReadFile(m.fs, metaPath)
 	if err != nil {
 		return true
 	}
@@ -200,7 +199,7 @@ func (m *EnvManager) writeOverrideMeta(composeContent []byte, org, repo, branch 
 		return
 	}
 	metaPath := hop.GetOverrideMetaCachePath(org, repo, branch)
-	os.WriteFile(metaPath, data, 0644)
+	afero.WriteFile(m.fs, metaPath, data, 0644)
 }
 
 func (m *EnvManager) writeEnvFile(path string, ports map[string]int, vols map[string]string) error {
