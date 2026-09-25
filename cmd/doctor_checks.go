@@ -114,7 +114,7 @@ func createMissingHopspace(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath stri
 
 	for _, branchName := range sortedBranchNames(hub) {
 		branchWorktreePath := config.ResolveWorktreePath(hub.Config.Branches[branchName].Path, hubPath)
-		if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
+		if err := hopspace.RegisterBranch(hubPath, branchName, branchWorktreePath); err != nil {
 			output.Error("Failed to register branch %s: %v", branchName, err)
 			r.failed(doctorCheckHub, branchName, "register branch in hopspace: %v", err)
 		}
@@ -134,7 +134,8 @@ func reconcileHopspaceBranches(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath 
 	}
 
 	for _, branchName := range sortedBranchNames(hub) {
-		if _, ok := hopspace.Config.Branches[branchName]; ok {
+		branchWorktreePath := config.ResolveWorktreePath(hub.Config.Branches[branchName].Path, hubPath)
+		if _, ok := hopspace.Entry(hubPath, branchName, branchWorktreePath); ok {
 			continue
 		}
 		r.fixableIssue(doctorCheckHub, branchName, "branch in hub but not in hopspace")
@@ -149,8 +150,7 @@ func reconcileHopspaceBranches(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath 
 			continue
 		}
 
-		branchWorktreePath := config.ResolveWorktreePath(hub.Config.Branches[branchName].Path, hubPath)
-		if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
+		if err := hopspace.RegisterBranch(hubPath, branchName, branchWorktreePath); err != nil {
 			output.Error("Failed to register branch %s: %v", branchName, err)
 			r.failed(doctorCheckHub, branchName, "register branch in hopspace: %v", err)
 		} else {

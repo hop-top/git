@@ -148,7 +148,7 @@ func recreateWorktree(fs afero.Fs, g git.GitInterface, registry, name, branch, l
 		r.failed(doctorCheckHub, name, "cannot recreate worktree: failed to load hopspace: %v", err)
 		return false
 	}
-	if _, ok := hopspace.Config.Branches[branch]; !ok {
+	if _, ok := hopspace.Entry(hubPath, branch, linkPath); !ok {
 		output.Error("Cannot fix: branch %s not found in hopspace", branch)
 		r.failed(doctorCheckHub, name, "cannot recreate worktree: branch %s not found in hopspace", branch)
 		return false
@@ -180,7 +180,7 @@ func recreateWorktree(fs afero.Fs, g git.GitInterface, registry, name, branch, l
 		r.failed(doctorCheckHub, name, "recreate worktree: %v", err)
 		return false
 	}
-	if err := hopspace.RegisterBranch(branch, linkPath); err != nil {
+	if err := hopspace.RegisterBranch(hubPath, branch, linkPath); err != nil {
 		output.Error("Failed to update hopspace: %v", err)
 		// Continue anyway as the worktree was created.
 	}

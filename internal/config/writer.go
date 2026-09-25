@@ -40,6 +40,17 @@ func RenamedBranch(oldBranch, newBranch string) WriteOption {
 	}
 }
 
+// RenamedBranches is RenamedBranch for every old -> new key of renames,
+// read when the write runs: a caller that settles its renames while
+// changing the config passes the map first and fills it in after.
+func RenamedBranches(renames map[string]string) WriteOption {
+	return func(o *writeOptions) {
+		for oldBranch, newBranch := range renames {
+			RenamedBranch(oldBranch, newBranch)(o)
+		}
+	}
+}
+
 // WriteHubConfig writes the hub configuration
 func (w *Writer) WriteHubConfig(path string, config *HubConfig, opts ...WriteOption) error {
 	return w.writeConfig(filepath.Join(path, "hop.json"), config, opts...)

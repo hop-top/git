@@ -175,7 +175,7 @@ func doctorHub(t *testing.T, fs afero.Fs, hubPath string, branches, present []st
 		"git@github.com:test/repo.git", "test", "repo", "main")
 	require.NoError(t, err)
 	for _, b := range branches {
-		require.NoError(t, hopspace.RegisterBranch(b,
+		require.NoError(t, hopspace.RegisterBranch(hopspace.Path, b,
 			filepath.Join(hubPath, config.MakeWorktreePath(b))))
 	}
 	return hopspacePath

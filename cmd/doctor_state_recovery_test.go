@@ -26,7 +26,7 @@ func TestDoctorCommand_DetectsOrphanedDirectories(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register main branch
-	require.NoError(t, hopspace.RegisterBranch("main", filepath.Join(hopsDir, "main")))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "main", filepath.Join(hopsDir, "main")))
 
 	// Create main directory and orphaned directories
 	require.NoError(t, fs.MkdirAll(filepath.Join(hopsDir, "main"), 0755))
@@ -61,8 +61,8 @@ func TestDoctorCommand_NoOrphanedDirectories(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register all branches
-	require.NoError(t, hopspace.RegisterBranch("main", filepath.Join(hopsDir, "main")))
-	require.NoError(t, hopspace.RegisterBranch("develop", filepath.Join(hopsDir, "develop")))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "main", filepath.Join(hopsDir, "main")))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "develop", filepath.Join(hopsDir, "develop")))
 
 	// Create directories
 	require.NoError(t, fs.MkdirAll(filepath.Join(hopsDir, "main"), 0755))
@@ -102,7 +102,7 @@ func TestDoctorCommand_DetectsBrokenWorktrees(t *testing.T) {
 	branchPath := "hops/feature"
 	worktreePath := filepath.Join(hubPath, branchPath)
 	require.NoError(t, hub.AddBranch("feature", "feature", branchPath))
-	require.NoError(t, hopspace.RegisterBranch("feature", worktreePath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "feature", worktreePath))
 
 	// Verify the worktree path doesn't exist (broken)
 	exists, err := afero.Exists(fs, worktreePath)

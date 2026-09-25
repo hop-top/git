@@ -148,7 +148,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		// Initialize hopspace in data directory
 		dataHome := GetGitHopDataHome()
 		hopspacePath := GetHopspacePath(dataHome, NewRepoRef(uri, org, repo))
-		if err := initializeHopspace(fs, hopspacePath, uri, org, repo, defaultBranch, absMainWorktreePath, true); err != nil {
+		if err := initializeHopspace(fs, hopspacePath, projectRoot, uri, org, repo, defaultBranch, absMainWorktreePath, true); err != nil {
 			return fmt.Errorf("failed to initialize hopspace: %v", err)
 		}
 	} else {
@@ -369,7 +369,7 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 }
 
 // initializeHopspace creates the hopspace directory structure and config
-func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch, worktreePath string, isGlobal bool) error {
+func initializeHopspace(fs afero.Fs, hopspacePath, hubPath, uri, org, repo, defaultBranch, worktreePath string, isGlobal bool) error {
 	// Use InitHopspace function which creates the directory and config
 	hopspace, err := InitHopspace(fs, hopspacePath, uri, org, repo, defaultBranch)
 	if err != nil {
@@ -377,7 +377,7 @@ func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch
 	}
 
 	// Register the initial branch (main) in the hopspace
-	if err := hopspace.RegisterBranch(defaultBranch, worktreePath); err != nil {
+	if err := hopspace.RegisterBranch(hubPath, defaultBranch, worktreePath); err != nil {
 		return fmt.Errorf("failed to register default branch: %w", err)
 	}
 

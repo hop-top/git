@@ -147,7 +147,7 @@ func TestHopspaceRegisterBranch(t *testing.T) {
 	branchName := "feature-x"
 	worktreePath := "/hops/feature-x"
 
-	err = hopspace.RegisterBranch(branchName, worktreePath)
+	err = hopspace.RegisterBranch(hopspace.Path, branchName, worktreePath)
 	if err != nil {
 		t.Fatalf("RegisterBranch failed: %v", err)
 	}
@@ -197,13 +197,13 @@ func TestHopspaceUnregisterBranch(t *testing.T) {
 
 	// Register a branch
 	branchName := "feature-x"
-	err = hopspace.RegisterBranch(branchName, "/hops/feature-x")
+	err = hopspace.RegisterBranch(hopspace.Path, branchName, "/hops/feature-x")
 	if err != nil {
 		t.Fatalf("RegisterBranch failed: %v", err)
 	}
 
 	// Unregister the branch
-	err = hopspace.UnregisterBranch(branchName)
+	err = hopspace.UnregisterBranch(hopspace.Path, branchName, "")
 	if err != nil {
 		t.Fatalf("UnregisterBranch failed: %v", err)
 	}
@@ -242,13 +242,13 @@ func TestHopspaceUnregisterBranch_NonExistent(t *testing.T) {
 
 	// Register a branch so we have something to verify wasn't removed
 	testBranch := "test-branch"
-	err = hopspace.RegisterBranch(testBranch, "/hops/test-branch")
+	err = hopspace.RegisterBranch(hopspace.Path, testBranch, "/hops/test-branch")
 	if err != nil {
 		t.Fatalf("RegisterBranch failed: %v", err)
 	}
 
 	// Try to unregister a branch that doesn't exist
-	err = hopspace.UnregisterBranch("non-existent-branch")
+	err = hopspace.UnregisterBranch(hopspace.Path, "non-existent-branch", "")
 
 	// Should NOT return an error - this is expected behavior
 	if err != nil {
@@ -290,7 +290,7 @@ func TestHopspaceRegisterMultipleBranches(t *testing.T) {
 	}
 
 	for name, path := range branches {
-		err = hopspace.RegisterBranch(name, path)
+		err = hopspace.RegisterBranch(hopspace.Path, name, path)
 		if err != nil {
 			t.Fatalf("RegisterBranch(%s) failed: %v", name, err)
 		}

@@ -77,7 +77,7 @@ func TestHopspace_WriteFromStaleLoadKeepsOtherWritersChanges(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, remover.RemoveBranch("gone"))
 
-	require.NoError(t, adderSpace.RegisterBranch("new", "/hub/hops/new"))
+	require.NoError(t, adderSpace.RegisterBranch(adderSpace.Path, "new", "/hub/hops/new"))
 
 	assert.Equal(t, []string{"new"}, hubBranches(t, fs, "/hub"))
 }
@@ -122,7 +122,7 @@ func addLikeGitHopAdd(fs afero.Fs, hubPath, branch string) error {
 		return err
 	}
 	path := filepath.Join(hubPath, "hops", branch)
-	if err := space.RegisterBranch(branch, path); err != nil {
+	if err := space.RegisterBranch(space.Path, branch, path); err != nil {
 		return err
 	}
 	return hub.AddBranch(branch, branch, path)
@@ -140,7 +140,7 @@ func removeLikeGitHopRemove(fs afero.Fs, hubPath, branch string) error {
 	if err != nil {
 		return err
 	}
-	return space.UnregisterBranch(branch)
+	return space.UnregisterBranch(space.Path, branch, "")
 }
 
 func expectedAfter(adders, perAdder int) []string {

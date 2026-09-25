@@ -20,16 +20,18 @@ decode json $WORK/hub/hop.json repo.mode global
 cd $WORK/hub
 
 # --- add registers the branch in the data-home hopspace ---
+# The hopspace other --global hubs can share records it under its path.
 exec git-hop add feat/x
-decode json $WORK/data/org/repo/hop.json branches.feat/x.exists true
-decode json $WORK/data/org/repo/hop.json branches.feat/x.path '~/hops/feat/x$'
+grep '"[^"]*/hub/hops/feat/x": \{' $WORK/data/org/repo/hop.json
+grep '"branch": "feat/x"' $WORK/data/org/repo/hop.json
 
 # --- move rekeys it there ---
 exec git-hop move feat/x feat/y
-! decode json $WORK/data/org/repo/hop.json branches.feat/x
-decode json $WORK/data/org/repo/hop.json branches.feat/y.path '~/hops/feat/y$'
+! grep '/hops/feat/x"' $WORK/data/org/repo/hop.json
+grep '"[^"]*/hub/hops/feat/y": \{' $WORK/data/org/repo/hop.json
+grep '"branch": "feat/y"' $WORK/data/org/repo/hop.json
 
 # --- remove unregisters it there ---
 exec git-hop remove feat/y --no-prompt
-! decode json $WORK/data/org/repo/hop.json branches.feat/y
-decode json $WORK/data/org/repo/hop.json branches.main.exists true
+! grep '/hops/feat/y"' $WORK/data/org/repo/hop.json
+grep '"[^"]*/hub/hops/main": \{' $WORK/data/org/repo/hop.json

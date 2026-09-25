@@ -78,6 +78,12 @@ type HopspaceBranch struct {
 	Path            string                            `json:"path"`
 	LastSync        time.Time                         `json:"lastSync"`
 	PackageManagers map[string]PackageManagerOverride `json:"packageManagers,omitempty"` // Branch-level PM overrides
+	// Branch and Hub say whose worktree an entry of a hopspace several
+	// --global hubs share records; such an entry is keyed by the
+	// worktree's path. A hub's own hopspace keys its entries by branch
+	// and leaves both empty.
+	Branch string `json:"branch,omitempty"`
+	Hub    string `json:"hub,omitempty"`
 }
 
 // PackageManagerOverride allows overriding install commands at repo or branch level
