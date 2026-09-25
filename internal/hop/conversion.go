@@ -468,12 +468,7 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 		return err
 	}
 
-	configPath := filepath.Join(repoPath, "hop.json")
-	if err := afero.WriteFile(c.fs, configPath, content, 0644); err != nil {
-		return err
-	}
-
-	return nil
+	return writeHopJSONLocked(c.fs, repoPath, content)
 }
 
 func (c *Converter) RestoreFromBackup(backupPath, targetPath string) error {

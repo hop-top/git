@@ -1,6 +1,7 @@
 package hop
 
 import (
+	"errors"
 	"fmt"
 	"path/filepath"
 
@@ -75,10 +76,6 @@ func FindHub(fs afero.Fs, startPath string) (string, error) {
 
 // CreateHub initializes a new hub
 func CreateHub(fs afero.Fs, path string, repoURI, org, repo, defaultBranch string) (*Hub, error) {
-	if IsHub(fs, path) {
-		return nil, fmt.Errorf("hub already exists at %s", path)
-	}
-
 	if err := fs.MkdirAll(path, 0755); err != nil {
 		return nil, err
 	}
@@ -96,15 +93,15 @@ func CreateHub(fs afero.Fs, path string, repoURI, org, repo, defaultBranch strin
 		},
 	}
 
-	writer := config.NewWriter(fs)
-	if err := writer.WriteHubConfig(path, cfg); err != nil {
+	err := WithHopJSONLock(fs, path, func() error {
+		if IsHub(fs, path) {
+			return fmt.Errorf("hub already exists at %s", path)
+		}
+		return config.NewWriter(fs).WriteHubConfig(path, cfg)
+	})
+	if err != nil {
 		return nil, err
 	}
-
-	// Create .gitignore to ignore symlinks if needed, though usually hubs are not git repos themselves
-	// unless they are the root of a repo. But in git-hop, the hub IS the entry point.
-	// If the user initializes a hub inside an existing repo, they might want to ignore it.
-	// But typically a hub is a directory containing symlinks.
 
 	return &Hub{
 		Path:   path,
@@ -113,15 +110,56 @@ func CreateHub(fs afero.Fs, path string, repoURI, org, repo, defaultBranch strin
 	}, nil
 }
 
+// errUnchanged, returned by an Update fn, ends the update without
+// writing hop.json.
+var errUnchanged = errors.New("hop.json unchanged")
+
+// Update applies fn to hop.json as it is on disk now and writes the
+// result, all under the hub's hop.json lock (WithHopJSONLock), then makes
+// it h.Config. fn never sees a copy loaded before another run's write, so
+// it cannot undo that write. fn must only modify cfg: no git, no hooks,
+// no other hop.json update.
+func (h *Hub) Update(fn func(cfg *config.HubConfig) error, opts ...config.WriteOption) error {
+	return WithHopJSONLock(h.fs, h.Path, func() error {
+		cfg, err := config.NewLoader(h.fs).LoadHubConfig(h.Path)
+		if err != nil {
+			return err
+		}
+		if cfg.Branches == nil {
+			cfg.Branches = make(map[string]config.HubBranch)
+		}
+		err = fn(cfg)
+		if err == nil {
+			err = config.NewWriter(h.fs).WriteHubConfig(h.Path, cfg, opts...)
+		}
+		if err != nil && !errors.Is(err, errUnchanged) {
+			return err
+		}
+		h.setConfig(cfg)
+		return nil
+	})
+}
+
+// setConfig replaces h.Config's contents in place, so a caller holding
+// the h.Config pointer sees the fresh copy too.
+func (h *Hub) setConfig(cfg *config.HubConfig) {
+	if h.Config == nil {
+		h.Config = cfg
+		return
+	}
+	*h.Config = *cfg
+}
+
 // AddBranch adds a branch to the hub config
 func (h *Hub) AddBranch(branchName, hopspaceBranch, worktreePath string) error {
-	// Update config - no symlinks needed, worktrees are accessed directly
-	h.Config.Branches[branchName] = config.HubBranch{
-		Path:           worktreePath, // Full path to worktree
-		HopspaceBranch: hopspaceBranch,
-	}
-
-	return h.Save()
+	return h.Update(func(cfg *config.HubConfig) error {
+		// No symlinks needed, worktrees are accessed directly
+		cfg.Branches[branchName] = config.HubBranch{
+			Path:           worktreePath, // Full path to worktree
+			HopspaceBranch: hopspaceBranch,
+		}
+		return nil
+	})
 }
 
 // SetBranchBase records the branch this worktree was forked from, for
@@ -129,38 +167,45 @@ func (h *Hub) AddBranch(branchName, hopspaceBranch, worktreePath string) error {
 // field (falls back to hub default). Returns an error if the branch is
 // not registered in this hub. Persists immediately.
 func (h *Hub) SetBranchBase(branchName, base string) error {
-	b, ok := h.Config.Branches[branchName]
-	if !ok {
-		return fmt.Errorf("branch %q not in hub", branchName)
-	}
-	if base == "" {
-		b.Base = nil
-	} else {
-		b.Base = &base
-	}
-	h.Config.Branches[branchName] = b
-	return h.Save()
+	return h.Update(func(cfg *config.HubConfig) error {
+		b, ok := cfg.Branches[branchName]
+		if !ok {
+			return fmt.Errorf("branch %q not in hub", branchName)
+		}
+		if base == "" {
+			b.Base = nil
+		} else {
+			b.Base = &base
+		}
+		cfg.Branches[branchName] = b
+		return nil
+	})
 }
 
 // SetBranchTask records the task a worktree was added for. task=""
 // clears it. Returns an error if the branch is not registered in this
 // hub. Persists immediately.
 func (h *Hub) SetBranchTask(branchName, task string) error {
-	b, ok := h.Config.Branches[branchName]
-	if !ok {
-		return fmt.Errorf("branch %q not in hub", branchName)
-	}
-	b.Task = task
-	h.Config.Branches[branchName] = b
-	return h.Save()
+	return h.Update(func(cfg *config.HubConfig) error {
+		b, ok := cfg.Branches[branchName]
+		if !ok {
+			return fmt.Errorf("branch %q not in hub", branchName)
+		}
+		b.Task = task
+		cfg.Branches[branchName] = b
+		return nil
+	})
 }
 
 // RemoveBranch removes a branch from the hub
 func (h *Hub) RemoveBranch(branchName string) error {
-	// Update config - no symlinks to remove
-	delete(h.Config.Branches, branchName)
-
-	return h.Save()
+	return h.Update(func(cfg *config.HubConfig) error {
+		if _, ok := cfg.Branches[branchName]; !ok {
+			return errUnchanged
+		}
+		delete(cfg.Branches, branchName)
+		return nil
+	})
 }
 
 // RenameBranch rekeys oldBranch's entry to newBranch at newPath. The rest
@@ -168,17 +213,19 @@ func (h *Hub) RemoveBranch(branchName string) error {
 // only when it named oldBranch itself; a fork entry's HopspaceBranch names
 // the fork-side branch, which a hub rename does not touch.
 func (h *Hub) RenameBranch(oldBranch, newBranch, newPath string) error {
-	entry, exists := h.Config.Branches[oldBranch]
-	if !exists {
-		return fmt.Errorf("branch %s not found in hub", oldBranch)
-	}
-	entry.Path = newPath
-	if entry.HopspaceBranch == oldBranch {
-		entry.HopspaceBranch = newBranch
-	}
-	delete(h.Config.Branches, oldBranch)
-	h.Config.Branches[newBranch] = entry
-	return h.save(config.RenamedBranch(oldBranch, newBranch))
+	return h.Update(func(cfg *config.HubConfig) error {
+		entry, exists := cfg.Branches[oldBranch]
+		if !exists {
+			return fmt.Errorf("branch %s not found in hub", oldBranch)
+		}
+		entry.Path = newPath
+		if entry.HopspaceBranch == oldBranch {
+			entry.HopspaceBranch = newBranch
+		}
+		delete(cfg.Branches, oldBranch)
+		cfg.Branches[newBranch] = entry
+		return nil
+	}, config.RenamedBranch(oldBranch, newBranch))
 }
 
 // BranchPath resolves a registered branch's worktree to an absolute
@@ -190,13 +237,4 @@ func (h *Hub) BranchPath(branchName string) string {
 		return ""
 	}
 	return absHubBranchPath(h.Path, b.Path)
-}
-
-// Save persists the hub config
-func (h *Hub) Save() error {
-	return h.save()
-}
-
-func (h *Hub) save(opts ...config.WriteOption) error {
-	return config.NewWriter(h.fs).WriteHubConfig(h.Path, h.Config, opts...)
 }

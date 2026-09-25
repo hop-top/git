@@ -165,8 +165,10 @@ func doctorHub(t *testing.T, fs afero.Fs, hubPath string, branches, present []st
 	writePruneHub(t, fs, hubPath, branches, present)
 	hub, err := hop.LoadHub(fs, hubPath)
 	require.NoError(t, err)
-	hub.Config.Repo.Mode = config.RepoModeGlobal
-	require.NoError(t, hub.Save())
+	require.NoError(t, hub.Update(func(cfg *config.HubConfig) error {
+		cfg.Repo.Mode = config.RepoModeGlobal
+		return nil
+	}))
 
 	hopspacePath := hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.RepoRef{Org: "test", Repo: "repo"})
 	hopspace, err := hop.InitHopspace(fs, hopspacePath,

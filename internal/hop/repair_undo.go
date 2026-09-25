@@ -79,8 +79,7 @@ func (b *RepairBackup) restoreHopJSON(backupDir string, m *RepairManifest) error
 	if want := m.Files["hop.json"]; want != "" && sha256Hex(data) != want {
 		return fmt.Errorf("hop.json sha256 mismatch")
 	}
-	dst := filepath.Join(b.hubPath, "hop.json")
-	return afero.WriteFile(b.fs, dst, data, 0644)
+	return writeHopJSONLocked(b.fs, b.hubPath, data)
 }
 
 func (b *RepairBackup) restorePointers(backupDir string, m *RepairManifest) error {

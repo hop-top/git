@@ -679,6 +679,13 @@ Each hub (workspace) has its own configuration.
 
 Example: `~/projects/myrepo/hop.json`
 
+Several git-hop commands can run in one hub at once. Each change to
+`hop.json` re-reads the file and rewrites it while holding a lock on
+`hop.json.lock` beside it, so one command never undoes another's change.
+The lock file exists only while a change is being written; the lock
+belongs to the process holding it and goes away when that process exits.
+A command that waits more than 30 seconds for the lock fails.
+
 ### Schema
 
 ```json

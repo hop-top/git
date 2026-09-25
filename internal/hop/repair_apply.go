@@ -121,24 +121,34 @@ func (a *Applier) recordBase(hubPath string, action *Action) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("load hub: %w", err)
 	}
-	branchName := branchKeyForPath(hub, hubPath, action.WorktreePath)
-	if branchName == "" {
-		return false, fmt.Errorf("cannot determine branch for %s from hop.json", action.WorktreePath)
+	var branchName, newBase string
+	err = hub.Update(func(cfg *config.HubConfig) error {
+		branchName = branchKeyForPath(cfg.Branches, hubPath, action.WorktreePath)
+		if branchName == "" {
+			return fmt.Errorf("cannot determine branch for %s from hop.json", action.WorktreePath)
+		}
+		b := cfg.Branches[branchName]
+		if b.Base != nil {
+			// Already set — either the planner raced with another run or
+			// this is a re-apply. Either way, nothing to do.
+			return errUnchanged
+		}
+		if action.NewValue == "" {
+			return fmt.Errorf("record-base action has empty NewValue for %s", branchName)
+		}
+		newBase = action.NewValue
+		b.Base = &newBase
+		cfg.Branches[branchName] = b
+		return nil
+	})
+	if err != nil {
+		if newBase != "" {
+			return true, fmt.Errorf("save hub: %w", err)
+		}
+		return false, err
 	}
-	b := hub.Config.Branches[branchName]
-	if b.Base != nil {
-		// Already set — either the planner raced with another run or
-		// this is a re-apply. Either way, nothing to do.
+	if newBase == "" {
 		return false, nil
-	}
-	if action.NewValue == "" {
-		return false, fmt.Errorf("record-base action has empty NewValue for %s", branchName)
-	}
-	newBase := action.NewValue
-	b.Base = &newBase
-	hub.Config.Branches[branchName] = b
-	if err := hub.Save(); err != nil {
-		return true, fmt.Errorf("save hub: %w", err)
 	}
 
 	reloaded, err := LoadHub(a.fs, hubPath)
@@ -222,31 +232,42 @@ func (a *Applier) updateHopJSON(hubPath string, action *Action) (bool, error) {
 	}
 	exists, _ := afero.DirExists(a.fs, action.WorktreePath)
 
-	branchInHub := branchKeyForPath(hub, hubPath, action.WorktreePath)
-	switch {
-	case branchInHub != "" && !exists:
-		delete(hub.Config.Branches, branchInHub)
-	case branchInHub == "" && exists:
-		branch := action.NewValue
-		if branch == "" {
-			return false, fmt.Errorf("no branch checked out at %s to record it under", action.WorktreePath)
+	changed := false
+	err = hub.Update(func(cfg *config.HubConfig) error {
+		branchInHub := branchKeyForPath(cfg.Branches, hubPath, action.WorktreePath)
+		switch {
+		case branchInHub != "" && !exists:
+			delete(cfg.Branches, branchInHub)
+		case branchInHub == "" && exists:
+			branch := action.NewValue
+			if branch == "" {
+				return fmt.Errorf("no branch checked out at %s to record it under", action.WorktreePath)
+			}
+			if other, ok := cfg.Branches[branch]; ok {
+				return fmt.Errorf("hop.json already lists branch %q at %s", branch, other.Path)
+			}
+			cfg.Branches[branch] = config.HubBranch{Path: action.WorktreePath, HopspaceBranch: branch}
+		default:
+			return errUnchanged
 		}
-		if other, ok := hub.Config.Branches[branch]; ok {
-			return false, fmt.Errorf("hop.json already lists branch %q at %s", branch, other.Path)
+		changed = true
+		return nil
+	})
+	if err != nil {
+		if changed {
+			return true, fmt.Errorf("save hub: %w", err)
 		}
-		hub.Config.Branches[branch] = config.HubBranch{Path: action.WorktreePath, HopspaceBranch: branch}
-	default:
-		return false, nil
+		return false, err
 	}
-	if err := hub.Save(); err != nil {
-		return true, fmt.Errorf("save hub: %w", err)
+	if !changed {
+		return false, nil
 	}
 
 	reloaded, err := LoadHub(a.fs, hubPath)
 	if err != nil {
 		return true, fmt.Errorf("post-action verify (reload): %w", err)
 	}
-	stillThere := branchKeyForPath(reloaded, hubPath, action.WorktreePath) != ""
+	stillThere := branchKeyForPath(reloaded.Config.Branches, hubPath, action.WorktreePath) != ""
 	if exists != stillThere {
 		return true, fmt.Errorf("post-action verify: hop.json mismatch (exists=%v, present=%v)", exists, stillThere)
 	}
@@ -331,8 +352,8 @@ func branchFromHubByPath(fs afero.Fs, hubPath, wtPath string) string {
 	return ""
 }
 
-func branchKeyForPath(hub *Hub, hubPath, wtPath string) string {
-	for name, b := range hub.Config.Branches {
+func branchKeyForPath(branches map[string]config.HubBranch, hubPath, wtPath string) string {
+	for name, b := range branches {
 		if absHubBranchPath(hubPath, b.Path) == wtPath {
 			return name
 		}
