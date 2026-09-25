@@ -2,7 +2,6 @@ package hop
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -43,7 +42,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	// 3. Fork Detection / Validation
 	// We need to verify that the remote branch shares history with our local compare branch.
 	// Initialize the fork hopspace directory
-	if err := os.MkdirAll(forkHopspacePath, 0755); err != nil {
+	if err := fs.MkdirAll(forkHopspacePath, 0755); err != nil {
 		return fmt.Errorf("failed to create fork hopspace: %v", err)
 	}
 

@@ -22,13 +22,15 @@ func UpdateCurrentSymlink(fs afero.Fs, hubPath, worktreePath string) error {
 	currentPath := filepath.Join(hubPath, currentSymlinkName)
 
 	// Remove existing symlink if it exists
-	if err := removeSymlinkIfExists(currentPath); err != nil {
+	if err := removeSymlinkIfExists(fs, currentPath); err != nil {
 		return err
 	}
 
-	// Create new symlink (using os.Symlink for real filesystem)
-	// Note: afero doesn't have full symlink support in the interface
-	if err := os.Symlink(relPath, currentPath); err != nil {
+	linker, ok := fs.(afero.Linker)
+	if !ok {
+		return fmt.Errorf("failed to create current symlink: %w", afero.ErrNoSymlink)
+	}
+	if err := linker.SymlinkIfPossible(relPath, currentPath); err != nil {
 		return fmt.Errorf("failed to create current symlink: %w", err)
 	}
 
@@ -39,8 +41,11 @@ func UpdateCurrentSymlink(fs afero.Fs, hubPath, worktreePath string) error {
 func GetCurrentSymlink(fs afero.Fs, hubPath string) (string, error) {
 	currentPath := filepath.Join(hubPath, currentSymlinkName)
 
-	// Read symlink target (using os.Readlink for real filesystem)
-	target, err := os.Readlink(currentPath)
+	reader, ok := fs.(afero.LinkReader)
+	if !ok {
+		return "", fmt.Errorf("failed to read current symlink: %w", afero.ErrNoReadlink)
+	}
+	target, err := reader.ReadlinkIfPossible(currentPath)
 	if err != nil {
 		return "", fmt.Errorf("failed to read current symlink: %w", err)
 	}
@@ -51,23 +56,19 @@ func GetCurrentSymlink(fs afero.Fs, hubPath string) (string, error) {
 // RemoveCurrentSymlink removes the "current" symlink from the hub (idempotent)
 func RemoveCurrentSymlink(fs afero.Fs, hubPath string) error {
 	currentPath := filepath.Join(hubPath, currentSymlinkName)
-	return removeSymlinkIfExists(currentPath)
+	return removeSymlinkIfExists(fs, currentPath)
 }
 
 // removeSymlinkIfExists removes a symlink if it exists (idempotent helper)
-func removeSymlinkIfExists(path string) error {
-	// Check if exists
-	_, err := os.Lstat(path)
-	if err != nil {
+func removeSymlinkIfExists(fs afero.Fs, path string) error {
+	if _, err := lstat(fs, path); err != nil {
 		if os.IsNotExist(err) {
-			// Doesn't exist, nothing to do
 			return nil
 		}
 		return fmt.Errorf("failed to stat symlink: %w", err)
 	}
 
-	// Remove it
-	if err := os.Remove(path); err != nil {
+	if err := fs.Remove(path); err != nil {
 		return fmt.Errorf("failed to remove symlink: %w", err)
 	}
 

@@ -268,7 +268,7 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 	mainPath := filepath.Join(hopsDir, defaultBranch)
 	_, err := g.Run("git", "-C", projectRoot, "worktree", "add", mainPath, defaultBranch)
 	if err != nil {
-		os.RemoveAll(projectRoot)
+		_ = fs.RemoveAll(projectRoot)
 		return fmt.Errorf("failed to create main worktree: %w", err)
 	}
 
