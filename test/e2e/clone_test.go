@@ -29,8 +29,10 @@ func TestClone_OutsideRepo(t *testing.T) {
 	t.Logf("Running git hop clone from %s", outsideDir)
 	out := env.RunGitHop(t, outsideDir, env.BareRepoPath)
 
-	if !strings.Contains(out, "Successfully cloned") {
-		t.Errorf("Expected success message, got: %s", out)
+	// Like git clone, a clone reports no result on stdout; its progress
+	// goes to stderr. RunGitHop fails the test on a non-zero exit.
+	if out != "" {
+		t.Errorf("clone wrote to stdout, want nothing: %s", out)
 	}
 
 	if _, err := os.Stat(expectedHubPath); err != nil {

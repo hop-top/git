@@ -113,9 +113,11 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		return fmt.Errorf("failed to get default branch: %v", err)
 	}
 
-	fmt.Printf("Cloning %s...\n", uri)
-	fmt.Printf("Project root: %s\n", projectRoot)
-	fmt.Printf("Default branch: %s\n", defaultBranch)
+	// Progress and next steps go to stderr, as git clone's do: clone
+	// reports no result on stdout, and -q leaves only errors.
+	output.Note("Cloning %s...", uri)
+	output.Note("Project root: %s", projectRoot)
+	output.Note("Default branch: %s", defaultBranch)
 
 	if err := cloneBareRepo(fs, g, uri, projectRoot, defaultBranch); err != nil {
 		return err
@@ -214,18 +216,19 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	}
 	worktreeDir := filepath.Dir(relWorktreePath)
 
-	fmt.Printf("\nSuccessfully cloned to %s\n", projectRoot)
-	fmt.Printf("\nProject structure:\n")
-	fmt.Printf("  %s/  (bare repository)\n", projectRoot)
-	fmt.Printf("    hop.json\n")
-	fmt.Printf("    %s/\n", worktreeDir)
-	fmt.Printf("      %s/           (worktree for current branch)\n", defaultBranch)
-
-	fmt.Printf("\nYou can now:\n")
-	fmt.Printf("  cd %s         # Work on current branch\n", mainWorktreePath)
-	fmt.Printf("  git hop add <branch>  # Add new branch\n")
-	fmt.Printf("  git hop <branch>      # Jump to worktree\n")
-	fmt.Printf("  git hop              # List all worktrees\n")
+	output.Note("Successfully cloned to %s", projectRoot)
+	output.Note("Project structure:\n"+
+		"  %s/  (bare repository)\n"+
+		"    hop.json\n"+
+		"    %s/\n"+
+		"      %s/  (worktree for current branch)",
+		projectRoot, worktreeDir, defaultBranch)
+	output.Hint("You can now:\n"+
+		"  cd %s  # Work on current branch\n"+
+		"  git hop add <branch>  # Add new branch\n"+
+		"  git hop <branch>      # Jump to worktree\n"+
+		"  git hop               # List all worktrees",
+		mainWorktreePath)
 
 	return nil
 }
@@ -238,7 +241,7 @@ func repoIDFor(org, repo string) string {
 }
 
 func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {
-	fmt.Println("Creating bare repository...")
+	output.Note("Creating bare repository...")
 
 	if err := g.CloneBare(uri, projectRoot); err != nil {
 		return fmt.Errorf("failed to create bare repository: %w", err)
@@ -375,7 +378,7 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	fmt.Printf("Created local configuration (hub+hopspace) at %s\n", cfgPath)
+	output.Note("Created local configuration (hub+hopspace) at %s", cfgPath)
 	return nil
 }
 
@@ -397,7 +400,7 @@ func registerProject(fs afero.Fs, org, repo, branch, worktreePath string) error 
 		return err
 	}
 
-	output.Info("Registered in global registry: %s:%s", repoKey, branch)
+	output.Note("Registered in global registry: %s:%s", repoKey, branch)
 
 	return nil
 }
@@ -419,6 +422,6 @@ func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch
 	if isGlobal {
 		location = "globally"
 	}
-	fmt.Printf("Initialized hopspace %s at %s\n", location, hopspacePath)
+	output.Note("Initialized hopspace %s at %s", location, hopspacePath)
 	return nil
 }
