@@ -324,7 +324,7 @@ Rules:
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.10): a MINOR bump adds
+- Result shapes are versioned together (currently 1.11): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
 - Under `--dry-run`, `init`, `remove`, `move`, `merge` and branch switch
   render the result the run would produce, in the same shape; `json` and `yaml` add
@@ -501,6 +501,7 @@ matching `fixed` (or `would-fix`) record, or any repair `failed`; see
 | `check` | string | `paths`, `hub`, `hopspace` (a stale data-home hopspace copy beside a default hub), `dependencies`, `worktrees`, `state` or `config` (a broken `managers.json`, a leftover `config.json` git-hop does not read, a leftover `hops.json` git-hop no longer uses, a `--global` `hop.*` key left by the old `global.json` migration, a retired `hop.*` setting, or the current hub's repository format). The published output schema lists all seven |
 | `subject` | string | What the record is about: a path, a branch, a dependency directory, or a git config key. `state` records about a worktree name the worktree's path (two hubs can each have a worktree of the same branch); only an entry without a path, kept from a state file an earlier release wrote, is named `repository:branch` |
 | `message` | string | Human-readable description; for repairs, the repair itself (`create data directory`) |
+| `fixable` | bool | *json/yaml only*; `issue` records only: `true` when `--fix` has a repair for it (which can still come out `failed`), `false` when it has none and the message or `hint:` says what to do instead (a broken `managers.json`, a state key collision, a missing origin fetch refspec, an unmerged branch's worktree path occupied by something else). Absent on other kinds |
 
 Columns: `kind check subject message`.
 

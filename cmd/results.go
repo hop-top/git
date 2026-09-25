@@ -26,7 +26,7 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.10"
+const resultSchemaVersion = "1.11"
 
 // addResult is the result of `git hop add`.
 type addResult struct {
@@ -88,6 +88,7 @@ type doctorRecord struct {
 	Check   string `json:"check" yaml:"check" table:"check" jsonschema:"description=Check that produced the record"`
 	Subject string `json:"subject" yaml:"subject" table:"subject" jsonschema:"description=What the record is about: a path / branch / repository:branch / dependency key"`
 	Message string `json:"message" yaml:"message" table:"message" jsonschema:"description=Human-readable description"`
+	Fixable *bool  `json:"fixable,omitempty" yaml:"fixable,omitempty" jsonschema:"description=issue only: true when --fix has a repair for it (which can still fail; see failed); false when it has none and the message or hint says what to do; absent on other kinds"`
 }
 
 // JSONSchemaExtend sets the schema's check enum from doctorChecks, so

@@ -973,6 +973,16 @@ is printed either way.
 
 ### Auto-fix
 
+Not every issue has a repair: a `managers.json` that does not parse, a
+state key collision, an origin without a fetch refspec (`git hop
+repair` restores it) or an unmerged branch's worktree path that
+something else occupies are left for you, with an `error:` or `hint:`
+saying what to do. The summary suggests `--fix` only when it can repair
+at least one issue found, says how many when it can repair only some,
+and otherwise points at the errors and hints. Each issue's `fixable` field in the structured result
+says the same. With `--fix`, the summary says some issues could not be
+fixed exactly when one is left.
+
 When issues are found, use `--fix` to automatically repair them:
 
 ```bash
