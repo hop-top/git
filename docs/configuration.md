@@ -851,7 +851,9 @@ state, of every repository), so no two worktrees get the same port:
   port in use; when the range runs out, the first free block is used.
 - Where two entries already hold one port, the hub set up first keeps it.
   The other hub gets new ports the next time its environment is generated
-  (`git hop env generate`), with a warning.
+  (`git hop env generate`), with a warning. Until then `git hop doctor`
+  lists the port (`--fix` does not re-port a running environment) and
+  `git hop env start` warns about it.
 
 `overrideDir` is where the branch's compose override is cached, when its
 compose file has hardcoded host ports: `$XDG_CACHE_HOME/git-hop/<org>/<repo>/<hub key>/<branch>`,

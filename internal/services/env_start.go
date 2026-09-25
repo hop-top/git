@@ -121,6 +121,7 @@ func StartEnv(fs afero.Fs, t EnvTarget, globalConfig *config.GlobalConfig, b bus
 	}
 
 	t.status("Environment Manager: %s", manager.Name)
+	warnPortCollisions(fs, t)
 
 	if t.HopspacePath != "" && t.Branch != "" {
 		t.status("Ensuring dependencies...")
@@ -171,4 +172,21 @@ func StartNewWorktreeEnv(fs afero.Fs, t EnvTarget, globalConfig *config.GlobalCo
 func WarnEnvNotStarted(err error, root string) {
 	output.WarnAlways("failed to start environment: %v", err)
 	output.Hint("the worktree is ready; start its environment with 'git hop env start' from %s", root)
+}
+
+// warnPortCollisions warns about each port t's worktree holds that a hub
+// set up earlier holds too. Start goes ahead: `env generate` re-ports.
+func warnPortCollisions(fs afero.Fs, t EnvTarget) {
+	if t.HopspacePath == "" || t.Branch == "" {
+		return
+	}
+	recs, _ := LoadEnvRecords(fs, t.HubPath)
+	self, found := recs.Self(t.HopspacePath, t.HubPath, t.Root, t.Branch)
+	if !found {
+		return
+	}
+	for _, c := range recs.Conflicts(self) {
+		output.Warn("port %d (%s) is also allocated to %s of %s, set up first; run 'git hop env generate' to allocate new ports",
+			c.Port, c.Service, c.Other.Branch, c.Other.Hub)
+	}
 }

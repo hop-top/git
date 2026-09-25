@@ -141,6 +141,7 @@ const (
 	doctorCheckPaths        = "paths"
 	doctorCheckHub          = "hub"
 	doctorCheckDependencies = "dependencies"
+	doctorCheckPorts        = "ports" // ports two worktrees hold, across every hub
 	doctorCheckWorktrees    = "worktrees"
 	doctorCheckState        = "state"
 	doctorCheckHopspace     = "hopspace" // stale data-home hopspace copies
@@ -155,6 +156,7 @@ var doctorChecks = []string{
 	doctorCheckHub,
 	doctorCheckHopspace,
 	doctorCheckDependencies,
+	doctorCheckPorts,
 	doctorCheckWorktrees,
 	doctorCheckState,
 	doctorCheckConfig,
@@ -244,6 +246,7 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 	hubPath, hubKept := checkHub(fs, g, cwd, opts, &r)
 	checkDependencies(fs, hubPath, opts, &r)
 	checkLegacyDepsStores(fs, hubPath, &r)
+	checkPorts(fs, hubPath, &r)
 	checkWorktreeState(fs, g, hubPath, opts, &r)
 	checkState(fs, g, hubPath, hubKept, opts, &r)
 	checkConfig(config.NewGlobalLoader(), hubPath, opts, &r)
