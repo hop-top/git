@@ -19,6 +19,13 @@ stderr '^hint: then run git hop init again$'
 ! stdout 'detached HEAD\)/'
 ! stderr '%!'
 
+# The regular layout's dry run refuses too, rather than planning to keep
+# the root as the working tree of a "(detached HEAD)" branch.
+! exec git-hop init --no-prompt --no-hooks --regular -n
+stderr '^fatal: HEAD is detached'
+! stdout 'Conversion plan'
+! stdout 'detached HEAD'
+
 # --- bare conversion: refused before the backup ---
 ! exec git-hop init --no-prompt --no-hooks
 stderr '^fatal: HEAD is detached'
