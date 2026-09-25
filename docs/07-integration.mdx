@@ -191,8 +191,10 @@ jobs:
       
       - name: Install git-hop
         run: |
-          go install github.com/jadb/git-hop@latest
-          echo "$HOME/go/bin" >> $GITHUB_PATH
+          git clone --depth 1 https://github.com/hop-top/git.git /tmp/git-hop
+          make -C /tmp/git-hop build
+          mkdir -p "$HOME/.local/bin" && mv /tmp/git-hop/git-hop "$HOME/.local/bin/"
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
       
       - name: Create hopspace
         run: |
@@ -220,14 +222,15 @@ jobs:
 
 ```yaml
 test:
-  image: golang:1.21
+  image: golang:1.26
   services:
     - docker:dind
   variables:
     GIT_HOP_AUTO_ENV_START: "true"
   script:
-    - go install github.com/jadb/git-hop@latest
-    - export PATH="$PATH:$HOME/go/bin"
+    - git clone --depth 1 https://github.com/hop-top/git.git /tmp/git-hop
+    - make -C /tmp/git-hop build
+    - export PATH="/tmp/git-hop:$PATH"
     - git hop origin/main
     - cd main
     - make test

@@ -220,7 +220,7 @@ func CheckHTTPEndpoint(t *testing.T, url string, expectedStatus int) {
 ### Follows Existing Patterns
 
 - Package naming: `docker_test`
-- Import style: Uses e2e package as `e2e "github.com/jadb/git-hop/test/e2e"`
+- Import style: Uses e2e package as `e2e "hop.top/git/test/e2e"`
 - Test structure: Setup → Execute → Verify → Cleanup
 - Assertions: Standard Go testing (no testify in e2e tests)
 - Helper pattern: `t.Helper()` for better stack traces

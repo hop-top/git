@@ -26,7 +26,7 @@ This shows all available components in action.
 ### Success Cards
 
 ```go
-import "github.com/jadb/git-hop/internal/output"
+import "hop.top/git/internal/output"
 
 card := output.SuccessCard("Operation Complete", []output.CardField{
     {Key: "Path", Value: "~/code/repo"},

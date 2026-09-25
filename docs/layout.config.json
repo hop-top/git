@@ -13,11 +13,11 @@
     },
     {
       "title": "GitHub",
-      "url": "https://github.com/jadb/git-hop"
+      "url": "https://github.com/hop-top/git"
     },
     {
       "title": "Releases",
-      "url": "https://github.com/jadb/git-hop/releases"
+      "url": "https://github.com/hop-top/git/releases"
     }
   ],
   "footer": {
@@ -27,15 +27,15 @@
         "links": [
           {
             "title": "GitHub",
-            "url": "https://github.com/jadb/git-hop"
+            "url": "https://github.com/hop-top/git"
           },
           {
             "title": "Releases",
-            "url": "https://github.com/jadb/git-hop/releases"
+            "url": "https://github.com/hop-top/git/releases"
           },
           {
             "title": "License",
-            "url": "https://github.com/jadb/git-hop/blob/main/LICENSE"
+            "url": "https://github.com/hop-top/git/blob/main/LICENSE"
           }
         ]
       }

@@ -20,25 +20,23 @@ Work on multiple branches in parallel without manual port setup, directory manag
 
 ### Install
 
-**From source** (requires Go 1.21+)
+**From source** (requires Go 1.26+)
 
 ```bash
-git clone https://github.com/jadb/git-hop.git
+git clone https://github.com/hop-top/git.git git-hop
 cd git-hop
 make build
 sudo mv git-hop /usr/local/bin/
 ```
 
+The binary must be named `git-hop` and sit on `PATH` for git to run it as
+`git hop`. Don't use `go install hop.top/git@latest`: it names the binary
+`git`, which shadows git itself.
+
 Verify installation:
 
 ```bash
 git hop --version
-```
-
-**From go install**
-
-```bash
-go install github.com/jadb/git-hop@latest
 ```
 
 ### First Run (60 seconds)
