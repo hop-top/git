@@ -117,6 +117,10 @@ Override default directory locations:
 | `XDG_CACHE_HOME` | Cache directory | `~/.cache` | `~/Library/Caches` |
 | `GIT_HOP_LOG_LEVEL` | Logging verbosity | `info` | `info` |
 | `GIT_HOP_AUTO_ENV_START` | Overrides `hop.env.autoStart` (`true`/`false`, git's boolean spellings); `--[no-]env-start` still wins | unset | unset |
+| `GIT_HOP_VERBOSE` | Debug switch, like git's `GIT_TRACE`: stands in for `-V` on every run. `true`/`yes`/`on` is `-V`, `false`/`no`/`off` or empty is off (any case), a number is the `-V` count (`2` is `-VV`); anything else prints a warning and counts as off. A `--verbose` on the command line wins | unset | unset |
+
+No other global flag has an environment variable: `-q`, `--format`,
+`--no-color` and the rest are set on the command line only.
 
 Example usage:
 

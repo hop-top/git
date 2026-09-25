@@ -1,0 +1,119 @@
+# GIT_HOP_VERBOSE is the one GIT_HOP_* variable read as a setting: a
+# debug switch, like git's GIT_TRACE. It stands in for -V from the very
+# start of a run, output setup included, so debug lines appear exactly as
+# they do under -V. Its value reads like git's GIT_TRACE: true/yes/on is
+# 1, false/no/off or empty is 0, any case, and a number is the -V count,
+# so 2 is -VV. Anything else is a warning, and 0. A --verbose given on
+# the command line wins.
+# No other global setting has an environment variable: GIT_HOP_QUIET,
+# GIT_HOP_FORMAT, GIT_HOP_OUTPUT, GIT_HOP_COLS and the like change nothing.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/gitignore .gitignore
+exec git add .gitignore
+exec git commit -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+cp $WORK/secret $WORK/hub/hops/main/.env
+
+# --- baseline: no debug lines ---
+exec git-hop add feat/plain
+stdout 'Copied 1 ignored entry'
+! stderr 'debug:'
+
+# --- -V prints the per-file debug line ---
+exec git-hop -V add feat/flag
+stderr '^debug: copied \.env$'
+
+# --- GIT_HOP_VERBOSE=1 behaves as -V ---
+env GIT_HOP_VERBOSE=1
+exec git-hop add feat/env1
+stderr '^debug: copied \.env$'
+
+# --- GIT_HOP_VERBOSE=2 behaves as -VV ---
+env GIT_HOP_VERBOSE=2
+exec git-hop add feat/env2
+stderr '^debug: copied \.env$'
+
+# --- boolean words, any case, as git reads GIT_TRACE ---
+env GIT_HOP_VERBOSE=TRUE
+exec git-hop add feat/env-true
+stderr '^debug: copied \.env$'
+env GIT_HOP_VERBOSE=on
+exec git-hop add feat/env-on
+stderr '^debug: copied \.env$'
+env GIT_HOP_VERBOSE=Off
+exec git-hop add feat/env-off
+stdout 'Copied 1 ignored entry'
+! stderr 'debug:'
+
+# --- anything else: a warning naming the variable, and no debug lines ---
+env GIT_HOP_VERBOSE=loud
+exec sh -c 'git-hop add feat/env-loud; echo "exit=$?"'
+stdout '^exit=0$'
+stderr '^warning: GIT_HOP_VERBOSE=loud is not a boolean or a -V count; ignored$'
+! stderr 'debug:'
+exec git-hop -V list
+stderr 'GIT_HOP_VERBOSE=loud'
+
+# --- the flag wins over the variable, both ways ---
+env GIT_HOP_VERBOSE=1
+exec git-hop --verbose=0 add feat/flag-off
+stdout 'Copied 1 ignored entry'
+! stderr 'debug:'
+env GIT_HOP_VERBOSE=0
+exec git-hop -V add feat/flag-on
+stderr '^debug: copied \.env$'
+
+# --- the variable also reaches reads after output setup ---
+# An unwritable event sink warns only when verbose.
+exec git config --global hop.events.sink jsonl
+exec git config --global hop.events.path $WORK/blocker/events.jsonl
+env GIT_HOP_VERBOSE=
+exec git-hop remove feat/plain --no-prompt
+! stderr 'event sink'
+env GIT_HOP_VERBOSE=1
+exec git-hop remove feat/flag --no-prompt
+stderr '(?i)warn.*event sink .*blocker'
+exec git config --global --unset hop.events.sink
+exec git config --global --unset hop.events.path
+env GIT_HOP_VERBOSE=
+
+# --- no other global setting has a variable ---
+env GIT_HOP_QUIET=1
+exec git-hop add feat/quiet
+stdout 'Copied 1 ignored entry'
+env GIT_HOP_QUIET=
+
+env GIT_HOP_FORMAT=json
+exec git-hop list
+! stdout '^\['
+stdout 'feat/quiet'
+env GIT_HOP_FORMAT=
+
+env GIT_HOP_OUTPUT=$WORK/out.json
+exec git-hop list --format json
+stdout '"branch"'
+! exists $WORK/out.json
+env GIT_HOP_OUTPUT=
+
+env GIT_HOP_COLS=branch
+exec git-hop list --format json
+stdout '"path"'
+env GIT_HOP_COLS=
+
+env GIT_HOP_NO_COLOR=1
+env GIT_HOP_VERBOSE=
+exec git-hop add feat/nocolor
+! stderr 'debug:'
+
+-- gitignore --
+.env
+-- secret --
+TOKEN=1
+-- blocker --
+a regular file, so nothing can be created beneath it

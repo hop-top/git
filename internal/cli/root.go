@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -44,9 +45,11 @@ var (
 )
 
 // verboseEnabled reports whether kit's --verbose count flag was raised at
-// least once (-V, -VV, ...). Reads from kit's viper key "verbose"; safe to
-// call before flag parsing (returns false). Replaces the v0.3-era boolean
-// package var that collided with kit v0.4's default --verbose -V Count flag.
+// least once (-V, -VV, ...), or GIT_HOP_VERBOSE stands in for it (see
+// applyVerboseEnv). Reads from kit's viper key "verbose"; safe to call
+// before flag parsing (returns false before the pre-run). Replaces the
+// v0.3-era boolean package var that collided with kit v0.4's default
+// --verbose -V Count flag.
 func verboseEnabled() bool {
 	if Root == nil || Root.Viper == nil {
 		return false
@@ -211,15 +214,19 @@ func init() {
 			// Direct assignment to RootCmd.PersistentPreRunE silently
 			// overwrites kit's built-in chain (chdir → identity → peer
 			// init). The Hooks slot composes additively. Order matters:
-			// setupOutputMode initializes the output mode first so the
-			// -c/--config warning renders in it.
+			// GIT_HOP_VERBOSE is applied first, so output setup sees
+			// it; setupOutputMode comes next so the warnings that follow
+			// (a bad GIT_HOP_VERBOSE, -c/--config) render in it.
 			PrePersistentRunE: func(cmd *cobra.Command, args []string) error {
+				verboseWarning := applyVerboseEnv(Root.Viper)
 				setupOutputMode(cmd)
+				if verboseWarning != "" {
+					output.Warn("%s", verboseWarning)
+				}
 				if err := checkDryRunSupported(cmd); err != nil {
 					output.FatalCode(exitUsage, "%s", err)
 				}
 				warnIgnoredConfigFlag(cmd)
-				bindEnv(Root.Viper)
 				attachEventSinks(cmd)
 				if cmd.Name() != "upgrade" {
 					upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
@@ -607,11 +614,42 @@ func warnIgnoredConfigFlag(cmd *cobra.Command) {
 		"(for a one-off override: git -c hop.<key>=<value> hop ...)")
 }
 
-// bindEnv lets GIT_HOP_* environment variables stand in for settings read
-// from v after the pre-run, as they always have.
-func bindEnv(v *viper.Viper) {
-	v.SetEnvPrefix("GIT_HOP")
-	v.AutomaticEnv()
+// verboseEnv is the one GIT_HOP_* variable read as a setting: a debug
+// switch, like git's GIT_TRACE. Every other setting lives in git config
+// hop.* or on the command line.
+const verboseEnv = "GIT_HOP_VERBOSE"
+
+// parseVerboseEnv reads a verboseEnv value the way git reads its
+// GIT_TRACE-style switches: true/yes/on is 1 and false/no/off or empty
+// is 0, in any case, and a number is the -V count, so 2 is -VV. ok is
+// false for anything else.
+func parseVerboseEnv(raw string) (count int, ok bool) {
+	switch strings.ToLower(raw) {
+	case "", "false", "no", "off":
+		return 0, true
+	case "true", "yes", "on":
+		return 1, true
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n < 0 {
+		return 0, false
+	}
+	return n, true
+}
+
+// applyVerboseEnv lets verboseEnv stand in for --verbose in v, as the
+// key's default: viper resolves a flag given on the command line first,
+// so a --verbose on the command line wins. The pre-run applies it before
+// output setup, so every read of the key sees it. It returns the warning
+// for a value parseVerboseEnv rejects, which counts as 0.
+func applyVerboseEnv(v *viper.Viper) (warning string) {
+	raw := os.Getenv(verboseEnv)
+	n, ok := parseVerboseEnv(raw)
+	if !ok {
+		warning = fmt.Sprintf("%s=%s is not a boolean or a -V count; ignored", verboseEnv, raw)
+	}
+	v.SetDefault("verbose", n)
+	return warning
 }
 
 // buildHookMirrorRun returns a closure that resolves the hooks install
