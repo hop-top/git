@@ -461,8 +461,12 @@ that name is taken), then restores the backup into the freed location.
 Nothing is deleted; restore prints the moved-aside path with the commands
 to remove it or swap it back. If the move fails, restore stops without
 changing anything. A backup stored inside the location it restores to is
-refused even with `--force`; move the backup elsewhere first. When a
-backup is kept, init prints the restore command as a hint.
+refused even with `--force`; move the backup elsewhere first, and so is
+a backup missing its `original/` copy. With `-n`/`--dry-run`, restore
+makes the same checks and refuses the same way, with the same exit
+status, then prints the target, whether it is occupied, and the
+`.pre-restore-<UTC time>` name it would be moved to, changing nothing.
+When a backup is kept, init prints the restore command as a hint.
 
 #### Retention
 

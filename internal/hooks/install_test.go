@@ -492,3 +492,43 @@ func TestResolveMode_Precedence(t *testing.T) {
 		t.Fatalf("default should be prompt, got %q", got)
 	}
 }
+
+// A dry run reports the hooks a real run would install or ask about,
+// and writes nothing: not even the hopspace hooks directory.
+func TestMirror_DryRunWritesNothing(t *testing.T) {
+	for _, mode := range []string{ModeCopy, ModeSymlink, ModePrompt} {
+		t.Run(mode, func(t *testing.T) {
+			fs := afero.NewMemMapFs()
+			dataHome := "/data"
+			withDataHome(t, dataHome)
+			wt := "/wt"
+			writeHook(t, fs, wt, "post-worktree-add", "#!/bin/sh\necho hi\n", 0755)
+
+			res, err := MirrorCommittedHooks(fs, MirrorOpts{
+				WorktreePath: wt,
+				RepoID:       testRepoID,
+				Mode:         mode,
+				Stdin:        strings.NewReader("y\n"),
+				Stdout:       io.Discard,
+				DryRun:       true,
+			})
+			if err != nil {
+				t.Fatalf("err: %v", err)
+			}
+			want := "would-install"
+			if mode == ModePrompt {
+				want = "would-prompt"
+			}
+			if len(res.Hooks) != 1 || res.Hooks[0].Status != want ||
+				res.Hooks[0].Target != hopspaceHookPath(dataHome, "post-worktree-add") {
+				t.Fatalf("outcomes = %+v, want one %s to the hopspace", res.Hooks, want)
+			}
+			if res.Installed != 0 {
+				t.Errorf("dry run counted %d installed", res.Installed)
+			}
+			if exists, _ := afero.Exists(fs, filepath.Dir(hopspaceHookPath(dataHome, "x"))); exists {
+				t.Error("dry run created the hopspace hooks directory")
+			}
+		})
+	}
+}
