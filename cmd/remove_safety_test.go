@@ -435,3 +435,84 @@ func TestInspectBranchSafety_ContentEquivalenceFallback(t *testing.T) {
 		}
 	})
 }
+
+// cherryKey builds the mock key for the patch-equivalence probe issued by
+// branchPatchesInDefault.
+func cherryKey(dir, branch, defaultBranch string) string {
+	return dir + ":git cherry " + defaultBranch + " " + branch
+}
+
+// TestBranchPatchesInDefault pins the patch-equivalence probe: a branch
+// counts as landed only when git cherry lists at least one commit and
+// marks every one '-' (an equivalent change is on default). Anything
+// else, including an error or empty output, fails closed.
+func TestBranchPatchesInDefault(t *testing.T) {
+	const (
+		dir    = "/wt"
+		branch = "feature"
+		def    = "main"
+	)
+	key := cherryKey(dir, branch, def)
+
+	cases := []struct {
+		name string
+		out  string
+		err  error
+		want bool
+	}{
+		{"every commit patch-equivalent", "- aaa\n- bbb\n", nil, true},
+		{"one commit not on default", "- aaa\n+ bbb\n", nil, false},
+		{"no commit on default", "+ aaa\n", nil, false},
+		{"no commits listed: fail closed", "", nil, false},
+		{"whitespace only: fail closed", "  \n", nil, false},
+		{"cherry fails: fail closed", "", errors.New("unknown commit main"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := mocks.NewMockGit()
+			m.Runner.Responses[key] = tc.out
+			if tc.err != nil {
+				m.Runner.Errors[key] = tc.err
+			}
+			if got := branchPatchesInDefault(m, dir, branch, def); got != tc.want {
+				t.Fatalf("branchPatchesInDefault(%q) = %v, want %v", tc.out, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestInspectBranchSafety_PatchEquivalenceFallback covers a rebase-merged
+// branch whose lines main changed again later: topology says ahead and
+// the in-memory merge differs from main, but git cherry shows every
+// commit on main. That is merged; one '+' commit is not.
+func TestInspectBranchSafety_PatchEquivalenceFallback(t *testing.T) {
+	const (
+		dir    = "/wt"
+		branch = "feature"
+		def    = "main"
+	)
+	mergedKey := dir + ":git rev-list --count " + branch + " --not " + def
+	verifyOriginKey := dir + ":git rev-parse --verify refs/remotes/origin/" + branch
+
+	for _, tc := range []struct {
+		name   string
+		cherry string
+		want   bool
+	}{
+		{"all commits patch-equivalent: merged", "- aaa\n- bbb\n", true},
+		{"one commit unshipped: not merged", "- aaa\n+ bbb\n", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := mocks.NewMockGit()
+			m.Runner.Responses[mergedKey] = "2"
+			m.Runner.Errors[verifyOriginKey] = errors.New("unknown ref")
+			m.Runner.Responses[contentProbeKey(dir, branch, def)] = "bbb222"
+			m.Runner.Responses[defaultTreeKey(dir, def)] = "aaa111"
+			m.Runner.Responses[cherryKey(dir, branch, def)] = tc.cherry
+
+			if got := inspectBranchSafety(m, dir, branch, def); got.Merged != tc.want {
+				t.Fatalf("Merged = %v, want %v (%+v)", got.Merged, tc.want, got)
+			}
+		})
+	}
+}

@@ -241,8 +241,8 @@ func resolveCompareBranch(cfg *config.HubConfig, b config.HubBranch) string {
 // Squash- and rebase-merges produce ahead>0 in rev-list: the shipped
 // commits were rewritten onto default under new SHAs, so the branch tip
 // stays unreachable. Those are caught separately, in the ahead>0 branch
-// below, by branchContentMergedInto — a content comparison rather than a
-// reachability one.
+// below, by branchWorkLandedIn — content and patch-id comparisons rather
+// than a reachability one.
 //
 // The two probes are deliberately not interchangeable. The remote-
 // deletion fingerprint is required for ahead==0 because content
@@ -289,11 +289,11 @@ func getBranchSyncStatus(g git.GitInterface, dir, branch, defaultBranch string) 
 		// ahead > 0. Topology alone cannot see a squash- or rebase-merge:
 		// those land rewritten commits on default, leaving the original
 		// tip unreachable and the ahead count nonzero even though the work
-		// shipped. A content comparison can, and it is safe to consult
-		// here precisely because ahead > 0 — the unborn/reset branches
+		// shipped. Content and patch-id comparisons can, and they are safe
+		// to consult here precisely because ahead > 0 — the unborn/reset branches
 		// that make the ahead==0 case ambiguous (see above) all have zero
 		// commits of their own and never reach this branch.
-		if branchContentMergedInto(g, dir, branch, defaultBranch) {
+		if branchWorkLandedIn(g, dir, branch, defaultBranch) {
 			if behind == "0" {
 				label = "merged"
 			} else {
