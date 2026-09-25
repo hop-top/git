@@ -441,6 +441,10 @@ git hop env gc [flags]
 **What it does:**
 - Scans all worktrees to identify orphaned dependencies
 - Shows dependency info including last used time and size
+- Also lists the cached compose overrides
+  (`$XDG_CACHE_HOME/git-hop/<org>/<repo>/...`) that no worktree of any hub
+  git-hop records uses, and removes them with the rest: only the override
+  and its metadata file are deleted, then the directories left empty
 - Prompts for confirmation before deletion (unless `--no-prompt` / `--force`)
 - Reports total space reclaimed
 

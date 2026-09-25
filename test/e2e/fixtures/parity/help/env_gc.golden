@@ -7,7 +7,8 @@ This command:
 4. Optionally deletes orphaned dependencies to free up disk space
 
 It also removes the dependency stores earlier releases kept under the
-data home, once no worktree of any hub git-hop knows of links into them.
+data home, once no worktree of any hub git-hop knows of links into them,
+and the cached compose overrides no worktree of any such hub uses.
 
 Use --dry-run to preview what would be deleted without actually deleting.
 Use --no-prompt (or --force) to skip the confirmation prompt; without it a
