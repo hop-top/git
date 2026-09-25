@@ -61,48 +61,40 @@ once and then ignored.
 
 ## Hub Configuration
 
-Each hub has a `hop.json` file in the hub directory:
+Each hub has a `hop.json`. git-hop writes and maintains `repo` and
+`branches`; the `settings` object is yours:
 
 ```json
 {
-  "port_base": 10000,
-  "port_limit": 5000,
-  "services": {
-    "enabled": true
-  }
-}
-```
-
-### Creating Hub Config
-
-```bash
-# Edit hub config manually
-cd org/repo
-vim hop.json
-```
-
-## Hopspace Configuration
-
-Each hopspace can have its own `hop.json` for branch-specific settings:
-
-```json
-{
-  "ports": {
-    "web": 8080,
-    "db": 5432,
-    "cache": 6379
-  },
-  "volumes": {
-    "db": "postgres_data"
-  },
-  "services": {
-    "web": {
-      "image": "nginx:alpine",
-      "port": 8080
+  "settings": {
+    "compareBranch": "develop",
+    "environmentManager": "docker-compose",
+    "environmentConfig": {
+      "hooks": {
+        "preStart": ["scripts/load-secrets.sh"],
+        "postStop": ["scripts/cleanup.sh"]
+      }
     }
   }
 }
 ```
+
+| Key | Effect |
+|-----|--------|
+| `settings.compareBranch` | Branch `status` and `list` compare worktrees against when a worktree records no base |
+| `settings.environmentManager` | Environment manager `env start`/`stop` use instead of detecting one; `none` disables it |
+| `settings.environmentConfig.hooks` | Commands run around `env start`/`stop`: `preStart`, `postStart`, `preStop`, `postStop` |
+
+See [Configuration](configuration.md#hub-configuration) for the full file.
+
+## Hopspace Configuration
+
+The hopspace keeps its own files: in the hub for a default clone, under
+`$GIT_HOP_DATA_HOME/<org>/<repo>/` for a `--global` one. Its `hop.json` can
+override package manager install commands per repository or per branch (see
+[Package Manager Overrides](package-manager-overrides.md)); `ports.json`
+holds the port range (see [Port range](#port-range)). git-hop maintains the
+rest.
 
 ## Configuration Options
 
@@ -126,54 +118,29 @@ git config hop.env.autoStart true            # this repository only
 `git hop env start` does; a worktree without an environment is skipped, and
 a failed start only warns.
 
-### port_base / port_limit
+### Port range
 
-Configure port allocation range:
-
-```json
-{
-  "port_base": 10000,
-  "port_limit": 5000
-}
-```
-
-This allocates ports from `10000` to `14999`.
-
-## Docker Configuration
-
-Configure Docker service behavior:
+Ports come from the range in the hopspace's `ports.json`, which git-hop
+creates the first time it allocates ports:
 
 ```json
 {
-  "docker": {
-    "compose": "docker-compose",
-    "project_prefix": "git-hop",
-    "network": "git-hop",
-    "remove_orphans": true
-  }
+  "allocationMode": "incremental",
+  "baseRange": { "start": 10000, "end": 20000 }
 }
 ```
 
-### Service Detection
+Edit `baseRange` to move the range. `allocationMode` is `incremental` (the
+next free block after the highest port in use) or any other value for a
+block chosen by hashing the branch name.
 
-git-hop detects services from:
+## Docker Services
 
-```bash tab="docker-compose.yml"
-# Automatically detected
-version: '3.8'
-services:
-  web:
-    image: nginx:alpine
-```
-
-```bash tab="git-hop/services.yml"
-# Custom service definition
-services:
-  web:
-    image: nginx:alpine
-    ports:
-      - 8080
-```
+A worktree has a Docker environment when it contains `compose.yaml`,
+`compose.yml`, `docker-compose.yml` or `docker-compose.yaml` (first match
+wins). git-hop allocates a port per service and writes them, with the volume
+paths, to the worktree's `.env` as `HOP_PORT_<SERVICE>` and
+`HOP_VOLUME_<NAME>`. There is no Docker section in `hop.json`.
 
 ## Examples
 
@@ -191,32 +158,12 @@ repository:
 git config hop.env.autoStart true
 ```
 
-### Team Config
-
-Shared configuration for team members:
-
-```json
-{
-  "port_base": 20000,
-  "port_limit": 10000,
-  "docker": {
-    "project_prefix": "mycompany"
-  }
-}
-```
-
 ### CI Config
 
-Optimized for CI/CD (set `GIT_HOP_AUTO_ENV_START=true` in the job to start
-services on add and clone):
+Start services on add and clone in a CI job without touching git config:
 
-```json
-{
-  "docker": {
-    "remove_orphans": true,
-    "timeout": 300
-  }
-}
+```bash
+export GIT_HOP_AUTO_ENV_START=true
 ```
 
 ## Validating Configuration
@@ -227,11 +174,8 @@ Check your configuration is valid:
 git hop doctor
 ```
 
-This will:
-- Parse all config files
-- Check for conflicts
-- Validate port ranges
-- Verify service definitions
+It checks paths, the hub and its hopspace, dependencies, worktrees, state
+and git config, and reports what it finds.
 
 ## What's Next?
 

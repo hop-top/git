@@ -35,7 +35,7 @@ Define default package managers in `~/.config/git-hop/managers.json`:
 
 ### 2. Repository-Level Overrides
 
-Override install commands for all branches in a repository in `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`:
+Override install commands for all branches in a repository in the hopspace `hop.json` (the hub's own `hop.json`; `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json` for a hub cloned with `--global`):
 
 ```json
 {
@@ -63,7 +63,7 @@ This overrides the global npm config for **all branches** in this repository.
 
 ### 3. Branch-Level Overrides
 
-Override install commands for specific branches/worktrees in `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`:
+Override install commands for specific branches/worktrees in the same `hop.json`:
 
 ```json
 {
@@ -292,7 +292,8 @@ Package manager overrides affect these commands:
 
 ### Where is hop.json located?
 
-The hopspace configuration is at:
+The hopspace configuration is the hub's own `hop.json`. For a hub cloned
+with `--global` (its `hop.json` has `"repo": {"mode": "global"}`) it is:
 ```
 $GIT_HOP_DATA_HOME/<org>/<repo>/hop.json
 ```
@@ -320,7 +321,8 @@ type PackageManagerOverride struct {
 
 ```
 ~/.config/git-hop/managers.json        # Global package / environment managers
-$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json   # Hopspace config
+<hub>/hop.json                             # Hopspace config (default clone)
+$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json   # Hopspace config (--global clone)
 ```
 
 ### Example Full Configuration

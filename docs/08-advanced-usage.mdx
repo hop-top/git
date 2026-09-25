@@ -67,79 +67,23 @@ fi
 
 The from-state variables are **absent, not empty**, when there was no previous worktree.
 
-> **Environment services**: hooks around `git hop env start` / `env stop` are a *different* mechanism — shell command strings declared in `hop.json` under `settings.environment.hooks`, not files. A file named `post-env-start` will never fire. See [Hooks System](https://github.com/hop-top/git/blob/main/docs/hooks.md).
+> **Environment services**: hooks around `git hop env start` / `env stop` are a *different* mechanism — shell command strings declared in `hop.json` under `settings.environmentConfig.hooks`, not files. A file named `post-env-start` will never fire. See [Hooks System](https://github.com/hop-top/git/blob/main/docs/hooks.md).
 
-## Port Manual Allocation
+## Port Range
 
-Override automatic port allocation for specific branches.
+git-hop picks each branch's ports from the range in the hopspace's
+`ports.json` (in the hub for a default clone):
 
-### Per-Branch Port Configuration
-
-```bash tab="hop.json"
+```json
 {
-  "ports": {
-    "main": {
-      "web": 8080,
-      "db": 5432,
-      "cache": 6379
-    },
-    "feature-x": {
-      "web": 8081,
-      "db": 5433,
-      "cache": 6380
-    }
-  }
+  "allocationMode": "incremental",
+  "baseRange": { "start": 20000, "end": 30000 }
 }
 ```
 
-### Port Range Override
-
-```bash tab="hop.json"
-{
-  "port_base": 20000,
-  "port_limit": 10000
-}
-```
-
-This allocates ports from 20000 to 29999.
-
-## Service Templates
-
-Create reusable service configurations.
-
-### Template Variables
-
-Templates support variable substitution:
-
-```bash tab="Template"
-# .git-hop/services.template.yml
-version: '3.8'
-services:
-  ${SERVICE_NAME}:
-    image: ${IMAGE_NAME}:${VERSION}
-    ports:
-      - "${PORT}:80"
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-      - CACHE_URL=${CACHE_URL}
-```
-
-```bash tab="Variables"
-# hop.json
-{
-  "services": {
-    "template": "services.template.yml",
-    "variables": {
-      "SERVICE_NAME": "web",
-      "IMAGE_NAME": "myapp",
-      "VERSION": "latest",
-      "PORT": 8080,
-      "DATABASE_URL": "postgresql://localhost:5432",
-      "CACHE_URL": "redis://localhost:6379"
-    }
-  }
-}
-```
+A worktree keeps the ports its `branches` entry records each time its
+environment is generated; only new ports come from the range. See
+[Configuration](configuration.md#ports-configuration).
 
 ## Cross-Repo Workflows
 
@@ -163,39 +107,6 @@ git hop feature-x
 
 cd ../shared-lib
 git hop bugfix-123
-```
-
-### Service Communication
-
-Configure services to communicate across hopspaces:
-
-```bash tab="Main Project"
-# main-project/hop.json
-{
-  "services": {
-    "main_project": {
-      "ports": {
-        "api": 8080
-      }
-    }
-  }
-}
-```
-
-```bash tab="Dependency"
-# shared-lib/hop.json
-{
-  "services": {
-    "shared_lib": {
-      "ports": {
-        "api": 8081
-      },
-      "environment": {
-        "DEPENDENCY_URL": "http://localhost:8080"
-      }
-    }
-  }
-}
 ```
 
 ## Troubleshooting
@@ -222,15 +133,15 @@ git hop doctor
 View hopspace details:
 
 ```bash
-cat ~/.local/share/git-hop/github.com/org/my-project/hop.json
+cat hop.json   # in the hub; a --global hub's hopspace is under $GIT_HOP_DATA_HOME/<org>/<repo>/
 ```
 
 ### List All Hopspaces
 
-Find all hopspaces across repositories:
+Find the hopspaces of `--global` hubs:
 
 ```bash
-find ~/.local/share/git-hop -name "hop.json" -exec dirname {} \;
+find "$GIT_HOP_DATA_HOME" -name "hop.json" -exec dirname {} \;
 ```
 
 ### Orphaned Resources
@@ -256,8 +167,8 @@ lsof -i :8080
 # Kill the process
 kill -9 <PID>
 
-# Or reallocate ports in hop.json
-vim ~/.local/share/git-hop/github.com/org/my-project/hop.json
+# Or move the port range in the hopspace's ports.json
+vim ports.json
 ```
 
 ### Worktree Corruption

@@ -175,7 +175,7 @@ Git Hop resolves install commands in this order (highest priority first):
 
 ### Repository-Level Overrides
 
-Override install commands for **all branches** in a repository by editing the hopspace config at `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`:
+Override install commands for **all branches** in a repository by editing the hopspace `hop.json` (the hub's own `hop.json`; `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json` for a hub cloned with `--global`):
 
 ```json
 {
@@ -314,7 +314,8 @@ The install command only affects **how** dependencies are installed when the cac
 
 ### Finding Your hop.json
 
-The hopspace configuration file is located at:
+The hopspace configuration is the hub's own `hop.json`. For a hub cloned
+with `--global` (its `hop.json` has `"repo": {"mode": "global"}`) it is:
 ```
 $GIT_HOP_DATA_HOME/<org>/<repo>/hop.json
 ```

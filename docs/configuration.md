@@ -573,9 +573,9 @@ right before an early exit can be lost.
 
 ## Hopspace Configuration
 
-**This file is managed automatically by git-hop. Do not edit it manually.**
-
-Each repository has its own hopspace configuration that tracks branches and metadata. You won't need to touch this; git-hop maintains it.
+Each repository has its own hopspace configuration that tracks branches and
+metadata. git-hop maintains it; the only part meant for editing is
+`packageManagers` (see [Package Manager Overrides](package-manager-overrides.md)).
 
 ### Location
 
@@ -630,6 +630,8 @@ it, and `git hop doctor` reports it as a warning (check `hopspace`).
 | `branches[].path` | string | Absolute path to the worktree |
 | `branches[].lastSync` | string | ISO 8601 timestamp of last sync |
 | `forks` | object | Fork repositories (for PR testing) |
+| `packageManagers.<pm>.installCmd` | array | Install command for package manager `<pm>` in this repository |
+| `branches[].packageManagers.<pm>.installCmd` | array | The same for one branch; wins over the repository's |
 
 ## Hub Configuration
 
@@ -663,9 +665,14 @@ Example: `~/projects/myrepo/hop.json`
   },
   "settings": {
     "compareBranch": "main",
-    "envPatterns": ["*.env", ".env.*"]
-  },
-  "migrated": true
+    "environmentManager": "docker-compose",
+    "environmentConfig": {
+      "hooks": {
+        "preStart": ["scripts/load-secrets.sh"],
+        "postStop": ["scripts/cleanup.sh"]
+      }
+    }
+  }
 }
 ```
 
@@ -678,9 +685,12 @@ Example: `~/projects/myrepo/hop.json`
 | `branches[].hopspaceBranch` | string | Corresponding branch name in hopspace |
 | `branches[].fork` | string | Fork URI if this is a fork branch |
 | `branches[].task` | string | Task id recorded by `git hop add --task`; omitted when none |
-| `settings.compareBranch` | string | Default branch for comparisons |
-| `settings.envPatterns` | array | Glob patterns for environment files |
-| `migrated` | boolean | Whether this hub has been migrated to the registry system |
+| `branches[].base` | string | Branch the worktree was created from; `status` and `list` compare against it |
+| `settings.compareBranch` | string | Comparison branch for worktrees without a `base`; default `repo.defaultBranch` |
+| `settings.environmentManager` | string | Environment manager `env start`/`stop` use, by name (built-in `docker-compose` or one from `managers.json`); `none` disables it. Unset: detected from the worktree's files |
+| `settings.environmentConfig.hooks` | object | Command lists `preStart`, `postStart`, `preStop`, `postStop` run around `env start`/`stop` |
+| `settings.envPatterns` | array | Written by git-hop with its defaults; not read |
+| `migrated` | boolean | Legacy; not read |
 | `repo.mode` | string | `global` when cloned with `--global`: the hopspace lives in `$GIT_HOP_DATA_HOME/<org>/<repo>`. Omitted by default, when the hub is its own hopspace |
 
 ## State Tracking
@@ -812,6 +822,8 @@ Tracks shared dependencies across worktrees. See [Dependency Sharing](dependency
 
 Port and volume allocations are recorded in the hopspace: `<hub>` for a
 default clone, `$GIT_HOP_DATA_HOME/<org>/<repo>` for a `--global` one.
+git-hop creates both files the first time it generates a worktree's Docker
+environment.
 
 ### Ports Configuration
 
@@ -822,7 +834,7 @@ default clone, `$GIT_HOP_DATA_HOME/<org>/<repo>` for a `--global` one.
   "allocationMode": "incremental",
   "baseRange": {
     "start": 10000,
-    "end": 15000
+    "end": 20000
   },
   "branches": {
     "main": {
@@ -841,6 +853,13 @@ default clone, `$GIT_HOP_DATA_HOME/<org>/<repo>` for a `--global` one.
   "services": ["api", "db", "redis"]
 }
 ```
+
+| Field | Description |
+|-------|-------------|
+| `allocationMode` | `incremental` (the default): new ports go after the highest port in use. `hash` (any other value): where the repository, hub and branch hash to |
+| `baseRange.start` / `baseRange.end` | Port range new ports come from; default `10000` / `20000`. Edit to move it |
+| `branches` | One entry per worktree (see below) |
+| `services` | Service names ports are allocated for |
 
 An entry is keyed by branch in a hub's own hopspace, and by worktree path
 in a `--global` hopspace, which every `--global` hub of the repository
@@ -916,21 +935,18 @@ Settings follow a hierarchy — git-hop uses the first one it finds:
 
 1. **Environment variables** — for one command
 2. **Hub config** (`<hub>/hop.json`) — for one workspace
-3. **Hopspace config** (`$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json`) — for one repository
+3. **Hopspace config** (the hub's `hop.json`, or `$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json` for a `--global` hub) — for one repository
 4. **git config** (`hop.*` keys; `--global` for all repositories, repo-local for one)
 5. **Built-in defaults** — fallback
 
-**Example:** Change port base for one repo only (don't affect others):
+**Example:** Change the port range for one repo only (don't affect others):
+edit `baseRange` in that repository's `ports.json` (see
+[Ports Configuration](#ports-configuration)).
+
+**Example:** Use an environment variable for a single command:
 
 ```bash
-# Edit ~/.local/share/git-hop/github.com/org/repo/hop.json
-# Add this to the JSON: "portBase": 20000
-```
-
-**Example:** Use environment variable for a single command:
-
-```bash
-GIT_HOP_PORT_BASE=20000 git hop add feature-x
+GIT_HOP_AUTO_ENV_START=true git hop add feature-x
 ```
 
 ## Best Practices

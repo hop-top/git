@@ -343,7 +343,7 @@ Git-hop keeps your branches isolated across two layers:
 
 **Hub** — the directory where you run `git hop` commands. Usually `~/my-repo/`. Tells git-hop which branches exist locally. Contains `hop.json` and a `.git` reference.
 
-**Hopspace** — centralized storage for all branches of a repository, shared by all hubs. Located at `$GIT_HOP_DATA_HOME/<org>/<repo>/`. Contains actual worktree directories, port allocations, and volume mappings.
+**Hopspace** — where a repository's branch metadata, port allocations and volume mappings live. By default the hub is its own hopspace; a hub cloned with `--global` keeps it at `$GIT_HOP_DATA_HOME/<org>/<repo>/`, where other hubs of the same repository can share it.
 
 Why two? Hubs are your local workspace; hopspace is shared storage. This lets you have multiple hubs (checkouts) of the same repository, all using the same branches without duplication.
 
@@ -364,16 +364,17 @@ The hub's `hop.json` maintains references to all worktrees with their full paths
 
 ### Hopspaces
 
-A **hopspace** is the canonical storage location for all worktrees of a repository. Located at:
+A **hopspace** holds a repository's branch metadata and resource
+allocations. It is the hub directory itself, or, for a hub cloned with
+`--global`, `$GIT_HOP_DATA_HOME/<org>/<repo>/` (the path under the data home
+follows `hop.dataLayout`, default `{org}/{repo}`):
 
 ```
-$GIT_HOP_DATA_HOME/<org>/<repo>/      # per hop.dataLayout, default {org}/{repo}
+<hopspace>/
   hop.json                  # Hopspace configuration
-  ports.json                # Port allocations
+  ports.json                # Port range and allocations
   volumes.json              # Volume allocations
-  feature-x/                # Actual worktree directory
-  feature-y/
-  ...
+  deps/                     # Shared dependency installs
 ```
 
 All worktrees for a repository reference the same hopspace, ensuring consistency.
@@ -418,11 +419,11 @@ git hop https://github.com/org/repo1.git
 cd org/repo1
 git hop init
 
-# Clone repo 2 with custom settings
+# Clone repo 2 and move its port range
 git hop https://github.com/org/repo2.git
 cd org/repo2
 git hop init
-git hop config port_base 20000
+# edit baseRange in ports.json (created on the first Docker worktree)
 ```
 
 Each repository has its own hopspace with independent resource allocation.
