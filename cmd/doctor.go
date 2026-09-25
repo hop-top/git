@@ -510,7 +510,7 @@ func missingStateWorktrees(fs afero.Fs, st *state.State) []stateIssue {
 		repo := st.Repositories[repoID]
 		for _, key := range repo.SortedWorktreeKeys() {
 			wt := repo.Worktrees[key]
-			if !worktreeDirPresent(fs, wt.Path) {
+			if !hop.WorktreeDirPresent(fs, wt.Path) {
 				issues = append(issues, stateIssue{repoID: repoID, key: key, branch: wt.Branch, path: wt.Path})
 			}
 		}

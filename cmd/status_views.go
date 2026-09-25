@@ -64,7 +64,7 @@ func systemStatusRecords(fs afero.Fs, g git.GitInterface) []statusRecord {
 		records = append(records, statusRecord{
 			Branch:     l.Branch,
 			Base:       l.Base,
-			State:      statusState(worktreeAt(fs, l.Path)),
+			State:      statusState(hop.WorktreeAt(fs, l.Path)),
 			Status:     l.Status,
 			Path:       l.Path,
 			Repository: l.Repository,

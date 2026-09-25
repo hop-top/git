@@ -155,7 +155,7 @@ func hubStatusRecords(fs afero.Fs, g git.GitInterface, hub *hop.Hub) []statusRec
 }
 
 // Worktree states of a status record: what is at the worktree's path
-// (worktreeAt).
+// (hop.WorktreeAt).
 const (
 	statusStateLinked   = "Linked"   // the worktree directory
 	statusStateMissing  = "Missing"  // nothing
@@ -164,11 +164,11 @@ const (
 
 // statusState is the state status reports for a worktree whose path
 // holds p.
-func statusState(p worktreePresence) string {
+func statusState(p hop.WorktreePresence) string {
 	switch p {
-	case worktreePresent:
+	case hop.WorktreePresent:
 		return statusStateLinked
-	case worktreeOccupied:
+	case hop.WorktreeOccupied:
 		return statusStateOccupied
 	default:
 		return statusStateMissing
@@ -180,7 +180,7 @@ func statusState(p worktreePresence) string {
 func hubBranchStatusRecord(fs afero.Fs, g git.GitInterface, hub *hop.Hub, name string) statusRecord {
 	b := hub.Config.Branches[name]
 	path := config.ResolveWorktreePath(b.Path, hub.Path)
-	presence := worktreeAt(fs, path)
+	presence := hop.WorktreeAt(fs, path)
 	r := statusRecord{
 		Branch: name,
 		Base:   resolveCompareBranch(hub.Config, b),
@@ -189,7 +189,7 @@ func hubBranchStatusRecord(fs afero.Fs, g git.GitInterface, hub *hop.Hub, name s
 		Path:   path,
 		Hub:    hub.Path,
 	}
-	if presence == worktreePresent {
+	if presence == hop.WorktreePresent {
 		r.Status = getBranchSyncStatus(g, r.Path, name, r.Base)
 	}
 	return r

@@ -215,7 +215,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 		for _, key := range repo.SortedWorktreeKeys() {
 			wt := repo.Worktrees[key]
 			branch := wt.Branch
-			if worktreeDirPresent(fs, wt.Path) {
+			if hop.WorktreeDirPresent(fs, wt.Path) {
 				continue
 			}
 			subject := stateWorktreeSubject(repoID, branch, wt.Path)

@@ -34,7 +34,7 @@ import (
 // A path something other than a directory occupies (a file, a dangling
 // symlink) is not the worktree either: it is reported as such and goes
 // through the same repair, which recreateBlocker then refuses, since git
-// cannot check a worktree out over it. worktreeAt is the test, the one
+// cannot check a worktree out over it. hop.WorktreeAt is the test, the one
 // the state check and prune use too.
 //
 // The hub check runs before the state check on purpose: a worktree it
@@ -51,8 +51,8 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 	for _, name := range sortedBranchNames(hub) {
 		b := hub.Config.Branches[name]
 		linkPath := config.ResolveWorktreePath(b.Path, hub.Path)
-		presence := worktreeAt(fs, linkPath)
-		if presence == worktreePresent {
+		presence := hop.WorktreeAt(fs, linkPath)
+		if presence == hop.WorktreePresent {
 			continue
 		}
 
@@ -65,7 +65,7 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 			continue
 		}
 
-		if presence == worktreeOccupied {
+		if presence == hop.WorktreeOccupied {
 			output.Error("Worktree path for branch %s is occupied by a non-directory: %s", name, linkPath)
 			r.issue(doctorCheckHub, name, "worktree path occupied by a non-directory: %s", linkPath)
 		} else {
