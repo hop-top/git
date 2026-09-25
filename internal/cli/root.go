@@ -11,6 +11,7 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	kitcli "hop.top/kit/go/console/cli"
 	kitout "hop.top/kit/go/console/output"
 	"hop.top/kit/go/core/upgrade"
@@ -28,7 +29,6 @@ import (
 )
 
 var (
-	cfgFile        string
 	jsonOut        bool
 	porcelain      bool
 	quiet          bool
@@ -182,14 +182,13 @@ func init() {
 		Short:           "Manage git worktrees and environments",
 		DisableValidate: true, // Layer-A annotations not yet adopted; see follow-up track.
 		Disable: kitcli.Disable{
-			// kit v0.4 registers --config -c (StringArrayP) and --dry-run
-			// (Bool) unconditionally; both collide with git-hop's own flags
-			// of the same name. Suppress kit's defaults so git-hop keeps
-			// its existing single-file --config and per-command --dry-run
-			// semantics. NOTE: kit v0.4 has no Disable.Verbose opt-out, so
-			// git-hop adopts kit's --verbose -V Count flag instead (was
-			// --verbose -v Bool in v0.3). See verboseEnabled() above.
-			Config: true,
+			// kit registers --dry-run (Bool) unconditionally; it collides
+			// with git-hop's own -n/--dry-run and its per-command support
+			// guard. Suppress kit's so git-hop keeps those semantics.
+			// kit's -c/--config is adopted as is; initConfig consumes it.
+			// NOTE: kit v0.4 has no Disable.Verbose opt-out, so git-hop
+			// adopts kit's --verbose -V Count flag instead (was --verbose
+			// -v Bool in v0.3). See verboseEnabled() above.
 			DryRun: true,
 		},
 		Hooks: kitcli.Hooks{
@@ -203,7 +202,9 @@ func init() {
 				if err := checkDryRunSupported(cmd); err != nil {
 					output.FatalCode(exitUsage, "%s", err)
 				}
-				initConfig()
+				if err := initConfig(); err != nil {
+					return asUsageError(cmd, err)
+				}
 				attachEventSinks(cmd)
 				if cmd.Name() != "upgrade" {
 					upgrade.NotifyIfAvailable(cmd.Context(), newUpgradeChecker(), os.Stderr)
@@ -416,7 +417,13 @@ Worktree Mode:
 	}
 
 	pf := RootCmd.PersistentFlags()
-	pf.StringVar(&cfgFile, "config", "", "config file (default is $XDG_CONFIG_HOME/git-hop/config.json)")
+	// --config -c is kit's (see initConfig). kit hides it from --help as
+	// plumbing; git-hop has always listed it, so keep it visible.
+	if f := pf.Lookup("config"); f != nil {
+		f.Hidden = false
+		f.Usage = "config file (default is $XDG_CONFIG_HOME/git-hop/config.json) " +
+			"or key=value override (repeatable)"
+	}
 	pf.BoolVar(&jsonOut, "json", false, "output in JSON format")
 	pf.BoolVar(&porcelain, "porcelain", false, "machine-readable output")
 	// --quiet is already registered by kit/cli.New(); add -q shorthand
@@ -567,25 +574,55 @@ func printAdminHelp(cmd *cobra.Command) {
 	}
 }
 
-func initConfig() {
-	v := Root.Viper
-	if cfgFile != "" {
-		v.SetConfigFile(cfgFile)
-	} else {
-		configDir, err := xdg.ConfigDir("git-hop")
-		if err != nil {
-			configDir = filepath.Join(os.Getenv("HOME"), ".config", "git-hop")
-		}
-		v.AddConfigPath(configDir)
-		v.SetConfigName("config")
-		v.SetConfigType("json")
+// initConfig loads Root.Viper's config from kit's -c/--config tokens.
+//
+// A bare path names a config file to read in place of the default
+// $XDG_CONFIG_HOME/git-hop/config.json; repeated paths layer in order. A
+// key=value token overrides one setting above every file. kit rejects a
+// path that does not exist, and that is reported as a bad flag value.
+func initConfig() error {
+	paths, overrides, err := Root.ConfigArgs()
+	if err != nil {
+		return fmt.Errorf("invalid -c/--config flag: %w", err)
 	}
+	configDir, err := xdg.ConfigDir("git-hop")
+	if err != nil {
+		configDir = filepath.Join(os.Getenv("HOME"), ".config", "git-hop")
+	}
+	loadConfig(Root.Viper, paths, overrides, configDir)
+	return nil
+}
 
+// loadConfig reads paths into v, or config.json under defaultDir when
+// paths is empty, then merges overrides on top. The environment
+// (GIT_HOP_*) and flags still win over both, per viper's precedence.
+// A file that cannot be read is skipped, as it always has been.
+func loadConfig(v *viper.Viper, paths []string, overrides map[string]any, defaultDir string) {
 	v.SetEnvPrefix("GIT_HOP")
 	v.AutomaticEnv()
 
-	if err := v.ReadInConfig(); err == nil && verboseEnabled() {
-		output.Debug("using config file: %s", v.ConfigFileUsed())
+	read := func(merge bool) {
+		readIn := v.ReadInConfig
+		if merge {
+			readIn = v.MergeInConfig
+		}
+		if err := readIn(); err == nil && verboseEnabled() {
+			output.Debug("using config file: %s", v.ConfigFileUsed())
+		}
+	}
+	if len(paths) == 0 {
+		v.AddConfigPath(defaultDir)
+		v.SetConfigName("config")
+		v.SetConfigType("json")
+		read(false)
+	}
+	for i, p := range paths {
+		v.SetConfigFile(p)
+		read(i > 0)
+	}
+
+	if len(overrides) > 0 {
+		_ = v.MergeConfigMap(overrides)
 	}
 }
 

@@ -1398,7 +1398,7 @@ These flags work with all commands:
 | `--verbose, -V` | Increase log verbosity; repeatable (`-V` debug, `-VV` trace) |
 | `--force` | Bypass safety checks (use with caution) |
 | `--global, -g` | Use the global hopspace in `$GIT_HOP_DATA_HOME` (default: local) |
-| `--config <file>` | Config file (default: `$XDG_CONFIG_HOME/git-hop/config.json`) |
+| `--config, -c <file>` | Config file to read instead of `$XDG_CONFIG_HOME/git-hop/config.json`, or `<key>=<value>` to override one setting; repeatable. A file that does not exist is a usage error (exit 129). Not git's `-c`: in `git -c <name>=<value> hop ...` git consumes the option itself |
 | `--dry-run, -n` | Show what would happen without making changes. A command that cannot preview itself (`env start`, `env stop`, `env generate`, clone) refuses the flag with exit 129 instead of running |
 | `--no-color` | Disable ANSI color. Without it, colour is used only when stdout is a terminal; `NO_COLOR` turns it off and `CLICOLOR_FORCE=1` forces it on |
 | `--no-hints` | Suppress next-step hints after command output |

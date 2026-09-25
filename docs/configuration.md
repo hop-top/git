@@ -215,6 +215,16 @@ Command-specific tunables, set the same way as the settings above: `git
 config --global <key> <value>`, or per-repo with `git config <key> <value>`
 inside any hub for that repository.
 
+For a single run, pass the key to git itself, before `hop`:
+
+```bash
+git -c hop.remote.timeout=30 hop add feat/x
+```
+
+git consumes that `-c`, so it never reaches git-hop's own `-c`/`--config`
+flag (which takes a config file or a `key=value` for git-hop's own settings,
+after `hop`).
+
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hop.repair.backupRetention` | duration | `720h` (30 days) | Max age of repair backup snapshots (`repair-*` directories under `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/`, or a legacy `<hub>/.hop/backups/`) before `git hop prune` deletes them. Go duration syntax (e.g. `720h`, `168h` for 7 days). `0` (or a negative duration) turns pruning of repair backups off; a value that is not a duration is ignored, as if unset. |
