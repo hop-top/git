@@ -26,12 +26,12 @@ cp $WORK/keep.txt hops/feat/occ/keep.txt
 exec sh -c 'git-hop add feat/occ -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/occ'' already exists and is not an empty directory$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/occ'': ''.*/hub/hops/feat/occ'' already exists and is not an empty directory$' err
 grep '^hint: move it away, or add another branch or set another hop.worktreeLocation$' err
 exec sh -c 'git-hop add feat/occ -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: ''.*/hub/hops/feat/occ'' already exists and is not an empty directory' err
+grep '"msg":"\[dry-run\] would refuse to add ''feat/occ'': ''.*/hub/hops/feat/occ'' already exists and is not an empty directory' err
 exec sh -c 'git-hop add feat/occ >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/occ'' already exists and is not an empty directory$' err
@@ -55,7 +55,7 @@ cmp hops/feat/dot/.keep $WORK/keep.txt
 cp $WORK/keep.txt hops/feat/file
 exec sh -c 'git-hop add feat/file -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
-grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/file'' already exists and is not an empty directory$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/file'': ''.*/hub/hops/feat/file'' already exists and is not an empty directory$' err
 exec sh -c 'git-hop add feat/file >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/file'' already exists and is not an empty directory$' err
@@ -88,7 +88,7 @@ rm $WORK/hub/worktrees/rel
 cd $WORK/hub/hops/main
 exec sh -c 'git-hop add feat/rel -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
-grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/rel$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/rel'': worktree already exists at .*/hub/hops/feat/rel$' err
 exec sh -c 'git-hop add feat/rel >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/rel$' err

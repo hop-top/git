@@ -94,7 +94,9 @@ hooks and environment start it would run, then stops: nothing is fetched,
 created or written and no hook runs. An add the real run would refuse
 (the worktree exists, a file or non-empty directory is in its way, the
 branch name is invalid or checked out in another worktree, the
-start-point is not a commit) fails the same way, with exit status 1.`,
+start-point is not a commit, --from cannot move the existing branch)
+fails with exit status 1 and "[dry-run] would refuse to add '<branch>':"
+before the real run's reason.`,
 	Args: addArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
@@ -375,4 +377,9 @@ func init() {
 		"record a task id for the worktree (metadata only); without <branch>, derive the branch from the task via tlc")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames
 	declareOutputSchema(addCmd, &addResult{})
+}
+
+// refuseAdd ends add the way a refused worktree creation does.
+func refuseAdd(err error) {
+	output.Fatal("Failed to create worktree: %v", err)
 }

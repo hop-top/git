@@ -49,7 +49,7 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	}
 	started, err := previewGitflowStart(g, wm, p)
 	if err != nil {
-		refuseDryRun(fmt.Sprintf("add '%s'", p.branch), fmt.Errorf("branch type detector failed: %v", err))
+		refusePreview(p, fmt.Errorf("branch type detector failed: %v", err))
 	}
 	switch {
 	case started:
@@ -78,24 +78,25 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 }
 
 // previewRefusals fails the preview when the real add would refuse to
-// create the worktree (see hop.WorktreeManager.CheckAdd), with its
-// message and exit status. The start-point is left unchecked when add
-// would fetch first: the fetch may bring it.
+// create the worktree (see hop.WorktreeManager.CheckAdd), with the real
+// run's reason and exit status. The start-point is left unchecked when
+// add would fetch first: the fetch may bring it.
 func previewRefusals(wm *hop.WorktreeManager, p addPlan) {
 	if err := wm.CheckAdd(p.hopspace, p.hubPath, p.branch, p.worktreePath); err != nil {
-		refuseAdd(err)
+		refusePreview(p, err)
 	}
 	if p.fetch {
 		return
 	}
 	if err := wm.CheckStartPoint(p.hopspace, p.hubPath, p.branch, p.startPoint); err != nil {
-		refuseAdd(err)
+		refusePreview(p, err)
 	}
 }
 
-// refuseAdd ends add the way a refused worktree creation does.
-func refuseAdd(err error) {
-	output.Fatal("Failed to create worktree: %v", err)
+// refusePreview ends the preview of an add the real run would refuse,
+// in the form every preview refuses in (refuseDryRun).
+func refusePreview(p addPlan, err error) {
+	refuseDryRun(fmt.Sprintf("add '%s'", p.branch), err)
 }
 
 // previewAddResult is the result add would produce for p, marked dry_run.
@@ -176,11 +177,11 @@ func previewBranch(g git.GitInterface, p addPlan) {
 // existing local branch is fast-forwarded or refused (see
 // hop.CheckExistingBranch), and a missing one is created from the
 // start-point, never from a same-named remote branch. A refusal fails the
-// preview with the real run's message and exit status.
+// preview with the real run's reason and exit status.
 func previewEnforcedBranch(wm *hop.WorktreeManager, p addPlan) {
 	e, target, err := wm.PreviewExistingBranch(p.hopspace, p.hubPath, p.branch, p.startPoint, p.defaultBranch)
 	if err != nil {
-		refuseAdd(err)
+		refusePreview(p, err)
 	}
 	switch {
 	case !e.Exists:

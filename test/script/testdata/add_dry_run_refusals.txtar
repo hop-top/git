@@ -1,7 +1,9 @@
 # `git hop add --dry-run` refuses whatever the real add would refuse, with
-# the same exit status (1) and the same error on stderr. Under --json the
-# error is the JSON record on stderr and stdout stays empty. Each case is
-# run for real too, so the two cannot drift apart.
+# the same exit status (1) and the same reason on stderr, in the form
+# every preview refuses in: `[dry-run] would refuse to add '<branch>':
+# <reason>`. Under --json the error is the JSON record on stderr and
+# stdout stays empty. Each case is run for real too, so the two cannot
+# drift apart; the real run keeps its own message.
 #
 # The regression this pins: add -n exited 0 for an existing worktree
 # while the real add failed with exit 1.
@@ -25,11 +27,11 @@ cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
 exec sh -c 'git-hop add feat/a -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/a$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/a'': worktree already exists at .*/hub/hops/feat/a$' err
 exec sh -c 'git-hop add feat/a -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: worktree already exists at .*/hub/hops/feat/a"' err
+grep '"msg":"\[dry-run\] would refuse to add ''feat/a'': worktree already exists at .*/hub/hops/feat/a"' err
 exec sh -c 'git-hop add feat/a >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/a$' err
@@ -38,11 +40,11 @@ grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/
 exec sh -c 'git-hop add bad..name -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: ''bad..name'' is not a valid branch name$' err
+grep '^fatal: \[dry-run\] would refuse to add ''bad..name'': ''bad..name'' is not a valid branch name$' err
 exec sh -c 'git-hop add bad..name -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: ''bad..name'' is not a valid branch name"' err
+grep '"msg":"\[dry-run\] would refuse to add ''bad..name'': ''bad..name'' is not a valid branch name"' err
 exec sh -c 'git-hop add bad..name >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: ''bad..name'' is not a valid branch name$' err
@@ -53,11 +55,11 @@ exec git worktree add $WORK/elsewhere feat/out
 exec sh -c 'git-hop add feat/out -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: ''feat/out'' is already checked out at ''.*/elsewhere''$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/out'': ''feat/out'' is already checked out at ''.*/elsewhere''$' err
 exec sh -c 'git-hop add feat/out -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: ''feat/out'' is already checked out at ''.*/elsewhere''"' err
+grep '"msg":"\[dry-run\] would refuse to add ''feat/out'': ''feat/out'' is already checked out at ''.*/elsewhere''"' err
 exec sh -c 'git-hop add feat/out >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: ''feat/out'' is already checked out at ''.*/elsewhere''$' err
@@ -66,11 +68,11 @@ grep '^fatal: Failed to create worktree: ''feat/out'' is already checked out at 
 exec sh -c 'git-hop add feat/x --from nope -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: start-point ''nope'' is not a valid commit$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/x'': start-point ''nope'' is not a valid commit$' err
 exec sh -c 'git-hop add feat/x --from nope -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: start-point ''nope'' is not a valid commit"' err
+grep '"msg":"\[dry-run\] would refuse to add ''feat/x'': start-point ''nope'' is not a valid commit"' err
 exec sh -c 'git-hop add feat/x --from nope >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: start-point ''nope'' is not a valid commit$' err
@@ -82,11 +84,11 @@ cp $WORK/keep.txt $WORK/hub/hops/feat/q/keep.txt
 exec sh -c 'git-hop add feat/q -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/q$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/q'': worktree already exists at .*/hub/hops/feat/q$' err
 exec sh -c 'git-hop add feat/q -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: worktree already exists at .*/hub/hops/feat/q"' err
+grep '"msg":"\[dry-run\] would refuse to add ''feat/q'': worktree already exists at .*/hub/hops/feat/q"' err
 exec sh -c 'git-hop add feat/q >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/q$' err
@@ -97,12 +99,12 @@ rm $WORK/hub/hops/feat/q
 exec sh -c 'git-hop add feat/q -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/q'' is a missing but already registered worktree$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/q'': ''.*/hub/hops/feat/q'' is a missing but already registered worktree$' err
 grep '^hint: clear it with ''git worktree prune'', then retry$' err
 exec sh -c 'git-hop add feat/q -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: ''.*/hub/hops/feat/q'' is a missing but already registered worktree' err
+grep '"msg":"\[dry-run\] would refuse to add ''feat/q'': ''.*/hub/hops/feat/q'' is a missing but already registered worktree' err
 exec sh -c 'git-hop add feat/q >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/q'' is a missing but already registered worktree$' err
@@ -140,11 +142,11 @@ rm $WORK/hub/worktrees/rec
 exec sh -c 'git-hop add feat/rec -n >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/rec$' err
+grep '^fatal: \[dry-run\] would refuse to add ''feat/rec'': worktree already exists at .*/hub/hops/feat/rec$' err
 exec sh -c 'git-hop add feat/rec -n --json >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 ! grep . out
-grep '"msg":"Failed to create worktree: worktree already exists at .*/hub/hops/feat/rec"' err
+grep '"msg":"\[dry-run\] would refuse to add ''feat/rec'': worktree already exists at .*/hub/hops/feat/rec"' err
 exec sh -c 'git-hop add feat/rec >out 2>err; echo "exit=$?"'
 stdout '^exit=1$'
 grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/rec$' err

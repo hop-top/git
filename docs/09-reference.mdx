@@ -368,7 +368,8 @@ Rules:
   `dry_run: true` where the shape has the field (absent on a real run),
   and the list shapes name the would-be action (`would-fix`, `would-prune`,
   `would-delete`). A preview the real run would refuse fails the same
-  way, with no result.
+  way, with no result; `add`, `remove`, `move` and `merge` word it
+  `[dry-run] would refuse to <action>: <reason>`.
 - A refusal or failure keeps its exit status and reports on stderr (the
   JSON error record under `--json`); stdout then carries no result,
   except where a shape below says otherwise.
