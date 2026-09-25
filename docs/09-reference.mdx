@@ -311,13 +311,13 @@ Rules:
 - `--json` with `--porcelain`, or `--json`/`--porcelain` with a different
   `--format`, is refused with exit 129 before the command does anything.
   So is an unknown format or an unknown `--cols` column.
-- Every result is a list of records, except `add`, which returns one
-  object. An empty result is `[]` (and no lines under `--porcelain`), never
-  empty stdout.
+- Every result is a list of records, except `add` and `init`, which
+  return one object. An empty result is `[]` (and no lines under
+  `--porcelain`), never empty stdout.
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.6): a MINOR bump adds
+- Result shapes are versioned together (currently 1.8): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
 - Commands not listed here have no structured result: the output flags
   only switch their log format.
@@ -456,6 +456,41 @@ result and exit 129 in the structured modes, before anything is restored.
 | `reason` | string | *json/yaml only*; why the planner chose the action |
 
 Columns: `status path kind old new` (the `repair --porcelain` line format).
+
+### init
+
+One object, whichever mode init runs in; `action` says which. Register
+as-is (menu option 3) is only offered by the interactive menu, which a
+structured run cannot show: a structured `init` without `--no-prompt` on a
+standard repository exits 129 before converting. The menu, the dry-run
+plan, the project tree and the backup lines are the human view and never
+reach stdout.
+
+| `action` | When |
+|----------|------|
+| `converted` | A standard repository was converted (`--no-prompt`, `--regular`) |
+| `adopted` | A hub git-hop did not create (a bare clone made with plain git) got its missing `hop.json` and was recorded in state |
+| `already-initialized` | The hub was set up already; nothing was created |
+| `restored` | `--restore <backup>` put a conversion backup back |
+
+Under `--dry-run` every mode reports the result the real run would have,
+with `dry_run: true`, and changes nothing; a refusal (occupied restore
+target without `--force`, dirty tree) fails the same way as the real run.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `action` | string | See above |
+| `hub` | string | Absolute path of the hub; for `restored`, the location the backup was restored to |
+| `layout` | string | `bare` (bare repository, worktrees under `hops/`) or `regular` (the repository root is the default branch's worktree); empty for `restored` |
+| `default_branch` | string | Default branch of the hub; empty for `restored` |
+| `backup` | string | The conversion backup taken (`converted`; empty under `--dry-run`) or restored from (`restored`); empty otherwise |
+| `dry_run` | bool | *json/yaml only*; `true` when `--dry-run` previewed the run and changed nothing; absent otherwise |
+| `backup_kept` | bool | *json/yaml only*; `true` when the backup is still on disk (`--keep-backup`, `hop.backup.keepBackup`; under `--dry-run`, would be); absent otherwise |
+| `registered` | bool | *json/yaml only*; `true` when this run recorded the hub in git-hop's state (`converted`, `adopted`; under `--dry-run`, would); absent otherwise |
+| `worktrees` | list of `{branch, path}` | *json/yaml only*; worktrees this run created (or would create); `[]` when none |
+| `moved_aside` | string | *json/yaml only*; `restored` with `--force`: where what occupied the original location was moved (would be, under `--dry-run`) |
+
+Columns: `action hub layout default_branch backup`.
 
 ## Configuration Reference
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -37,6 +38,8 @@ var (
 	// initRunFlags is the running command's flag set, for the dry run's
 	// closing hint (initCmd itself cannot be named from convertRepo).
 	initRunFlags *pflag.FlagSet
+	// initRunCmd is the running command, which renders init's result.
+	initRunCmd *cobra.Command
 )
 
 func init() {
@@ -65,6 +68,7 @@ See docs/hooks.md for details.`,
 		g := git.New()
 		keepBackupFlagSet = cmd.Flags().Changed("keep-backup")
 		initRunFlags = cmd.Flags()
+		initRunCmd = cmd
 
 		if restorePath != "" {
 			handleRestore(fs, g, restorePath, forceFlag, dryRunFlag)
@@ -99,47 +103,48 @@ See docs/hooks.md for details.`,
 }
 
 func showConversionMenu(fs afero.Fs, g git.GitInterface, repoPath string) {
-	fmt.Println(`
+	out := output.ReportOut()
+	fmt.Fprintln(out, `
 -----------------------------------------------------
   Git-Hop Repository Structure
 -----------------------------------------------------
 
 Current repository: Standard git repository`)
 
-	fmt.Printf("Location: %s\n", repoPath)
+	fmt.Fprintf(out, "Location: %s\n", repoPath)
 
 	remoteURL, err := g.GetRemoteURL(repoPath)
 	if err == nil {
-		fmt.Printf("Remote: origin (%s)\n", remoteURL)
+		fmt.Fprintf(out, "Remote: origin (%s)\n", remoteURL)
 	} else {
-		fmt.Println("Remote: none")
+		fmt.Fprintln(out, "Remote: none")
 	}
 
 	branch, err := g.GetCurrentBranch(repoPath)
 	if err == nil && branch != "" {
-		fmt.Printf("Branch: %s\n", branch)
+		fmt.Fprintf(out, "Branch: %s\n", branch)
 	}
 
-	fmt.Println("Structure Options:")
-	fmt.Println("")
-	fmt.Println("  1. Convert to bare repo + worktrees (Recommended)")
-	fmt.Println("     Creates bare .git repo + worktree directories")
-	fmt.Println("     Preserves all your work and branches")
-	fmt.Println("     Backup created automatically")
-	fmt.Println("     Follows: Git worktree best practices")
-	fmt.Println("")
-	fmt.Println("  2. Convert to regular repo + worktrees")
-	fmt.Println("     Same worktree structure as option 1")
-	fmt.Println("     But allows commits in repo root (not recommended)")
-	fmt.Println("     Use if: You need repo root to be working tree")
-	fmt.Println("")
-	fmt.Println("  3. Register as-is (Limited)")
-	fmt.Println("     Uses current repository structure without changes")
-	fmt.Println("     Manual worktree management required")
-	fmt.Println("     Some git-hop features limited")
-	fmt.Println("")
-	fmt.Println("  q. Quit")
-	fmt.Println("")
+	fmt.Fprintln(out, "Structure Options:")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  1. Convert to bare repo + worktrees (Recommended)")
+	fmt.Fprintln(out, "     Creates bare .git repo + worktree directories")
+	fmt.Fprintln(out, "     Preserves all your work and branches")
+	fmt.Fprintln(out, "     Backup created automatically")
+	fmt.Fprintln(out, "     Follows: Git worktree best practices")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  2. Convert to regular repo + worktrees")
+	fmt.Fprintln(out, "     Same worktree structure as option 1")
+	fmt.Fprintln(out, "     But allows commits in repo root (not recommended)")
+	fmt.Fprintln(out, "     Use if: You need repo root to be working tree")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  3. Register as-is (Limited)")
+	fmt.Fprintln(out, "     Uses current repository structure without changes")
+	fmt.Fprintln(out, "     Manual worktree management required")
+	fmt.Fprintln(out, "     Some git-hop features limited")
+	fmt.Fprintln(out, "")
+	fmt.Fprintln(out, "  q. Quit")
+	fmt.Fprintln(out, "")
 
 	choice, err := resolveInitChoice(noPromptFlag, regularFlag)
 	if err != nil {
@@ -157,7 +162,7 @@ Current repository: Standard git repository`)
 	case choiceRegisterAsIs:
 		registerAsIs(fs, g, repoPath, noHooksFlag, enableChdirFlag)
 	case choiceQuit:
-		fmt.Println("Cancelled")
+		fmt.Fprintln(out, "Cancelled")
 		// Return rather than os.Exit so the root command's deferred
 		// EventBus.Close() still runs. A user quitting is a clean exit.
 		return
@@ -207,6 +212,15 @@ staged and unstaged as they are:
 	}
 
 	if dryRunFlag {
+		if output.IsStructured() {
+			branch, _ := g.GetCurrentBranch(repoPath)
+			res := initConversionResult(repoPath, branch, initWorktreePath(repoPath, branch, useBare), useBare)
+			res.DryRun = true
+			res.BackupKept = converter.KeepBackup
+			res.Registered = true
+			emitResult(initRunCmd, res)
+			return
+		}
 		fmt.Println(initDryRunBanner)
 		fmt.Printf("Repository: %s\n", repoPath)
 
@@ -247,7 +261,7 @@ staged and unstaged as they are:
 		output.Error("Conversion failed: %v", err)
 
 		for _, errMsg := range result.Errors {
-			fmt.Printf("  - %s\n", errMsg)
+			fmt.Fprintf(output.DiagOut(), "  - %s\n", errMsg)
 		}
 		for _, warning := range result.Warnings {
 			output.Warn("%s", warning)
@@ -258,7 +272,7 @@ staged and unstaged as they are:
 		}
 		// A failed conversion keeps its backup: it is what the automatic
 		// rollback restored from.
-		reportPreservedBackup(fs, result.BackupPath)
+		reportPreservedBackup(output.DiagOut(), fs, result.BackupPath)
 
 		os.Exit(1)
 	}
@@ -295,7 +309,7 @@ staged and unstaged as they are:
 		}
 	}
 
-	registerConvertedHub(fs, hub, repoPath, mainWorktreePath, currentBranchName, isRegularRepo)
+	registered := registerConvertedHub(fs, hub, repoPath, mainWorktreePath, currentBranchName, isRegularRepo)
 
 	// Emit hopspace.initialized after successful conversion, then
 	// worktree.created for the worktree the conversion created, as clone
@@ -321,21 +335,22 @@ staged and unstaged as they are:
 		}
 	}
 
-	fmt.Println("\nConversion successful!")
+	out := output.ReportOut()
+	fmt.Fprintln(out, "\nConversion successful!")
 	if isRegularRepo {
-		fmt.Printf("Project structure:\n")
-		fmt.Printf("  %s/\n", repoPath)
-		fmt.Printf("    .git/              (repository)\n")
-		fmt.Printf("    hop.json\n")
-		fmt.Printf("    worktrees/         (future branch worktrees)\n")
-		fmt.Printf("    (repo root is %s branch working tree)\n", currentBranchName)
+		fmt.Fprintf(out, "Project structure:\n")
+		fmt.Fprintf(out, "  %s/\n", repoPath)
+		fmt.Fprintf(out, "    .git/              (repository)\n")
+		fmt.Fprintf(out, "    hop.json\n")
+		fmt.Fprintf(out, "    worktrees/         (future branch worktrees)\n")
+		fmt.Fprintf(out, "    (repo root is %s branch working tree)\n", currentBranchName)
 	} else {
-		fmt.Printf("Project structure:\n")
-		fmt.Printf("  %s/  (bare repository)\n", repoPath)
-		fmt.Printf("    hop.json\n")
-		fmt.Printf("    hops/\n")
-		fmt.Printf("      %s/              (worktree for %s branch)\n", currentBranchName, currentBranchName)
-		fmt.Printf("    current -> hops/%s  (symlink)\n", currentBranchName)
+		fmt.Fprintf(out, "Project structure:\n")
+		fmt.Fprintf(out, "  %s/  (bare repository)\n", repoPath)
+		fmt.Fprintf(out, "    hop.json\n")
+		fmt.Fprintf(out, "    hops/\n")
+		fmt.Fprintf(out, "      %s/              (worktree for %s branch)\n", currentBranchName, currentBranchName)
+		fmt.Fprintf(out, "    current -> hops/%s  (symlink)\n", currentBranchName)
 	}
 	printCarriedWorktrees(result.Carried)
 
@@ -346,7 +361,7 @@ staged and unstaged as they are:
 		output.Hint("%s", hint)
 	}
 
-	reportPreservedBackup(fs, result.BackupPath)
+	reportPreservedBackup(out, fs, result.BackupPath)
 
 	if !noHooks {
 		if err := installInitHooks(fs, repoPath, mainWorktreePath, isRegularRepo); err != nil {
@@ -356,7 +371,7 @@ staged and unstaged as they are:
 			if mainWorktreePath != "" && !isRegularRepo {
 				hookInstallPath = mainWorktreePath
 			}
-			fmt.Printf("\nHooks directory created: %s/.git-hop/hooks/\n", hookInstallPath)
+			fmt.Fprintf(out, "\nHooks directory created: %s/.git-hop/hooks/\n", hookInstallPath)
 			printInitHooksHint(repoPath, hookInstallPath != repoPath)
 		}
 	}
@@ -386,6 +401,15 @@ staged and unstaged as they are:
 		}
 	}
 
+	if output.IsStructured() {
+		res := initConversionResult(repoPath, currentBranchName, mainWorktreePath, !isRegularRepo)
+		res.Backup = result.BackupPath
+		res.BackupKept = backupOnDisk(fs, result.BackupPath)
+		res.Registered = registered
+		emitResult(initRunCmd, res)
+		return
+	}
+
 	next := "You can now:\n"
 	if !isRegularRepo {
 		next += fmt.Sprintf("  cd %s   # Work on %s branch\n", mainWorktreePath, currentBranchName)
@@ -413,16 +437,23 @@ func resolveInitKeepBackup(flagValue, flagSet bool, gc *config.GitConfig) bool {
 // successful conversion unless --keep-backup; a failed conversion or a
 // failed cleanup leaves it behind. Asking the filesystem keeps this line
 // honest in every one of those cases.
-func reportPreservedBackup(fs afero.Fs, backupPath string) {
-	if backupPath == "" {
+func reportPreservedBackup(w io.Writer, fs afero.Fs, backupPath string) {
+	if !backupOnDisk(fs, backupPath) {
 		return
 	}
-	if exists, _ := afero.DirExists(fs, backupPath); !exists {
-		return
-	}
-	fmt.Printf("\nBackup preserved at: %s\n", backupPath)
+	fmt.Fprintf(w, "\nBackup preserved at: %s\n", backupPath)
 	output.Hint("%s", restoreHint(backupPath))
 	output.Hint("To remove backup manually:\n  rm -rf %s", backupPath)
+}
+
+// backupOnDisk reports whether the conversion backup at backupPath is
+// still there.
+func backupOnDisk(fs afero.Fs, backupPath string) bool {
+	if backupPath == "" {
+		return false
+	}
+	exists, _ := afero.DirExists(fs, backupPath)
+	return exists
 }
 
 // initNextSteps is the command list init's closing hint suggests.
@@ -531,16 +562,24 @@ func handleAlreadyInitialized(fs afero.Fs, g git.GitInterface, path string, stru
 // A dry run reports all of that and does none of it.
 func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path string, structure config.StructureType, noHooks, enableChdir bool) {
 	if dryRunFlag {
+		if output.IsStructured() {
+			emitResult(initRunCmd, previewAlreadyInitializedResult(fs, g, path, structure))
+			return
+		}
 		previewAlreadyInitialized(fs, g, path, structure, noHooks, enableChdir)
 		output.Hint("%s", "You can use git-hop normally:\n"+initNextSteps)
 		return
 	}
-	if hubPath, ok := resolveBackfillRoot(fs, g, path, structure); ok {
+	out := output.ReportOut()
+	hubPath, action, registered := path, initActionAlreadyInitialized, false
+	if root, ok := resolveBackfillRoot(fs, g, path, structure); ok {
+		hubPath = root
 		if created, err := backfillHubConfigIfMissing(fs, g, hubPath); err != nil {
 			output.Warn("failed to back-fill hop.json at %s: %v", hubPath, err)
 		} else if created {
-			fmt.Printf("Created missing hop.json at %s.\n", hubPath)
-			registerAdoptedHub(fs, hubPath)
+			fmt.Fprintf(out, "Created missing hop.json at %s.\n", hubPath)
+			action = initActionAdopted
+			registered = registerAdoptedHub(fs, hubPath)
 			restoreAdoptedFetchRefspec(g, hubPath)
 		}
 	}
@@ -551,7 +590,7 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 		if err := installInitHooks(fs, path, "", true); err != nil {
 			output.Warn("failed to ensure hooks directory: %v", err)
 		} else {
-			fmt.Printf("\nHooks directory: %s/.git-hop/hooks/\n", path)
+			fmt.Fprintf(out, "\nHooks directory: %s/.git-hop/hooks/\n", path)
 		}
 	}
 
@@ -564,15 +603,24 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 		}
 	}
 
+	if output.IsStructured() {
+		res := initHubResult(fs, g, hubPath, action)
+		res.Registered = registered
+		emitResult(initRunCmd, res)
+		return
+	}
+
 	output.Hint("%s", "You can use git-hop normally:\n"+initNextSteps)
 }
 
 // printAlreadyInitialized is the summary init prints for a repository
 // that already has the worktree structure.
+// It is dropped when a structured result stands in for it.
 func printAlreadyInitialized(path string, structure config.StructureType) {
-	fmt.Println("Repository already initialized with git-hop worktree structure.")
-	fmt.Printf("Structure: %s\n", structure)
-	fmt.Printf("Path:      %s\n", path)
+	out := output.ReportOut()
+	fmt.Fprintln(out, "Repository already initialized with git-hop worktree structure.")
+	fmt.Fprintf(out, "Structure: %s\n", structure)
+	fmt.Fprintf(out, "Path:      %s\n", path)
 }
 
 // installInitHooks installs the .git-hop/hooks directory after init.
@@ -722,6 +770,7 @@ func initHintedFlags() []string {
 }
 
 func init() {
+	declareOutputSchema(initCmd, &initResult{})
 	initCmd.Flags().BoolVar(&forceFlag, "force", false, "Convert even with uncommitted changes (DANGEROUS; a backup is still taken); with --restore, move what occupies the original location aside (never deleted)")
 	initCmd.Flags().BoolVarP(&dryRunFlag, "dry-run", "n", false, "Show conversion steps without executing")
 	initCmd.Flags().BoolVar(&keepBackupFlag, "keep-backup", false, "Preserve backup after successful conversion (default: hop.backup.keepBackup)")

@@ -30,6 +30,9 @@ standard repo it normally prompts for a structure, so **always pass
 /usr/bin/git hop init --no-prompt --dry-run    # preview the conversion plan
 /usr/bin/git hop init --no-prompt --hooks none # skip mirroring committed hooks
 /usr/bin/git hop init --no-prompt --force      # convert despite uncommitted changes (either layout)
+/usr/bin/git hop init --no-prompt --json       # {action, hub, layout, default_branch, backup,
+                                               #   backup_kept, registered, worktrees, dry_run}
+# action: converted | adopted | already-initialized | restored; -n --json = would-be result, dry_run true
 ```
 
 A dirty working tree is refused (exit 1) unless `--force` is given.
@@ -171,9 +174,10 @@ exits 0 without prompting.
 
 Structured output rules:
 
-- Only `add`, `status`, `list`, `doctor`, `prune`, `env gc`, `repair` have
-  a result; other commands ignore the format for stdout.
-- Every result is a list (`add`: one object). Empty = `[]`, never empty stdout.
+- Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env gc`, `repair`
+  have a result; other commands ignore the format for stdout.
+- Every result is a list (`add`, `init`: one object). Empty = `[]`, never empty stdout.
+- Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
 - `--json` + `--porcelain`, `--json` + another `--format`, an unknown format
   or column: exit 129 before anything changes.
 - `repair --list-backups` / `--undo` in a structured mode: exit 129.

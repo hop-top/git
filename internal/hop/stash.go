@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/output"
 )
 
 type StashRef struct {
@@ -83,7 +84,7 @@ func (s *StashManager) ImportStashes(repoPath string, stashes []StashRef) error 
 		}
 
 		if strings.TrimSpace(sha) == stash.SHA {
-			fmt.Printf("Verified stash@{%d}: %s\n", stash.Index, stash.Message)
+			fmt.Fprintf(output.ReportOut(), "Verified stash@{%d}: %s\n", stash.Index, stash.Message)
 		}
 	}
 

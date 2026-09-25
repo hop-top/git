@@ -49,6 +49,17 @@ func handleRestore(fs afero.Fs, g git.GitInterface, backupPath string, force, dr
 		os.Exit(1)
 	}
 
+	if output.IsStructured() {
+		emitResult(initRunCmd, initResult{
+			Action:     initActionRestored,
+			Hub:        res.Target,
+			Backup:     abs,
+			DryRun:     dryRun,
+			MovedAside: res.MovedAside,
+			Worktrees:  []initWorktree{},
+		})
+		return
+	}
 	if dryRun {
 		previewRestore(fs, abs, res)
 		return

@@ -2,6 +2,8 @@ package output
 
 import (
 	"fmt"
+	"io"
+	"os"
 	"reflect"
 	"strings"
 
@@ -37,6 +39,28 @@ func ResultFormat() string { return resultFormat }
 // skip human-only output (progress lines, tables, hints) and emit their
 // result with EmitResult instead.
 func IsStructured() bool { return resultFormat != "" }
+
+// ReportOut is where a command writes its human report (summaries,
+// plans, layout trees): stdout, or nowhere while the command renders a
+// structured result, which stands in for the report and must be all
+// stdout carries.
+func ReportOut() io.Writer {
+	if IsStructured() {
+		return io.Discard
+	}
+	return os.Stdout
+}
+
+// DiagOut is where a command writes the detail of a failure it reports
+// with Error or Fatal: stdout, as before, for a person at a terminal;
+// stderr while a structured result is requested, so stdout stays empty
+// and the detail is still seen.
+func DiagOut() io.Writer {
+	if IsStructured() {
+		return os.Stderr
+	}
+	return os.Stdout
+}
 
 // IsHumanFormat reports whether format selects the human view: the
 // --format default ("table"), "human", or unset.
