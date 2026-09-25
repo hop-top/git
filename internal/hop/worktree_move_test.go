@@ -198,3 +198,72 @@ func TestMoveWorktree_NewBranchAlreadyExists(t *testing.T) {
 		t.Fatal("expected error when new branch already exists, got nil")
 	}
 }
+
+// A file or a non-empty directory at the destination is refused before
+// anything changes: `git worktree move` would nest the worktree inside
+// the directory while hop.json recorded the directory itself. An empty
+// directory is taken, and removed first so git moves the worktree to
+// the path itself.
+func TestMoveWorktree_Destination(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		setup  func(fs afero.Fs, dest string)
+		refuse bool
+	}{
+		{"non-empty directory", func(fs afero.Fs, dest string) {
+			_ = fs.MkdirAll(dest, 0755)
+			_ = afero.WriteFile(fs, dest+"/keep.txt", []byte("work"), 0644)
+		}, true},
+		{"file", func(fs afero.Fs, dest string) {
+			_ = afero.WriteFile(fs, dest, []byte("work"), 0644)
+		}, true},
+		{"empty directory", func(fs afero.Fs, dest string) { _ = fs.MkdirAll(dest, 0755) }, false},
+		{"nothing", func(afero.Fs, string) {}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fs := afero.NewMemMapFs()
+			hubPath, oldPath, dest := "/hub", "/hub/hops/feature-old", "/hub/hops/feature-new"
+			fs.MkdirAll(oldPath, 0755)
+			fs.MkdirAll(hubPath+"/hops/main", 0755)
+			hopspace := setupMoveTestHopspace(fs, hubPath, "feature-old", oldPath)
+			hub := setupMoveTestHub(fs, hubPath, "main", "feature-old", oldPath)
+			tc.setup(fs, dest)
+			g := mocks.NewMockGit()
+
+			checkErr := hop.CheckMove(fs, hub, g, "feature-old", "feature-new", dest)
+			_, _, err := hop.NewWorktreeManager(fs, g).MoveWorktree(hopspace, hub, "feature-old", "feature-new", "{hubPath}/hops/{branch}", "org", "repo")
+
+			if !tc.refuse {
+				if checkErr != nil || err != nil {
+					t.Fatalf("move refused: check %v, move %v", checkErr, err)
+				}
+				if exists, _ := afero.Exists(fs, dest); exists {
+					t.Errorf("%s must be gone before git moves the worktree there", dest)
+				}
+				return
+			}
+			for _, e := range []error{checkErr, err} {
+				if e == nil || !strings.Contains(e.Error(), "already exists and is not an empty directory") {
+					t.Errorf("want refusal, got %v", e)
+				}
+			}
+			if len(g.RenamedBranches) > 0 || len(g.MovedWorktrees) > 0 {
+				t.Errorf("a refused move must not touch git: renamed %v, moved %v", g.RenamedBranches, g.MovedWorktrees)
+			}
+			if _, ok := hub.Config.Branches["feature-old"]; !ok {
+				t.Error("a refused move must leave hop.json as it was")
+			}
+			info, statErr := fs.Stat(dest)
+			if statErr != nil {
+				t.Fatalf("%s must survive: %v", dest, statErr)
+			}
+			keep := dest
+			if info.IsDir() {
+				keep = dest + "/keep.txt"
+			}
+			if got, _ := afero.ReadFile(fs, keep); string(got) != "work" {
+				t.Errorf("%s must survive unchanged, got %q", keep, got)
+			}
+		})
+	}
+}

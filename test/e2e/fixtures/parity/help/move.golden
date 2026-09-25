@@ -1,4 +1,10 @@
-Rename a worktree and its branch
+Rename a worktree and its branch.
+
+With one argument, renames the current worktree's branch.
+
+Like add, move refuses a destination a file or a non-empty directory
+occupies, with exit status 1: 'git worktree move' would put the
+worktree inside the directory. An empty directory is taken.
 
 Usage:
   git-hop move [old-branch] <new-branch> [flags]

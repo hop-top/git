@@ -25,7 +25,12 @@ var mergeCmd = &cobra.Command{
 	Long: `Merges the source branch into the receiving (into) branch, removes the source
 worktree, and symlinks "current" to the receiving branch's worktree.
 
-If only one argument is given, the current branch is used as the source.`,
+If only one argument is given, the current branch is used as the source.
+
+The source worktree is removed only through 'git worktree remove'. When
+that cannot happen (git refuses, or the recorded directory is not a
+worktree git has registered and is not empty), the merge stands but
+merge exits 1, leaving the worktree, its hop.json entry and its branch.`,
 	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
 		noFF, _ := cmd.Flags().GetBool("no-ff")
@@ -150,18 +155,14 @@ If only one argument is given, the current branch is used as the source.`,
 		// Determine base path for git worktree remove (use receiving branch path)
 		basePath := intoPath
 
-		// Remove source worktree via git
-		if err := g.WorktreeRemove(basePath, srcPath, true); err != nil {
-			output.Warn("Failed to remove worktree via git: %v", err)
-		}
-
-		// Remove source worktree directory
+		// Remove the source worktree. Only `git worktree remove` deletes
+		// its files; when that cannot happen, the merge stands but the
+		// worktree, its hop.json entry and its branch stay.
 		output.Info("Removing worktree directory: %s", srcPath)
-		if err := fs.RemoveAll(srcPath); err != nil {
-			output.Warn("Failed to remove worktree directory: %v", err)
-		} else {
-			res.SourceRemoved = true
+		if err := removeWorktreeFiles(fs, g, basePath, srcPath); err != nil {
+			output.Fatal("Merged '%s' into '%s', but did not remove its worktree: %v", sourceBranch, intoBranch, err)
 		}
+		res.SourceRemoved = true
 
 		// Remove source branch from hub config
 		if err := hub.RemoveBranch(sourceBranch); err != nil {

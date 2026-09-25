@@ -334,33 +334,21 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	}
 	absBasePath := resolveBasePath()
 
-	// Deregister the worktree with git, but only if git still knows
-	// about it. Asking git to remove a path absent from its worktree
-	// registry fails ("is not a working tree") even though that is
-	// precisely the state we want — warning about it reported routine
-	// cleanup as a problem. See isWorktreeRegistered.
-	if isWorktreeRegistered(g, absBasePath, worktreePath) {
-		if err := g.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
-			output.Warn("Failed to remove worktree via git: %v", err)
-		}
-	} else {
-		output.Debug("worktree %s already deregistered; skipping git worktree remove", worktreePath)
-	}
-
-	// Always try to remove the directory physically as well
+	// Only `git worktree remove` deletes a worktree's files. When it
+	// cannot, or the directory is not a worktree git has registered and
+	// holds anything, the removal stops here: the files, the hop.json
+	// entry and the branch all stay, and the error says why.
 	output.Info("Removing worktree directory: %s", worktreePath)
-	if err := fs.RemoveAll(worktreePath); err != nil {
-		output.Error("Failed to remove worktree directory: %v", err)
-		rec.Reason = fmt.Sprintf("failed to remove worktree directory: %v", err)
-	} else {
-		rec.Removed = true
-		output.Info("Successfully removed worktree directory")
+	if err := removeWorktreeFiles(fs, g, absBasePath, worktreePath); err != nil {
+		return rec, err
+	}
+	rec.Removed = true
+	output.Info("Successfully removed worktree directory")
 
-		// Remove parent dir (e.g. feat/, fix/) if now empty.
-		cleanupMgr := hop.NewCleanupManager(fs, g)
-		if err := cleanupMgr.RemoveEmptyParent(worktreePath, hubPath); err != nil {
-			output.Warn("Failed to remove empty parent directory: %v", err)
-		}
+	// Remove parent dir (e.g. feat/, fix/) if now empty.
+	cleanupMgr := hop.NewCleanupManager(fs, g)
+	if err := cleanupMgr.RemoveEmptyParent(worktreePath, hubPath); err != nil {
+		output.Warn("Failed to remove empty parent directory: %v", err)
 	}
 
 	// Delete the local branch, but only if it still exists. `git branch
@@ -479,14 +467,10 @@ func isWorktreeRegistered(g git.GitInterface, basePath, worktreePath string) boo
 		return true
 	}
 
-	target, err := filepath.Abs(worktreePath)
-	if err != nil {
-		target = worktreePath
-	}
-	target = filepath.Clean(target)
-
+	// git lists resolved paths (macOS /var is /private/var); a path
+	// recorded through a symlink still names the same worktree.
 	for _, wt := range parseWorktreeListPorcelain(out) {
-		if filepath.Clean(wt.Path) == target {
+		if state.SamePath(wt.Path, worktreePath) {
 			return true
 		}
 	}

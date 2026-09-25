@@ -633,6 +633,13 @@ Piping an answer works as expected, so `yes | git hop remove …` and
 The branch on `origin` is **not** touched. Removal is a local
 operation and never contacts the network unless you ask it to.
 
+Only `git worktree remove` deletes the worktree's files. When git
+refuses (a locked worktree, a permission error), or the recorded
+directory is not a worktree git has registered and is not empty, remove
+fails with exit status 1 and leaves the files, the `hop.json` entry and
+the branch as they were. An unregistered directory that is empty, or
+already gone, is removed as before.
+
 ### Removing a hub
 
 `git hop remove <hub-path>` deletes the hub's worktrees, the hub
@@ -1567,6 +1574,12 @@ git hop move [&lt;old-branch&gt;] &lt;new-branch&gt;
 With one argument, renames the current worktree's branch. Runs the
 `pre-worktree-move` and `post-worktree-move` hooks.
 
+Like `add`, move refuses a destination that a file or a non-empty
+directory occupies (exit status 1; `-n` says `[dry-run] would refuse to
+move '<branch>'`): `git worktree move` would put the worktree inside the
+directory. An empty directory is taken; the worktree lands at the path
+itself.
+
 ## git hop merge
 
 Merge a worktree's branch into a receiving branch, then remove the source
@@ -1580,6 +1593,11 @@ git hop merge [&lt;source-branch&gt;] &lt;into-branch&gt; [flags]
 ```
 
 With one argument, the current branch is the source.
+
+The source worktree is removed as [`git hop remove`](#git-hop-remove)
+removes one: only through `git worktree remove`. When that cannot
+happen, the merge stands, but merge fails with exit status 1 and the
+worktree, its `hop.json` entry and its branch stay.
 
 ### Flags
 

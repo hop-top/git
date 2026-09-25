@@ -1,0 +1,126 @@
+# `git hop move` refuses a destination a file or a non-empty directory
+# occupies, as add does: `git worktree move` would put the worktree
+# inside such a directory while hop.json recorded the directory itself.
+# An empty directory is taken, and the worktree lands at the path
+# hop.json records. merge and remove never delete a directory `git
+# worktree remove` did not remove: the error is reported and the files
+# stay.
+#
+# The regression this pins: move into an occupied directory nested the
+# worktree in it, and a later merge deleted the directory, the user's
+# files in it included.
+
+# --- upstream repo and hub ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/a
+
+# --- snapshot what a refused move must leave alone ---
+cp hop.json $WORK/hop.json.before
+
+# --- a non-empty directory at the destination ---
+mkdir hops/feat/occ
+cp $WORK/keep.txt hops/feat/occ/keep.txt
+exec sh -c 'git-hop move feat/a feat/occ -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '^fatal: \[dry-run\] would refuse to move ''feat/a'': ''.*/hub/hops/feat/occ'' already exists and is not an empty directory$' err
+grep '^hint: move it away, or pick another branch name$' err
+exec sh -c 'git-hop move feat/a feat/occ >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Cannot move ''feat/a'': ''.*/hub/hops/feat/occ'' already exists and is not an empty directory$' err
+grep '^hint: move it away, or pick another branch name$' err
+cmp hops/feat/occ/keep.txt $WORK/keep.txt
+! exists hops/feat/occ/a
+exists hops/feat/a/.git
+exec git branch --list feat/occ
+! stdout .
+cmp hop.json $WORK/hop.json.before
+
+# --- a file at the destination ---
+cp $WORK/keep.txt hops/feat/file
+exec sh -c 'git-hop move feat/a feat/file -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to move ''feat/a'': ''.*/hub/hops/feat/file'' already exists and is not an empty directory$' err
+exec sh -c 'git-hop move feat/a feat/file >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+cmp hops/feat/file $WORK/keep.txt
+cmp hop.json $WORK/hop.json.before
+
+# --- an empty directory is taken: the worktree lands at the recorded path ---
+mkdir hops/feat/empty
+exec git-hop move feat/a feat/empty -n
+stdout '\[dry-run\] Would move worktree .*/hub/hops/feat/a -> .*/hub/hops/feat/empty$'
+exec git-hop move feat/a feat/empty
+exists hops/feat/empty/.git
+! exists hops/feat/empty/a
+exec git -C hops/feat/empty rev-parse --abbrev-ref HEAD
+stdout '^feat/empty$'
+grep '"path": ".*/hub/hops/feat/empty"' hop.json
+
+# --- the original chain: merge after a nested move keeps the user's files ---
+# Reproduce the nesting the refused move used to create, with git itself:
+# hop.json records hops/feat/nest while git has the worktree at
+# hops/feat/nest/b.
+exec git-hop add feat/b
+mkdir hops/feat/nest
+cp $WORK/keep.txt hops/feat/nest/keep.txt
+exec git -C hops/main worktree move $WORK/hub/hops/feat/b $WORK/hub/hops/feat/nest
+exists hops/feat/nest/b/.git
+exec sh -c 'sed -e ''s#"path": "\([^"]*\)/hops/feat/b"#"path": "\1/hops/feat/nest"#'' hop.json >hop.json.new && mv hop.json.new hop.json'
+grep '"path": ".*/hops/feat/nest"' hop.json
+cp $WORK/keep.txt hops/feat/nest/b/wip.txt
+cp hop.json $WORK/hop.json.nested
+exec sh -c 'git-hop merge feat/b main >out 2>err; echo "exit=$?"'
+cmp hops/feat/nest/keep.txt $WORK/keep.txt
+cmp hops/feat/nest/b/wip.txt $WORK/keep.txt
+stdout '^exit=1$'
+grep '^fatal: Merged ''feat/b'' into ''main'', but did not remove its worktree: ''.*/hub/hops/feat/nest'' is not a worktree git has registered and is not empty, so it stays$' err
+grep '^hint: move out what you want to keep, delete it, then try again$' err
+exists hops/feat/nest/b/.git
+grep '"feat/b"' hop.json
+
+# --- remove refuses the same way ---
+exec sh -c 'git-hop remove feat/b --force --no-verify --no-prompt >out 2>err; echo "exit=$?"'
+cmp hops/feat/nest/keep.txt $WORK/keep.txt
+cmp hops/feat/nest/b/wip.txt $WORK/keep.txt
+stdout '^exit=1$'
+grep '^fatal: ''.*/hub/hops/feat/nest'' is not a worktree git has registered and is not empty, so it stays$' err
+exec git branch --list feat/b
+stdout 'feat/b'
+grep '"feat/b"' hop.json
+
+# --- git refusing to remove a worktree (locked) leaves its files ---
+exec git-hop add feat/lock
+cp $WORK/keep.txt hops/feat/lock/wip.txt
+exec git worktree lock hops/feat/lock
+exec sh -c 'git-hop remove feat/lock --force --no-verify --no-prompt >out 2>err; echo "exit=$?"'
+cmp hops/feat/lock/wip.txt $WORK/keep.txt
+stdout '^exit=1$'
+grep '^fatal: git could not remove the worktree at ''.*/hub/hops/feat/lock'', so its files stay: ' err
+grep '"feat/lock"' hop.json
+# merge wants a clean source: commit the work, keep the lock.
+exec git -C hops/feat/lock add wip.txt
+exec git -C hops/feat/lock commit -m 'wip'
+exec sh -c 'git-hop merge feat/lock main >out 2>err; echo "exit=$?"'
+cmp hops/feat/lock/wip.txt $WORK/keep.txt
+stdout '^exit=1$'
+grep '^fatal: Merged ''feat/lock'' into ''main'', but did not remove its worktree: git could not remove the worktree at ''.*/hub/hops/feat/lock'', so its files stay: ' err
+grep '"feat/lock"' hop.json
+exec git branch --list feat/lock
+stdout 'feat/lock'
+
+# --- once git can, remove removes it as before ---
+exec git worktree unlock hops/feat/lock
+exec git-hop remove feat/lock --force --no-verify --no-prompt
+! exists hops/feat/lock
+! grep '"feat/lock"' hop.json
+
+-- keep.txt --
+uncommitted work
