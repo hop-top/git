@@ -33,8 +33,9 @@ func WithGitFlowActions(enabled bool) GitFlowOption {
 }
 
 // WithStartBase makes OnAdd pass base to `git flow <type> start` as its
-// [base]: the branch starts there and git-flow records it as the branch's
-// finish target. Empty leaves both to the branch type's configuration.
+// [base]: the branch starts there, and git-flow records it as
+// gitflow.branch.<branch>.base. Finish still merges into the type's
+// parent. Empty leaves the start point to the branch type.
 func WithStartBase(base string) GitFlowOption {
 	return func(d *GitFlowNextDetector) { d.startBase = base }
 }
@@ -195,8 +196,8 @@ func (d *GitFlowNextDetector) OnRemove(ctx context.Context, info *BranchTypeInfo
 
 // finishDir returns the worktree to run finish in, readying it first.
 //
-// git-flow-next finishes into the target (the branch's recorded base, else
-// its type's parent) in whichever worktree has the target checked out;
+// git-flow-next 2.1 finishes into the target, the type's parent (not the
+// base start recorded), in whichever worktree has it checked out;
 // run from the branch's own worktree, it then detaches that worktree and
 // deletes the branch. With the target checked out nowhere it falls back to
 // the repository's main work tree, which a bare hub lacks, and from any
@@ -207,11 +208,7 @@ func (d *GitFlowNextDetector) OnRemove(ctx context.Context, info *BranchTypeInfo
 // one about to be removed; detached reports that it was. A branch whose
 // worktree is gone finishes in the target's worktree.
 func (d *GitFlowNextDetector) finishDir(info *BranchTypeInfo, worktreePath, repoPath string) (dir string, detached bool, err error) {
-	branch := info.Prefix + info.Name
-	target := d.getConfig(repoPath, fmt.Sprintf("gitflow.branch.%s.base", branch))
-	if target == "" {
-		target = info.Parent
-	}
+	target := info.Parent
 	targetDir := d.checkedOutAt(repoPath, target)
 
 	if st, err := os.Stat(worktreePath); err != nil || !st.IsDir() {

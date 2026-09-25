@@ -186,8 +186,10 @@ func TestGitFlowNextDetector_FinishDetachesWhenTargetCheckedOutNowhere(t *testin
 	}
 }
 
-// The recorded base, not the type's parent, is the finish target.
-func TestGitFlowNextDetector_FinishTargetIsRecordedBase(t *testing.T) {
+// The finish target is the type's parent: git-flow-next 2.1 merges there
+// even when start recorded another base, so a base checked out nowhere
+// is no reason to detach while the parent has a worktree.
+func TestGitFlowNextDetector_FinishTargetIsTypeParent(t *testing.T) {
 	wt := t.TempDir()
 	g := &recordingGit{
 		config:    map[string]string{"gitflow.branch.feature/x.base": "release/1"},
@@ -199,8 +201,11 @@ func TestGitFlowNextDetector_FinishTargetIsRecordedBase(t *testing.T) {
 	if err := d.OnRemove(context.Background(), info, wt, "/repo"); err != nil {
 		t.Fatal(err)
 	}
-	if !g.detached() {
-		t.Errorf("release/1 is checked out nowhere, yet the worktree was not detached: %v", g.runs)
+	if g.detached() {
+		t.Errorf("worktree detached although the parent develop is checked out: %v", g.runs)
+	}
+	if want := []string{wt}; !reflect.DeepEqual(g.dirs, want) {
+		t.Errorf("finish ran in %v, want %v", g.dirs, want)
 	}
 }
 
