@@ -1,0 +1,34 @@
+# In a --global hub, repair keeps the shared data-home hopspace in line
+# with the hop.json rows it adds and drops, and drops the state entry of
+# a worktree whose row it drops, so doctor finds nothing left to report.
+
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/glob.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+cd $WORK/g1/app
+
+# --- a worktree git has registered and hop.json does not record ---
+exec git worktree add -q hops/feat/r -b feat/r
+! grep '/g1/app/hops/feat/r"' $WORK/data/org/glob/hop.json
+exec git-hop repair
+grep '"[^"]*/g1/app/hops/feat/r": \{' $WORK/data/org/glob/hop.json
+grep '"branch": "feat/r"' $WORK/data/org/glob/hop.json
+exec git-hop doctor
+! stderr 'not in hopspace'
+
+# --- a hop.json row whose worktree is gone, from git and from disk ---
+exec git-hop add feat/d
+grep '"[^"]*/g1/app/hops/feat/d": \{' $WORK/data/org/glob/hop.json
+exec git worktree remove hops/feat/d
+exec git-hop repair
+! grep '/g1/app/hops/feat/d"' $WORK/g1/app/hop.json
+! grep '/g1/app/hops/feat/d"' $WORK/data/org/glob/hop.json
+! grep '/g1/app/hops/feat/d"' $WORK/.local/state/git-hop/state.json
+grep '/g1/app/hops/feat/r"' $WORK/.local/state/git-hop/state.json
+exec git-hop doctor
+! stderr 'Missing worktree'

@@ -1265,7 +1265,10 @@ removes the leftover `.hop/` once it is empty.
 8. Re-plan; auto-restore from backup if new issues appeared
 9. Record in `state.json` each worktree `hop.json` gained, as
    [`git hop add`](#git-hop-add) records one (keyed by path, with its
-   branch and hub), so `list`, `status --all` and `doctor` see it
+   branch and hub), so `list`, `status --all` and `doctor` see it; a
+   `--global` hub's data-home hopspace records it too. A row dropped for
+   a worktree gone from git and disk loses its state entry and hopspace
+   record
 10. Fire `post-repair` hook
 
 ### Porcelain v1 format
