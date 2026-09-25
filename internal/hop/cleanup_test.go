@@ -1,6 +1,7 @@
 package hop
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -10,41 +11,46 @@ import (
 	"hop.top/git/internal/git"
 )
 
-func TestCleanupOrphanedDirectory(t *testing.T) {
+func TestRemoveEmptyDirectory(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	g := git.New()
-	cleanup := NewCleanupManager(fs, g)
+	cleanup := NewCleanupManager(fs, git.New())
 
-	// Create a directory to be cleaned up
-	orphanedPath := "/path/to/orphaned"
-	require.NoError(t, fs.MkdirAll(orphanedPath, 0755))
-
-	// Verify it exists
-	exists, err := afero.DirExists(fs, orphanedPath)
+	empty := "/path/to/empty"
+	require.NoError(t, fs.MkdirAll(empty, 0755))
+	require.NoError(t, cleanup.RemoveEmptyDirectory(empty))
+	exists, err := afero.Exists(fs, empty)
 	require.NoError(t, err)
-	require.True(t, exists)
+	assert.False(t, exists, "an empty directory is removed")
 
-	// Clean it up
-	err = cleanup.CleanupOrphanedDirectory(orphanedPath)
-	assert.NoError(t, err)
-
-	// Verify it's gone
-	exists, err = afero.DirExists(fs, orphanedPath)
-	assert.NoError(t, err)
-	assert.False(t, exists)
+	assert.NoError(t, cleanup.RemoveEmptyDirectory("/path/to/nonexistent"), "one already gone is not an error")
 }
 
-func TestCleanupOrphanedDirectory_NotExists(t *testing.T) {
+// A directory with anything in it, however deep, and a file are refused
+// and left exactly as they were.
+func TestRemoveEmptyDirectory_RefusesAnythingElse(t *testing.T) {
 	fs := afero.NewMemMapFs()
-	g := git.New()
-	cleanup := NewCleanupManager(fs, g)
+	cleanup := NewCleanupManager(fs, git.New())
 
-	// Try to clean up a directory that doesn't exist
-	nonExistentPath := "/path/to/nonexistent"
-	err := cleanup.CleanupOrphanedDirectory(nonExistentPath)
+	files := []string{"/o/top/keep.txt", "/o/deep/a/b/keep.txt", "/o/dot/.keep", "/o/file"}
+	for _, f := range files {
+		require.NoError(t, fs.MkdirAll(filepath.Dir(f), 0755))
+		require.NoError(t, afero.WriteFile(fs, f, []byte("work"), 0644))
+	}
+	require.NoError(t, fs.MkdirAll("/o/nested/empty", 0755))
 
-	// Should not return an error if already gone
-	assert.NoError(t, err)
+	for _, p := range []string{"/o/top", "/o/deep", "/o/dot", "/o/file", "/o/nested"} {
+		err := cleanup.RemoveEmptyDirectory(p)
+		assert.ErrorContains(t, err, "is not an empty directory", p)
+		exists, _ := afero.Exists(fs, p)
+		assert.True(t, exists, "%s must survive", p)
+	}
+	for _, f := range files {
+		got, err := afero.ReadFile(fs, f)
+		require.NoError(t, err, "%s must survive", f)
+		assert.Equal(t, "work", string(got))
+	}
+	exists, _ := afero.DirExists(fs, "/o/nested/empty")
+	assert.True(t, exists, "an empty directory inside one that is refused survives too")
 }
 
 // MockCommandRunner is a mock implementation of CommandRunner for testing

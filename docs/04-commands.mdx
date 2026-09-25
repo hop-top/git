@@ -911,6 +911,13 @@ git hop doctor --fix --dry-run
 - An invalid `hop.dataLayout`, at `--global` or in effect for the current
   hub (its own config, `git -c`): a warning naming the scope; the
   `--global` value, or the default, is used
+- Directories under the hopspace's `hops/` that `hop.json` does not
+  record, each an issue. `--fix` removes only an empty one. A worktree
+  git has registered (at the directory or below it) is never removed,
+  whatever is in it: record it with [`git hop repair`](#git-hop-repair)
+  or remove it with `git worktree remove`. Any other directory with
+  something in it is left for you to empty or delete; `--fix` cannot
+  repair either
 - Orphaned worktrees
 - A repository state still keys by another host than its origin's,
   because the `<host>/<org>/<repo>` key its origin gives was already
@@ -1010,7 +1017,8 @@ is printed either way.
 
 Not every issue has a repair: a `managers.json` that does not parse, a
 state key collision, an origin without a fetch refspec (`git hop
-repair` restores it) or an unmerged branch's worktree path that
+repair` restores it), a directory under `hops/` that `hop.json` does
+not record and that is not empty or is a registered worktree, or an unmerged branch's worktree path that
 something else occupies are left for you, with an `error:` or `hint:`
 saying what to do. The summary suggests `--fix` only when it can repair
 at least one issue found, says how many when it can repair only some,
@@ -1033,6 +1041,8 @@ The `--fix` flag will:
   it, `--global` or the current hub's config, and no live key
 - Set the current hub's `core.repositoryformatversion` to 1 when it has
   `extensions.worktreeConfig` on at version 0
+- Remove empty directories under `hops/` that `hop.json` does not record
+  (never one with anything in it)
 - Remove the stale temp files interrupted saves left, unless a save
   holds the file's lock at the time (they stay for a later run)
 - Register branches from hub to hopspace
