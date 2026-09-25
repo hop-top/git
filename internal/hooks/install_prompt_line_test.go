@@ -71,11 +71,12 @@ func TestMirror_PromptPipedRetryOnItsOwnLine(t *testing.T) {
 }
 
 // With no answer at all (EOF) the line is closed once, and the mirror
-// fails instead of reading the silence as an answer.
+// stops instead of reading the silence as an answer (the warning is
+// pinned in install_prompt_eof_test.go).
 func TestMirror_PromptEOFEndsLine(t *testing.T) {
 	out, res, err := mirrorPrompt(t, "", "post-worktree-add")
-	if err == nil {
-		t.Errorf("want an error on EOF, got none (%+v)", res)
+	if err != nil || res.Installed != 0 || res.Skipped != 0 {
+		t.Errorf("want the mirror stopped with nothing answered, got %+v, %v", res, err)
 	}
 	if want := installPrompt + "\n"; !strings.HasSuffix(out, want) || strings.HasSuffix(out, "\n\n") {
 		t.Errorf("output %q does not end with exactly %q", out, want)
