@@ -1,0 +1,54 @@
+# clone publishes the lifecycle events of the hub and worktree it
+# creates, in the order add and init publish theirs: hopspace.initialized
+# (as init does for the hub it registers), then worktree.created for the
+# initial worktree with add's payload keys, then deps.installed.
+#
+# The regression this pins: clone published deps.installed for a
+# worktree that never had a worktree.created, so a consumer tracking
+# worktrees from events never learned about a clone's first worktree.
+#
+# A stub npm on PATH stands in for `npm ci`: it writes ./node_modules.
+
+mkdir $WORK/bin
+cp $WORK/npm-stub $WORK/bin/npm
+chmod 755 $WORK/bin/npm
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/package.json package.json
+cp $WORK/package.json package-lock.json
+exec git add package.json package-lock.json
+exec git commit -m 'npm'
+exec git push origin main
+cd $WORK
+
+exec git config --global hop.events.sink jsonl
+exec git config --global hop.events.path $WORK/events.jsonl
+
+# --- --dry-run is refused and publishes nothing ---
+! exec git-hop --dry-run $WORK/org/repo.git dry
+stderr 'dry-run is not supported for clone'
+! exists $WORK/dry
+! exists $WORK/events.jsonl
+
+# --- default hub ---
+exec git-hop $WORK/org/repo.git hub
+grep -count=3 '"topic":' $WORK/events.jsonl
+grep -count=1 '"topic":"git.runtime.hopspace.initialized","source":"git-hop".*"payload":\{"path":"[^"]*/hub","org":"org","repo":"repo"\}' $WORK/events.jsonl
+grep -count=1 '"topic":"git.runtime.worktree.created","source":"git-hop".*"payload":\{"path":"[^"]*/hub/hops/main","branch":"main","hopspace_path":"[^"]*/hub","repo_path":"[^"]*/hub"\}' $WORK/events.jsonl
+grep -count=1 '"topic":"git.runtime.deps.installed".*"payload":\{"worktree_path":"[^"]*/hub/hops/main","branch":"main"\}' $WORK/events.jsonl
+grep '(?s)hopspace\.initialized.*\n.*worktree\.created.*\n.*deps\.installed' $WORK/events.jsonl
+
+# --- --global hub: hopspace_path is the data-home hopspace ---
+exec git config --global hop.events.path $WORK/global.jsonl
+exec git-hop --global $WORK/org/repo.git hubg
+grep -count=1 '"topic":"git.runtime.worktree.created".*"payload":\{"path":"[^"]*/hubg/hops/main","branch":"main","hopspace_path":"[^"]*/data/org/repo","repo_path":"[^"]*/hubg"\}' $WORK/global.jsonl
+grep '(?s)hopspace\.initialized.*\n.*worktree\.created.*\n.*deps\.installed' $WORK/global.jsonl
+
+-- package.json --
+{}
+-- npm-stub --
+#!/bin/sh
+mkdir -p node_modules && echo ok > node_modules/installed

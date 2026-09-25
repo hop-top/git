@@ -14,14 +14,12 @@ import (
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
-	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/services"
 	"hop.top/kit/go/core/xdg"
-	"hop.top/kit/go/runtime/bus"
 )
 
 // addFromFlag holds the --from CLI flag value.
@@ -278,16 +276,7 @@ created or written and no hook runs.`,
 		// the handler stays blind to it for the rest of the session.
 		refreshRootsCache(fs, hub, hubPath)
 
-		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
-			events.WorktreeCreated, events.Source,
-			events.WorktreeEvent{
-				Path:         worktreePath,
-				Branch:       branch,
-				HopspacePath: hopspacePath,
-				RepoPath:     hubPath,
-			},
-		))
-		setup.PublishDepsInstalled(context.Background(), cli.EventBus)
+		setup.PublishCreated(context.Background(), cli.EventBus, hubPath)
 
 		// Last, once the worktree is complete: a failed start only warns.
 		envStarted := envStart && services.StartNewWorktreeEnv(fs, envTarget, globalConfig, cli.EventBus)

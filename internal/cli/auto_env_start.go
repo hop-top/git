@@ -8,9 +8,11 @@ import (
 	"github.com/spf13/pflag"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
+	"hop.top/git/internal/events"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/services"
+	"hop.top/kit/go/runtime/bus"
 )
 
 // exitFatal is git's status for a fatal error.
@@ -65,17 +67,31 @@ func clonedEnvTarget(fs afero.Fs, hubPath string) (services.EnvTarget, error) {
 
 // setUpClonedWorktree prepares the worktree a clone just checked out at
 // the hub at hubPath through the same path as add (services.SetUpWorktree):
-// ports, volumes, .env and compose override, then shared deps, publishing
-// deps.installed when it linked them. Clone runs it before
-// post-worktree-add, as add does. Like add, it never fails the clone.
+// ports, volumes, .env and compose override, then shared deps. Clone runs
+// it before post-worktree-add, as add does. Like add, it never fails the
+// clone.
+//
+// The hub and worktree are registered by then, so it also publishes their
+// events: hopspace.initialized for the hub, as init does for the hub it
+// registers, then worktree.created and deps.installed, as add does.
 func setUpClonedWorktree(fs afero.Fs, hubPath string, globalCfg *config.GlobalConfig) {
 	target, err := clonedEnvTarget(fs, hubPath)
 	if err != nil {
 		output.Warn("failed to prepare environment: %v", err)
 		return
 	}
-	services.SetUpWorktree(fs, docker.New(), target, globalCfg).
-		PublishDepsInstalled(context.Background(), EventBus)
+	setup := services.SetUpWorktree(fs, docker.New(), target, globalCfg)
+
+	ctx := context.Background()
+	_ = EventBus.Publish(ctx, bus.NewEvent(
+		events.HopspaceInitialized, events.Source,
+		events.HopspaceEvent{
+			Path: hubPath,
+			Org:  target.Hub.Repo.Org,
+			Repo: target.Hub.Repo.Repo,
+		},
+	))
+	setup.PublishCreated(ctx, EventBus, hubPath)
 }
 
 // startClonedEnv starts the environment setUpClonedWorktree prepared, once
