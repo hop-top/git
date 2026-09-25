@@ -602,7 +602,13 @@ operation and never contacts the network unless you ask it to.
 
 `git hop remove <hub-path>` deletes the hub's worktrees, the hub
 directory and the hub's state entry; the repository's other hubs stay
-in state. A default hub keeps its hopspace in itself, so that goes with
+in state. It also drops the hub's entries from the hops registry
+(`$XDG_CONFIG_HOME/git-hop/hops.json`): those whose worktree path lies
+in the hub or is one of its worktrees. That registry holds one entry
+per `<org>/<repo>:<branch>`, recorded by whichever hub registered the
+branch first, so an entry another hub of the repository recorded stays.
+A registry file that cannot be read is left as it is, with a warning.
+`--dry-run` lists each of these. A default hub keeps its hopspace in itself, so that goes with
 it. A `--global` hub's hopspace lives in
 `$GIT_HOP_DATA_HOME/<org>/<repo>` and may be shared by other hubs of
 the same repository, so it is deleted only when no other hub state
