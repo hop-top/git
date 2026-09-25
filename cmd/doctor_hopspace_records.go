@@ -14,7 +14,8 @@ import (
 // checkGoneHubRecords warns about the records a data-home hopspace
 // several --global hubs share holds for worktrees of a hub that no longer
 // exists: state does not record it and its directory is gone (deleted by
-// hand, then pruned from state). Nothing reads them, so they are
+// hand, then taken out of state by doctor --fix or an earlier release's
+// prune). Nothing reads them, so they are
 // warnings; --fix drops them. A hub's own hopspace has no such records:
 // it goes with the hub.
 func checkGoneHubRecords(fs afero.Fs, hubPath, hopspacePath string, opts doctorOpts, r *doctorReport) {

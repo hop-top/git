@@ -4,7 +4,8 @@
 # touches nothing); the other hub's records stay and doctor there passes.
 #
 # Records of a hub that is gone some other way (its directory deleted by
-# hand, then pruned from state) are a doctor warning, which --fix clears.
+# hand, then pruned from state by a release whose prune left them) are a
+# doctor warning, which --fix clears.
 
 exec git init --bare $WORK/org/glob.git
 exec git clone $WORK/org/glob.git $WORK/seed
@@ -49,7 +50,9 @@ stdout 'healthy'
 # --- records of a hub deleted by hand: a warning --fix clears ---
 exec git-hop $WORK/org/glob.git $WORK/g3/app --global
 exec rm -rf $WORK/g3
+cp $WORK/data/org/glob/hop.json $WORK/hop.json.kept
 exec git-hop prune
+cp $WORK/hop.json.kept $WORK/data/org/glob/hop.json
 grep '"[^"]*/g3/app/hops/main": \{' $WORK/data/org/glob/hop.json
 
 exec git-hop doctor

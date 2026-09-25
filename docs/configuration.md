@@ -676,9 +676,9 @@ same file are keyed. A `--global` hopspace, which every `--global` hub of
 the repository shares, keys each worktree's entry by the worktree's path
 and names its branch and hub, so each hub's worktree of a branch has its
 own entry. Branch-level `packageManagers` there go under the branch name,
-in an entry without a `path`. Removing a hub drops its entries; `git hop
-doctor` warns about entries of a hub gone some other way, and `--fix`
-drops them.
+in an entry without a `path`. Removing a hub drops its entries, as does
+`git hop prune` for a hub whose directory is gone; `git hop doctor` warns
+about entries of a hub gone some other way, and `--fix` drops them.
 
 A `--global` hopspace an earlier release wrote keys its entries by branch.
 The first git-hop command that changes it copies it to

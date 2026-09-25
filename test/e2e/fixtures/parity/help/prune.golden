@@ -11,6 +11,11 @@ hub's hop.json, removing:
   - Hubs whose directories have been deleted
   - hop.json branch entries whose worktree directory is gone
     (the rows 'git hop status' reports as Missing)
+  - For a --global hub whose directory is gone, its records in the
+    hopspace it shared with the repository's other --global hubs: the
+    worktree records in that hopspace's hop.json and the entries in its
+    ports.json and volumes.json. The volume directories themselves, and
+    the data in them, are left alone
   - Repair backups older than hop.repair.backupRetention
   - Conversion backups 'git hop init' kept, beyond hop.backup.maxBackups
     per repository or older than hop.backup.cleanupAgeDays (backups of

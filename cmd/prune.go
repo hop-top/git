@@ -36,6 +36,11 @@ hub's hop.json, removing:
   - Hubs whose directories have been deleted
   - hop.json branch entries whose worktree directory is gone
     (the rows 'git hop status' reports as Missing)
+  - For a --global hub whose directory is gone, its records in the
+    hopspace it shared with the repository's other --global hubs: the
+    worktree records in that hopspace's hop.json and the entries in its
+    ports.json and volumes.json. The volume directories themselves, and
+    the data in them, are left alone
   - Repair backups older than hop.repair.backupRetention
   - Conversion backups 'git hop init' kept, beyond hop.backup.maxBackups
     per repository or older than hop.backup.cleanupAgeDays (backups of
@@ -133,11 +138,9 @@ func runPrune(cmd *cobra.Command, args []string) {
 	case counts.total() == 0:
 		output.Success("No orphaned entries found.")
 	case dryRun:
-		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), %d state backup(s), and %d temp file(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups, counts.tempFiles)
+		output.Success("[dry-run] Would prune %s", counts.summary())
 	default:
-		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), %d state backup(s), and %d temp file(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups, counts.tempFiles)
+		output.Success("Pruned %s", counts.summary())
 	}
 }
 
@@ -233,7 +236,13 @@ type pruneCounts struct {
 	worktrees      int
 	hubs           int
 	hopJSONEntries int
-	repairBackups  int
+	// hopspaceRecords, portsEntries and volumesEntries count the records
+	// a hopspace --global hubs share kept for a hub whose directory is
+	// gone.
+	hopspaceRecords int
+	portsEntries    int
+	volumesEntries  int
+	repairBackups   int
 	// conversionBackups counts init's conversion backups aged out.
 	conversionBackups int
 	// stateBackups counts state.json backups aged out (prune --all).
@@ -245,7 +254,15 @@ type pruneCounts struct {
 }
 
 func (c pruneCounts) total() int {
-	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups + c.conversionBackups + c.stateBackups + c.tempFiles
+	return c.worktrees + c.hubs + c.hopJSONEntries + c.hopspaceRecords + c.portsEntries + c.volumesEntries +
+		c.repairBackups + c.conversionBackups + c.stateBackups + c.tempFiles
+}
+
+// summary lists the count of every class, for the closing line.
+func (c pruneCounts) summary() string {
+	return fmt.Sprintf("%d worktree(s), %d hub(s), %d hop.json entry(ies), %d hopspace record(s), %d ports entry(ies), %d volumes entry(ies), %d repair backup(s), %d conversion backup(s), %d state backup(s), and %d temp file(s)",
+		c.worktrees, c.hubs, c.hopJSONEntries, c.hopspaceRecords, c.portsEntries, c.volumesEntries,
+		c.repairBackups, c.conversionBackups, c.stateBackups, c.tempFiles)
 }
 
 // addStateBackups adds the state backups a pass aged out.
@@ -264,30 +281,47 @@ func (c *pruneCounts) addTempFiles(records []pruneRecord) {
 // counts. Mutations to st are in-memory and recorded in edits; the
 // caller persists them (stateEdits.save).
 //
-// Ordering matters: hop.json entries are pruned first because the hub
-// entries in st are what tell us which hop.json files to visit, and
-// pruneOrphanedHubs drops those same entries from st in the pass right
-// after.
+// Ordering matters: hop.json entries, and the shared hopspaces' records
+// of gone hubs, are pruned first because the hub entries in st are what
+// tell us which files to visit, and pruneOrphanedHubs drops those same
+// entries from st in the pass right after.
 func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, edits *stateEdits) pruneCounts {
 	hopJSON := pruneOrphanedHubBranches(fs, g, st, dryRun)
+	shared := pruneGoneHubRecords(fs, st, dryRun)
 	worktrees, hubs := runPruneFS(fs, g, st, dryRun, edits)
 	backups := pruneRepairBackups(fs, g, st, dryRun)
 	conversions := pruneConversionBackups(fs, st, dryRun)
 	temps := pruneHubTemps(fs, st, dryRun)
 
-	records := make([]pruneRecord, 0, len(hopJSON)+len(worktrees)+len(hubs)+len(backups)+len(conversions)+len(temps))
-	for _, pass := range [][]pruneRecord{hopJSON, worktrees, hubs, backups, conversions, temps} {
-		records = append(records, pass...)
-	}
-	return pruneCounts{
+	counts := pruneCounts{
 		worktrees:         prunedCount(worktrees),
 		hubs:              len(hubs),
 		hopJSONEntries:    prunedCount(hopJSON),
 		repairBackups:     len(backups),
 		conversionBackups: len(conversions),
 		tempFiles:         len(temps),
-		records:           records,
 	}
+	for _, rec := range shared {
+		switch rec.Kind {
+		case pruneKindHopspaceRecord:
+			counts.hopspaceRecords++
+		case pruneKindPortsEntry:
+			counts.portsEntries++
+		case pruneKindVolumesEntry:
+			counts.volumesEntries++
+		}
+	}
+	passes := [][]pruneRecord{hopJSON, shared, worktrees, hubs, backups, conversions, temps}
+	n := 0
+	for _, pass := range passes {
+		n += len(pass)
+	}
+	// Never nil: an empty result is rendered as [], not null.
+	counts.records = make([]pruneRecord, 0, n)
+	for _, pass := range passes {
+		counts.records = append(counts.records, pass...)
+	}
+	return counts
 }
 
 // Kinds of entry prune removes, as reported in pruneRecord.Kind.

@@ -1,0 +1,109 @@
+# --global hubs of one repository share a data-home hopspace: its
+# hop.json records each hub's worktrees under their paths, as do its
+# ports.json and volumes.json. When one hub's directory is deleted by
+# hand, prune drops that hub from state and, in the same run, its
+# records from all three files (--dry-run says so and touches nothing).
+# The other hub's records stay, doctor there passes, and no volume
+# directory is touched: only the records go.
+#
+# A stub docker on PATH: `compose config` fails, so the raw compose file
+# is parsed.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/glob.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+exec git-hop $WORK/org/glob.git $WORK/g2/app --global
+cd $WORK/g1/app
+exec git-hop add feat/y
+cd $WORK/g2/app
+exec git-hop add feat/y
+cd $WORK
+exec sh -c 'for d in $(find $WORK/data/org/glob/volumes -type d -name "*_data"); do echo kept > "$d/kept"; done'
+exec sh -c 'find $WORK/data/org/glob/volumes -name kept | wc -l'
+stdout '^ *4$'
+exec cp $WORK/data/org/glob/hop.json $WORK/data/org/glob/ports.json $WORK/data/org/glob/volumes.json $WORK
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/ports.json
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/volumes.json
+
+exec rm -rf $WORK/g1
+cd $WORK/g2/app
+
+# --- -n previews every drop and changes nothing ---
+exec git-hop prune -n
+stdout '\[dry-run\] Would prune hopspace record: .*:main \(.*/g1/app/hops/main\) from .*/data/org/glob/hop.json'
+stdout '\[dry-run\] Would prune hopspace record: .*:feat/y \(.*/g1/app/hops/feat/y\) from .*/data/org/glob/hop.json'
+stdout '\[dry-run\] Would prune ports entry: .*:main \(.*/g1/app/hops/main\) from .*/data/org/glob/ports.json'
+stdout '\[dry-run\] Would prune volumes entry: .*:feat/y \(.*/g1/app/hops/feat/y\) from .*/data/org/glob/volumes.json'
+stdout '\[dry-run\] Would prune 2 worktree\(s\), 1 hub\(s\), 0 hop.json entry\(ies\), 2 hopspace record\(s\), 2 ports entry\(ies\), 2 volumes entry\(ies\),'
+! stdout '/g2/app/hops'
+cmp $WORK/data/org/glob/hop.json $WORK/hop.json
+cmp $WORK/data/org/glob/ports.json $WORK/ports.json
+cmp $WORK/data/org/glob/volumes.json $WORK/volumes.json
+
+exec git-hop prune -n --json
+stdout '"kind": "hopspace-record"'
+stdout '"kind": "ports-entry"'
+stdout '"kind": "volumes-entry"'
+stdout '"action": "would-prune"'
+! stdout '"action": "pruned"'
+cmp $WORK/data/org/glob/hop.json $WORK/hop.json
+
+# --- prune drops the gone hub's records; the other hub's stay ---
+exec git-hop prune
+stdout 'Pruned 2 worktree\(s\), 1 hub\(s\), 0 hop.json entry\(ies\), 2 hopspace record\(s\), 2 ports entry\(ies\), 2 volumes entry\(ies\),'
+! grep '/g1/app' $WORK/data/org/glob/hop.json
+! grep '/g1/app' $WORK/data/org/glob/ports.json
+! grep '/g1/app' $WORK/data/org/glob/volumes.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/ports.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/ports.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/volumes.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/volumes.json
+
+# --- no volume directory or data touched ---
+exec sh -c 'find $WORK/data/org/glob/volumes -name kept | wc -l'
+stdout '^ *4$'
+
+# --- doctor in the other hub passes ---
+exec git-hop doctor
+! stderr 'no longer exists'
+! stderr 'warning'
+stdout 'healthy'
+
+# --- a second prune finds nothing ---
+exec git-hop prune
+stdout 'No orphaned entries found.'
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - data:/data
+      - ${HOP_VOLUME_CACHE}:/cache
+volumes:
+  data:
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0
