@@ -46,28 +46,36 @@ git-hop uses different directories for different types of data:
 
 ### Data (Repository Storage)
 
+A default clone keeps its hopspace in the hub (`hop.json`, `ports.json`,
+`volumes.json`, `deps/`, with worktrees under `hops/`). The data home holds
+each repository's hopspace hooks, and the whole hopspace of a hub cloned
+with `--global`:
+
 **Linux/Unix:**
 ```
 ~/.local/share/git-hop/
 └── <org>/<repo>/
-    ├── hop.json              # Hopspace config
-    ├── deps/                 # Shared dependencies
-    │   └── .registry.json    # Dependency tracking
-    ├── hops/                 # Worktrees
-    │   ├── main/
-    │   └── feature-x/
-    └── hooks/                # Hopspace-level hooks
+    ├── hooks/                # Hopspace-level hooks
+    ├── hop.json              # --global only: hopspace config
+    ├── ports.json            # --global only
+    ├── volumes.json          # --global only
+    └── deps/                 # --global only: shared dependencies
+        └── .registry.json
 ```
 
 **macOS:**
 ```
 ~/Library/Application Support/git-hop/
 └── <org>/<repo>/
+    ├── hooks/
     ├── hop.json
-    ├── deps/
-    ├── hops/
-    └── hooks/
+    ├── ports.json
+    ├── volumes.json
+    └── deps/
 ```
+
+Worktrees live here only when `hop.worktreeLocation` puts them in the
+hopspace (`{hopspace}/hops/{branch}`).
 
 **Environment variable override:** `$GIT_HOP_DATA_HOME`
 
@@ -629,12 +637,12 @@ it, and `git hop doctor` reports it as a warning (check `hopspace`).
   "branches": {
     "main": {
       "exists": true,
-      "path": "/home/user/.local/share/git-hop/github.com/org/repo/hops/main",
+      "path": "/home/user/src/repo/hops/main",
       "lastSync": "2026-02-01T10:00:00Z"
     },
     "feature-x": {
       "exists": true,
-      "path": "/home/user/.local/share/git-hop/github.com/org/repo/hops/feature-x",
+      "path": "/home/user/src/repo/hops/feature-x",
       "lastSync": "2026-02-02T14:30:00Z"
     }
   },

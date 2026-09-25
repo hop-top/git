@@ -7,70 +7,70 @@ description: Integrate git-hop with your development tools
 
 git-hop integrates seamlessly with Git, Docker, and your development tools.
 
-## Git Hooks
+## Lifecycle Hooks
 
-git-hop installs lightweight Git hook wrappers that call internal hop-hooks.
+git-hop runs its own lifecycle hooks: executable files named after the
+hook. They are not git's hooks and never live in `.git/hooks/`.
 
 ### Hook Order
 
+The first file found wins; a missing hook is a silent no-op.
+
 ```mermaid
 graph TD
-    A[Git Hook] --> B[Hop Wrapper]
-    B --> C{Repo-level Hook?}
+    A[Hook fires] --> C{Repo-level hook?}
     C -->|Yes| D[Repo Hook]
-    C -->|No| E{Hopspace Hook?}
+    C -->|No| E{Hopspace hook?}
     E -->|Yes| F[Hopspace Hook]
-    E -->|No| G{Global Hook?}
+    E -->|No| G{Global hook?}
     G -->|Yes| H[Global Hook]
-    G -->|No| I[Built-in Default]
-    
+    G -->|No| I[Nothing runs]
+
     D --> J[Complete]
     F --> J
     H --> J
     I --> J
-    
+
     style A fill:#e1f5e1
     style I fill:#fff9c4
 ```
 
+- Repo: `<worktree>/.git-hop/hooks/<name>`, walking up parent directories,
+  so a hub-level `.git-hop/hooks/` applies to every worktree
+- Hopspace: `$GIT_HOP_DATA_HOME/<org>/<repo>/hooks/<name>` (per
+  `hop.dataLayout`)
+- Global: `$XDG_CONFIG_HOME/git-hop/hooks/<name>`
+
 ### Available Hooks
 
-| Hook | Description |
-|------|-------------|
-| `pre-worktree-add` | Before creating a worktree |
-| `post-worktree-add` | After creating a worktree |
-| `pre-env-start` | Before starting environment |
-| `post-env-start` | After starting environment |
-| `pre-env-stop` | Before stopping environment |
-| `post-env-stop` | After stopping environment |
+| Hook | Runs |
+|------|------|
+| `pre-worktree-add` / `post-worktree-add` | Around `git hop add` (`post-` also for the first worktree of clone and init) |
+| `pre-worktree-remove` / `post-worktree-remove` | Around `git hop remove` |
+| `pre-worktree-move` / `post-worktree-move` | Around `git hop move` |
+| `pre-worktree-switch` / `post-worktree-switch` | Around `git hop <branch>`; `post-` also on a plain `cd` into a worktree |
+| `pre-clone` / `post-clone` | Around `git hop clone` |
+| `pre-repair` / `post-repair` | Around `git hop repair` |
+
+A non-zero exit from a `pre-` hook aborts the command; a failing `post-`
+hook only warns. `pre-env-start`, `post-env-start`, `pre-env-stop` and
+`post-env-stop` are accepted names but never run. See
+[Hooks System](./hooks) for levels, variables and details.
 
 ### Custom Hooks
 
-Create custom hooks in your hopspace:
+Commit hooks to the repository so every clone gets them:
 
 ```bash
-# In your hopspace
 mkdir -p .git-hop/hooks
 
-# Create a custom hook
-cat > .git-hop/hooks/post-env-start << 'EOF'
+cat > .git-hop/hooks/post-worktree-add << 'EOF'
 #!/bin/bash
-echo "Environment started for $(git branch --show-current)"
-# Run custom initialization
-npm install
-make db-migrate
+echo "Worktree ready for $GIT_HOP_BRANCH"
+cd "$GIT_HOP_WORKTREE_PATH" && npm install
 EOF
 
-chmod +x .git-hop/hooks/post-env-start
-```
-
-### Example: Auto-run Tests on Environment Start
-
-```bash
-# .git-hop/hooks/post-env-start
-#!/bin/bash
-# Run tests after starting environment
-make test || echo "Tests failed!"
+chmod +x .git-hop/hooks/post-worktree-add
 ```
 
 ### Example: Notify Team on Worktree Creation
@@ -78,13 +78,35 @@ make test || echo "Tests failed!"
 ```bash
 # .git-hop/hooks/post-worktree-add
 #!/bin/bash
-BRANCH=$(git branch --show-current)
 SLACK_WEBHOOK="https://hooks.slack.com/..."
 
 curl -X POST "$SLACK_WEBHOOK" \
   -H 'Content-Type: application/json' \
-  -d "{\"text\":\"New worktree created: $BRANCH\"}"
+  -d "{\"text\":\"New worktree created: $GIT_HOP_BRANCH\"}"
 ```
+
+### Running Commands Around `env start` / `env stop`
+
+`git hop env start` and `env stop` run commands declared in the hub's
+`hop.json`, not hook files:
+
+```json
+{
+  "settings": {
+    "environmentConfig": {
+      "hooks": {
+        "preStart": ["scripts/load-secrets.sh"],
+        "postStart": ["make db-migrate", "make test"],
+        "preStop": [],
+        "postStop": []
+      }
+    }
+  }
+}
+```
+
+Each command runs in the worktree. See
+[Two different hook systems](./hooks#two-different-hook-systems).
 
 ## Docker Services
 

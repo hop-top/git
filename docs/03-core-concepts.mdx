@@ -33,7 +33,7 @@ graph TD
 
 ## Hubs
 
-A *hub* is a directory that acts as the workspace for a single repository. It contains symlinks to all your worktrees, making it easy to switch between branches.
+A *hub* is a directory that acts as the workspace for a single repository. It holds the bare repository and every worktree under `hops/`, with a `current` symlink pointing at the last one you switched to.
 
 ### When to Create a Hub
 
@@ -46,13 +46,22 @@ Create a hub when you:
 
 ```
 my-project/
+  HEAD, config, objects/, refs/, worktrees/, ...   # the bare repository
   hops/
-    main -> ~/.local/share/git-hop/github.com/org/my-project/main
-    feature-x -> ~/.local/share/git-hop/github.com/org/my-project/feature-x
-    feature-y -> ~/.local/share/git-hop/github.com/org/my-project/feature-y
-  hop.json
+    main/           # worktrees, checked out in place
+    feature-x/
+    feature-y/
+  current -> hops/feature-x
+  hop.json          # hub config (and hopspace config for a default clone)
+  ports.json        # default clone: the hub is its own hopspace
+  volumes.json
+  deps/             # shared dependency installs
   .git-hop/         # repo-level hook overrides (shared across worktrees)
 ```
+
+Worktrees go wherever `hop.worktreeLocation` says; `hops/<branch>` in the
+hub is the default. A `--global` hub keeps `ports.json`, `volumes.json`
+and `deps/` in its data-home hopspace instead.
 
 ### Hub Configuration
 
@@ -104,7 +113,7 @@ hub-root copy automatically from inside any worktree.
 
 ## Hopspaces
 
-A *hopspace* is the canonical storage location for all worktrees of a single repository. It contains the actual git objects, configuration, and service data.
+A *hopspace* is where a repository's git-hop data lives: its branch registry, port and volume allocations and shared dependencies. The git objects stay in the hub's bare repository.
 
 ### Location
 
@@ -146,7 +155,7 @@ Each worktree has:
 - **Unique ports**: No two worktrees get the same port
 - **Isolated volumes**: Separate data per branch
 - **Independent services**: Run different service versions per branch
-- **Symlinked access**: Accessible via hub for convenience
+- **In the hub**: Checked out under `hops/<branch>`
 
 ### Worktree Lifecycle
 

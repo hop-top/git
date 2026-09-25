@@ -34,10 +34,14 @@ git hop file:///path/to/local/repo
 ### What Happens
 
 1. Detects server and organization
-2. Creates hub directory in current working directory
-3. Creates hopspace under `$GIT_HOP_DATA_HOME/org/repo`
-4. Clones repo into hopspace (default branch only)
-5. Symlinks worktree back into hub
+2. Clones the repository as a bare repository into the hub directory
+   (`<repo>` in the current directory, or the path given)
+3. Checks the default branch out at `hops/<default-branch>` in the hub
+4. Writes the hub's `hop.json`: by default the hub is its own hopspace.
+   With `--global` the hopspace is created under
+   `$GIT_HOP_DATA_HOME/<org>/<repo>` (per `hop.dataLayout`) and the hub's
+   `hop.json` is marked `repo.mode: global`
+5. Points the hub's `current` symlink at the worktree
 6. Sets up the worktree as add does: its ports and volumes,
    `.env` and, for a compose file with hardcoded host ports, the compose
    override, then shared dependencies. This happens before the
@@ -51,12 +55,23 @@ git hop file:///path/to/local/repo
 
 ### Output
 
+Progress and next steps go to stderr, as `git clone`'s do:
+
 ```
-Creating hub for org/repo
-Created hopspace for 'main'
-Worktree: ./org/repo/main
-Ports: 10100-10102
-Services: api, db
+Cloning git@github.com:org/repo.git...
+Project root: /home/user/src/repo
+Default branch: main
+Creating bare repository...
+Created local configuration (hub+hopspace) at /home/user/src/repo/hop.json
+Successfully cloned to /home/user/src/repo
+Project structure:
+  /home/user/src/repo/  (bare repository)
+    hop.json
+    hops/
+      main/  (worktree for current branch)
+hint: You can now:
+hint:   cd /home/user/src/repo/hops/main  # Work on current branch
+...
 ```
 
 ## git hop add
