@@ -55,6 +55,11 @@ Checks:
   remote.origin.fetch (a plain 'git clone --bare') never updates
   refs/remotes/origin/* on fetch ('git hop repair' restores it)
 - Hopspace existence and consistency
+- Hopspaces of --global hubs left where another hop.dataLayout put
+  them (e.g. <org>/<repo> after a switch to {host}/{org}/{repo}): a
+  warning (--fix renames the directory to the current location when
+  nothing is there yet and no worktree lies inside it or links into it;
+  with data at both, nothing is moved)
 - Hopspace hooks left at the pre-hop.dataLayout location
   ($GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks): they still fire,
   a warning (--fix moves the directory to the hop.dataLayout location
@@ -199,6 +204,20 @@ type doctorReport struct {
 	issuesFound bool
 	fixed       int
 	records     []doctorRecord
+	// misplaced holds data-home hopspace paths whose hopspace sits, not
+	// moved, at another hop.dataLayout's path (checkMisplacedHopspaces).
+	// The hub check reports no such hopspace missing and creates none:
+	// that would strand the real one.
+	misplaced map[string]bool
+}
+
+// markMisplaced records that the hopspace belonging at path sits, not
+// moved, elsewhere; see doctorReport.misplaced.
+func (r *doctorReport) markMisplaced(path string) {
+	if r.misplaced == nil {
+		r.misplaced = map[string]bool{}
+	}
+	r.misplaced[filepath.Clean(path)] = true
 }
 
 // record appends one record to the structured result.
@@ -333,6 +352,10 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 	}
 
 	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
+	if r.misplaced[filepath.Clean(hopspacePath)] {
+		output.Info("Hopspace not at %s. Skipping worktree state checks.", hopspacePath)
+		return
+	}
 
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err != nil {

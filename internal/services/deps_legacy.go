@@ -99,6 +99,20 @@ func RemoveLegacyDepsStore(fs afero.Fs, store LegacyDepsStore) error {
 	return nil
 }
 
+// LinksInto returns the symlinks under roots (each walked in full, .git
+// skipped, links not followed) that point into dir. A root that is gone
+// has none; one that cannot be walked completely is an error, since a
+// link may sit anywhere below it.
+func LinksInto(fs afero.Fs, roots []string, dir string) ([]string, error) {
+	stores := map[string]*LegacyDepsStore{dir: {Path: dir}}
+	for _, root := range roots {
+		if err := collectLegacyLinks(fs, root, stores); err != nil {
+			return nil, err
+		}
+	}
+	return stores[dir].Links, nil
+}
+
 // collectLegacyLinks walks root and records every symlink pointing into
 // one of stores. A root that is gone has nothing to record.
 func collectLegacyLinks(fs afero.Fs, root string, stores map[string]*LegacyDepsStore) error {

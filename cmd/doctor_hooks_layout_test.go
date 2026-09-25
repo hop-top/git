@@ -188,3 +188,21 @@ func TestDoctor_WarnsAboutInvalidRepoDataLayout(t *testing.T) {
 	assert.Contains(t, msgs[0], "local config")
 	assert.Contains(t, msgs[0], "using {host}/{org}/{repo}")
 }
+
+// The move re-checks the target right before renaming: a target that
+// appeared since is never replaced.
+func TestMoveDirNoClobber_RefusesExistingTarget(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	writeTestFile(t, fs, "/data/old/hop.json", "{}")
+	writeTestFile(t, fs, "/data/new/ports.json", "{}")
+
+	err := moveDirNoClobber(fs, "/data/old", "/data/new")
+
+	require.Error(t, err)
+	ok, _ := afero.Exists(fs, "/data/old/hop.json")
+	assert.True(t, ok, "source must stay")
+	ok, _ = afero.Exists(fs, "/data/new/hop.json")
+	assert.False(t, ok, "target must not be replaced")
+	ok, _ = afero.Exists(fs, "/data/new/ports.json")
+	assert.True(t, ok, "target must not be replaced")
+}

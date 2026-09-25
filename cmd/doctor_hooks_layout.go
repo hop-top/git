@@ -18,14 +18,16 @@ import (
 // before hop.dataLayout: the fixed host of the repo ID, whatever the origin.
 const legacyHooksHost = "github.com"
 
-// checkDataLayout warns about an invalid hop.dataLayout and about hopspace
+// checkDataLayout warns about an invalid hop.dataLayout, about hopspaces
+// of --global hubs left at another layout's path, and about hopspace
 // hooks left where releases before hop.dataLayout mirrored them. It runs
 // before the hub check, which would otherwise create a hopspace where one
 // moved here belongs.
 func checkDataLayout(fs afero.Fs, cwd string, opts doctorOpts, r *doctorReport) {
 	hubPath, _ := hop.FindHub(fs, cwd)
 	checkDataLayoutSetting(hubPath, r)
-	checkLegacyHooksDirs(fs, opts, r)
+	claimed := checkMisplacedHopspaces(fs, hubPath, opts, r)
+	checkLegacyHooksDirs(fs, opts, r, claimed)
 }
 
 // checkDataLayoutSetting reports a hop.dataLayout git-hop cannot use: the
@@ -56,11 +58,16 @@ func warnInvalidDataLayout(r *doctorReport, scope, raw string, err error, using 
 // still fire (hook lookup reads them after the new location), so each is
 // a warning. --fix moves one to the new location by rename, only when
 // nothing is there yet; with hooks at both locations it changes nothing.
-// Nothing is ever deleted or overwritten.
-func checkLegacyHooksDirs(fs afero.Fs, opts doctorOpts, r *doctorReport) {
+// Nothing is ever deleted or overwritten. A hooks dir inside a hopspace
+// checkMisplacedHopspaces reported (skip) moves with that hopspace, so it
+// is left to that check.
+func checkLegacyHooksDirs(fs afero.Fs, opts doctorOpts, r *doctorReport, skip map[string]bool) {
 	dataHome := hop.GetGitHopDataHome()
 	repos := stateRepos(fs)
 	for _, legacy := range findLegacyHooksDirs(fs, dataHome) {
+		if skip[filepath.Clean(filepath.Dir(legacy))] {
+			continue
+		}
 		org := filepath.Base(filepath.Dir(filepath.Dir(legacy)))
 		repo := filepath.Base(filepath.Dir(legacy))
 		repoID := legacyHooksHost + "/" + org + "/" + repo
@@ -102,7 +109,7 @@ func reportLegacyHooksDir(fs afero.Fs, opts doctorOpts, r *doctorReport, legacy,
 		output.Info("[dry-run] Would move %s -> %s", legacy, newDir)
 		r.repaired(opts, doctorCheckHopspace, legacy, "move to %s", newDir)
 	default:
-		if err := moveHooksDir(fs, legacy, newDir); err != nil {
+		if err := moveDirNoClobber(fs, legacy, newDir); err != nil {
 			output.Error("Failed to move %s: %v", legacy, err)
 			r.failed(doctorCheckHopspace, legacy, "move to %s: %v", newDir, err)
 			return
@@ -110,18 +117,6 @@ func reportLegacyHooksDir(fs afero.Fs, opts doctorOpts, r *doctorReport, legacy,
 		output.Info("Moved %s -> %s", legacy, newDir)
 		r.repaired(opts, doctorCheckHopspace, legacy, "move to %s", newDir)
 	}
-}
-
-// moveHooksDir renames legacy to newDir, creating newDir's parent. It
-// refuses when newDir exists: rename would replace an empty directory.
-func moveHooksDir(fs afero.Fs, legacy, newDir string) error {
-	if err := fs.MkdirAll(filepath.Dir(newDir), 0o755); err != nil {
-		return err
-	}
-	if exists, _ := afero.Exists(fs, newDir); exists {
-		return &existsError{path: newDir}
-	}
-	return fs.Rename(legacy, newDir)
 }
 
 type existsError struct{ path string }

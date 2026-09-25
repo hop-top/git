@@ -39,10 +39,16 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 
 	// Only a hub marked global can lack its hopspace: an unmarked hub's
 	// hopspace is its own hop.json, loaded above.
-	if exists, _ := afero.Exists(fs, filepath.Join(hopspacePath, "hop.json")); !exists {
+	exists, _ := afero.Exists(fs, filepath.Join(hopspacePath, "hop.json"))
+	switch {
+	case !exists && r.misplaced[filepath.Clean(hopspacePath)]:
+		// Reported by the hop.dataLayout check, with what to do; a new
+		// hopspace here would strand the real one.
+		output.Info("Hopspace not at %s: see the hop.dataLayout warning above.", hopspacePath)
+	case !exists:
 		r.issue(doctorCheckHub, hopspacePath, "hopspace does not exist")
 		createMissingHopspace(fs, hub, hubPath, hopspacePath, opts, r)
-	} else {
+	default:
 		reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
 	}
 
