@@ -1,0 +1,112 @@
+# Port allocation across hubs.
+#
+# - Two hubs of one repository get distinct ports.
+# - Generating again keeps a worktree's ports (no drift).
+# - An entry an earlier release wrote keeps its ports and compose project.
+# - Where two hubs already hold the same port, the hub set up first keeps
+#   it; the other gets new ports, with a warning, when it generates.
+# - Hubs sharing a --global hopspace get one entry each, keyed by
+#   worktree path; an earlier release's branch-keyed entry goes to the
+#   first hub set up.
+#
+# A stub docker on PATH: `compose config` fails, so the raw compose file
+# is parsed.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git init --bare $WORK/org/solo.git
+exec git init --bare $WORK/org/coll.git
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+exec git push $WORK/org/solo.git main
+exec git push $WORK/org/coll.git main
+exec git push $WORK/org/glob.git main
+cd $WORK
+
+# --- two hubs of one repository: distinct ports ---
+exec git-hop $WORK/org/repo.git $WORK/one/app
+exec git-hop $WORK/org/repo.git $WORK/two/app
+exec sh -c 'grep -h "^HOP_PORT_WEB=" $WORK/one/app/hops/main/.env $WORK/two/app/hops/main/.env | sort -u | wc -l'
+stdout '^ *2$'
+grep '"hub": ".*/one/app"' $WORK/one/app/ports.json
+grep '"project": "org-repo-main"' $WORK/one/app/ports.json
+
+# --- generating again keeps the ports ---
+exec sh -c 'grep "^HOP_PORT_WEB=" $WORK/one/app/hops/main/.env > $WORK/before'
+cd $WORK/one/app/hops/main
+exec git-hop env generate
+exec git-hop env generate
+exec sh -c 'grep "^HOP_PORT_WEB=" $WORK/one/app/hops/main/.env | cmp - $WORK/before'
+cd $WORK
+
+# --- an entry an earlier release wrote keeps its ports and project ---
+exec git-hop $WORK/org/solo.git $WORK/solo
+cp $WORK/legacy-15000.json $WORK/solo/ports.json
+cd $WORK/solo/hops/main
+exec git-hop env generate
+! stderr 'allocating new ports'
+grep '^HOP_PORT_WEB=15000$' .env
+grep '"WEB": 15000' $WORK/solo/ports.json
+grep '"project": "org-solo-main"' $WORK/solo/ports.json
+cd $WORK
+
+# --- an existing collision: the hub set up first keeps the port ---
+exec git-hop $WORK/org/coll.git $WORK/x/first
+exec git-hop $WORK/org/coll.git $WORK/y/second
+cp $WORK/legacy-16000.json $WORK/x/first/ports.json
+cp $WORK/legacy-16000.json $WORK/y/second/ports.json
+cd $WORK/y/second/hops/main
+exec git-hop env generate
+stderr 'warning: port 16000 \(WEB\) is also allocated to main of .*/x/first, set up first; allocating new ports'
+! grep '^HOP_PORT_WEB=16000$' .env
+cd $WORK/x/first/hops/main
+exec git-hop env generate
+! stderr 'allocating new ports'
+grep '^HOP_PORT_WEB=16000$' .env
+cd $WORK
+
+# --- hubs sharing a --global hopspace: one entry each, by worktree path ---
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+exec git-hop $WORK/org/glob.git $WORK/g2/app --global
+cp $WORK/legacy-17000.json $WORK/data/org/glob/ports.json
+cd $WORK/g2/app/hops/main
+exec git-hop env generate
+! grep '^HOP_PORT_WEB=17000$' .env
+cd $WORK/g1/app/hops/main
+exec git-hop env generate
+grep '^HOP_PORT_WEB=17000$' .env
+grep '"/.*/g1/app/hops/main": \{' $WORK/data/org/glob/ports.json
+grep '"/.*/g2/app/hops/main": \{' $WORK/data/org/glob/ports.json
+! grep '"main": \{' $WORK/data/org/glob/ports.json
+exec sh -c 'grep -h "^HOP_PORT_WEB=" $WORK/g1/app/hops/main/.env $WORK/g2/app/hops/main/.env | sort -u | wc -l'
+stdout '^ *2$'
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- legacy-15000.json --
+{"allocationMode":"incremental","baseRange":{"start":10000,"end":20000},"branches":{"main":{"ports":{"WEB":15000}}},"services":["WEB"]}
+-- legacy-16000.json --
+{"allocationMode":"incremental","baseRange":{"start":10000,"end":20000},"branches":{"main":{"ports":{"WEB":16000}}},"services":["WEB"]}
+-- legacy-17000.json --
+{"allocationMode":"incremental","baseRange":{"start":10000,"end":20000},"branches":{"main":{"ports":{"WEB":17000}}},"services":["WEB"]}
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

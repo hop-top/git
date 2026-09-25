@@ -19,7 +19,7 @@ import (
 var ErrNoEnvironment = errors.New("no environment manager detected")
 
 // EnvTarget is the worktree whose environment is started or stopped.
-// HopspacePath and Hub are empty for a worktree outside a hub.
+// HubPath, HopspacePath and Hub are empty for a worktree outside a hub.
 type EnvTarget struct {
 	Root   string
 	Branch string
@@ -82,7 +82,7 @@ func resolveOverridePath(t EnvTarget) string {
 	dir := legacyOverrideDir(t.Hub.Repo.Org, t.Hub.Repo.Repo, t.Branch)
 	if t.HopspacePath != "" {
 		if cfg, err := config.NewLoader(afero.NewOsFs()).LoadPortsConfig(t.HopspacePath); err == nil {
-			if entry, ok := cfg.Branches[t.Branch]; ok && entry.OverrideDir != "" {
+			if entry, ok := LookupEnvEntry(cfg, t.HopspacePath, t.HubPath, t.Root, t.Branch); ok && entry.OverrideDir != "" {
 				dir = entry.OverrideDir
 			}
 		}

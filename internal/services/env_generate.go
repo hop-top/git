@@ -7,6 +7,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/state"
 )
 
 // WorktreeEnv is the environment GenerateWorktreeEnv prepared for a
@@ -50,9 +51,19 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 		}
 	}
 
+	recs, err := LoadEnvRecords(fs, hubPath)
+	if err != nil {
+		output.Warn("cannot read the port allocations of other hubs: %v", err)
+	}
+	self, found := recs.Self(hopspacePath, hubPath, worktreePath, branch)
+	keep := keptPorts(recs, self, found)
+
 	manager := NewEnvManager(fs, portsCfg, volsCfg, d)
+	manager.Ports.Keep = keep
+	manager.Ports.Reserved = recs.Reserved(self)
 	if hubPath != "" {
 		manager.OverrideDir = HubOverrideDir(org, repo, hubPath, branch)
+		manager.Ports.Seed = org + "/" + repo + "/" + HubKey(hubPath) + "/" + branch
 	}
 	ports, vols, overridePath, err := manager.Generate(branch, worktreePath, org, repo)
 	if err != nil {
@@ -61,6 +72,10 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	if overridePath != "" {
 		ports.OverrideDir = filepath.Dir(overridePath)
 	}
+	ports.Project = projectFor(self, found && keep != nil, org, repo, branch)
+	ports.Branch = branch
+	ports.Worktree = state.WorktreeKey(worktreePath)
+	ports.Hub = hubPath
 
 	if portsCfg.Branches == nil {
 		portsCfg.Branches = make(map[string]config.BranchPorts)
@@ -68,8 +83,15 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	if volsCfg.Branches == nil {
 		volsCfg.Branches = make(map[string]config.BranchVolumes)
 	}
-	portsCfg.Branches[branch] = *ports
-	volsCfg.Branches[branch] = *vols
+	key := EnvRecordKey(hopspacePath, hubPath, worktreePath, branch)
+	if found && self.Key != key {
+		// The branch-keyed entry an earlier release wrote in a shared
+		// hopspace moves under this worktree's key.
+		delete(portsCfg.Branches, self.Key)
+		delete(volsCfg.Branches, self.Key)
+	}
+	portsCfg.Branches[key] = *ports
+	volsCfg.Branches[key] = *vols
 	writer := config.NewWriter(fs)
 	if err := writer.WritePortsConfig(hopspacePath, portsCfg); err != nil {
 		output.Error("Failed to save ports config: %v", err)
@@ -79,4 +101,32 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	}
 
 	return &WorktreeEnv{Ports: ports, Volumes: vols, OverridePath: overridePath}, nil
+}
+
+// keptPorts returns the ports the worktree keeps: all it has, unless a
+// claim ordered before it (the hub set up first) holds one of them, in
+// which case it gets new ones and each conflict is reported. nil means
+// nothing is kept.
+func keptPorts(recs *EnvRecords, self EnvClaim, found bool) map[string]int {
+	if !found || len(self.Entry.Ports) == 0 {
+		return nil
+	}
+	conflicts := recs.Conflicts(self)
+	if len(conflicts) == 0 {
+		return self.Entry.Ports
+	}
+	for _, c := range conflicts {
+		output.Warn("port %d (%s) is also allocated to %s of %s, set up first; allocating new ports",
+			c.Port, c.Service, c.Other.Branch, c.Other.Hub)
+	}
+	return nil
+}
+
+// projectFor returns the compose project the worktree runs as: the one
+// its entry records when it keeps its ports, else <org>-<repo>-<branch>.
+func projectFor(self EnvClaim, kept bool, org, repo, branch string) string {
+	if kept && self.Entry.Project != "" {
+		return self.Entry.Project
+	}
+	return ComposeProjectName(org, repo, branch)
 }

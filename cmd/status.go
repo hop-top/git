@@ -525,7 +525,8 @@ func showTargetStatus(fs afero.Fs, d *docker.Docker, hubPath, target string) {
 	portsCfg, _ := portsLoader.LoadPortsConfig(hopspacePath)
 
 	if portsCfg != nil {
-		if bp, ok := portsCfg.Branches[branch.HopspaceBranch]; ok && len(bp.Ports) > 0 {
+		worktreePath := config.ResolveWorktreePath(branch.Path, hubPath)
+		if bp, ok := services.LookupEnvEntry(portsCfg, hopspacePath, hubPath, worktreePath, branch.HopspaceBranch); ok && len(bp.Ports) > 0 {
 			var minPort, maxPort int
 			first := true
 			for _, p := range bp.Ports {
