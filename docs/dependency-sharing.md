@@ -2,7 +2,7 @@
 
 ## Overview
 
-git-hop's dependency sharing feature eliminates the need to install dependencies separately in each worktree. Instead, dependencies are installed once per lockfile version and shared across all branches with identical lockfiles using symlinks.
+git-hop's dependency sharing feature eliminates the need to install dependencies separately in each worktree. Instead, dependencies are installed once per lockfile version and shared across all branches with identical lockfiles through links.
 
 This provides:
 - **Space savings** - One installation per lockfile instead of per branch
@@ -39,18 +39,56 @@ inside the store, e.g. under vitest).
 
 Beside each install, `<DepsDir>.git-hop.json` records the entries the
 install had when it was made. An install missing any of them is damaged
-(see [Emptying a shared install through its link](#emptying-a-shared-install-through-its-link)).
+(see [Emptying a worktree's node_modules](#emptying-a-worktrees-node_modules)).
 Entries added later, such as a tool's cache, do not count.
 
-### Worktree Symlinks
+### Worktree Links
 
-Each worktree gets a symlink to the shared storage:
+Each worktree's `node_modules` (or other deps directory) is a real
+directory holding one link per entry of the shared install:
 
 ```
-<hub>/hops/feature-xyz/
-├── node_modules -> <hopspace>/deps/abc123/node_modules
-└── vendor -> <hopspace>/deps/789ghi/vendor
+<hub>/hops/feature-xyz/node_modules/
+├── .git-hop-links        # the install linked into, and the files copied from it
+├── .package-lock.json    # copied from the install
+├── .bin/                 # real directory
+│   └── vite -> <hopspace>/deps/abc123/node_modules/.bin/vite
+├── @types/               # real directory, one link per scoped package
+│   └── node -> <hopspace>/deps/abc123/node_modules/@types/node
+├── react -> <hopspace>/deps/abc123/node_modules/react
+├── vite -> <hopspace>/deps/abc123/node_modules/vite
+└── .vite/                # this worktree's own tool cache
 ```
+
+- **Packages** directly in the install are linked by name.
+- **Scopes** (`@scope/`) and **`.bin`** are real directories with one link
+  per package or command, so a package manager adding to them writes into
+  the worktree.
+- **Hidden files** directly in the install (npm's `.package-lock.json`,
+  yarn's `.yarn-integrity` or `.yarn-state.yml`) are copied, never linked:
+  package managers rewrite them in place, which through a link would write
+  into the install every worktree uses. With its state file copied,
+  `yarn install` in a worktree finds it up to date and leaves the links
+  alone.
+- **Other hidden entries** (tool caches such as `.cache`, `.vite`) are not
+  linked: each worktree keeps its own. One the install already has, such as
+  a client a `postinstall` step generated, is still found by the packages
+  in the install, which resolve from their real paths in the store.
+
+Emptying a worktree's `node_modules` therefore removes its links, never
+the install: `npm ci` or `rm -rf node_modules/*` in one worktree leaves
+every other worktree working. Writing a file inside a linked package
+directory still writes into the install.
+
+git-hop only ever replaces or removes, in a worktree's `node_modules`, the
+links into the store and the files it copied there. Anything else in it
+(a tool's cache, a link made by `npm link`) belongs to the worktree and is
+kept when the worktree is relinked to another install.
+
+Node resolves every package through its real path in the store, so
+packages find their dependencies, siblings and peers in the install, for
+CommonJS and ES modules alike. `--preserve-symlinks` works too: every
+entry of the install has a link in the worktree.
 
 ### Installs that stay in the worktree
 
@@ -107,6 +145,23 @@ resolve from that layout, so those installs are no longer reused:
 - `git hop doctor` reports such links as warnings.
 - `git hop env gc` removes an old install once no worktree of any hub
   git-hop records links into it.
+
+### Single links from earlier releases
+
+Earlier releases linked a worktree's `node_modules` to the install as a
+whole (`node_modules -> <hopspace>/deps/abc123/node_modules`), so `npm ci`
+there emptied the install for every worktree. `git hop doctor` warns about
+such a link to the current install
+(`node_modules is a single link to shared install abc123/node_modules`).
+The next install (`git hop env start`) or `git hop doctor --fix` replaces
+the link with the per-entry layout, into the same install:
+
+- nothing is reinstalled when the install is intact;
+- the install is only read, never written;
+- if laying the links fails, the single link is put back.
+
+A single link to an install that is damaged, or for an older lockfile, is
+replaced the same way once the right install is in place.
 
 ### Stores from earlier releases
 
@@ -179,9 +234,10 @@ When you create or switch to a branch, git-hop automatically:
 1. Detects package managers in the worktree
 2. Computes the hash of each lockfile
 3. Checks if dependencies are already installed for that hash
-4. If installed: creates a symlink to the shared storage
+4. If installed: links each entry of the shared install into the worktree
+   (see [Worktree Links](#worktree-links))
 5. If not installed: installs in the worktree, moves the install to shared
-   storage, then creates the symlink; an install that cannot be shared stays
+   storage, then links its entries; an install that cannot be shared stays
    in the worktree (see [Installs that stay in the worktree](#installs-that-stay-in-the-worktree))
 
 No manual intervention required!
@@ -453,17 +509,24 @@ git hop doctor
 ```
 
 It detects:
-- **Local folders** instead of symlinks (user ran `rm -rf node_modules && npm install`) — error
+- **Local folders** instead of links: a package manager installed into the
+  worktree (`npm ci` or `npm install` there, see
+  [npm and yarn in a worktree](#npm-and-yarn-in-a-worktree)) — error
 - **Broken symlinks** pointing to missing dependencies — error
 - **Missing dependencies** that should exist — error
-- **Damaged shared installs**: a link to an install missing entries it was
-  made with, e.g. emptied by `npm ci` in another worktree — error
+- **Missing links into the shared install**: removed (`rm -rf node_modules/*`),
+  dangling, or pointing elsewhere in the store — error
+- **Damaged shared installs**: an install missing entries it was made
+  with, e.g. emptied by `npm ci` through a single link — error
+- **Single links** to the current shared install, made by an earlier
+  release (see [Single links from earlier releases](#single-links-from-earlier-releases)) — warning
 - **Links to unshareable store installs**: a store install with links out
   of it (`file:`, `link:`, workspace packages), or a pnpm install, made by
   an earlier release — error
 - **Local installs for an older lockfile**, or not marked by git-hop but
   unshareable anyway — warning
-- **Stale symlinks** pointing to old lockfile versions — warning
+- **Stale symlinks** pointing to old lockfile versions (a single link, or
+  links per entry, into the install for an older lockfile) — warning
 
 Stale symlinks are reported as warnings, not errors: the dependencies are
 present and usable, they just predate the current lockfile, and the next
@@ -509,20 +572,21 @@ git hop doctor --fix
 
 This automatically repairs:
 
-1. **Local folder instead of symlink:**
-   - Moves the local folder to system trash (safe, recoverable)
+1. **Local folder instead of links:**
+   - Removes the links into the store it still holds, and moves the rest
+     to git-hop's trash (safe, recoverable)
    - Installs to shared storage if the hash doesn't exist
-   - Creates symlink to shared storage
+   - Links each entry of the shared install
 
-2. **Broken symlink:**
-   - Removes the broken symlink
+2. **Broken symlink** (links into an install that is gone):
+   - Removes the broken links
    - Installs dependencies to shared storage
-   - Creates new symlink
+   - Links each entry of the new install
 
-3. **Stale symlink:**
-   - Removes the old symlink
+3. **Stale symlink** (links into the install for an older lockfile):
    - Installs new version to shared storage (if needed)
-   - Creates symlink to new hash
+   - Replaces the links into the old install with links into the new one,
+     keeping the worktree's own entries (tool caches)
    - Old version becomes orphaned (cleaned by GC later)
 
 4. **Damaged shared install:**
@@ -530,6 +594,13 @@ This automatically repairs:
 
 5. **Link to an unshareable store install:**
    - Installs in the worktree and keeps it there (a local install)
+
+6. **Missing links into the shared install:**
+   - Lays them again; nothing is reinstalled
+
+7. **Single link from an earlier release:**
+   - Replaces it with a link per entry into the same install; nothing is
+     reinstalled or written
 
 `--fix` never touches Go `vendor/` unless vendor mode is active (see above),
 so it cannot create the directory in a repository that gitignores it.
@@ -570,46 +641,74 @@ SHA256 first 6 characters provides ~16M combinations. Collisions are extremely u
 
 ### Manual Installation
 
-If you manually delete a symlink and install locally:
+If you install in a worktree yourself:
 
 ```bash
-rm -rf node_modules
+rm -rf node_modules   # removes the worktree's links only
 npm install
 ```
 
 This creates a real folder in the worktree, disconnecting it from shared storage:
 
 - Other branches remain unaffected (still use shared version)
-- `git hop doctor` detects this: "has local folder instead of symlink"
-- `git hop doctor --fix` restores the symlink to shared storage
+- `git hop doctor` detects this: "local node_modules ... instead of symlink"
+- `git hop doctor --fix` links the worktree into shared storage again
 - The local folder is moved to trash (recoverable if needed)
 
-### Emptying a shared install through its link
+### Emptying a worktree's node_modules
 
-A worktree's `node_modules` is a link to the shared install, so a command
-that empties it empties the install for every worktree linked to it:
+A worktree's `node_modules` holds links into the shared install, so
+emptying it removes only those links:
 
-- `npm ci` removes every entry of `node_modules` before it installs, then
-  installs a real `node_modules` in the worktree it ran in
-- `rm -rf node_modules/*` removes the visible entries
+- `npm ci` removes every entry of `node_modules`, then installs a real
+  `node_modules` in the worktree it ran in. The shared install and every
+  other worktree are untouched. `git hop doctor` reports that worktree's
+  install as a local folder, and `git hop doctor --fix` (or the next
+  install git-hop runs there) moves it to the trash and links the
+  worktree again.
+- `rm -rf node_modules/*` removes the visible links. `git hop doctor`
+  reports them missing
+  (`node_modules is missing links into shared install abc123/node_modules`),
+  and `git hop doctor --fix` lays them again without reinstalling.
 
-git-hop cannot prevent this without giving up the link, but it notices:
-the install is missing entries it was made with. `git hop doctor`
-reports each worktree linked to it
-(`shared install abc123/node_modules is missing entries`), and the next
-install git-hop runs for that lockfile reinstalls it: `git hop doctor --fix`,
-`git hop add`, or `git hop env start` in a worktree with an environment.
+A worktree still on a single link from an earlier release is the
+exception: through it, `npm ci` or `rm -rf node_modules/*` empties the
+install for every worktree. git-hop notices, since the install is then
+missing entries it was made with: `git hop doctor` reports each worktree
+linked to it (`shared install abc123/node_modules is missing entries`),
+and the next install git-hop runs for that lockfile reinstalls it
+(`git hop doctor --fix`, `git hop add`, or `git hop env start`). Convert
+such links first (see [Single links from earlier releases](#single-links-from-earlier-releases)).
 
-To give a worktree its own install, remove the link itself first:
-`rm node_modules` (no trailing slash), then install.
+### npm and yarn in a worktree
+
+Node, `npm run`, `npx`, `npm exec` and `npm rebuild` work through the
+links. npm's own view of the tree does not:
+
+- **`npm ls` exits 1**, reporting every package `invalid` and its
+  dependencies `UNMET DEPENDENCY`. npm reads each link as a link to a
+  directory outside the project, which the lockfile does not describe, and
+  it discards its hidden lockfile (`.package-lock.json`) whenever a link
+  leads out of the project, so no copy of it helps.
+- **`npm install`**, `npm prune` and `npm install <package>` replace every
+  link with a real package directory: the worktree ends up with its own
+  install and stops sharing. The shared install is not written. `git hop
+  doctor` reports the worktree's install as a local folder; `git hop
+  doctor --fix`, or the next install git-hop runs there, links it again
+  (the local folder goes to the trash). To change dependencies, change the
+  lockfile and let git-hop install for the new lockfile.
+
+yarn (1, and 2+ with `nodeLinker: node-modules`) finds its copied state
+file up to date, so `yarn install` in a worktree leaves the links alone.
 
 ### Concurrent Access
 
 Multiple branches can safely share the same dependency installation:
 
-- Each branch gets its own symlink to the same shared storage
+- Each branch gets its own links into the same shared storage
 - No locking needed for reads
-- Anything that writes into `node_modules` of one worktree writes into the
+- Removing entries of one worktree's `node_modules` removes its links
+  only; writing a file inside a linked package directory writes into the
   install every linked worktree uses
 
 However, avoid running installs for the **same lockfile hash** simultaneously in different terminals, as this could corrupt the shared installation.
@@ -660,12 +759,13 @@ For developers interested in the implementation:
 
 - **Package manager detection**: `internal/services/package_managers.go`
 - **Dependency management**: `internal/services/deps_manager.go`, `internal/services/deps_link.go`
+- **Per-entry links**: `internal/services/deps_entries.go` (layout), `internal/services/deps_entries_link.go` (link, relink, migration), `internal/services/deps_entries_audit.go` (doctor)
 - **Registry tracking**: `internal/services/deps_registry.go`
 - **Trash utility**: `internal/services/trash.go`
 - **Command integration**: `cmd/env.go`, `cmd/env_gc.go`, `cmd/doctor.go`
 
 The system uses:
 - SHA256 hashing for lockfile fingerprints
-- Symlinks for zero-copy sharing
+- A link per install entry for zero-copy sharing
 - JSON registry for usage tracking
 - System trash for safe deletion (recoverable)

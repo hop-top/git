@@ -257,13 +257,13 @@ Each branch gets:
 
 ## Dependency Sharing
 
-git-hop automatically shares dependencies across worktrees to save disk space and installation time. When you have multiple branches with the same lockfile, dependencies are installed once and symlinked to each worktree.
+git-hop automatically shares dependencies across worktrees to save disk space and installation time. When you have multiple branches with the same lockfile, dependencies are installed once and linked into each worktree.
 
 ### How It Works
 
 1. **Lockfile Hashing**: git-hop hashes your lockfile (package-lock.json, go.sum, etc.) using SHA256
-2. **Centralized Storage**: Dependencies are installed to `<hopspace>/deps/{depsdir}.{hash}/` (`<hub>/deps/` for a default clone, `$GIT_HOP_DATA_HOME/org/repo/deps/` for a `--global` one)
-3. **Symlink Creation**: Each worktree gets a symlink pointing to the shared storage
+2. **Centralized Storage**: Dependencies are installed to `<hopspace>/deps/{hash}/{depsdir}/` (`<hub>/deps/` for a default clone, `$GIT_HOP_DATA_HOME/org/repo/deps/` for a `--global` one)
+3. **Linking**: Each worktree gets a real `node_modules` (or other deps directory) holding one link per entry of the shared install, so `npm ci` or `rm -rf node_modules/*` in one worktree removes only its own links
 4. **Usage Tracking**: A registry tracks which branches use which dependencies
 
 ### Supported Package Managers
@@ -319,8 +319,10 @@ git hop doctor
 This checks for:
 - Broken symlinks (pointing to missing deps)
 - Stale symlinks (lockfile changed but symlink outdated)
-- Local folders (user ran `rm -rf node_modules && npm install`)
-- Damaged shared installs (emptied through a link, e.g. by `npm ci` in another worktree)
+- Local folders (a package manager installed into the worktree, e.g. `npm install` or `npm ci` there)
+- Missing links into the shared install (e.g. after `rm -rf node_modules/*`)
+- Single links to the shared install, made by earlier releases (warning)
+- Damaged shared installs (emptied through a single link, e.g. by `npm ci`)
 - Links to store installs that cannot be shared (links out of `node_modules`)
 
 An install with `file:`, `link:` or workspace dependencies has links out of
@@ -340,8 +342,9 @@ git hop doctor --fix
 Automatically repairs:
 - Recreates missing dependencies
 - Updates stale symlinks
-- Replaces local folders with shared symlinks
-- Reinstalls a shared install emptied through a link (e.g. by `npm ci`)
+- Replaces local folders with links into the shared install
+- Lays missing links again, and converts single links, without reinstalling
+- Reinstalls a shared install emptied through a single link (e.g. by `npm ci`)
 
 #### Clean Up Orphaned Dependencies
 
