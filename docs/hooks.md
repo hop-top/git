@@ -307,7 +307,7 @@ Controlled by flags on `clone` (and equivalents on `init`):
 
 Default is `prompt`. Only filenames in `ValidHookNames` are mirrored; anything else in `.git-hop/hooks/` is ignored. A repo with no `.git-hop/hooks/` directory is a silent no-op — most repos commit no hooks.
 
-When committed hooks are not mirrored (mode `none`, a non-interactive `prompt`, or a hook that is not executable), a `hint:` names the remedy: run `git hop init --hooks=<mode>` inside the worktree, which mirrors again without re-cloning. `-q` drops the hint.
+When committed hooks are not mirrored (mode `none`, a non-interactive `prompt`, or a hook that is not executable), a `hint:` names the remedy: run `git hop init --hooks=<mode>` inside the worktree, which mirrors again without re-cloning. `-q` drops the hint. A prompt that gets no answer (stdin at end of input, e.g. `</dev/null`) leaves the unanswered hooks unmirrored with a `warning:`, and its hint also names `git config hop.hooks.installMode symlink`, which mirrors without asking.
 
 ### `pre-clone` has no repo level
 

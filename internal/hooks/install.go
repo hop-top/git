@@ -3,6 +3,7 @@ package hooks
 import (
 	"bufio"
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/spf13/afero"
 
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
@@ -239,6 +241,10 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 			install := allYes
 			if !install {
 				answer, err := promptInstall(fs, opts.Stdin, reader, promptOut, name, srcPath, dstPath, dstExists)
+				if errors.Is(err, io.EOF) {
+					warnNoAnswer(opts.WorktreePath, res.Installed+res.Skipped > 0)
+					return res, nil
+				}
 				if err != nil {
 					return res, fmt.Errorf("prompt: %w", err)
 				}
@@ -275,6 +281,20 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	}
 
 	return res, nil
+}
+
+// warnNoAnswer reports a hooks prompt that met the end of input: the
+// hooks not yet answered are left unmirrored, not read as a "no".
+// answered says whether earlier hooks got an answer.
+func warnNoAnswer(worktreePath string, answered bool) {
+	what := "committed hooks were not mirrored"
+	if answered {
+		what = "the remaining committed hooks were not mirrored"
+	}
+	output.Warn("the hooks prompt got no answer (end of input); %s", what)
+	output.Hint("Run %s to mirror them.\n"+
+		"Set 'git config %s %s' to mirror them without asking.",
+		remirrorCommand(worktreePath, ModeSymlink), config.KeyHooksInstallMode, ModeSymlink)
 }
 
 // remirrorCommand names the command that mirrors committed hooks into
