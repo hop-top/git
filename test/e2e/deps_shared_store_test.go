@@ -51,6 +51,12 @@ func initSeed(t *testing.T, env *TestEnv) {
 // clones the hub.
 func seedNpmRepo(t *testing.T, env *TestEnv, files map[string]string, branches ...string) {
 	t.Helper()
+	seedNpmRepoWith(t, env, files, nil, branches...)
+}
+
+// seedNpmRepoWith is seedNpmRepo cloning the hub with extra clone args.
+func seedNpmRepoWith(t *testing.T, env *TestEnv, files map[string]string, cloneArgs []string, branches ...string) {
+	t.Helper()
 	files[".gitignore"] = "node_modules\n"
 	for name, content := range files {
 		path := filepath.Join(env.SeedRepoPath, name)
@@ -66,7 +72,7 @@ func seedNpmRepo(t *testing.T, env *TestEnv, files map[string]string, branches .
 	for _, b := range branches {
 		env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main:"+b)
 	}
-	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
+	env.RunGitHop(t, env.RootDir, append([]string{env.BareRepoPath, "hub"}, cloneArgs...)...)
 }
 
 // nodeOutput runs node script in worktree wt and returns its trimmed
@@ -147,5 +153,129 @@ func TestDeps_NpmCiThroughLink_DoctorReportsFixReinstalls(t *testing.T) {
 	}
 	if out := runHop(t, env, "doctor"); strings.Contains(out, "missing entries") {
 		t.Errorf("doctor after --fix still reports damage:\n%s", out)
+	}
+}
+
+// resolveScript prints what each named module resolves to in a worktree,
+// MISSING for one that does not resolve.
+func resolveScript(names ...string) string {
+	return `const r = n => { try { return require(n) } catch (e) { return "MISSING" } };` +
+		`console.log(` + strings.Join(func() []string {
+		out := make([]string, len(names))
+		for i, n := range names {
+			out[i] = `r("` + n + `")`
+		}
+		return out
+	}(), `+" "+`) + `)`
+}
+
+// assertNoStoreInstalls fails if any install was put in a deps store under
+// root (each has an entry record beside it).
+func assertNoStoreInstalls(t *testing.T, root string) {
+	t.Helper()
+	_ = filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return nil
+		}
+		if info.IsDir() && info.Name() == "node_modules" {
+			return filepath.SkipDir
+		}
+		if strings.HasSuffix(path, "node_modules.git-hop.json") {
+			t.Errorf("install put in the store: %s", path)
+		}
+		return nil
+	})
+}
+
+// npm links file: directory dependencies and workspace packages with
+// relative links out of node_modules, which resolve from wherever the
+// install is. Such an install stays in the worktree that made it, so each
+// worktree resolves exactly what npm resolves there: its own workspace
+// packages, and file: paths relative to its own depth.
+func TestDeps_NpmLinkedDeps_InstalledPerWorktree(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping e2e test in short mode")
+	}
+	for name, global := range map[string]bool{"hub store": false, "global store": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			env := npmTestEnv(t)
+			// The lockfile is made at the depth of hops/<branch>, so the
+			// file: path reaches the sibling from there.
+			env.SeedRepoPath = filepath.Join(env.RootDir, "gen", "hops", "seed")
+			initSeed(t, env)
+			sibling := filepath.Join(env.RootDir, "fit")
+			if err := os.MkdirAll(sibling, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			WriteFile(t, filepath.Join(sibling, "package.json"), `{"name":"fit","version":"1.0.0","main":"index.js"}`)
+			WriteFile(t, filepath.Join(sibling, "index.js"), `module.exports = "fit";`+"\n")
+			packTarball(t, env, filepath.Join(env.SeedRepoPath, "pkgs"), "a", "a")
+
+			files := map[string]string{
+				"package.json": `{"name":"app","version":"1.0.0","private":true,"workspaces":["packages/*"],` +
+					`"dependencies":{"a":"file:pkgs/a-1.0.0.tgz","fit":"file:../../../fit"}}`,
+				"packages/util/package.json": `{"name":"@app/util","version":"1.0.0","main":"index.js"}`,
+				"packages/util/index.js":     `module.exports = "util@seed";` + "\n",
+			}
+			args := []string{}
+			if global {
+				args = append(args, "--global")
+			}
+			seedNpmRepoWith(t, env, files, args, "feat", "fix/deep")
+			runHop(t, env, "add", "feat")
+			runHop(t, env, "add", "fix/deep")
+
+			want := map[string]string{
+				"main":     "a fit util@main",
+				"feat":     "a fit util@feat",
+				"fix/deep": "a MISSING util@fix/deep", // what npm itself resolves at that depth
+			}
+			script := resolveScript("a", "fit", "@app/util")
+			for branch, expected := range want {
+				wt := filepath.Join(env.HubPath, "hops", branch)
+				WriteFile(t, filepath.Join(wt, "packages", "util", "index.js"), `module.exports = "util@`+branch+`";`+"\n")
+				nm := filepath.Join(wt, "node_modules")
+				if info, err := os.Lstat(nm); err != nil || !info.IsDir() {
+					t.Errorf("%s: node_modules must be a real directory: %v", branch, err)
+				}
+				if _, err := os.Stat(filepath.Join(nm, ".git-hop-local")); err != nil {
+					t.Errorf("%s: local install not marked: %v", branch, err)
+				}
+				if got := nodeOutput(t, env, wt, script); got != expected {
+					t.Errorf("%s resolves %q, want %q", branch, got, expected)
+				}
+			}
+			assertNoStoreInstalls(t, env.RootDir)
+
+			out := env.RunGitHopCombined(t, env.HubPath, "doctor")
+			if !strings.Contains(out, "All dependencies are properly configured") {
+				t.Errorf("doctor should accept the local installs; output:\n%s", out)
+			}
+			runHop(t, env, "doctor", "--fix")
+			for branch, expected := range want {
+				wt := filepath.Join(env.HubPath, "hops", branch)
+				if got := nodeOutput(t, env, wt, script); got != expected {
+					t.Errorf("%s after doctor --fix resolves %q, want %q", branch, got, expected)
+				}
+			}
+			if _, err := os.Stat(filepath.Join(env.DataHome, "backups")); err == nil {
+				t.Errorf("doctor --fix trashed a local install")
+			}
+
+			// npm ci drops the marker with the rest of node_modules: a
+			// warning, and --fix marks the install again.
+			main := filepath.Join(env.HubPath, "hops", "main")
+			env.RunCommand(t, main, "npm", "ci")
+			out = env.RunGitHopCombined(t, env.HubPath, "doctor")
+			if !strings.Contains(out, "main: local node_modules was not installed by git-hop and cannot be shared") {
+				t.Errorf("doctor should warn about the unmarked local install; output:\n%s", out)
+			}
+			runHop(t, env, "doctor", "--fix")
+			if _, err := os.Stat(filepath.Join(main, "node_modules", ".git-hop-local")); err != nil {
+				t.Errorf("doctor --fix should mark main's install again: %v", err)
+			}
+		})
 	}
 }
