@@ -117,14 +117,14 @@ If only one argument is given, the current branch is used as the source.`,
 
 		// Everything below writes; the preview stops here.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-			previewMerge(g, mergePlan{
+			emitMergeResult(cmd, previewMerge(g, mergePlan{
 				source:       sourceBranch,
 				into:         intoBranch,
 				sourcePath:   srcPath,
 				intoPath:     intoPath,
 				noFF:         noFF,
 				deleteRemote: deleteRemote,
-			})
+			}))
 			return
 		}
 
@@ -138,9 +138,12 @@ If only one argument is given, the current branch is used as the source.`,
 		mergeArgs = append(mergeArgs, sourceBranch)
 
 		output.Info("Merging '%s' -> '%s'...", sourceBranch, intoBranch)
+		before := revParse(g, intoPath, "HEAD")
 		if _, err := g.RunInDir(intoPath, "git", mergeArgs...); err != nil {
 			output.Fatal("Merge failed: %v", err)
 		}
+		res := mergeResult{Source: sourceBranch, Into: intoBranch, Commit: revParse(g, intoPath, "HEAD")}
+		res.Result = mergeOutcome(g, intoPath, before, res.Commit)
 
 		output.Info("Merge successful.")
 
@@ -156,6 +159,8 @@ If only one argument is given, the current branch is used as the source.`,
 		output.Info("Removing worktree directory: %s", srcPath)
 		if err := fs.RemoveAll(srcPath); err != nil {
 			output.Warn("Failed to remove worktree directory: %v", err)
+		} else {
+			res.SourceRemoved = true
 		}
 
 		// Remove source branch from hub config
@@ -164,7 +169,7 @@ If only one argument is given, the current branch is used as the source.`,
 		}
 
 		// Delete the source branch locally, and on origin when asked.
-		deleteMergedSourceBranch(g, basePath, sourceBranch, deleteRemote)
+		res.BranchDeleted, res.RemoteDeleted = deleteMergedSourceBranch(g, basePath, sourceBranch, deleteRemote)
 
 		// Prune stale hopspace data
 		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
@@ -205,6 +210,7 @@ If only one argument is given, the current branch is used as the source.`,
 		))
 
 		output.Success("Merged '%s' into '%s' and cleaned up source worktree.", sourceBranch, intoBranch)
+		emitMergeResult(cmd, res)
 	},
 }
 
@@ -245,21 +251,26 @@ func resolveMergeDeleteRemote(flagValue, flagSet bool, gc *config.GitConfig) boo
 //
 // Failures are warnings, not errors: the merge itself has already
 // landed, so a failed branch cleanup must not be reported as a failed
-// merge.
-func deleteMergedSourceBranch(g git.GitInterface, basePath, sourceBranch string, deleteRemote bool) {
+// merge. It reports which of the two deletions happened.
+func deleteMergedSourceBranch(g git.GitInterface, basePath, sourceBranch string, deleteRemote bool) (local, remote bool) {
 	if err := g.DeleteLocalBranch(basePath, sourceBranch); err != nil {
 		output.Warn("Failed to delete local branch '%s': %v", sourceBranch, err)
+	} else {
+		local = true
 	}
 
 	if !deleteRemote {
-		return
+		return local, false
 	}
 
 	if g.HasRemoteBranch(basePath, sourceBranch) {
 		if err := g.DeleteRemoteBranch(basePath, sourceBranch); err != nil {
 			output.Warn("Failed to delete remote branch '%s': %v", sourceBranch, err)
+		} else {
+			remote = true
 		}
 	}
+	return local, remote
 }
 
 func init() {

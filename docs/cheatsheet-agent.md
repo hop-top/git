@@ -108,6 +108,9 @@ exits 0 without prompting.
 # merged source branch on origin (or set hop.merge.deleteRemote true).
 /usr/bin/git hop merge <source> <into> --delete-remote
 /usr/bin/git hop merge <source> <into> --delete-remote=false  # override the config default
+/usr/bin/git hop merge <source> <into> --json  # {source, into, result, commit, source_removed,
+                                              #   branch_deleted, remote_deleted, dry_run?}
+# result: up-to-date | fast-forward | merge-commit; conflict: exit 1, no result
 
 # Remove (safety gate — see Error Handling for blocked cases)
 # IMPORTANT: --no-prompt only skips the confirmation prompt; it does NOT
@@ -186,10 +189,10 @@ exits 0 without prompting.
 Structured output rules:
 
 - Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env start`,
-  `env stop`, `env generate`, `env gc`, `repair`, `remove`, `move` have a
-  result; other commands ignore the format for stdout.
-- Every result is a list (`add`, `init`, `move`, `env start|stop|generate`: one
-  object). Empty = `[]`, never empty stdout.
+  `env stop`, `env generate`, `env gc`, `repair`, `remove`, `move`,
+  `merge` have a result; other commands ignore the format for stdout.
+- Every result is a list (`add`, `init`, `move`, `merge`,
+  `env start|stop|generate`: one object). Empty = `[]`, never empty stdout.
 - Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
 - `--dry-run` with a result: same shape, would-be values, `dry_run: true`
   in json/yaml.

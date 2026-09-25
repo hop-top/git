@@ -19,22 +19,47 @@ type mergePlan struct {
 // previewMerge reports what `git hop merge` would do for p without doing
 // any of it: the receiving branch does not move, and the source worktree,
 // branch, hop.json, hopspace, state and symlink are left alone. A merge
-// that would stop on conflicts fails here too.
-func previewMerge(g git.GitInterface, p mergePlan) {
+// that would stop on conflicts fails here too. It returns the result the
+// merge would produce.
+func previewMerge(g git.GitInterface, p mergePlan) mergeResult {
 	mode, err := mergeMode(g, p)
 	if err != nil {
 		refuseDryRun(fmt.Sprintf("merge '%s' into '%s'", p.source, p.into), err)
 	}
 
-	output.Info("[dry-run] Would merge '%s' into '%s' (%s)", p.source, p.into, mode)
+	output.Info("[dry-run] Would merge '%s' into '%s' (%s)", p.source, p.into, mergeModeText[mode])
 	output.Info("[dry-run] Would remove worktree at %s", p.sourcePath)
 	previewBranchDeletion(p.source, true, p.deleteRemote)
 	output.Info("[dry-run] Would remove '%s' from hop.json, hopspace and state", p.source)
 	output.Info("[dry-run] Would point 'current' at '%s'", p.into)
+
+	res := mergeResult{
+		Source:        p.source,
+		Into:          p.into,
+		Result:        mode,
+		SourceRemoved: true,
+		BranchDeleted: true,
+		RemoteDeleted: p.deleteRemote,
+		DryRun:        true,
+	}
+	switch mode {
+	case mergeUpToDate:
+		res.Commit = revParse(g, p.intoPath, "HEAD")
+	case mergeFastForward:
+		res.Commit = revParse(g, p.intoPath, p.source)
+	}
+	return res
 }
 
-// mergeMode names the merge `git merge` would perform, or returns an error
-// when it would stop on conflicts.
+// mergeModeText is how the preview words each merge outcome.
+var mergeModeText = map[string]string{
+	mergeUpToDate:    "already up to date",
+	mergeFastForward: "fast-forward",
+	mergeCommit:      "merge commit",
+}
+
+// mergeMode names the merge `git merge` would perform (a mergeResult
+// Result value), or returns an error when it would stop on conflicts.
 //
 // The conflict probe is `git merge-tree --write-tree`, which merges in
 // memory: no ref, index or worktree changes. Like the content-equivalence
@@ -49,14 +74,14 @@ func mergeMode(g git.GitInterface, p mergePlan) (string, error) {
 
 	switch {
 	case isAncestor(p.source, p.into):
-		return "already up to date", nil
+		return mergeUpToDate, nil
 	case !p.noFF && isAncestor(p.into, p.source):
-		return "fast-forward", nil
+		return mergeFastForward, nil
 	}
 
 	out, err := g.RunInDir(p.intoPath, "git", "merge-tree", "--write-tree", p.into, p.source)
 	if err != nil && strings.Contains(out, "CONFLICT") {
 		return "", errors.New("merge would stop on conflicts")
 	}
-	return "merge commit", nil
+	return mergeCommit, nil
 }

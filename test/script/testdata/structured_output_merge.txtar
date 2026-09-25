@@ -1,0 +1,124 @@
+# merge honours the structured output modes.
+#
+# The result is one object: the source and receiving branches, what the
+# merge did (up-to-date, fast-forward or merge-commit), the commit the
+# receiving branch ends on, and the source cleanup. --dry-run renders the
+# result the merge would produce, marked dry_run in json/yaml; a merge
+# commit it would create has no id yet, so commit is empty there. Human
+# progress never reaches stdout in those modes; a conflict keeps its exit
+# status and says why on stderr.
+#
+# The regression this pins: merge printed nothing under --json /
+# --porcelain and its human progress under --format json|yaml.
+
+# --- upstream repo, hub, one source branch per merge outcome ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/same
+exec git-hop add feat/ff
+exec git-hop add feat/mc
+exec git-hop add feat/clash
+
+cd $WORK/hub/hops/feat/ff
+cp $WORK/a1.txt a.txt
+exec git add a.txt
+exec git commit -m 'a, first'
+cd $WORK/hub/hops/feat/mc
+cp $WORK/b.txt b.txt
+exec git add b.txt
+exec git commit -m 'b'
+cd $WORK/hub/hops/feat/clash
+cp $WORK/a2.txt a.txt
+exec git add a.txt
+exec git commit -m 'a, second'
+cd $WORK/hub
+
+# --- an unknown column is refused before anything merges ---
+exec sh -c 'git-hop merge feat/ff main --json --cols nope; echo "exit=$?"'
+stdout '^exit=129$'
+exists $WORK/hub/hops/feat/ff
+
+# --- --dry-run: the would-be result, nothing merged ---
+exec git-hop merge feat/ff main --dry-run --json
+decode json stdout source feat/ff
+decode json stdout into main
+decode json stdout result fast-forward
+decode json stdout commit '~^[0-9a-f]{40}$'
+decode json stdout source_removed true
+decode json stdout branch_deleted true
+decode json stdout remote_deleted false
+decode json stdout dry_run true
+! stdout 'dry-run\]'
+exists $WORK/hub/hops/feat/ff
+
+exec git-hop merge feat/same main --dry-run --porcelain
+stdout '^feat/same\tmain\tup-to-date\t[0-9a-f]{40}\ttrue\ttrue\tfalse$'
+
+exec git-hop merge feat/mc main --dry-run --delete-remote --format yaml
+decode yaml stdout result fast-forward
+decode yaml stdout remote_deleted true
+decode yaml stdout dry_run true
+
+# --- up to date: the receiving branch stays where it was ---
+exec git -C $WORK/hub/hops/main rev-parse HEAD
+cp stdout $WORK/main.before
+exec git-hop merge feat/same main --porcelain
+stdout '^feat/same\tmain\tup-to-date\t[0-9a-f]{40}\ttrue\ttrue\tfalse$'
+exec git -C $WORK/hub/hops/main rev-parse HEAD
+cmp stdout $WORK/main.before
+! exists $WORK/hub/hops/feat/same
+
+# --- fast-forward ---
+exec git-hop merge feat/ff main --format yaml
+decode yaml stdout source feat/ff
+decode yaml stdout into main
+decode yaml stdout result fast-forward
+decode yaml stdout commit '~^[0-9a-f]{40}$'
+decode yaml stdout source_removed true
+decode yaml stdout branch_deleted true
+decode yaml stdout remote_deleted false
+! decode yaml stdout dry_run
+! stdout 'Merg'
+! stdout 'Symlinked'
+! exists $WORK/hub/hops/feat/ff
+
+# --- a conflict keeps exit 1; the error is on stderr, stdout is empty ---
+exec sh -c 'git-hop merge feat/clash main --dry-run --porcelain; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\t'
+stderr '^fatal: .*conflicts'
+
+# --- merge commit: previewed without an id, then created ---
+exec git-hop merge feat/mc main --dry-run --json
+decode json stdout result merge-commit
+decode json stdout commit ''
+
+exec git-hop merge feat/mc main --porcelain --cols result,commit
+stdout '^merge-commit\t[0-9a-f]{40}$'
+cp stdout $WORK/mc.txt
+exec cut -f2 $WORK/mc.txt
+cp stdout $WORK/commit.txt
+exec git -C $WORK/hub/hops/main rev-parse HEAD
+cmp stdout $WORK/commit.txt
+exec git -C $WORK/hub/hops/main rev-parse --verify --quiet HEAD^2
+! exists $WORK/hub/hops/feat/mc
+
+# --- a real conflict: exit 1, error on stderr, no result ---
+exec sh -c 'git-hop merge feat/clash main --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr '"level":"error"'
+stderr 'Merge failed'
+
+-- a1.txt --
+first
+-- a2.txt --
+second
+-- b.txt --
+b

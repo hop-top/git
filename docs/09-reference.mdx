@@ -311,16 +311,17 @@ Rules:
 - `--json` with `--porcelain`, or `--json`/`--porcelain` with a different
   `--format`, is refused with exit 129 before the command does anything.
   So is an unknown format or an unknown `--cols` column.
-- Every result is a list of records, except `add`, `init`, `move`, `env start`,
-  `env stop` and `env generate`, which return one object. An empty
-  result is `[]` (and no lines under `--porcelain`), never empty stdout.
+- Every result is a list of records, except `add`, `init`, `move`,
+  `merge`, `env start`, `env stop` and `env generate`, which return one
+  object. An empty result is `[]` (and no lines under `--porcelain`),
+  never empty stdout.
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
 - Result shapes are versioned together (currently 1.9): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
-- Under `--dry-run`, `init`, `remove` and `move` render the result the
-  run would produce, in the same shape; `json` and `yaml` add
+- Under `--dry-run`, `init`, `remove`, `move` and `merge` render the
+  result the run would produce, in the same shape; `json` and `yaml` add
   `dry_run: true` to each record (absent on a real run). A preview
   the real run would refuse fails the same way, with no result.
 - A refusal or failure keeps its exit status and reports on stderr (the
@@ -431,6 +432,25 @@ One object.
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 
 Columns: `old_branch new_branch old_path new_path current_updated`.
+
+### merge
+
+One object. A merge that stops on conflicts exits 1 with no result (as
+does its `--dry-run` preview); the receiving worktree is left mid-merge,
+as `git merge` leaves it.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `source` | string | Branch merged |
+| `into` | string | Receiving branch |
+| `result` | string | `up-to-date` (`into` already contained `source`), `fast-forward` (`into` moved to `source`'s tip), `merge-commit` (a merge commit was created; `--no-ff` forces one) |
+| `commit` | string | Full id of the commit `into` ends on; under `--dry-run` empty for a `merge-commit`, which does not exist yet |
+| `source_removed` | bool | `true` when the source worktree directory was removed (or, under `--dry-run`, would be) |
+| `branch_deleted` | bool | `true` when the local source branch was deleted (or would be) |
+| `remote_deleted` | bool | `true` when the source branch was deleted on origin (`--delete-remote`, `hop.merge.deleteRemote`); under `--dry-run`, `true` when it would try (origin is not probed) |
+| `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
+
+Columns: `source into result commit source_removed branch_deleted remote_deleted`.
 
 ### doctor
 
