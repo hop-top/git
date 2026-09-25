@@ -1,7 +1,9 @@
-# `git hop env start` and `env stop` have no result to print: everything
-# they say is progress (the manager in use, each step, hook output and the
-# lifecycle command's own output), and progress goes to stderr, as git
-# keeps it, whatever the output mode. stdout stays empty.
+# Everything `git hop env start` and `env stop` say is progress (the
+# manager in use, each step, hook output and the lifecycle command's own
+# output), and progress goes to stderr, as git keeps it, whatever the
+# output mode. stdout stays empty in the human view; a structured mode
+# puts the command's result there and nothing else (see
+# env_structured_output).
 #
 # A stub docker on PATH stands in for compose: `compose config` fails (so
 # the raw compose file is parsed) and every other call echoes on both
@@ -40,14 +42,16 @@ stderr 'Stopping services: docker-compose'
 stderr '^stub-compose-stdout compose .* stop$'
 stderr 'Environment stopped successfully'
 
-# --- structured and quiet modes keep stdout clean too ---
+# --- structured modes: the result alone on stdout ---
 exec git-hop env start --json
-! stdout .
+decode json stdout env_started true
+! stdout 'stub-compose'
 stderr 'stub-compose-stdout'
 ! stderr 'Starting services'
 ! stderr 'Environment started'
 exec git-hop env stop --porcelain
-! stdout .
+stdout '^main\t\S+\tdocker-compose\ttrue$'
+! stdout 'stub-compose'
 ! stderr 'Stopping services'
 ! stderr 'Environment stopped'
 
