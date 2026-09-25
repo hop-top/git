@@ -110,7 +110,7 @@ var moveCmd = &cobra.Command{
 
 		// Everything below writes or runs hooks; the preview stops here.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-			previewMove(fs, g, plan)
+			emitMoveResult(cmd, previewMove(fs, g, plan))
 			return
 		}
 
@@ -138,12 +138,21 @@ var moveCmd = &cobra.Command{
 			output.Fatal("Failed to move worktree: %v", err)
 		}
 
+		res := moveResult{
+			OldBranch: oldBranch,
+			NewBranch: newBranch,
+			OldPath:   actualOldPath,
+			NewPath:   actualNewPath,
+		}
+
 		// Update current symlink if it pointed to old path
 		if target, err := hop.GetCurrentSymlink(fs, hubPath); err == nil {
 			absTarget, _ := filepath.Abs(filepath.Join(hubPath, target))
 			if absTarget == actualOldPath {
 				if err := hop.UpdateCurrentSymlink(fs, hubPath, actualNewPath); err != nil {
 					output.Warn("Failed to update current symlink: %v", err)
+				} else {
+					res.CurrentUpdated = true
 				}
 			}
 		}
@@ -199,6 +208,7 @@ var moveCmd = &cobra.Command{
 
 		output.Info("Moved '%s' -> '%s'", oldBranch, newBranch)
 		output.Info("Worktree: %s", actualNewPath)
+		emitMoveResult(cmd, res)
 	},
 }
 

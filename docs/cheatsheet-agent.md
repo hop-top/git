@@ -96,6 +96,8 @@ exits 0 without prompting.
 # Rename
 /usr/bin/git hop move <old-branch> <new-branch>
 /usr/bin/git hop move <old-branch> <new-branch> --dry-run  # preview; no rename, no hooks
+/usr/bin/git hop move <old> <new> --json      # {old_branch, new_branch, old_path, new_path,
+                                              #   current_updated, dry_run?}
 
 # Merge + cleanup
 /usr/bin/git hop merge <source> <into>        # merge, remove source, symlink current
@@ -184,9 +186,9 @@ exits 0 without prompting.
 Structured output rules:
 
 - Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env start`,
-  `env stop`, `env generate`, `env gc`, `repair`, `remove` have a result;
-  other commands ignore the format for stdout.
-- Every result is a list (`add`, `init`, `env start|stop|generate`: one
+  `env stop`, `env generate`, `env gc`, `repair`, `remove`, `move` have a
+  result; other commands ignore the format for stdout.
+- Every result is a list (`add`, `init`, `move`, `env start|stop|generate`: one
   object). Empty = `[]`, never empty stdout.
 - Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
 - `--dry-run` with a result: same shape, would-be values, `dry_run: true`
