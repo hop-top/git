@@ -9,6 +9,8 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+
+	"hop.top/git/internal/git"
 )
 
 // A bare conversion clones the repository into a new hub, then swaps the
@@ -275,8 +277,8 @@ func (c *Converter) carryOverExtraRefs(srcRepo, bareRepo string) error {
 		return nil
 	}
 	sort.Strings(refspecs)
-	args := append([]string{"-C", bareRepo, "fetch", "--no-tags", "--quiet", srcRepo}, refspecs...)
-	if _, err := c.git.Run("git", args...); err != nil {
+	args := git.FetchArgs(append([]string{"--no-tags", "--quiet", srcRepo}, refspecs...)...)
+	if _, err := c.git.RunInDir(bareRepo, "git", args...); err != nil {
 		return fmt.Errorf("failed to carry over refs %v: %w", refspecs, err)
 	}
 	return nil

@@ -129,8 +129,8 @@ func hasRemote(entries []configEntry) bool {
 // copyRemoteTrackingRefs copies refs/remotes/* from srcRepo into bareRepo,
 // keeping symbolic ones (origin/HEAD) symbolic.
 func (c *Converter) copyRemoteTrackingRefs(srcRepo, bareRepo string) error {
-	if _, err := c.git.Run("git", "-C", bareRepo, "fetch", "--no-tags", "--quiet",
-		srcRepo, "+refs/remotes/*:refs/remotes/*"); err != nil {
+	if _, err := c.git.RunInDir(bareRepo, "git", git.FetchArgs("--no-tags", "--quiet",
+		srcRepo, "+refs/remotes/*:refs/remotes/*")...); err != nil {
 		return fmt.Errorf("failed to copy remote-tracking refs: %w", err)
 	}
 

@@ -355,10 +355,10 @@ func (g *Git) DeleteRemoteBranch(dir, branch string) error {
 	return err
 }
 
-// FetchRemote runs `git fetch <remote>`, under the same deadline as
-// HasRemoteBranch.
+// FetchRemote runs `git fetch <remote>` (see FetchArgs), under the same
+// deadline as HasRemoteBranch.
 func (g *Git) FetchRemote(dir, remote string) error {
-	_, err := g.runRemote(dir, "fetch", remote)
+	_, err := g.runRemote(dir, FetchArgs(remote)...)
 	return err
 }
 

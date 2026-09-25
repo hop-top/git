@@ -98,7 +98,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	// Fetch
 	// We can use a temporary remote name or just fetch by URI
 	// git fetch <uri> <branch>
-	_, err = g.RunInDir(mainRepoPath, "git", "fetch", uri, branch)
+	_, err = g.RunInDir(mainRepoPath, "git", git.FetchArgs(uri, branch)...)
 	if err != nil {
 		return fmt.Errorf("failed to fetch fork branch: %v", err)
 	}

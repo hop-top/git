@@ -91,7 +91,7 @@ func (m *MockCommandRunner) Run(cmd string, args ...string) (string, error) {
 // FetchRemote mocks `git fetch <remote>` through the runner, so tests
 // script its result via Responses / Errors.
 func (m *MockGit) FetchRemote(dir, remote string) error {
-	_, err := m.Runner.RunInDir(dir, "git", "fetch", remote)
+	_, err := m.Runner.RunInDir(dir, "git", git.FetchArgs(remote)...)
 	return err
 }
 
