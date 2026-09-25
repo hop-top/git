@@ -45,6 +45,9 @@ fmt:
 # extension, so the .mdx pages link to each other extensionless
 # (./02-quick-start); --fallback-extensions resolves such a link to its
 # page file the way the site does.
+# docs/plans holds dated design notes that link code as it was then;
+# they are not kept in step with the tree, so their links are not checked.
 lint-links:
-	lychee --offline --no-progress --exclude-path vendor --fallback-extensions md,mdx \
+	lychee --offline --no-progress --exclude-path vendor --exclude-path 'docs/plans/' \
+		--fallback-extensions md,mdx \
 		'docs/**/*.md' 'docs/**/*.mdx' 'internal/**/*.md' '*.md'
