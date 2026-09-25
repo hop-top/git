@@ -732,9 +732,11 @@ A command that waits more than 30 seconds for the lock fails.
 | `settings.compareBranch` | string | Comparison branch for worktrees without a `base`; default `repo.defaultBranch` |
 | `settings.environmentManager` | string | Environment manager `env start`/`stop` use, by name (built-in `docker-compose` or one from `managers.json`); `none` disables it. Unset: detected from the worktree's files |
 | `settings.environmentConfig.hooks` | object | Command lists `preStart`, `postStart`, `preStop`, `postStop` run around `env start`/`stop` |
-| `settings.envPatterns` | array | Written by git-hop with its defaults; not read |
-| `migrated` | boolean | Legacy; not read |
 | `repo.mode` | string | `global` when cloned with `--global`: the hopspace lives in `$GIT_HOP_DATA_HOME/<org>/<repo>`. Omitted by default, when the hub is its own hopspace |
+
+Earlier releases also wrote `settings.envPatterns` and `migrated`. Nothing
+reads either; git-hop no longer writes them, and keeps them as they are
+when it rewrites a `hop.json` that has them.
 
 ## State Tracking
 

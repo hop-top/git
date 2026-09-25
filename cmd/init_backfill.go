@@ -77,10 +77,6 @@ func parseWorktreeListPorcelain(s string) []porcelainWorktree {
 //     on error, matching CreateHub's behavior).
 //   - branches via WorktreeListPorcelain; the bare entry and detached
 //     worktrees are skipped.
-//
-// envPatterns defaults to the same set CreateHub seeds (dev, staging,
-// qa) so a backfilled hub behaves identically to a freshly-initialized
-// one.
 func backfillHubConfigIfMissing(fs afero.Fs, g git.GitInterface, hubPath string) (bool, error) {
 	if hubConfigExists(fs, hubPath) {
 		return false, nil
@@ -132,9 +128,6 @@ func backfillHubConfigIfMissing(fs afero.Fs, g git.GitInterface, hubPath string)
 			DefaultBranch: defaultBranch,
 		},
 		Branches: branches,
-		Settings: config.HubSettings{
-			EnvPatterns: []string{"dev", "staging", "qa"},
-		},
 	}
 
 	// Another run may have written hop.json since the check above; that

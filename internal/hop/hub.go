@@ -88,9 +88,6 @@ func CreateHub(fs afero.Fs, path string, repoURI, org, repo, defaultBranch strin
 			DefaultBranch: defaultBranch,
 		},
 		Branches: make(map[string]config.HubBranch),
-		Settings: config.HubSettings{
-			EnvPatterns: []string{"dev", "staging", "qa"}, // Defaults
-		},
 	}
 
 	err := WithHopJSONLock(fs, path, func() error {

@@ -10,7 +10,6 @@ type HubConfig struct {
 	Repo     RepoConfig           `json:"repo"`
 	Branches map[string]HubBranch `json:"branches"`
 	Settings HubSettings          `json:"settings"`
-	Migrated bool                 `json:"migrated"` // True if migrated to registry
 }
 
 type RepoConfig struct {
@@ -62,7 +61,6 @@ type EnvConfig struct {
 
 type HubSettings struct {
 	CompareBranch      *string    `json:"compareBranch,omitempty"`
-	EnvPatterns        []string   `json:"envPatterns"`
 	EnvironmentManager *string    `json:"environmentManager,omitempty"`
 	EnvironmentConfig  *EnvConfig `json:"environmentConfig,omitempty"`
 }

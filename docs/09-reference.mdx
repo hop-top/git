@@ -688,8 +688,8 @@ hub (`git hop repair` does it for you).
 Whether add and clone start the new worktree's environment is not a
 `hop.json` field: it is `git config hop.env.autoStart` (default `false`),
 overridden by `$GIT_HOP_AUTO_ENV_START` and `--[no-]env-start`. An old
-`settings.autoEnvStart` in `hop.json` is kept but not read. Neither is
-`settings.envPatterns`, which git-hop writes with its defaults.
+`settings.autoEnvStart` in `hop.json` is kept but not read, as are
+`settings.envPatterns` and `migrated`, which earlier releases wrote.
 
 ### ports.json and volumes.json
 

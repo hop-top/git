@@ -315,9 +315,6 @@ func createProjectConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch
 				"hopspaceBranch": defaultBranch,
 			},
 		},
-		"settings": map[string]any{
-			"envPatterns": []string{"dev", "staging", "qa"},
-		},
 	}
 
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -354,9 +351,6 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 				"exists":   true,
 				"lastSync": time.Now().Format(time.RFC3339),
 			},
-		},
-		"settings": map[string]any{
-			"envPatterns": []string{"dev", "staging", "qa"},
 		},
 		"forks": map[string]any{},
 	}
