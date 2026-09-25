@@ -1,0 +1,60 @@
+# doctor points at `git hop repair` to record a worktree git has
+# registered but hop.json does not. repair refuses a worktree with
+# uncommitted changes unless given --force-dirty, so for such a worktree
+# the hint (and the issue's message under --json) names that command,
+# and for a clean one the plain command. Following either hint works.
+#
+# The regression this pins: the hint said 'git hop repair' for a dirty
+# worktree, and repair then refused it.
+
+# --- upstream repo and hub ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# --- a clean registered worktree hop.json does not record ---
+exec git worktree add hops/tidy -b tidy
+! exec git-hop doctor
+stderr '^error:   - tidy: a worktree git has registered but hop.json does not record$'
+stderr '^hint: doctor never removes a registered worktree; record it with ''git hop repair'',$'
+! stderr 'force-dirty'
+exec sh -c 'git-hop doctor --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+decode json out '#' 1
+decode json out 0.subject '~/hub/hops/tidy$'
+decode json out 0.message '~^orphaned directory holds a worktree git has registered \(.*/hub/hops/tidy\); record it with ''git hop repair'' or remove it'
+! grep 'force-dirty' out
+
+# --- the plain command records it ---
+exec git-hop repair
+! exec git-hop doctor
+! stderr '  - tidy'
+
+# --- a dirty registered worktree hop.json does not record ---
+exec git worktree add hops/wip -b wip
+cp $WORK/keep.txt hops/wip/keep.txt
+! exec git-hop doctor
+stderr '^error:   - wip: a worktree git has registered but hop.json does not record$'
+stderr '^hint: doctor never removes a registered worktree; it has uncommitted changes, so$'
+stderr '^hint: record it with ''git hop repair --force-dirty'', or remove it with$'
+stderr '^hint: ''git worktree remove'' once its work is safe$'
+exec sh -c 'git-hop doctor --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+decode json out 0.subject '~/hub/hops/wip$'
+decode json out 0.message '~^orphaned directory holds a worktree git has registered \(.*/hub/hops/wip\) with uncommitted changes; record it with ''git hop repair --force-dirty'' or remove it'
+
+# --- the plain command refuses it; the one the hint names records it ---
+! exec git-hop repair
+stderr 'use --force-dirty'
+exec git-hop repair --force-dirty
+cmp hops/wip/keep.txt $WORK/keep.txt
+! exec git-hop doctor
+! stderr '  - wip'
+
+-- keep.txt --
+uncommitted work

@@ -938,6 +938,8 @@ git hop doctor --fix --dry-run
   record, each an issue. `--fix` removes only an empty one. A worktree
   git has registered (at the directory or below it) is never removed,
   whatever is in it: record it with [`git hop repair`](#git-hop-repair)
+  (`git hop repair --force-dirty` when it has uncommitted changes, which
+  repair otherwise refuses; the hint and the issue name the one to run)
   or remove it with `git worktree remove`. Any other directory with
   something in it is left for you to empty or delete; `--fix` cannot
   repair either

@@ -314,16 +314,21 @@ func dirtyWorktrees(g git.GitInterface, plan *hop.Plan, showProgress bool) []str
 
 	var dirty []string
 	for _, p := range targets {
-		out, err := g.RunInDir(p, "git", "status", "--porcelain")
+		isDirty := repairSeesDirty(g, p)
 		meter.Tick()
-		if err != nil {
-			continue
-		}
-		if strings.TrimSpace(out) != "" {
+		if isDirty {
 			dirty = append(dirty, p)
 		}
 	}
 	return dirty
+}
+
+// repairSeesDirty reports whether repair's dirty check refuses the
+// worktree at path without --force-dirty: `git status --porcelain`
+// lists anything in it. A status git cannot read does not count.
+func repairSeesDirty(g git.GitInterface, path string) bool {
+	out, err := g.RunInDir(path, "git", "status", "--porcelain")
+	return err == nil && strings.TrimSpace(out) != ""
 }
 
 // repairRecords is the plan as the command's structured result, one

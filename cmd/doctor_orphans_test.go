@@ -160,3 +160,26 @@ func TestDoctorOrphans_MissingRegisteredWorktreeHoldsNothing(t *testing.T) {
 	exists, _ := afero.DirExists(f.fs, stale)
 	assert.False(t, exists, "the empty directory is removed")
 }
+
+// repair refuses to record a dirty worktree without --force-dirty, so
+// the way out doctor names for a registered but unrecorded worktree
+// carries the flag when that worktree has uncommitted changes, and only
+// then.
+func TestDoctorOrphans_RepairHintForceDirtyOnlyWhenDirty(t *testing.T) {
+	f := newOrphanFixture(t)
+	wip := filepath.Join(f.hops, "wip")
+	f.g.Runner.Responses = map[string]string{wip + ":git status --porcelain": "?? uncommitted.txt"}
+
+	var r doctorReport
+	_, stderr := captureRemoveOutput(t, func() {
+		r = runDoctor(f.fs, f.g, f.hub, doctorOpts{})
+	})
+
+	_, _, messages := orphanRecords(r)
+	assert.Contains(t, messages[wip], "'git hop repair --force-dirty'", "a dirty worktree needs --force-dirty")
+	feat := filepath.Join(f.hops, "feat")
+	assert.Contains(t, messages[feat], "'git hop repair'", "a clean worktree needs no flag")
+	assert.NotContains(t, messages[feat], "--force-dirty", "a clean worktree needs no flag")
+	assert.Contains(t, stderr, "hint: doctor never removes a registered worktree; it has uncommitted changes, so\nhint: record it with 'git hop repair --force-dirty',")
+	assert.Contains(t, stderr, "hint: doctor never removes a registered worktree; record it with 'git hop repair',")
+}
