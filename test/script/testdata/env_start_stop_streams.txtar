@@ -1,0 +1,78 @@
+# `git hop env start` and `env stop` have no result to print: everything
+# they say is progress (the manager in use, each step, hook output and the
+# lifecycle command's own output), and progress goes to stderr, as git
+# keeps it, whatever the output mode. stdout stays empty.
+#
+# A stub docker on PATH stands in for compose: `compose config` fails (so
+# the raw compose file is parsed) and every other call echoes on both
+# streams.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub/hops/main
+
+# --- start ---
+exec git-hop env start
+! stdout .
+stderr '^Environment Manager: docker-compose$'
+stderr 'Starting services: docker-compose'
+stderr '^stub-compose-stdout compose .* up -d$'
+stderr '^stub-compose-stderr$'
+stderr 'Environment started successfully'
+
+# --- stop ---
+exec git-hop env stop
+! stdout .
+stderr '^Environment Manager: docker-compose$'
+stderr 'Stopping services: docker-compose'
+stderr '^stub-compose-stdout compose .* stop$'
+stderr 'Environment stopped successfully'
+
+# --- structured and quiet modes keep stdout clean too ---
+exec git-hop env start --json
+! stdout .
+stderr 'stub-compose-stdout'
+exec git-hop env stop --porcelain
+! stdout .
+exec git-hop env start -q
+! stdout .
+
+# --- no environment: the skip notice is progress as well ---
+cd $WORK/hub
+exec git-hop add plain
+cd $WORK/hub/hops/plain
+exec git rm -q docker-compose.yml
+exec git commit -q -m 'no compose'
+exec git-hop env start
+! stdout .
+stderr 'No environment manager detected, skipping'
+exec git-hop env stop
+! stdout .
+stderr 'No environment manager detected, skipping'
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+esac
+echo "stub-compose-stdout $*"
+echo "stub-compose-stderr" >&2
+exit 0

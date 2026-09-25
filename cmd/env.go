@@ -71,7 +71,9 @@ func runEnvCommand(action string) {
 
 	// Hub context is optional: outside a hub the worktree's own files
 	// still select a manager.
-	target := services.EnvTarget{Root: root}
+	// start and stop have no result: all they say is progress, and
+	// progress goes to stderr.
+	target := services.EnvTarget{Root: root, Progress: os.Stderr}
 	if hubPath, err := hop.FindHub(fs, cwd); err == nil {
 		if hub, err := hop.LoadHub(fs, hubPath); err == nil {
 			target.Hub = hub.Config
@@ -84,7 +86,7 @@ func runEnvCommand(action string) {
 	case "start":
 		err := services.StartEnv(fs, target, globalConfig, cli.EventBus)
 		if errors.Is(err, services.ErrNoEnvironment) {
-			output.Info("No environment manager detected, skipping")
+			output.Note("No environment manager detected, skipping")
 			return
 		}
 		if err != nil {
@@ -96,10 +98,10 @@ func runEnvCommand(action string) {
 			output.Fatal("Failed to detect environment manager: %v", err)
 		}
 		if manager == nil {
-			output.Info("No environment manager detected, skipping")
+			output.Note("No environment manager detected, skipping")
 			return
 		}
-		output.Info("Environment Manager: %s", manager.Name)
+		output.Note("Environment Manager: %s", manager.Name)
 		if err := manager.Stop(root, target.Branch, target.HopspacePath, target.Hub, overridePath); err != nil {
 			output.Fatal("Failed to stop environment: %v", err)
 		}
