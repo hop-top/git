@@ -31,12 +31,18 @@ Run 'git hop doctor --fix' to resolve these issues
 
 **Resolution:**
 ```bash
-# Let doctor diagnose and fix the issue
+# Let doctor diagnose it; --fix removes the directory only if it is empty
 git hop doctor --fix
 
-# Or manually remove the directory
+# A worktree git has registered: record it in hop.json
+git hop repair
+
+# Anything else with something in it: keep what you need, then delete it
 rm -rf hops/feature-x
 ```
+
+Doctor never removes a directory with anything in it, and never a
+worktree git has registered, whatever is in it.
 
 ### Stale Git Metadata
 
@@ -132,14 +138,14 @@ git hop doctor --fix
 ```
 
 This will automatically fix issues that can be safely resolved:
-- Remove orphaned directories (if they have no uncommitted changes)
+- Remove empty orphaned directories under `hops/`
 - Prune stale git worktree metadata
 - Clean up broken dependency symlinks (e.g., node_modules, vendor)
 - Prune orphaned worktree and hub entries from the state file
 - Drop the current hub's `hop.json` branch entries whose worktree directory is
   gone — the rows `git hop status` reports as `Missing`
 
-**Safety:** The doctor command will never remove directories with uncommitted changes. You'll need to manually resolve those cases.
+**Safety:** The doctor command never removes a directory with anything in it, nor a worktree git has registered. It reports them for you to resolve: `git hop repair` records a registered worktree in `hop.json`.
 
 Before rewriting `hop.json`, doctor snapshots it to
 `$XDG_STATE_HOME/git-hop/repair/<hub>/backups/repair-<timestamp>Z` (outside
@@ -152,11 +158,14 @@ use `git hop prune` to sweep every hub registered in state.
 ### OrphanedDirectory
 A directory exists in `hops/` but is not registered in the hopspace configuration.
 
-**Auto-fixable:** Yes (if no uncommitted changes)
+**Auto-fixable:** Only when empty. A worktree git has registered is never removed
+(`git hop repair` records it); any other directory with something in it is left
+for you.
 
 **Manual fix:**
 ```bash
-rm -rf hops/<directory-name>
+git hop repair                 # a registered worktree: record it
+rm -rf hops/<directory-name>   # anything else, once nothing in it is needed
 ```
 
 ### PartialWorktree

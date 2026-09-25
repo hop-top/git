@@ -64,7 +64,10 @@ Checks:
   a warning (--fix moves the directory to the hop.dataLayout location
   when nothing is there yet; with hooks at both, nothing is moved), and
   an invalid hop.dataLayout value, a warning
-- Worktree state (orphaned directories)
+- Worktree state: directories under hops/ that hop.json does not
+  record. --fix removes only empty ones; a worktree git has registered
+  ('git hop repair' records it) and any directory with something in it
+  are reported for you to handle, never removed
 - Orphaned worktrees in state
 - Repositories state still keys by another host than their origin's,
   because the "<host>/<org>/<repo>" key their origin gives was already
@@ -383,74 +386,6 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 		}
 		output.Info("Created data directory")
 		r.repaired(opts, doctorCheckPaths, dataHome, "create data directory")
-	}
-}
-
-// checkWorktreeState detects hopspace directories with no corresponding
-// worktree and, under --fix, deletes them.
-func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts doctorOpts, r *doctorReport) {
-	output.Info("\n=== Checking Worktree State ===")
-	if hubPath == "" {
-		output.Info("Not in a hub. Skipping worktree state checks.")
-		return
-	}
-
-	hub, err := hop.LoadHub(fs, hubPath)
-	if err != nil {
-		return
-	}
-
-	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
-	if r.misplaced[filepath.Clean(hopspacePath)] {
-		output.Info("Hopspace not at %s. Skipping worktree state checks.", hopspacePath)
-		return
-	}
-
-	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
-	if err != nil {
-		output.Error("Failed to load hopspace: %v", err)
-		r.unfixableIssue(doctorCheckWorktrees, hopspacePath, "failed to load hopspace: %v", err)
-		return
-	}
-
-	validator := hop.NewStateValidator(fs, g)
-	cleanup := hop.NewCleanupManager(fs, g)
-
-	orphanedDirs, err := validator.DetectOrphanedDirectories(hopspace)
-	if err != nil {
-		output.Error("Failed to detect orphaned directories: %v", err)
-		r.unfixableIssue(doctorCheckWorktrees, hopspacePath, "failed to detect orphaned directories: %v", err)
-		return
-	}
-	if len(orphanedDirs) == 0 {
-		output.Info("No orphaned directories found")
-		return
-	}
-
-	output.Error("Found %d orphaned directories", len(orphanedDirs))
-	for _, dir := range orphanedDirs {
-		output.Error("  - %s", dir)
-		fullPath := filepath.Join(hopspacePath, "hops", dir)
-		r.fixableIssue(doctorCheckWorktrees, fullPath, "orphaned directory")
-		if !opts.fix {
-			continue
-		}
-		if !opts.mutating() {
-			output.Info("    [dry-run] Would remove %s", fullPath)
-			r.repaired(opts, doctorCheckWorktrees, fullPath, "remove orphaned directory")
-			continue
-		}
-		output.Info("    Cleaning up...")
-		if err := cleanup.CleanupOrphanedDirectory(fullPath); err != nil {
-			output.Error("    Failed to remove: %v", err)
-			r.failed(doctorCheckWorktrees, fullPath, "remove orphaned directory: %v", err)
-		} else {
-			output.Info("    Removed")
-			r.repaired(opts, doctorCheckWorktrees, fullPath, "remove orphaned directory")
-		}
-	}
-	if !opts.fix {
-		output.Info("  Run 'git hop doctor --fix' to clean up orphaned directories")
 	}
 }
 

@@ -21,24 +21,6 @@ func NewCleanupManager(fs afero.Fs, g git.GitInterface) *CleanupManager {
 	}
 }
 
-// CleanupOrphanedDirectory removes an orphaned directory from the filesystem
-// Returns nil if the directory doesn't exist (already cleaned up)
-func (c *CleanupManager) CleanupOrphanedDirectory(path string) error {
-	// Check if directory exists
-	exists, err := afero.Exists(c.fs, path)
-	if err != nil {
-		return err
-	}
-
-	// Already gone, nothing to do
-	if !exists {
-		return nil
-	}
-
-	// Remove the directory
-	return c.fs.RemoveAll(path)
-}
-
 // RemoveEmptyParent removes the parent directory of a worktree path if it is
 // empty and distinct from the hub root. This handles the case where branches
 // use a prefix like feat/ or fix/ — after the last worktree using that prefix

@@ -18,7 +18,10 @@ Checks:
   a warning (--fix moves the directory to the hop.dataLayout location
   when nothing is there yet; with hooks at both, nothing is moved), and
   an invalid hop.dataLayout value, a warning
-- Worktree state (orphaned directories)
+- Worktree state: directories under hops/ that hop.json does not
+  record. --fix removes only empty ones; a worktree git has registered
+  ('git hop repair' records it) and any directory with something in it
+  are reported for you to handle, never removed
 - Orphaned worktrees in state
 - Repositories state still keys by another host than their origin's,
   because the "<host>/<org>/<repo>" key their origin gives was already

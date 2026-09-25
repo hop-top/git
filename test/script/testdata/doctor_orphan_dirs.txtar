@@ -1,0 +1,98 @@
+# `git hop doctor --fix` removes a directory under hops/ that hop.json
+# does not record only when it is empty. A worktree git has registered is
+# never removed, whatever is in it: doctor reports it and points at
+# 'git hop repair', which records it. Any other directory with something
+# in it is reported for removal by hand. --fix --dry-run previews exactly
+# that, and neither run loses a file.
+#
+# The regression this pins: --fix deleted every such directory, contents
+# and all, including a registered worktree with uncommitted work.
+
+# --- upstream repo and hub ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# --- one orphan of each kind ---
+# wip: registered in git, not in hop.json, with uncommitted work.
+exec git worktree add hops/wip -b wip
+cp $WORK/keep.txt hops/wip/keep.txt
+# feat: unrecorded parent of a registered worktree.
+exec git worktree add hops/feat/x -b feat/x
+cp $WORK/keep.txt hops/feat/x/keep.txt
+# plain: not a worktree, with a file in it.
+mkdir hops/plain
+cp $WORK/keep.txt hops/plain/keep.txt
+# empty: nothing in it.
+mkdir hops/empty
+
+# --- report ---
+! exec git-hop doctor
+stderr '^error: Found 4 orphaned directories$'
+stderr '^error:   - wip: a worktree git has registered but hop.json does not record$'
+stderr '^error:   - feat: holds a worktree git has registered but hop.json does not record: .*/hub/hops/feat/x$'
+stderr '^hint: doctor never removes a registered worktree; record it with ''git hop repair'',$'
+stderr '^error:   - plain: not empty; doctor removes only empty directories$'
+stderr '^hint: move out what you want to keep from .*/hub/hops/plain, then delete it$'
+stderr '^error:   - empty$'
+stdout 'Run ''git hop doctor --fix'' to remove the empty orphaned directories'
+
+# --- --fix --dry-run previews removing the empty one only ---
+! exec git-hop doctor --fix --dry-run
+stdout '\[dry-run\] Would remove empty directory .*/hub/hops/empty$'
+! stdout 'Would remove .*/hops/(wip|feat|plain)'
+stdout '\[dry-run\] Would fix 1 issue\(s\)'
+exists hops/empty
+cmp hops/wip/keep.txt $WORK/keep.txt
+cmp hops/feat/x/keep.txt $WORK/keep.txt
+cmp hops/plain/keep.txt $WORK/keep.txt
+
+# --- structured: only the empty one is fixable ---
+! exec git-hop doctor --fix --dry-run --json
+decode json stdout '#' 5
+decode json stdout 0.subject '~/hub/hops/empty$'
+decode json stdout 0.fixable true
+decode json stdout 1.kind would-fix
+decode json stdout 2.subject '~/hub/hops/feat$'
+decode json stdout 2.fixable false
+decode json stdout 3.subject '~/hub/hops/plain$'
+decode json stdout 3.fixable false
+decode json stdout 4.subject '~/hub/hops/wip$'
+decode json stdout 4.fixable false
+
+# --- --fix removes the empty one and nothing else ---
+! exec git-hop doctor --fix
+stdout 'Removed empty directory .*/hub/hops/empty$'
+stdout 'Fixed 1 issue\(s\)'
+! exists hops/empty
+cmp hops/wip/keep.txt $WORK/keep.txt
+cmp hops/feat/x/keep.txt $WORK/keep.txt
+cmp hops/plain/keep.txt $WORK/keep.txt
+exec git -C hops/wip status --porcelain
+stdout '^\?\? keep.txt$'
+exec git worktree list
+stdout 'hops/wip '
+stdout 'hops/feat/x '
+
+# --- a second --fix changes nothing ---
+! exec git-hop doctor --fix
+! stdout 'Removed'
+cmp hops/wip/keep.txt $WORK/keep.txt
+cmp hops/plain/keep.txt $WORK/keep.txt
+
+# --- the hint's way out: repair records the registered worktrees ---
+# (--force-dirty: repair refuses dirty worktrees by default)
+exec git-hop repair --force-dirty
+cmp hops/wip/keep.txt $WORK/keep.txt
+cmp hops/feat/x/keep.txt $WORK/keep.txt
+! exec git-hop doctor
+! stderr '  - (wip|feat)'
+stderr '^error:   - plain: not empty'
+
+-- keep.txt --
+uncommitted work
