@@ -25,4 +25,7 @@ func TestTrashMove_CopyRefusesSpecialFiles(t *testing.T) {
 	assert.Contains(t, err.Error(), "not a regular file, directory or symlink")
 	_, err = os.Lstat(filepath.Join(src, "pipe"))
 	assert.NoError(t, err, "the original must be left in place")
+	folders, err := os.ReadDir(filepath.Join(os.Getenv("GIT_HOP_DATA_HOME"), "backups"))
+	require.NoError(t, err)
+	assert.Empty(t, folders, "the partial copy must leave the trash")
 }
