@@ -636,16 +636,28 @@ Piping an answer works as expected, so `yes | git hop remove …` and
 
 ### What Gets Removed
 
-- Worktree
-- Hopspace data
-- Port and volume allocations
-- Containers
-- Networks
+- Worktree (its directory, through `git worktree remove`)
 - Local branch
+- Its records: the hub's and the hopspace's `hop.json` entries and its
+  state entry
+- Its port and volume allocations: its `ports.json` and `volumes.json`
+  entries, so the ports are free for another worktree
 
-The volume directories themselves, and the data in them, stay: removing a
-branch drops its entry from `volumes.json` only. See
-[Volume data](#volume-data) for removing a hub.
+What stays:
+
+- Volume data: the volume directories, and the data in them, stay;
+  removing a branch drops its entry from `volumes.json` only. See
+  [Volume data](#volume-data) for removing a hub.
+- The Docker environment: `remove` never stops or removes containers,
+  networks or Docker volumes. A container still running keeps the ports
+  `remove` has just freed, which the next allocation may hand to another
+  worktree. Run [`git hop env stop`](#stop) in the worktree before
+  removing it (once it is gone, `env stop` cannot find it). That runs
+  `docker compose stop`: the containers stop but stay, with their
+  network. To remove them as well, run `docker compose -p <project> down`
+  there, `<project>` being the `project` of the worktree's `ports.json`
+  entry ([Ports Configuration](./configuration.md#ports-configuration));
+  `git hop env down` is `env stop` under another name and does not.
 
 The branch on `origin` is **not** touched. Removal is a local
 operation and never contacts the network unless you ask it to.
@@ -680,6 +692,10 @@ hopspace loses the removed hub's entries: its worktrees' records in
 
 `--dry-run` says whether the hopspace would be kept or deleted, and
 why, and how many of the hub's `hop.json` records a kept one would lose.
+
+Removing a hub does not stop its worktrees' environments either: run
+`git hop env stop` in each worktree with a running environment first
+(see [What Gets Removed](#what-gets-removed)).
 
 ### Volume data
 
