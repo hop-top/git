@@ -332,43 +332,6 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 	return oldPath, newPath, nil
 }
 
-// RemoveWorktree removes a worktree
-func (m *WorktreeManager) RemoveWorktree(hopspace *Hopspace, branch string) error {
-	// Find the worktree to remove
-	branchInfo, exists := hopspace.Config.Branches[branch]
-	if !exists {
-		return fmt.Errorf("branch %s not found in hopspace", branch)
-	}
-
-	worktreePath := branchInfo.Path
-
-	// We need a base path that is NOT the one we are removing
-	var basePath string
-	for bName, b := range hopspace.Config.Branches {
-		if bName != branch && b.Exists && b.Path != "" {
-			basePath = b.Path
-			break
-		}
-	}
-
-	if basePath == "" {
-		// Cannot remove the last worktree - git worktree remove requires a git context from another worktree
-		return fmt.Errorf("cannot remove the last/main worktree via this method")
-	}
-
-	// Use absolute path for git commands
-	absBasePath, err := filepath.Abs(basePath)
-	if err != nil {
-		return fmt.Errorf("failed to get absolute path: %w", err)
-	}
-
-	if err := m.git.WorktreeRemove(absBasePath, worktreePath, true); err != nil {
-		return err
-	}
-
-	return nil
-}
-
 // hopspaceURI returns the origin URL hopspace records, "" when there is
 // no hopspace or config to read it from.
 func hopspaceURI(hopspace *Hopspace) string {
