@@ -14,108 +14,78 @@ import (
 	"hop.top/git/internal/hop"
 )
 
-// TestAddCommand_RecoveryFromOrphanedDirectory tests worktree creation recovery
-// This is an integration test that verifies CreateWorktreeTransactional cleans up
-// an orphaned directory before creating a worktree.
-func TestAddCommand_RecoveryFromOrphanedDirectory(t *testing.T) {
-	// Create a temporary directory for our test
+// newRecoveryRepo makes a git repository with one commit and the
+// hopspace that records it as main.
+func newRecoveryRepo(t *testing.T) (string, *hop.Hopspace) {
+	t.Helper()
 	tempDir := t.TempDir()
-
-	// Initialize a real git repo using exec commands
-	cmd := exec.Command("git", "init")
-	cmd.Dir = tempDir
-	err := cmd.Run()
-	require.NoError(t, err, "Failed to initialize git repo")
-
-	// Configure git for testing
-	cmd = exec.Command("git", "config", "user.email", "test@example.com")
-	cmd.Dir = tempDir
-	_ = cmd.Run()
-
-	cmd = exec.Command("git", "config", "user.name", "Test User")
-	cmd.Dir = tempDir
-	_ = cmd.Run()
-
-	// Create initial commit (required for worktree operations)
-	testFile := filepath.Join(tempDir, "README.md")
-	err = os.WriteFile(testFile, []byte("# Test Repo"), 0644)
-	require.NoError(t, err)
-
-	cmd = exec.Command("git", "add", ".")
-	cmd.Dir = tempDir
-	err = cmd.Run()
-	require.NoError(t, err)
-
-	cmd = exec.Command("git", "commit", "-m", "Initial commit")
-	cmd.Dir = tempDir
-	err = cmd.Run()
-	require.NoError(t, err)
-
-	// Setup filesystem and hopspace
-	fs := afero.NewOsFs()
-	hopspace := &hop.Hopspace{
+	for _, args := range [][]string{
+		{"init"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "Test User"},
+		{"commit", "--allow-empty", "-m", "Initial commit"},
+	} {
+		cmd := exec.Command("git", args...)
+		cmd.Dir = tempDir
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %v: %s", args, out)
+	}
+	return tempDir, &hop.Hopspace{
 		Path: tempDir,
 		Config: &config.HopspaceConfig{
 			Branches: map[string]config.HopspaceBranch{
-				"main": {
-					Path:   tempDir,
-					Exists: true,
-				},
+				"main": {Path: tempDir, Exists: true},
 			},
 		},
 	}
+}
 
-	// Create an orphaned directory (simulates a previous failed worktree creation)
-	orphanedPath := filepath.Join(tempDir, "feature-branch")
-	err = fs.MkdirAll(orphanedPath, 0755)
-	require.NoError(t, err, "Failed to create orphaned directory")
+// TestAddCommand_RefusesNonEmptyDirectory: a directory neither git nor
+// hop.json knows, holding files, is left as it was and the add refused.
+func TestAddCommand_RefusesNonEmptyDirectory(t *testing.T) {
+	tempDir, hopspace := newRecoveryRepo(t)
+	fs := afero.NewOsFs()
 
-	// Write some content to make it non-empty (orphaned directory)
-	orphanedFile := filepath.Join(orphanedPath, "junk.txt")
-	err = afero.WriteFile(fs, orphanedFile, []byte("orphaned content"), 0644)
-	require.NoError(t, err, "Failed to write orphaned file")
+	occupiedPath := filepath.Join(tempDir, "feature-branch")
+	keep := filepath.Join(occupiedPath, "junk.txt")
+	require.NoError(t, fs.MkdirAll(occupiedPath, 0755))
+	require.NoError(t, afero.WriteFile(fs, keep, []byte("uncommitted work"), 0644))
 
-	// Verify orphaned directory exists
-	exists, err := afero.DirExists(fs, orphanedPath)
-	require.NoError(t, err)
-	require.True(t, exists, "Orphaned directory should exist before test")
-
-	// Create worktree manager
-	g := git.New()
-	wm := hop.NewWorktreeManager(fs, g)
-
-	// Use CreateWorktreeTransactional which should clean up the orphaned directory
-	// and successfully create the worktree
+	wm := hop.NewWorktreeManager(fs, git.New())
 	worktreePath, err := wm.CreateWorktreeTransactional(
-		hopspace,
-		tempDir,
-		"feature-branch",
-		"{branch}", // Will expand to tempDir/feature-branch (relative to hubPath)
-		"testorg",
-		"testrepo",
-		"",
-		"",
-	)
+		hopspace, tempDir, "feature-branch", "{branch}", "testorg", "testrepo", "", "")
 
-	// Assert: Should succeed and return the expected path
-	require.NoError(t, err, "CreateWorktreeTransactional should succeed after cleanup")
-	assert.Equal(t, orphanedPath, worktreePath, "Should return expected worktree path")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists and is not an empty directory")
+	assert.Equal(t, occupiedPath, worktreePath)
+	got, readErr := os.ReadFile(keep)
+	require.NoError(t, readErr, "the file in the directory must survive")
+	assert.Equal(t, "uncommitted work", string(got))
+	_, statErr := os.Stat(filepath.Join(occupiedPath, ".git"))
+	assert.True(t, os.IsNotExist(statErr), "no worktree may be created over it")
+}
 
-	// Verify the directory now contains a valid git worktree
-	gitDir := filepath.Join(worktreePath, ".git")
-	exists, err = afero.Exists(fs, gitDir)
+// TestAddCommand_ReusesEmptyDirectory: an empty directory at the target
+// path is reused, as git worktree add reuses it.
+func TestAddCommand_ReusesEmptyDirectory(t *testing.T) {
+	tempDir, hopspace := newRecoveryRepo(t)
+	fs := afero.NewOsFs()
+
+	emptyPath := filepath.Join(tempDir, "feature-branch")
+	require.NoError(t, fs.MkdirAll(emptyPath, 0755))
+
+	wm := hop.NewWorktreeManager(fs, git.New())
+	worktreePath, err := wm.CreateWorktreeTransactional(
+		hopspace, tempDir, "feature-branch", "{branch}", "testorg", "testrepo", "", "")
+
 	require.NoError(t, err)
-	assert.True(t, exists, "Worktree should have .git file after creation")
+	assert.Equal(t, emptyPath, worktreePath)
+	_, statErr := os.Stat(filepath.Join(emptyPath, ".git"))
+	assert.NoError(t, statErr, "worktree should have a .git file")
 
-	// Verify the orphaned junk file is gone (directory was cleaned)
-	exists, err = afero.Exists(fs, orphanedFile)
+	list := exec.Command("git", "worktree", "list")
+	list.Dir = tempDir
+	out, err := list.CombinedOutput()
 	require.NoError(t, err)
-	assert.False(t, exists, "Orphaned file should be removed after cleanup")
-
-	// Verify worktree is registered in git using exec
-	cmd = exec.Command("git", "worktree", "list")
-	cmd.Dir = tempDir
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err)
-	assert.Contains(t, string(output), "feature-branch", "Worktree should be listed in git worktree list")
+	assert.Contains(t, string(out), "feature-branch")
 }

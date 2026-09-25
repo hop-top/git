@@ -1,0 +1,98 @@
+# `git hop add` never deletes what sits at the target path. A directory
+# neither git nor hop.json knows is reused only when empty, as `git
+# worktree add` does; anything else is refused, with exit status 1, by
+# the preview and the real add alike, and left as it was.
+#
+# The regression this pins: add deleted a non-empty directory at the
+# target path and went on, and add -n did not mention it.
+
+# --- upstream repo and hub ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# --- snapshot what a refused add must leave alone ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+
+# --- non-empty directory at the target path ---
+mkdir hops/feat/occ
+cp $WORK/keep.txt hops/feat/occ/keep.txt
+exec sh -c 'git-hop add feat/occ -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/occ'' already exists and is not an empty directory$' err
+grep '^hint: move it away, or add another branch or set another hop.worktreeLocation$' err
+exec sh -c 'git-hop add feat/occ -n --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"Failed to create worktree: ''.*/hub/hops/feat/occ'' already exists and is not an empty directory' err
+exec sh -c 'git-hop add feat/occ >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/occ'' already exists and is not an empty directory$' err
+grep '^hint: move it away, or add another branch or set another hop.worktreeLocation$' err
+exec sh -c 'git-hop add feat/occ --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"Failed to create worktree: ''.*/hub/hops/feat/occ'' already exists and is not an empty directory' err
+cmp hops/feat/occ/keep.txt $WORK/keep.txt
+! exists hops/feat/occ/.git
+
+# --- a hidden file alone makes the directory non-empty ---
+mkdir hops/feat/dot
+cp $WORK/keep.txt hops/feat/dot/.keep
+exec sh -c 'git-hop add feat/dot >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/dot'' already exists and is not an empty directory$' err
+cmp hops/feat/dot/.keep $WORK/keep.txt
+
+# --- a file at the target path ---
+cp $WORK/keep.txt hops/feat/file
+exec sh -c 'git-hop add feat/file -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/file'' already exists and is not an empty directory$' err
+exec sh -c 'git-hop add feat/file >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Failed to create worktree: ''.*/hub/hops/feat/file'' already exists and is not an empty directory$' err
+cmp hops/feat/file $WORK/keep.txt
+
+# --- no refused add wrote anything ---
+exec git branch --list feat/occ feat/dot feat/file
+! stdout .
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+
+# --- an empty directory is reused ---
+mkdir hops/feat/empty
+exec git-hop add feat/empty -n
+stdout '\[dry-run\] Would create worktree at ./hops/feat/empty'
+exec git-hop add feat/empty
+exists hops/feat/empty/.git
+exec git -C hops/feat/empty rev-parse --abbrev-ref HEAD
+stdout '^feat/empty$'
+
+# --- a worktree hop.json records by a relative path ---
+# Recorded relative to the hub and run from a worktree below it, so the
+# relative path means something else from the working directory. git no
+# longer knows the worktree, so only the record identifies it.
+exec git-hop add feat/rel
+cp $WORK/keep.txt hops/feat/rel/keep.txt
+exec sh -c 'sed -e ''s#"path": "[^"]*/hops/feat/rel"#"path": "hops/feat/rel"#'' hop.json >hop.json.new && mv hop.json.new hop.json'
+grep '"path": "hops/feat/rel"' hop.json
+rm $WORK/hub/worktrees/rel
+cd $WORK/hub/hops/main
+exec sh -c 'git-hop add feat/rel -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/rel$' err
+exec sh -c 'git-hop add feat/rel >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Failed to create worktree: worktree already exists at .*/hub/hops/feat/rel$' err
+cmp $WORK/hub/hops/feat/rel/keep.txt $WORK/keep.txt
+
+-- keep.txt --
+uncommitted work
