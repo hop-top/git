@@ -54,16 +54,22 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 
 	// Remove from global state: this hub and its worktrees. The
 	// repository's other hubs, and their worktrees, stay.
-	st, stErr := state.LoadState(fs)
-	if stErr == nil {
-		otherHubs := otherHubsInState(st, repoID, hubPath)
-		if err := st.RemoveHub(repoID, hubPath); err != nil {
-			output.Warn("Failed to update state: %v", err)
-		} else if err := state.SaveState(fs, st); err != nil {
-			output.Warn("Failed to save state: %v", err)
+	// st is state as the removal left it, nil when it could not be
+	// loaded (stErr says why).
+	var st *state.State
+	otherHubs := false
+	stErr := state.Update(fs, func(fresh *state.State) error {
+		st = fresh
+		otherHubs = otherHubsInState(fresh, repoID, hubPath)
+		return fresh.RemoveHub(repoID, hubPath)
+	})
+	if st != nil {
+		if stErr != nil {
+			output.Warn("Failed to update state: %v", stErr)
 		} else {
 			output.Info("Removed %s", stateRemoval(repoID, hubPath, otherHubs))
 		}
+		stErr = nil
 	}
 
 	// A default hub's hopspace is the hub directory removed above; a

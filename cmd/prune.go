@@ -114,20 +114,9 @@ func runPrune(cmd *cobra.Command, args []string) {
 		output.Info("Scanning %s for orphaned entries...", scopeRepoIDs(scoped)[0])
 	}
 
-	counts := runPruneAll(fs, g, scoped, dryRun)
-	if all {
-		// State backups belong to no one repository, so only a prune of
-		// every repository ages them out.
-		counts.addStateBackups(pruneStateBackups(fs, g, st, dryRun))
-	}
-
-	if !dryRun && (counts.worktrees > 0 || counts.hubs > 0) {
-		// scoped shares its *RepositoryState pointers with st, so the
-		// in-place edits above are already visible in st; save the full
-		// state so out-of-scope repositories are preserved verbatim.
-		if err := state.SaveState(fs, st); err != nil {
-			output.Fatal("Failed to save state: %v", err)
-		}
+	counts, err := pruneAndSave(fs, g, st, scoped, all, dryRun)
+	if err != nil {
+		output.Fatal("Failed to save state: %v", err)
 	}
 
 	if output.IsStructured() {
@@ -145,6 +134,25 @@ func runPrune(cmd *cobra.Command, args []string) {
 		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), and %d state backup(s)",
 			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups)
 	}
+}
+
+// pruneAndSave runs every prune pass over scoped, the part of st in
+// scope (resolvePruneScope), and saves what they removed from state.
+//
+// The passes run git and take their time, so they work on the state
+// loaded before them, without the state lock. What they removed is then
+// removed from state.json as it is by the time of the save (stateEdits),
+// so entries another run recorded or dropped during the scan stay as
+// that run left them.
+func pruneAndSave(fs afero.Fs, g git.GitInterface, st, scoped *state.State, all, dryRun bool) (pruneCounts, error) {
+	var edits stateEdits
+	counts := runPruneAll(fs, g, scoped, dryRun, &edits)
+	if all {
+		// State backups belong to no one repository, so only a prune of
+		// every repository ages them out.
+		counts.addStateBackups(pruneStateBackups(fs, g, st, dryRun))
+	}
+	return counts, edits.save(fs)
 }
 
 // resolvePruneScope narrows st to the repositories prune is allowed to
@@ -238,15 +246,16 @@ func (c *pruneCounts) addStateBackups(records []pruneRecord) {
 }
 
 // runPruneAll performs every prune pass against st and returns the
-// counts. Mutations to st are in-memory; the caller persists.
+// counts. Mutations to st are in-memory and recorded in edits; the
+// caller persists them (stateEdits.save).
 //
 // Ordering matters: hop.json entries are pruned first because the hub
 // entries in st are what tell us which hop.json files to visit, and
 // pruneOrphanedHubs drops those same entries from st in the pass right
 // after.
-func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) pruneCounts {
+func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, edits *stateEdits) pruneCounts {
 	hopJSON := pruneOrphanedHubBranches(fs, g, st, dryRun)
-	worktrees, hubs := runPruneFS(fs, g, st, dryRun)
+	worktrees, hubs := runPruneFS(fs, g, st, dryRun, edits)
 	backups := pruneRepairBackups(fs, g, st, dryRun)
 	conversions := pruneConversionBackups(fs, st, dryRun)
 
@@ -345,22 +354,23 @@ func repairBackupRetention(g git.GitInterface, st *state.State) time.Duration {
 }
 
 // runPruneFS scans st for orphaned worktrees and hubs and returns them.
-// When dryRun is false the orphans are removed from st in place; the caller
-// is responsible for persisting. When dryRun is true st is left untouched.
-func runPruneFS(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) (worktrees, hubs []pruneRecord) {
-	worktrees = pruneOrphanedWorktrees(fs, g, st, dryRun)
-	hubs = pruneOrphanedHubs(fs, st, dryRun)
+// When dryRun is false the orphans are removed from st in place and the
+// removals recorded in edits; the caller is responsible for persisting.
+// When dryRun is true st is left untouched.
+func runPruneFS(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, edits *stateEdits) (worktrees, hubs []pruneRecord) {
+	worktrees = pruneOrphanedWorktrees(fs, g, st, dryRun, edits)
+	hubs = pruneOrphanedHubs(fs, st, dryRun, edits)
 	return
 }
 
 // pruneOrphanedWorktrees reports worktrees whose paths no longer exist,
 // in repository then branch order (state.SortedWorktreeKeys). When dryRun is false it also removes
-// them from st.
+// them from st, recording each removal in edits.
 //
 // A worktree git has locked is kept and reported skipped
 // (skipLockedEntry): like `git worktree prune`, prune leaves it for the
 // user to unlock.
-func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool) []pruneRecord {
+func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, edits *stateEdits) []pruneRecord {
 	var pruned []pruneRecord
 	prefix := "Pruning"
 	if dryRun {
@@ -379,7 +389,7 @@ func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dr
 				}
 				output.Info("%s orphaned worktree: %s:%s (%s)", prefix, repoID, branch, wt.Path)
 				if !dryRun {
-					delete(repo.Worktrees, key)
+					edits.dropWorktree(st, repoID, key)
 				}
 				pruned = append(pruned, newPruneRecord(pruneKindWorktree, repoID, branch, wt.Path, dryRun))
 			}
@@ -390,8 +400,9 @@ func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dr
 }
 
 // pruneOrphanedHubs reports hubs whose directories no longer exist.
-// When dryRun is false it also removes them from st.
-func pruneOrphanedHubs(fs afero.Fs, st *state.State, dryRun bool) []pruneRecord {
+// When dryRun is false it also removes them from st, recording each
+// removal in edits.
+func pruneOrphanedHubs(fs afero.Fs, st *state.State, dryRun bool, edits *stateEdits) []pruneRecord {
 	var pruned []pruneRecord
 	prefix := "Pruning"
 	if dryRun {
@@ -400,19 +411,19 @@ func pruneOrphanedHubs(fs afero.Fs, st *state.State, dryRun bool) []pruneRecord 
 
 	for _, repoID := range scopeRepoIDs(st) {
 		repo := st.Repositories[repoID]
-		var validHubs []*state.HubState
-
+		var gone []string
 		for _, hub := range repo.Hubs {
-			if exists, _ := afero.DirExists(fs, hub.Path); exists {
-				validHubs = append(validHubs, hub)
-			} else {
+			if exists, _ := afero.DirExists(fs, hub.Path); !exists {
 				output.Info("%s orphaned hub: %s (%s)", prefix, repoID, hub.Path)
 				pruned = append(pruned, newPruneRecord(pruneKindHub, repoID, "", hub.Path, dryRun))
+				gone = append(gone, hub.Path)
 			}
 		}
 
 		if !dryRun {
-			repo.Hubs = validHubs
+			for _, path := range gone {
+				edits.dropHub(st, repoID, path)
+			}
 		}
 	}
 

@@ -165,7 +165,7 @@ func TestRunPruneAll_ClearsHopJSONRows(t *testing.T) {
 		filepath.Join(hubPath, "hops", "feat", "gone"): {Path: filepath.Join(hubPath, "hops", "feat", "gone"), Branch: "feat/gone", Type: "linked"},
 	}
 
-	counts := runPruneAll(fs, mocks.NewMockGit(), st, false)
+	counts := runPruneAll(fs, mocks.NewMockGit(), st, false, nil)
 
 	assert.Equal(t, 1, counts.hopJSONEntries, "hop.json pass must run")
 	assert.Equal(t, 1, counts.worktrees, "state.json pass must still run")

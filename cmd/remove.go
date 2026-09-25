@@ -412,15 +412,10 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	}
 
 	// Update global state
-	st, err := state.LoadState(fs)
-	if err == nil {
-		if err := st.RemoveWorktreeAt(repoID, worktreePath); err != nil {
-			output.Warn("Failed to update state: %v", err)
-		} else {
-			if err := state.SaveState(fs, st); err != nil {
-				output.Warn("Failed to save state: %v", err)
-			}
-		}
+	if err := state.Update(fs, func(st *state.State) error {
+		return st.RemoveWorktreeAt(repoID, worktreePath)
+	}); err != nil {
+		output.Warn("Failed to update state: %v", err)
 	}
 
 	// Execute post-worktree-remove hook

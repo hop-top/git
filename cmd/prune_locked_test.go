@@ -41,7 +41,7 @@ func TestPrune_SkipsLockedMissingWorktree(t *testing.T) {
 			g.WorktreeListOut = porcelainEntry(usb, "usb", "locked on the usb drive") +
 				porcelainEntry(gone, "gone", "prunable gitdir file points to non-existent location")
 
-			counts := runPruneAll(fs, g, st, dryRun)
+			counts := runPruneAll(fs, g, st, dryRun, nil)
 
 			assert.Equal(t, 1, counts.worktrees, "only the unlocked state entry: %+v", counts.records)
 			assert.Equal(t, 1, counts.hopJSONEntries, "only the unlocked hop.json row: %+v", counts.records)
@@ -88,7 +88,7 @@ func TestPrune_UnreadableRegistry_Prunes(t *testing.T) {
 	g := mocks.NewMockGit()
 	g.WorktreeListErr = assert.AnError
 
-	counts := runPruneAll(fs, g, st, false)
+	counts := runPruneAll(fs, g, st, false, nil)
 
 	assert.Equal(t, 1, counts.worktrees)
 	assert.Equal(t, 1, counts.hopJSONEntries)

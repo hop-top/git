@@ -18,51 +18,44 @@ import (
 // are keyed by path, so another hub's worktree of the same branch stays.
 //
 // A state file that cannot be read is not replaced; the worktree is then
-// left unrecorded, with a warning.
+// left unrecorded, with a warning. The entries are added to state.json
+// as it is when they are saved (state.Update), so what another run
+// recorded meanwhile stays.
 func recordAddedWorktree(fs afero.Fs, hub *hop.Hub, repoID, hubPath, branch, worktreePath string) {
-	st, err := state.LoadState(fs)
-	if err != nil {
-		output.Error("Failed to update state: %v", err)
-		return
-	}
-
 	now := time.Now()
-	if st.Repositories[repoID] == nil {
-		st.AddRepository(repoID, &state.RepositoryState{
-			URI:           hub.Config.Repo.URI,
-			Org:           hub.Config.Repo.Org,
-			Repo:          hub.Config.Repo.Repo,
-			DefaultBranch: hub.Config.Repo.DefaultBranch,
-			Worktrees:     make(map[string]*state.WorktreeState),
-			Hubs:          []*state.HubState{},
-		})
-	}
 	mode := state.HubModeLocal
 	if hub.Config.Repo.Mode == config.RepoModeGlobal {
 		mode = state.HubModeGlobal
 	}
-	if err := st.AddHub(repoID, &state.HubState{
-		Path:         hubPath,
-		Mode:         mode,
-		CreatedAt:    now,
-		LastAccessed: now,
-	}); err != nil {
+	err := state.Update(fs, func(st *state.State) error {
+		if st.Repositories[repoID] == nil {
+			st.AddRepository(repoID, &state.RepositoryState{
+				URI:           hub.Config.Repo.URI,
+				Org:           hub.Config.Repo.Org,
+				Repo:          hub.Config.Repo.Repo,
+				DefaultBranch: hub.Config.Repo.DefaultBranch,
+				Worktrees:     make(map[string]*state.WorktreeState),
+				Hubs:          []*state.HubState{},
+			})
+		}
+		if err := st.AddHub(repoID, &state.HubState{
+			Path:         hubPath,
+			Mode:         mode,
+			CreatedAt:    now,
+			LastAccessed: now,
+		}); err != nil {
+			return err
+		}
+		return st.PutWorktree(repoID, &state.WorktreeState{
+			Path:         worktreePath,
+			Branch:       branch,
+			Type:         "linked",
+			HubPath:      hubPath,
+			CreatedAt:    now,
+			LastAccessed: now,
+		})
+	})
+	if err != nil {
 		output.Error("Failed to update state: %v", err)
-		return
-	}
-
-	if err := st.PutWorktree(repoID, &state.WorktreeState{
-		Path:         worktreePath,
-		Branch:       branch,
-		Type:         "linked",
-		HubPath:      hubPath,
-		CreatedAt:    now,
-		LastAccessed: now,
-	}); err != nil {
-		output.Error("Failed to update state: %v", err)
-		return
-	}
-	if err := state.SaveState(fs, st); err != nil {
-		output.Error("Failed to save state: %v", err)
 	}
 }

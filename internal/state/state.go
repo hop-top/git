@@ -97,8 +97,9 @@ func statePath() string {
 //
 // A file an earlier release wrote is migrated in memory: every caller
 // sees worktrees keyed by path (migrate) and repositories keyed by the
-// host of their origin (rekeyRepoIDs). Nothing is written here; the next
-// SaveState persists the migration, backing the old file up first.
+// host of their origin (rekeyRepoIDs). Nothing is written here; the
+// next save (Update, SaveState) persists the migration, backing the old
+// file up first.
 func LoadState(fs afero.Fs) (*State, error) {
 	path := statePath()
 
@@ -141,7 +142,8 @@ func parseState(data []byte) (*State, error) {
 	return &state, nil
 }
 
-// SaveState saves the state to disk atomically.
+// SaveState saves st to disk atomically, replacing whatever state.json
+// holds, under the state lock (see Update).
 //
 // It refuses to replace a state file it cannot parse, or one a newer
 // release wrote: saving over either would lose what it records. Before
@@ -149,10 +151,18 @@ func parseState(data []byte) (*State, error) {
 // in the branch-keyed format, repositories under a github.com key their
 // origin does not give), it copies the file to a backup
 // (backupLegacyState).
-func SaveState(fs afero.Fs, state *State) error {
+//
+// A caller that changes the state it loaded uses Update instead:
+// SaveState writes st as it is, dropping whatever another run saved
+// since st was loaded.
+func SaveState(fs afero.Fs, st *State) error {
+	return withStateLock(fs, func() error { return saveLocked(fs, st) })
+}
+
+// saveLocked is SaveState for a caller holding the state lock.
+func saveLocked(fs afero.Fs, state *State) error {
 	stateDir := GetStateHome()
 	path := statePath()
-	tmpPath := filepath.Join(stateDir, "state.json.tmp")
 
 	if err := guardExisting(fs, path); err != nil {
 		return err
@@ -172,15 +182,7 @@ func SaveState(fs afero.Fs, state *State) error {
 		return fmt.Errorf("failed to marshal state: %w", err)
 	}
 
-	if err := afero.WriteFile(fs, tmpPath, data, 0644); err != nil {
-		return fmt.Errorf("failed to write temp state file: %w", err)
-	}
-
-	if err := fs.Rename(tmpPath, path); err != nil {
-		return fmt.Errorf("failed to save state file: %w", err)
-	}
-
-	return nil
+	return replaceFile(fs, path, data)
 }
 
 // guardExisting checks the state file SaveState is about to replace: it
