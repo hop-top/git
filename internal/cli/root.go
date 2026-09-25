@@ -350,6 +350,9 @@ Worktree Mode:
 
 			if dryRun {
 				previewSwitch(fs, hub.Config.Repo.URI, hubPath, repoID, arg, worktreePath)
+				res := switchResult(arg, worktreePath, hubPath, true)
+				res.DryRun = true
+				emitRootResult(cmd, res)
 				return
 			}
 
@@ -374,8 +377,10 @@ Worktree Mode:
 				output.Fatal("Hook pre-worktree-switch failed: %v", err)
 			}
 
+			currentUpdated := true
 			if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
 				output.Warn("Failed to update current symlink: %v", err)
+				currentUpdated = false
 			}
 
 			if err := os.Chdir(worktreePath); err != nil {
@@ -404,6 +409,7 @@ Worktree Mode:
 
 			output.Success("Switched to worktree '%s'", arg)
 			output.Info("Path: %s", worktreePath)
+			emitRootResult(cmd, switchResult(arg, worktreePath, hubPath, currentUpdated))
 
 			// The hook navigated the user itself. The switch SUCCEEDED --
 			// symlink written, event published, success reported above --

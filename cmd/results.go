@@ -26,7 +26,7 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.9"
+const resultSchemaVersion = "1.10"
 
 // addResult is the result of `git hop add`.
 type addResult struct {

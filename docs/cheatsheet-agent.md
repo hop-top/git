@@ -93,6 +93,12 @@ exits 0 without prompting.
 /usr/bin/git hop status --json                # [{branch, base, state, status, path, hub}]
 /usr/bin/git hop status <branch> --json       # one-element list; + ports, services
 
+# Switch (points `current` at the worktree; shell integration cds there)
+/usr/bin/git hop <branch> --json              # {action: switched, branch, path, hub,
+                                              #   current_updated, dry_run?}; exit 93 =
+                                              #   a hook navigated, result still printed
+/usr/bin/git hop --json                       # no <branch>: help, never a result
+
 # Rename
 /usr/bin/git hop move <old-branch> <new-branch>
 /usr/bin/git hop move <old-branch> <new-branch> --dry-run  # preview; no rename, no hooks
@@ -190,9 +196,10 @@ Structured output rules:
 
 - Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env start`,
   `env stop`, `env generate`, `env gc`, `repair`, `remove`, `move`,
-  `merge` have a result; other commands ignore the format for stdout.
+  `merge`, `git hop <branch>` have a result; other commands ignore the
+  format for stdout.
 - Every result is a list (`add`, `init`, `move`, `merge`,
-  `env start|stop|generate`: one object). Empty = `[]`, never empty stdout.
+  `env start|stop|generate`, `git hop <branch>`: one object). Empty = `[]`, never empty stdout.
 - Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
 - `--dry-run` with a result: same shape, would-be values, `dry_run: true`
   in json/yaml.

@@ -112,7 +112,9 @@ git hop [-n] &lt;branch&gt;
 
 `&lt;branch&gt;` must be registered in the hub's `hop.json`. No flags of its
 own; `-n, --dry-run` names the hooks and the `current` target without
-running or writing anything.
+running or writing anything. With `--json`, `--format` or `--porcelain`
+it prints the [root command's result](#root-command) (`action:
+switched`), also on exit 93.
 
 **Exit Codes:**
 | Code | Description |
@@ -124,7 +126,8 @@ running or writing anything.
 
 ### git hop
 
-With no arguments, print help (as `git hop --help`) and exit 0. To see the
+With no arguments, print help (as `git hop --help`) and exit 0, in every
+output mode: help is never a result. To see the
 worktrees, use `git hop list`; for machine-readable output, add `--json`,
 `--format` or `--porcelain` (see [Structured Output](#list)).
 
@@ -312,16 +315,16 @@ Rules:
   `--format`, is refused with exit 129 before the command does anything.
   So is an unknown format or an unknown `--cols` column.
 - Every result is a list of records, except `add`, `init`, `move`,
-  `merge`, `env start`, `env stop` and `env generate`, which return one
-  object. An empty result is `[]` (and no lines under `--porcelain`),
+  `merge`, `env start`, `env stop`, `env generate` and the root command
+  (`git hop <branch>`), which return one object. An empty result is `[]` (and no lines under `--porcelain`),
   never empty stdout.
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.9): a MINOR bump adds
+- Result shapes are versioned together (currently 1.10): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
-- Under `--dry-run`, `init`, `remove`, `move` and `merge` render the
-  result the run would produce, in the same shape; `json` and `yaml` add
+- Under `--dry-run`, `init`, `remove`, `move`, `merge` and branch switch
+  render the result the run would produce, in the same shape; `json` and `yaml` add
   `dry_run: true` to each record (absent on a real run). A preview
   the real run would refuse fails the same way, with no result.
 - A refusal or failure keeps its exit status and reports on stderr (the
@@ -451,6 +454,29 @@ as `git merge` leaves it.
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 
 Columns: `source into result commit source_removed branch_deleted remote_deleted`.
+
+### root command
+
+`git hop <branch>` (switch) renders one object, told apart by `action`.
+The root command carries one result shape whatever it does. On exit 93
+(a `post-worktree-switch` hook navigated itself) the switch succeeded
+and the result still prints. The bare `git hop` prints help and no
+result.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `action` | string | `switched`: an existing worktree became current |
+| `branch` | string | Branch of the worktree the run landed on |
+| `path` | string | Absolute path of that worktree |
+| `hub` | string | Absolute path of the hub |
+| `current_updated` | bool | *json/yaml only*; `switched` only: `true` when the hub's `current` symlink now points at the worktree (or, under `--dry-run`, would); `false` when writing it failed |
+| `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
+
+Columns: `action branch path hub`.
+
+The shell integration reads only the exit status and asks
+`git hop __current-path` where to `cd`, so a structured switch still
+moves the shell.
 
 ### doctor
 
