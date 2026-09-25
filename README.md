@@ -1,6 +1,6 @@
 # git-hop
 
-Work on multiple branches in parallel without manual port setup, directory management, or lost context. Each branch gets its own isolated environment with deterministic ports and volumes.
+Work on multiple branches in parallel without manual port setup, directory management, or lost context. Each branch gets its own isolated environment with its own ports and volumes, kept once allocated.
 
 > **Status:** Active development. Usable today, with some rough edges as features evolve.
 
@@ -75,7 +75,7 @@ git hop install-shell-integration
 
 You now have:
 - A clean worktree for `feature-x`
-- Deterministic ports allocated (no conflicts)
+- Ports allocated (no conflicts with other worktrees)
 - Docker environment configured (if docker-compose.yml exists)
 - Full isolation from other branches
 - (Optional) Automatic navigation with `git-hop` command
@@ -383,15 +383,22 @@ follows `hop.dataLayout`, default `{org}/{repo}`):
 
 All worktrees for a repository reference the same hopspace, ensuring consistency.
 
-### Deterministic Resource Allocation
+### Stable Resource Allocation
 
-Ports, volumes, and networks are derived from stable hashing:
+Ports are allocated once per worktree and recorded in the hopspace's
+`ports.json`:
 
-- **Same branch = same ports** across worktrees (reproducible)
-- **Different branches = different ports** (no conflicts)
-- **Predictable allocation** (no manual configuration)
+- **Stable**: a worktree keeps its ports each time its environment is
+  generated (`add`, `env generate`)
+- **No conflicts**: new ports skip every port any hub git-hop knows of
+  already holds; where two hubs hold one port, the hub set up first keeps
+  it and the other gets new ports
+- **Incremental by default**: new ports go after the highest port in use.
+  Hashing the repository, hub and branch is opt-in (`allocationMode` in
+  `ports.json`); see [Configuration](docs/configuration.md#ports-configuration)
 
-Example: branch `feature-x` always gets ports 11500-11505 if not already assigned.
+Allocation depends on what is already allocated, so the same branch in
+another hub or on another machine can get other ports.
 
 ### Output Formats
 

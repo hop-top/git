@@ -131,8 +131,10 @@ creates the first time it allocates ports:
 ```
 
 Edit `baseRange` to move the range. `allocationMode` is `incremental` (the
-next free block after the highest port in use) or any other value for a
-block chosen by hashing the branch name.
+default: the next free block after the highest port in use) or `hash`
+(opt-in: a block chosen by hashing the repository, hub and branch). Either
+way a worktree keeps the ports it has when its environment is generated
+again.
 
 ## Docker Services
 
