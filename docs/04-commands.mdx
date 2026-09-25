@@ -841,6 +841,11 @@ git hop doctor --fix --dry-run
   `git hop list`, `git hop status --all` and `git hop prune --all` read
   state and do not see it
 - Dependency health (symlinks, shared storage, orphaned deps)
+- Ports two worktrees hold, across every hub of every repository, each a
+  warning (exit status unaffected) naming the worktree of the hub set up
+  later. `--fix` leaves them: re-porting would break a running
+  environment. Run `git hop env generate` in that worktree to give it new
+  ports
 - Leftovers of the old `global.json` migration: `--global` `hop.*` keys it
   wrote as `false`/`0`/`""` although `global.json` never set them. They
   shadow the defaults (`hop.worktreeLocation` `""` selects the centralized

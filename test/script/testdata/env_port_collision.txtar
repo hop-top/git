@@ -1,0 +1,68 @@
+# A port two hubs already hold is reported, never silently re-ported:
+# doctor warns (--fix changes nothing), env start warns and still starts,
+# both naming the worktree of the hub set up later. env generate there
+# re-ports it, and the warnings stop.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/repo.git $WORK/x/first
+exec git-hop $WORK/org/repo.git $WORK/y/second
+cp $WORK/legacy.json $WORK/x/first/ports.json
+cp $WORK/legacy.json $WORK/y/second/ports.json
+
+# --- doctor names the later hub's worktree, and leaves it be ---
+cd $WORK/x/first
+exec git-hop doctor
+stderr 'warning: port 16000 \(WEB\) of .*/y/second/hops/main is also allocated to main of .*/x/first'
+! stderr 'allocated to main of .*/y/second'
+exec git-hop doctor --fix
+grep '"WEB": ?16000' $WORK/y/second/ports.json
+
+# --- env start warns in the later hub only, and starts ---
+cd $WORK/x/first/hops/main
+exec git-hop env start
+! stderr 'also allocated'
+cd $WORK/y/second/hops/main
+exec git-hop env start
+stderr 'warning: port 16000 \(WEB\) is also allocated to main of .*/x/first, set up first; run .git hop env generate. to allocate new ports'
+grep -count=2 '^up ' $WORK/up.log
+
+# --- env generate re-ports; nothing left to report ---
+exec git-hop env generate
+exec git-hop env start
+! stderr 'also allocated'
+exec git-hop doctor
+stdout 'No port is allocated twice'
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- legacy.json --
+{"allocationMode":"incremental","baseRange":{"start":10000,"end":20000},"branches":{"main":{"ports":{"WEB":16000}}},"services":["WEB"]}
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" up "*)
+	echo "up $* in $PWD" >> "$WORK/up.log"
+	exit 0
+	;;
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

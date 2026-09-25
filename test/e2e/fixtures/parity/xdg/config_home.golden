@@ -11,6 +11,9 @@ Not in a hub. Skipping hub-specific checks.
 === Checking Dependencies ===
 Not in a hub. Skipping dependency checks.
 
+=== Checking Ports ===
+No port is allocated twice
+
 === Checking Worktree State ===
 Not in a hub. Skipping worktree state checks.
 

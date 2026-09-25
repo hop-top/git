@@ -34,8 +34,10 @@ type EnvClaim struct {
 	Hub        string // the hub the worktree belongs to; "" when unknown
 	HubCreated time.Time
 	Branch     string
-	Org, Repo  string
-	Entry      config.BranchPorts
+	// WorktreePath is the worktree's path, "" when not known.
+	WorktreePath string
+	Org, Repo    string
+	Entry        config.BranchPorts
 }
 
 // before orders claims to one port: the claim of the hub created first
@@ -186,6 +188,14 @@ func (r *EnvRecords) claim(hopspace, key string, entry config.BranchPorts) EnvCl
 	if owner != nil {
 		c.Hub, c.HubCreated, c.Org, c.Repo = owner.Path, owner.Created, owner.Org, owner.Repo
 	}
+	switch {
+	case entry.Worktree != "":
+		c.WorktreePath = entry.Worktree
+	case filepath.IsAbs(key):
+		c.WorktreePath = key
+	case owner != nil:
+		c.WorktreePath = owner.Branches[c.Branch]
+	}
 	return c
 }
 
@@ -317,4 +327,31 @@ func RekeyEnvEntry(fs afero.Fs, hopspacePath, hubPath, oldPath, newPath, oldBran
 		}
 	}
 	return nil
+}
+
+// PortCollision is a claim holding a port an earlier claim holds too.
+type PortCollision struct {
+	Claim EnvClaim
+	PortConflict
+}
+
+// Collisions returns every port two claims hold, reported against the
+// later claim (EnvClaim.before), the one `env generate` re-ports.
+func (r *EnvRecords) Collisions() []PortCollision {
+	var out []PortCollision
+	for _, c := range r.Claims {
+		for _, conflict := range r.Conflicts(c) {
+			out = append(out, PortCollision{Claim: c, PortConflict: conflict})
+		}
+	}
+	return out
+}
+
+// Worktree returns the claim's worktree path, or its key when that is
+// not known.
+func (c EnvClaim) Worktree() string {
+	if c.WorktreePath != "" {
+		return c.WorktreePath
+	}
+	return c.Key
 }
