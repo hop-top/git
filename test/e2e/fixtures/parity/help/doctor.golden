@@ -8,6 +8,9 @@ Checks:
   remote.origin.fetch (a plain 'git clone --bare') never updates
   refs/remotes/origin/* on fetch ('git hop repair' restores it)
 - Hopspace existence and consistency
+- Records in the data-home hopspace --global hubs share of worktrees of
+  a hub that no longer exists (not in state, directory gone): a warning
+  (--fix drops them)
 - Hopspaces of --global hubs left where another hop.dataLayout put
   them (e.g. <org>/<repo> after a switch to {host}/{org}/{repo}): a
   warning (--fix renames the directory to the current location when
