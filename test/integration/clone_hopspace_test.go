@@ -60,7 +60,7 @@ func TestCloneWorktreeCreatesHopspace(t *testing.T) {
 	}
 
 	// Step 2: Initialize hopspace (this is what was missing before the fix)
-	hopspacePath := hop.GetHopspacePath(dataHome, org, repo)
+	hopspacePath := hop.GetHopspacePath(dataHome, hop.RepoRef{Org: org, Repo: repo})
 	mainWorktreePath := filepath.Join(projectRoot, "main")
 
 	hopspace, err := hop.InitHopspace(fs, hopspacePath, uri, org, repo, defaultBranch)
@@ -149,7 +149,7 @@ func TestDoctorFixesMissingHopspace(t *testing.T) {
 	}
 
 	// Get hopspace path
-	hopspacePath := hop.GetHopspacePath(dataHome, org, repo)
+	hopspacePath := hop.GetHopspacePath(dataHome, hop.RepoRef{Org: org, Repo: repo})
 
 	// Register branch in hub config directly (skip symlink for unit test)
 	hub.Config.Branches[defaultBranch] = config.HubBranch{
@@ -213,7 +213,7 @@ func TestHubHopspaceConsistency(t *testing.T) {
 	}
 
 	// Create hopspace
-	hopspacePath := hop.GetHopspacePath(dataHome, org, repo)
+	hopspacePath := hop.GetHopspacePath(dataHome, hop.RepoRef{Org: org, Repo: repo})
 	hopspace, err := hop.InitHopspace(fs, hopspacePath, uri, org, repo, defaultBranch)
 	if err != nil {
 		t.Fatalf("Failed to initialize hopspace: %v", err)

@@ -838,6 +838,13 @@ git hop doctor --fix --dry-run
   `$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
   (marked `repo.mode: "global"` in its `hop.json`); a data-home copy next
   to an unmarked hub is reported as a warning and left alone
+- Hopspace hooks earlier releases mirrored to
+  `$GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks`, where they still
+  fire: a warning. `--fix` moves the directory to the `hop.dataLayout`
+  location (`$GIT_HOP_DATA_HOME/<org>/<repo>/hooks` by default) when
+  nothing is there yet; with hooks at both locations nothing is moved and
+  both are named. Nothing is deleted or overwritten
+- An invalid `hop.dataLayout`: a warning; the default is used
 - Orphaned worktrees
 - The current hub's record in state: a hub with a `hop.json` that state
   does not record (converted by a release that did not record

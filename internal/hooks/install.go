@@ -31,6 +31,9 @@ type MirrorOpts struct {
 	WorktreePath string
 	// RepoID is the 3-part identifier "host/org/repo" (e.g. "github.com/foo/bar").
 	RepoID string
+	// RepoURI is the repository's origin URL. It supplies the host when
+	// hop.dataLayout names {host}; the repo ID's own host is fixed.
+	RepoURI string
 	// Mode is one of ModeSymlink, ModeCopy, ModePrompt, ModeNone.
 	Mode string
 	// Overwrite, when true, replaces an existing hopspace hook with different
@@ -83,7 +86,7 @@ var validHookSet = func() map[string]struct{} {
 
 // MirrorCommittedHooks scans <WorktreePath>/.git-hop/hooks/ for committed
 // hook scripts matching ValidHookNames and mirrors them into the user's
-// hopspace at <XDG_DATA_HOME>/git-hop/<host>/<org>/<repo>/hooks/<name>
+// hopspace at hop.HopspaceHooksDir (<data home>/<hop.dataLayout>/hooks/<name>)
 // according to opts.Mode.
 //
 // Returns a Result with per-hook outcomes; only system-level errors are
@@ -136,12 +139,11 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	// Sort entries by name for deterministic prompt order.
 	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 
-	// Resolve hopspace hooks dir.
-	parts := strings.Split(opts.RepoID, "/")
-	if len(parts) < 3 {
+	ref, ok := hop.RepoRefFromID(opts.RepoID, opts.RepoURI)
+	if !ok {
 		return res, fmt.Errorf("invalid repoID %q: expected host/org/repo", opts.RepoID)
 	}
-	hopspaceHooksDir := filepath.Join(hop.GetGitHopDataHome(), parts[0], parts[1], parts[2], "hooks")
+	hopspaceHooksDir := hop.HopspaceHooksDir(ref)
 	if !opts.DryRun {
 		if err := fs.MkdirAll(hopspaceHooksDir, 0755); err != nil {
 			return res, fmt.Errorf("create hopspace hooks dir: %w", err)

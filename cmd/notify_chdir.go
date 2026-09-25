@@ -132,7 +132,7 @@ func runNotifyChdir(fs afero.Fs, path string, oldPwd string) error {
 
 	hookEnv := hooks.SwitchEnvVars(fromBranch, fromWorktreePath, hooks.TriggerChdir)
 
-	runner := hooks.NewRunner(fs)
+	runner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
 	result, err := runner.ExecuteHookWithDetector(
 		"post-worktree-switch", worktreePath, repoID, branch, hookEnv,
 	)

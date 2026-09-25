@@ -71,6 +71,10 @@ git-hop uses different directories for different types of data:
 
 **Environment variable override:** `$GIT_HOP_DATA_HOME`
 
+`<org>/<repo>` is the default `hop.dataLayout`; with `{host}/{org}/{repo}`
+each repository lives under `<host>/<org>/<repo>/` instead (see
+[Settings Reference](#settings-reference)).
+
 ### State (Tracking)
 
 **Linux/Unix:**
@@ -139,6 +143,7 @@ centralized layout (`{dataHome}/{org}/{repo}/hops/{branch}`).
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `hop.gitDomain` | string | `github.com` | Git hosting domain used to expand `org/repo` shorthands |
+| `hop.dataLayout` | string | `{org}/{repo}` | Where each repository's data (hopspace `hop.json`, `ports.json`, `volumes.json`, `deps/`, `hooks/`) lives under the data home. Variables: `{host}` (the host of the origin URL, or `hop.gitDomain` for a local path), `{org}`, `{repo}`; `{org}` and `{repo}` are required. Read from `--global` only, since every repository shares the data home; an invalid value falls back to the default and `git hop doctor` warns. Changing it does not move data already stored under the old layout |
 | `hop.worktreeLocation` | string | `{hubPath}/hops/{branch}` | Where `git hop add` and `git hop move` put worktrees. Variables: `{hubPath}`, `{branch}`, `{org}`, `{repo}`, `{dataHome}`. A relative result is resolved against the hub |
 | `hop.add.defaultStartPoint` | string | `default-branch` | Start-point for new branches: `default-branch`, `initial` (root commit), or any ref / SHA |
 | `hop.env.autoStart` | boolean | `false` | Whether `git hop add` and clone start the new worktree's environment (the same start as `git hop env start`) once the worktree exists. Overridden by `GIT_HOP_AUTO_ENV_START` and, for one run, `--env-start` / `--no-env-start` |

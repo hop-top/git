@@ -36,7 +36,7 @@ The four `env-*` names are a reserved surface, not a working one. `git hop env s
 When git-hop looks for a hook to execute, it searches in this order (first found wins):
 
 1. **Repo-level override** — `.git-hop/hooks/<hook-name>` inside the worktree (the runner also walks parent directories so a hub-level `.git-hop/hooks/` is picked up)
-2. **Hopspace-level hook** — `$XDG_DATA_HOME/git-hop/<host>/<org>/<repo>/hooks/<hook-name>` (only matches when the repoID has 3 slash-separated parts; see [Repository identifier](#repository-identifier))
+2. **Hopspace-level hook** — `$XDG_DATA_HOME/git-hop/<org>/<repo>/hooks/<hook-name>` with the default [`hop.dataLayout`](configuration.md#settings-reference), then the location earlier releases used, `$XDG_DATA_HOME/git-hop/github.com/<org>/<repo>/hooks/<hook-name>` (only matches when the repoID has 3 slash-separated parts; see [Repository identifier](#repository-identifier))
 3. **Global hook** — `$XDG_CONFIG_HOME/git-hop/hooks/<hook-name>`
 
 One exception: `pre-clone` skips tier 1 entirely (no repo-level lookup, no parent walk), because the repo is not on disk yet. See [`pre-clone` has no repo level](#pre-clone-has-no-repo-level).
@@ -55,7 +55,7 @@ git-hop resolves all paths through the XDG Base Directory specification. Linux a
 | Level | Default path |
 |-------|--------------|
 | Global | `~/.config/git-hop/hooks/` |
-| Hopspace | `~/.local/share/git-hop/<host>/<org>/<repo>/hooks/` |
+| Hopspace | `~/.local/share/git-hop/<org>/<repo>/hooks/` (the directory follows `hop.dataLayout`) |
 | Repo | `<worktree>/.git-hop/hooks/` |
 
 Override with the standard XDG environment variables:
@@ -70,13 +70,18 @@ The XDG kit maps to platform-native locations under the hood (typically `%APPDAT
 
 ### Repository identifier
 
-The hopspace-level lookup keys off a 3-part repository identifier of the shape `<host>/<org>/<repo>` — for example `github.com/acme/widgets`. The runner splits the ID on `/` and only resolves a hopspace hook when there are at least three parts. So a hook for `github.com/acme/widgets` is looked up at:
+The hopspace-level lookup keys off a 3-part repository identifier of the shape `<host>/<org>/<repo>` — for example `github.com/acme/widgets`. The runner splits the ID on `/` and only resolves a hopspace hook when there are at least three parts. The org and repo come from the ID; the directory is the repository's hopspace in the data home, laid out by `hop.dataLayout` (default `{org}/{repo}`). So a hook for `github.com/acme/widgets` is looked up at:
 
 ```
-~/.local/share/git-hop/github.com/acme/widgets/hooks/<hook-name>
+~/.local/share/git-hop/acme/widgets/hooks/<hook-name>
+~/.local/share/git-hop/github.com/acme/widgets/hooks/<hook-name>   # earlier releases
 ```
 
-A 2-part identifier such as `acme/widgets` **silently skips the hopspace lookup** — `FindHookFile` falls through to the global hook with no warning. For that reason, callers inside git-hop (e.g. `cmd/add.go`) always construct the repoID as `github.com/<org>/<repo>` so the hopspace lookup actually fires. If you are creating hopspace hooks by hand, mirror that 3-part shape on disk.
+The first match wins. The ID's host is always `github.com`, whatever the origin; with `hop.dataLayout` set to `{host}/{org}/{repo}` the host of the directory comes from the repository's origin URL instead (`gitlab.example.com` for `git@gitlab.example.com:acme/widgets.git`, `hop.gitDomain` for a local path).
+
+Earlier releases mirrored hooks to `github.com/<org>/<repo>/hooks/` under the data home. Those hooks keep firing. `git hop doctor` warns about each such directory, and `git hop doctor --fix` moves it to the `hop.dataLayout` location when nothing is there yet (`--fix --dry-run` previews the move). With hooks at both locations it moves nothing and names both, so you can merge them by hand.
+
+A 2-part identifier such as `acme/widgets` **silently skips the hopspace lookup** — `FindHookFile` falls through to the global hook with no warning. For that reason, callers inside git-hop (e.g. `cmd/add.go`) always construct the repoID as `github.com/<org>/<repo>` so the hopspace lookup actually fires.
 
 ## Choosing a hook level
 
@@ -85,7 +90,7 @@ The three levels look interchangeable in the priority list, but they answer diff
 | Level | Storage | Versioned? | Best for |
 |-------|---------|------------|----------|
 | Repo | `<worktree>/.git-hop/hooks/` | Yes — committed in the repo | Team-shared hooks that travel with the codebase |
-| Hopspace | `~/.local/share/git-hop/<host>/<org>/<repo>/hooks/` | No — local to your machine | Per-repo hooks that must fire on every `git hop add`, including the very first worktree |
+| Hopspace | `~/.local/share/git-hop/<org>/<repo>/hooks/` | No — local to your machine | Per-repo hooks that must fire on every `git hop add`, including the very first worktree |
 | Global | `~/.config/git-hop/hooks/` | No — local to your machine | Defaults that apply to every repo on this machine unless overridden |
 
 ### The `post-worktree-add` chicken-and-egg trap
@@ -284,7 +289,7 @@ The environment is set up before `post-worktree-add` through the same function a
 
 `post-worktree-add` fires **after** the committed-hook mirror on purpose. That single ordering is what lets a repo-level hook carried *by the clone* apply to the very worktree that carried it.
 
-Walk it through. A repo commits `.git-hop/hooks/post-worktree-add`. You clone it. At the moment the initial worktree appears, that file is on disk inside it — but it is a *repo-level* hook, and nothing has yet made it visible at the hopspace level. The mirror step copies (or symlinks) it into `~/.local/share/git-hop/<host>/<org>/<repo>/hooks/`. Only after that does `post-worktree-add` dispatch, and now `FindHookFile` finds it — at repo level directly, and at hopspace level for every subsequent `git hop add` on any branch.
+Walk it through. A repo commits `.git-hop/hooks/post-worktree-add`. You clone it. At the moment the initial worktree appears, that file is on disk inside it — but it is a *repo-level* hook, and nothing has yet made it visible at the hopspace level. The mirror step copies (or symlinks) it into `~/.local/share/git-hop/<org>/<repo>/hooks/`. Only after that does `post-worktree-add` dispatch, and now `FindHookFile` finds it — at repo level directly, and at hopspace level for every subsequent `git hop add` on any branch.
 
 Move the dispatch above the mirror and the hook silently does not fire on the first worktree. Not an error — a silence. The repo's own bootstrap script skips exactly once, on the clone, which is the one run where you most need it.
 

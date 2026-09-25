@@ -144,7 +144,7 @@ created or written and no hook runs.`,
 		// --from (CLI) > GIT_HOP_ADD_FROM env > hop.add.defaultStartPoint > built-in default ("default-branch").
 		startPoint := resolveAddStartPoint(addFromFlag, os.Getenv("GIT_HOP_ADD_FROM"), globalConfig.Defaults.DefaultStartPoint)
 
-		hookRunner := hooks.NewRunner(fs)
+		hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
 
 		wm := hop.NewWorktreeManager(fs, g)
 		wm.EnforceStartPoint = addFromFlag != ""

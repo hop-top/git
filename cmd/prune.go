@@ -373,7 +373,7 @@ func pruneOrphanedWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, dr
 			wt := repo.Worktrees[key]
 			branch := wt.Branch
 			if !hop.WorktreeDirPresent(fs, wt.Path) {
-				if reason, locked := stateWorktreeLock(fs, g, repoID, wt); locked {
+				if reason, locked := stateWorktreeLock(fs, g, repoID, repo.URI, wt); locked {
 					pruned = append(pruned, skipLockedEntry(pruneKindWorktree, "orphaned worktree", repoID, branch, wt.Path, reason))
 					continue
 				}
