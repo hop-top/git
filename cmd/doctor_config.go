@@ -7,9 +7,9 @@ import (
 	"hop.top/git/internal/output"
 )
 
-// checkConfig reports --global hop.* keys the zero-value global.json
-// migration wrote and the user never set (see
-// config.GlobalLoader.MigrationDebris), and keys of retired settings in
+// checkConfig reports a broken managers.json (checkManagersFile), --global
+// hop.* keys the zero-value global.json migration wrote and the user never
+// set (see config.GlobalLoader.MigrationDebris), and keys of retired settings in
 // --global and in the current hub's --local config (see
 // config.ConfigScope.StaleRetiredSettings), and the hub's repository
 // format (checkRepositoryFormat). Under --fix it unsets the keys and
@@ -18,6 +18,7 @@ import (
 // config. hubPath is "" outside a hub.
 func checkConfig(l *config.GlobalLoader, hubPath string, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking Config ===")
+	checkManagersFile(l, r)
 	checkMigrationDebris(l, opts, r)
 
 	scopes := []config.ConfigScope{l.GlobalScope()}
@@ -34,6 +35,19 @@ func checkConfig(l *config.GlobalLoader, hubPath string, opts doctorOpts, r *doc
 	if found > 0 && !opts.fix {
 		output.Hint("run 'git hop doctor --fix' to unset them")
 	}
+}
+
+// checkManagersFile reports a managers.json that cannot be read or parsed.
+// Every command skips such a file with a warning, so its package and
+// environment managers stop applying until the user repairs it; --fix
+// cannot guess what it should hold.
+func checkManagersFile(l *config.GlobalLoader, r *doctorReport) {
+	err := l.ManagersFileError()
+	if err == nil {
+		return
+	}
+	output.Error("%v; its package and environment managers are ignored", err)
+	r.issue(doctorCheckConfig, config.ManagersPath(), "%v; its package and environment managers are ignored until it is fixed", err)
 }
 
 // checkMigrationDebris reports and, under --fix, unsets the migration

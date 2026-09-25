@@ -146,7 +146,7 @@ func TestInstallIntegration(t *testing.T) {
 
 		// Verify config was updated
 		loader := config.NewGlobalLoader()
-		cfg, _ := loader.Load()
+		cfg := loader.Load()
 		if cfg.ShellIntegration.Status != "approved" {
 			t.Errorf("Config status = %q, want %q", cfg.ShellIntegration.Status, "approved")
 		}
@@ -207,7 +207,7 @@ func TestUninstallIntegration(t *testing.T) {
 
 		// Verify config was updated
 		loader := config.NewGlobalLoader()
-		cfg, _ := loader.Load()
+		cfg := loader.Load()
 		if cfg.ShellIntegration.Status != "declined" {
 			t.Errorf("Config status = %q, want %q", cfg.ShellIntegration.Status, "declined")
 		}
@@ -248,10 +248,7 @@ func TestSetIntegrationStatus(t *testing.T) {
 
 			// Verify status was saved
 			loader := config.NewGlobalLoader()
-			cfg, err := loader.Load()
-			if err != nil {
-				t.Fatalf("Load() error = %v", err)
-			}
+			cfg := loader.Load()
 
 			if cfg.ShellIntegration.Status != tt.status {
 				t.Errorf("Status = %q, want %q", cfg.ShellIntegration.Status, tt.status)

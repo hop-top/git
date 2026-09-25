@@ -45,10 +45,7 @@ func TestMigration_WritesOnlyKeysPresentInLegacyFile(t *testing.T) {
 
 	store := map[string]string{}
 	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 
 	want := []string{"hop.gitDomain", "hop.migrated"}
 	if got := hopKeys(store); strings.Join(got, ",") != strings.Join(want, ",") {
@@ -80,10 +77,7 @@ func TestMigration_KeepsExplicitZeroValues(t *testing.T) {
 
 	store := map[string]string{}
 	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 
 	for key, want := range map[string]string{
 		"hop.backup.keepBackup": "false",
@@ -114,10 +108,7 @@ func TestMigration_EmptyStrings(t *testing.T) {
 
 	store := map[string]string{}
 	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 
 	want := []string{"hop.migrated", "hop.worktreeLocation"}
 	if got := hopKeys(store); strings.Join(got, ",") != strings.Join(want, ",") {

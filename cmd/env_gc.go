@@ -65,11 +65,7 @@ silently cancelling.`,
 
 		// Load global config
 		globalLoader := config.NewGlobalLoader()
-		globalConfig, err := globalLoader.Load()
-		if err != nil {
-			output.Warn("Failed to load global config, using defaults: %v", err)
-			globalConfig = globalLoader.GetDefaults()
-		}
+		globalConfig := globalLoader.Load()
 
 		// Create deps manager
 		depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)

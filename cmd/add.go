@@ -119,10 +119,7 @@ created or written and no hook runs.`,
 
 		// Load global config for worktree location
 		globalLoader := config.NewGlobalLoader()
-		globalConfig, err := globalLoader.Load()
-		if err != nil {
-			globalConfig = globalLoader.GetDefaults()
-		}
+		globalConfig := globalLoader.Load()
 
 		branch, taskID := mustResolveAddTarget(args)
 

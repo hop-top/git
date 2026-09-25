@@ -13,10 +13,7 @@ func TestShellIntegrationStatus(t *testing.T) {
 	loader := config.NewGlobalLoaderWithGitConfig(gc)
 
 	t.Run("default status is unknown", func(t *testing.T) {
-		cfg, err := loader.Load()
-		if err != nil {
-			t.Fatalf("Load() error = %v", err)
-		}
+		cfg := loader.Load()
 
 		if cfg.ShellIntegration.Status != "unknown" {
 			t.Errorf("Default status = %q, want %q",
@@ -25,7 +22,7 @@ func TestShellIntegrationStatus(t *testing.T) {
 	})
 
 	t.Run("set status to approved", func(t *testing.T) {
-		cfg, _ := loader.Load()
+		cfg := loader.Load()
 		cfg.ShellIntegration.Status = "approved"
 		cfg.ShellIntegration.InstalledShell = "bash"
 		cfg.ShellIntegration.InstalledPath = "/tmp/.bashrc"
@@ -42,10 +39,7 @@ func TestShellIntegrationStatus(t *testing.T) {
 		}
 
 		// Load and verify
-		reloaded, err := loader.Load()
-		if err != nil {
-			t.Fatalf("Load() after write error = %v", err)
-		}
+		reloaded := loader.Load()
 
 		if reloaded.ShellIntegration.Status != "approved" {
 			t.Errorf("Status = %q, want %q",
@@ -58,14 +52,14 @@ func TestShellIntegrationStatus(t *testing.T) {
 	})
 
 	t.Run("set status to declined", func(t *testing.T) {
-		cfg, _ := loader.Load()
+		cfg := loader.Load()
 		cfg.ShellIntegration.Status = "declined"
 
 		if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
 			t.Fatalf("WriteShellIntegration() error = %v", err)
 		}
 
-		reloaded, _ := loader.Load()
+		reloaded := loader.Load()
 		if reloaded.ShellIntegration.Status != "declined" {
 			t.Errorf("Status = %q, want %q",
 				reloaded.ShellIntegration.Status, "declined")
@@ -73,14 +67,14 @@ func TestShellIntegrationStatus(t *testing.T) {
 	})
 
 	t.Run("set status to disabled", func(t *testing.T) {
-		cfg, _ := loader.Load()
+		cfg := loader.Load()
 		cfg.ShellIntegration.Status = "disabled"
 
 		if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
 			t.Fatalf("WriteShellIntegration() error = %v", err)
 		}
 
-		reloaded, _ := loader.Load()
+		reloaded := loader.Load()
 		if reloaded.ShellIntegration.Status != "disabled" {
 			t.Errorf("Status = %q, want %q",
 				reloaded.ShellIntegration.Status, "disabled")

@@ -218,3 +218,23 @@ func TestDoctorConfig_RetiredKeysNoHub(t *testing.T) {
 	_, ok := e.get("--local", "hop.backup.enabled")
 	assert.True(t, ok, "the hub's --local config was touched without a hub")
 }
+
+// A managers.json that does not parse is skipped by every command (with a
+// warning), so its managers silently stop applying: doctor reports it as
+// an issue naming the file. A valid or absent file reports nothing.
+func TestDoctorConfig_BrokenManagersJSON(t *testing.T) {
+	e := newRetiredConfigEnv(t)
+	assert.Empty(t, configRecords(e.doctor(doctorOpts{}), doctorKindIssue), "no managers.json")
+
+	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "git-hop", "managers.json")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(`{"packageManagers": []}`), 0o644))
+	assert.Empty(t, configRecords(e.doctor(doctorOpts{}), doctorKindIssue), "valid managers.json")
+
+	require.NoError(t, os.WriteFile(path, []byte("{ not json"), 0o644))
+	r := e.doctor(doctorOpts{})
+	issues := configRecords(r, doctorKindIssue)
+	require.Len(t, issues[path], 1, "records: %+v", r.records)
+	assert.Contains(t, issues[path][0].Message, "ignored")
+	assert.NotEqual(t, 0, cli.ExitCode(doctorResult(r)))
+}
