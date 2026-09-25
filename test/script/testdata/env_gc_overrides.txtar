@@ -1,0 +1,85 @@
+# env gc removes the compose override caches no worktree of any hub uses:
+# a hub's own override stays, the repository-wide one of an earlier
+# release stays while an entry without an override directory still falls
+# back to it, and anything else in the cache is left alone.
+#
+# A stub docker on PATH: `compose config` fails, so the raw compose file
+# is parsed and an override is generated.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/repo.git $WORK/one/app
+exec git-hop $WORK/org/repo.git $WORK/two/app
+
+# --- unused: the repository-wide one and a gone hub's; plus a stray note ---
+mkdir $WORK/.cache/git-hop/org/repo/main $WORK/.cache/git-hop/org/repo/gone-12345678/main $WORK/.cache/git-hop/org/repo/notes
+cp $WORK/compose.yml $WORK/.cache/git-hop/org/repo/main/docker-compose.override.yml
+cp $WORK/meta.json $WORK/.cache/git-hop/org/repo/main/.override-meta.json
+cp $WORK/meta.json $WORK/.cache/git-hop/org/repo/main/notes.txt
+cp $WORK/compose.yml $WORK/.cache/git-hop/org/repo/gone-12345678/main/docker-compose.override.yml
+cp $WORK/meta.json $WORK/.cache/git-hop/org/repo/gone-12345678/main/.override-meta.json
+cp $WORK/compose.yml $WORK/.cache/git-hop/org/repo/notes/docker-compose.override.yml
+
+cd $WORK/one/app
+exec git-hop env gc --dry-run --json
+decode json stdout '#' 2
+decode json stdout 0.action would-delete
+decode json stdout 0.key org/repo/gone-12345678/main
+decode json stdout 1.key org/repo/main
+exists $WORK/.cache/git-hop/org/repo/gone-12345678/main/docker-compose.override.yml
+
+exec git-hop env gc --no-prompt --json
+decode json stdout '#' 2
+decode json stdout 0.action deleted
+! exists $WORK/.cache/git-hop/org/repo/gone-12345678
+! exists $WORK/.cache/git-hop/org/repo/main/docker-compose.override.yml
+! exists $WORK/.cache/git-hop/org/repo/main/.override-meta.json
+exists $WORK/.cache/git-hop/org/repo/main/notes.txt
+exists $WORK/.cache/git-hop/org/repo/notes/docker-compose.override.yml
+exec sh -c 'ls $WORK/.cache/git-hop/org/repo/app-*/main/docker-compose.override.yml | wc -l'
+stdout '^ *2$'
+
+# --- an entry without an override directory keeps the repository-wide one ---
+cp $WORK/legacy-ports.json $WORK/two/app/ports.json
+cp $WORK/compose.yml $WORK/.cache/git-hop/org/repo/main/docker-compose.override.yml
+cp $WORK/meta.json $WORK/.cache/git-hop/org/repo/main/.override-meta.json
+exec git-hop env gc --dry-run --json
+decode json stdout '#' 1
+decode json stdout 0.key '~^org/repo/app-[0-9a-f]{8}/main$'
+
+# --- so does a worktree with no entry at all ---
+rm $WORK/two/app/ports.json
+exec git-hop env gc --dry-run --json
+decode json stdout '#' 1
+decode json stdout 0.key '~^org/repo/app-[0-9a-f]{8}/main$'
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- meta.json --
+{"composeHash":"x"}
+-- legacy-ports.json --
+{"allocationMode":"incremental","baseRange":{"start":10000,"end":20000},"branches":{"main":{"ports":{"WEB":10001}}},"services":["WEB"]}
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

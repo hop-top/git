@@ -35,7 +35,8 @@ This command:
 4. Optionally deletes orphaned dependencies to free up disk space
 
 It also removes the dependency stores earlier releases kept under the
-data home, once no worktree of any hub git-hop knows of links into them.
+data home, once no worktree of any hub git-hop knows of links into them,
+and the cached compose overrides no worktree of any such hub uses.
 
 Use --dry-run to preview what would be deleted without actually deleting.
 Use --no-prompt (or --force) to skip the confirmation prompt; without it a
@@ -99,7 +100,13 @@ silently cancelling.`,
 		}
 		records = append(records, legacyGCRecords(legacy)...)
 
-		if len(orphaned) == 0 && len(legacy) == 0 {
+		overrides, err := orphanedOverrideDirs(fs, hubPath)
+		if err != nil {
+			output.Warn("Cannot check compose override caches, keeping them: %v", err)
+		}
+		records = append(records, overrideGCRecords(overrides)...)
+
+		if len(orphaned) == 0 && len(legacy) == 0 && len(overrides) == 0 {
 			if output.IsStructured() {
 				emitResult(cmd, records)
 				return
@@ -145,6 +152,14 @@ silently cancelling.`,
 			totalSize += s.Size
 		}
 
+		if len(overrides) > 0 {
+			output.Info("\nCompose override caches no worktree uses:")
+		}
+		for _, d := range overrides {
+			output.Info("  %s", d.Path)
+			totalSize += d.Size
+		}
+
 		totalSizeMB := float64(totalSize) / 1024 / 1024
 		output.Info("\nTotal reclaimable: %.1fMB", totalSizeMB)
 
@@ -181,6 +196,14 @@ silently cancelling.`,
 			}
 			deleted = append(deleted, removed...)
 			output.Info("Removed %d old dependency store(s)", len(removed))
+		}
+		if len(overrides) > 0 {
+			removed := removeOverrideDirs(fs, hubPath, overrides)
+			for _, r := range removed {
+				totalSize += r.Size
+			}
+			deleted = append(deleted, removed...)
+			output.Info("Removed %d compose override cache(s)", len(removed))
 		}
 
 		if output.IsStructured() {
