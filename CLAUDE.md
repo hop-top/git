@@ -72,6 +72,8 @@ Ports are allocated per hopspace (so per hub, unless `repo.mode: global`), NOT h
 5. `git config hop.*` (repo-local, then `--global`); a legacy `global.json` is migrated into it once; package/env managers live in `$XDG_CONFIG_HOME/git-hop/managers.json`
 6. Built-in defaults
 
+No other settings file: `$XDG_CONFIG_HOME/git-hop/config.json` is not read (doctor warns if one exists, never deletes it), and kit's `-c/--config` is accepted, hidden from help and ignored with a `warning:`. A one-off setting is `git -c hop.<key>=<value> hop ...`.
+
 ### Testability via interfaces
 Every external dependency is behind an interface so unit tests don't shell out:
 - `git.GitInterface` — all git operations (mock at `test/mocks/mock_git.go`)

@@ -25,7 +25,7 @@ anywhere without a terminal, pass `--no-prompt` to answer from flags
 instead; without it a run that cannot be answered exits 129 rather than
 hanging.
 
-Config: `$XDG_CONFIG_HOME/git-hop/config.json`
+Settings: `git config hop.*` (`git config --get-regexp '^hop\.'`)
 
 ---
 
@@ -149,7 +149,7 @@ Available hooks:
 | Symptom | Fix |
 |---------|-----|
 | `cd` not happening after add/merge | Run `git hop init --enable-chdir` |
-| Wrong config loaded | `--config <path>` or set `XDG_CONFIG_HOME` |
+| Setting not taking effect | Settings are `git config hop.*` only; `config.json` and `-c/--config` are ignored. One run: `git -c hop.<key>=<value> hop ...` |
 | Orphaned worktrees in state | `git hop prune` |
 | Stale state after manual branch delete | `git hop doctor --fix` |
 | Services still up after worktree remove | `git hop env stop` first |

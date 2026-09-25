@@ -13,7 +13,7 @@ Scannable in 30 seconds.
 /usr/bin/git hop status --all --json  # every tracked repo's worktrees (works anywhere)
 ```
 
-Config: `$XDG_CONFIG_HOME/git-hop/config.json`
+Settings: `git config hop.*` (`git config --get-regexp '^hop\.'`); no config file
 Global hopspace: `$GIT_HOP_DATA_HOME`
 
 ---
@@ -242,7 +242,7 @@ cd <path from list>
 | `env gc` exited 129: "cannot prompt for confirmation" | same cause — add `--no-prompt` (or `--force`) |
 | `init` exited 129: "cannot prompt for confirmation" | conversion menu hit a non-interactive stdin — add `--no-prompt` |
 | `init` seems to ignore piped `y` | the menu is `1/2/3/q`, not yes/no — pipe `1`, or use `--no-prompt` |
-| Wrong config targeted | pass `--config <path>` explicitly |
+| Setting not taking effect | settings are `git config hop.*` only; `-c/--config` and `config.json` are ignored — for one run use `git -c hop.<key>=<value> hop ...` |
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |
 | exited 129: "--dry-run is not supported by ..." | that command has no preview (e.g. `env start`); nothing ran — decide, then run it without `--dry-run` |
@@ -253,6 +253,6 @@ cd <path from list>
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `$XDG_CONFIG_HOME/git-hop/config.json` | `~/.config/git-hop/config.json` | main config |
+| `$XDG_CONFIG_HOME/git-hop/managers.json` | `~/.config/git-hop/managers.json` | custom package / environment managers |
 | `$GIT_HOP_DATA_HOME` | XDG data home / git-hop | global hopspace |
 | `.git-hop/hooks/` | repo-relative | repo-level hook overrides |

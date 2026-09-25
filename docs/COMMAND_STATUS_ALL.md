@@ -48,7 +48,7 @@ Tree view of all tracked repositories showing:
 
 🔧 Configuration
   Data Home /Users/user/.local/share/git-hop
-  Config /Users/user/.config/git-hop/config.json
+  Settings git config hop.*
   Version git-hop
 
 📦 Resources

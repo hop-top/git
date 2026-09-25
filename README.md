@@ -239,6 +239,9 @@ git config --global --unset hop.add.fetch            # Back to the default
 
 Custom package and environment managers live in
 `~/.config/git-hop/managers.json`.
+git-hop reads no other settings file: an old `~/.config/git-hop/config.json`
+is ignored (`git hop doctor` points it out), and so is git-hop's own
+`-c`/`--config`. For a one-off setting, use `git -c hop.<key>=<value> hop ...`.
 
 Configuration hierarchy (first found wins):
 1. Environment variables

@@ -214,6 +214,19 @@ git-hop does not read `global.json` after that. Edit git config and
 `managers.json` instead; a new `global.json` is ignored once `hop.migrated`
 is set.
 
+### `config.json` is not read
+
+git-hop does not read `$XDG_CONFIG_HOME/git-hop/config.json`: its settings
+live in git config `hop.*` keys only. A `config.json` left there changes
+nothing; `git hop doctor` warns while it exists, and never deletes it,
+`--fix` included. To keep a value it held, set the matching `hop.*` key,
+then delete the file by hand.
+
+git-hop's own `-c`/`--config` flag is ignored too. It is still accepted, so
+scripts that pass it keep running with their usual exit status, but each run
+that passes it prints a `warning:` on stderr, even with `-q`. For a one-off
+setting, use git's `-c` (see below).
+
 ## git config Settings
 
 Command-specific tunables, set the same way as the settings above: `git
@@ -226,9 +239,8 @@ For a single run, pass the key to git itself, before `hop`:
 git -c hop.remote.timeout=30 hop add feat/x
 ```
 
-git consumes that `-c`, so it never reaches git-hop's own `-c`/`--config`
-flag (which takes a config file or a `key=value` for git-hop's own settings,
-after `hop`).
+The `-c` goes before `hop`: git consumes it. git-hop's own `-c`/`--config`,
+after `hop`, is [ignored with a warning](#configjson-is-not-read).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
