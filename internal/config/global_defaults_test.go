@@ -25,29 +25,17 @@ func memGitConfig(store map[string]string) *GitConfig {
 }
 
 // GetDefaults is the fallback when Load fails; Load reads the git-config
-// defaults table. Every hop.* key GlobalConfig models must agree between the
-// two, and keys without a table entry must default to the zero value.
+// defaults table. Setting every key in that table explicitly to its default
+// value must load exactly GetDefaults: the explicit-value parse path and the
+// fallback path agree for every key GlobalConfig models.
 func TestGetDefaults_AgreesWithGitConfigDefaultsForEveryKey(t *testing.T) {
 	store := map[string]string{}
+	for k, v := range defaults {
+		store[k] = v
+	}
 	loader := NewGlobalLoaderWithGitConfig(memGitConfig(store))
-	if err := loader.writeToGitConfig(loader.GetDefaults()); err != nil {
-		t.Fatalf("writeToGitConfig: %v", err)
-	}
-	if len(store) == 0 {
-		t.Fatal("writeToGitConfig wrote no keys")
-	}
-
-	for key, got := range store {
-		want, ok := defaults[key]
-		if !ok {
-			if got != "" && got != "false" && got != "0" {
-				t.Errorf("%s: GetDefaults gives %q but the git-config defaults table has no entry", key, got)
-			}
-			continue
-		}
-		if got != want {
-			t.Errorf("%s: GetDefaults gives %q, git-config default is %q", key, got, want)
-		}
+	if got, want := readFromGitConfig(loader.gc), loader.GetDefaults(); !reflect.DeepEqual(got, want) {
+		t.Errorf("explicit defaults load as %+v\nGetDefaults = %+v", got, want)
 	}
 }
 

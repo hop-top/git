@@ -37,26 +37,14 @@ func TestLoad_StaleBareRepoGitConfigIsIgnored(t *testing.T) {
 				t.Errorf("GitDomain = %q, want gitlab.com", cfg.Defaults.GitDomain)
 			}
 
-			if err := loader.Write(cfg); err != nil {
-				t.Fatalf("Write() error = %v", err)
+			if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
+				t.Fatalf("WriteShellIntegration() error = %v", err)
 			}
 			if got := store[staleBareRepoKey]; got != v {
-				t.Errorf("Write() touched user's %s: got %q, want %q left as-is",
+				t.Errorf("WriteShellIntegration() touched user's %s: got %q, want %q left as-is",
 					staleBareRepoKey, got, v)
 			}
 		})
-	}
-}
-
-func TestWrite_DoesNotPersistBareRepo(t *testing.T) {
-	store := map[string]string{}
-	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
-
-	if err := loader.Write(loader.GetDefaults()); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	if v, ok := store[staleBareRepoKey]; ok {
-		t.Errorf("Write() set %s = %q; the setting no longer exists", staleBareRepoKey, v)
 	}
 }
 

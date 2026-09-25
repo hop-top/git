@@ -31,8 +31,8 @@ func TestShellIntegrationStatus(t *testing.T) {
 		cfg.ShellIntegration.InstalledPath = "/tmp/.bashrc"
 		cfg.ShellIntegration.InstalledAt = time.Now()
 
-		if err := loader.Write(cfg); err != nil {
-			t.Fatalf("Write() error = %v", err)
+		if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
+			t.Fatalf("WriteShellIntegration() error = %v", err)
 		}
 
 		// Verify values persisted to git config store
@@ -61,8 +61,8 @@ func TestShellIntegrationStatus(t *testing.T) {
 		cfg, _ := loader.Load()
 		cfg.ShellIntegration.Status = "declined"
 
-		if err := loader.Write(cfg); err != nil {
-			t.Fatalf("Write() error = %v", err)
+		if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
+			t.Fatalf("WriteShellIntegration() error = %v", err)
 		}
 
 		reloaded, _ := loader.Load()
@@ -76,8 +76,8 @@ func TestShellIntegrationStatus(t *testing.T) {
 		cfg, _ := loader.Load()
 		cfg.ShellIntegration.Status = "disabled"
 
-		if err := loader.Write(cfg); err != nil {
-			t.Fatalf("Write() error = %v", err)
+		if err := loader.WriteShellIntegration(cfg.ShellIntegration); err != nil {
+			t.Fatalf("WriteShellIntegration() error = %v", err)
 		}
 
 		reloaded, _ := loader.Load()

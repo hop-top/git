@@ -56,23 +56,6 @@ func TestMigration_DropsRetiredSettings(t *testing.T) {
 	}
 }
 
-// Write persists live settings only.
-func TestWrite_OmitsRetiredSettings(t *testing.T) {
-	store := map[string]string{}
-	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
-	if err := loader.Write(loader.GetDefaults()); err != nil {
-		t.Fatalf("Write() error = %v", err)
-	}
-	if len(store) == 0 {
-		t.Fatal("Write() wrote nothing")
-	}
-	for _, k := range retiredKeys {
-		if v, ok := store[k]; ok {
-			t.Errorf("Write() set retired %s = %q", k, v)
-		}
-	}
-}
-
 // Retired keys left in git config load without error and change nothing.
 func TestLoad_IgnoresRetiredSettingsInGitConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
