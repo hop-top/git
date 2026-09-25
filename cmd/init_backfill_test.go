@@ -154,8 +154,9 @@ func TestBackfillHubConfigIfMissing(t *testing.T) {
 		if b, ok := cfg.Branches["feat/x"]; !ok || b.Path != "/repo/hops/feat/x" || b.HopspaceBranch != "feat/x" {
 			t.Errorf("feat/x entry wrong: %+v", b)
 		}
-		if len(cfg.Settings.EnvPatterns) == 0 {
-			t.Errorf("envPatterns empty, want defaults populated")
+		raw, _ := afero.ReadFile(fs, filepath.Join(hubPath, "hop.json"))
+		if strings.Contains(string(raw), "envPatterns") || strings.Contains(string(raw), "migrated") {
+			t.Errorf("hop.json has members nothing reads:\n%s", raw)
 		}
 	})
 
