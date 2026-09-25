@@ -23,17 +23,36 @@ const (
 	pruneKindVolumesEntry = "volumes-entry"
 )
 
-// pruneGoneHubRecords drops what the hopspaces --global hubs share still
+// pruneGoneHubRecords is dropGoneHubRecords for prune: the records it
+// drops, or would, as prune reports them.
+func pruneGoneHubRecords(fs afero.Fs, st *state.State, dryRun bool) []pruneRecord {
+	drops := dropGoneHubRecords(fs, st, dryRun)
+	out := make([]pruneRecord, len(drops))
+	for i, d := range drops {
+		out[i] = d.rec
+	}
+	return out
+}
+
+// goneHubDrop is one record dropGoneHubRecords drops, or would: rec as
+// prune reports it, and the file it is in.
+type goneHubDrop struct {
+	rec  pruneRecord
+	file string
+}
+
+// dropGoneHubRecords drops what the hopspaces --global hubs share still
 // record for each hub of st whose directory is gone (the hubs
 // pruneOrphanedHubs takes out of state): its worktree records in the
 // hopspace's hop.json, then its ports.json and volumes.json entries.
 // Only the records go: the volume directories they name are left, data
-// and all. Under dryRun nothing is written.
+// and all. Under dryRun nothing is written. Both prune and doctor --fix
+// run it.
 //
 // It runs before pruneOrphanedHubs, while st still has the hubs and the
 // repository they belong to.
-func pruneGoneHubRecords(fs afero.Fs, st *state.State, dryRun bool) []pruneRecord {
-	var out []pruneRecord
+func dropGoneHubRecords(fs afero.Fs, st *state.State, dryRun bool) []goneHubDrop {
+	var out []goneHubDrop
 	for _, repoID := range scopeRepoIDs(st) {
 		repo := st.Repositories[repoID]
 		for _, hub := range repo.Hubs {
@@ -41,12 +60,23 @@ func pruneGoneHubRecords(fs afero.Fs, st *state.State, dryRun bool) []pruneRecor
 				continue
 			}
 			for _, hs := range sharedHopspacesOf(fs, repo, hub.Path) {
-				out = append(out, pruneHubHopspaceRecords(fs, repoID, hs, hub.Path, dryRun)...)
-				out = append(out, pruneHubEnvEntries(fs, repoID, hs, hub.Path, dryRun)...)
+				recs := pruneHubHopspaceRecords(fs, repoID, hs, hub.Path, dryRun)
+				recs = append(recs, pruneHubEnvEntries(fs, repoID, hs, hub.Path, dryRun)...)
+				for _, rec := range recs {
+					out = append(out, goneHubDrop{rec: rec, file: filepath.Join(hs, goneHubRecordFiles[rec.Kind])})
+				}
 			}
 		}
 	}
 	return out
+}
+
+// goneHubRecordFiles names the hopspace file each kind of record
+// dropGoneHubRecords drops is in.
+var goneHubRecordFiles = map[string]string{
+	pruneKindHopspaceRecord: "hop.json",
+	pruneKindPortsEntry:     "ports.json",
+	pruneKindVolumesEntry:   "volumes.json",
 }
 
 // sharedHopspacesOf returns the existing hopspaces, shared by --global

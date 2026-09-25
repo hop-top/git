@@ -173,7 +173,7 @@ exits 0 without prompting.
 ```bash
 /usr/bin/git hop doctor --json        # [{kind, check, subject, message, fixable?}]; [] = healthy; fixable on issues only
                                       #   exit 1 on any issue; warnings alone exit 0
-/usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json; records an unlisted hub)
+/usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json; records an unlisted hub; a pruned --global hub's shared-hopspace records)
                                       #   exit 0 only if every issue was fixed
 /usr/bin/git hop doctor --fix --dry-run  # preview those repairs; writes nothing, no backups
                                       #   exit 0 only if every issue would be fixed

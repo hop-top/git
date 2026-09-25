@@ -108,7 +108,12 @@ Use --fix to automatically repair issues. In the current hub, --fix also
 drops hop.json branch entries whose worktree directory is gone (the rows
 'git hop status' reports as Missing), backing hop.json up to the per-hub
 repair state dir ($XDG_STATE_HOME/git-hop/repair/<hub>/backups/) first so
-the change can be undone with 'git hop repair --undo'.
+the change can be undone with 'git hop repair --undo'. When --fix prunes
+from state a --global hub whose directory is gone, it drops that hub's
+records from the hopspace it shared with the repository's other --global
+hubs in the same run, as 'git hop prune' does: the worktree records in
+its hop.json and the entries in its ports.json and volumes.json. The
+volume directories, and the data in them, are left alone.
 
 Combine --fix with --dry-run to preview every repair without applying any
 of it: no directories created, no worktrees recreated, no dependencies

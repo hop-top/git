@@ -40,8 +40,14 @@ import (
 // worktrees in hubKept, the ones the hub check could not recreate,
 // unless the user deletes or relocates their entry at the prompt.
 //
+// A hub pruned from state because its directory is gone also loses its
+// records in the hopspace it shared with the repository's other --global
+// hubs, in the same run (dropGoneHubRecords, prune's step): otherwise the
+// next doctor would warn about them and take a second --fix.
+//
 // Each repair is recorded in r as it lands (or would); the returned count
-// is what the caller adds to r.fixed.
+// is what the caller adds to r.fixed. The hopspace records dropped are
+// not in it: recordGoneHubDrop counts them as it records them.
 func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath string, hubKept keptWorktrees, opts doctorOpts, r *doctorReport) int {
 	dryRun := !opts.mutating()
 	// The repairs are recorded on a scratch report and folded into r
@@ -56,6 +62,8 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 	missingFixed, kept := fixMissingWorktrees(fs, g, st, hubKept, opts, &fixes, &edits)
 
 	output.Info("\nPruning orphaned hubs from state...")
+	// Before the hubs leave st: it says which hopspaces to visit.
+	drops := dropGoneHubRecords(fs, st, dryRun)
 	hubsPruned := pruneOrphanedHubs(fs, st, dryRun, &edits)
 	for _, p := range hubsPruned {
 		recordStatePrune(&fixes, opts, p)
@@ -85,7 +93,26 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 
 	records, dropped := dedupeRepairs(fixes.records)
 	r.records = append(r.records, records...)
+	// Recorded straight in r: each is a record of its own, and each
+	// landed (or would) in its own file whether state saves or not.
+	for _, d := range drops {
+		recordGoneHubDrop(r, opts, d)
+	}
 	return fixed - dropped
+}
+
+// recordGoneHubDrop records one record of a pruned hub dropGoneHubRecords
+// dropped (or would) from a hopspace --global hubs share, under the
+// hopspace check (whose checkGoneHubRecords reports such hop.json
+// records once state no longer has the hub), subject the worktree path
+// it is keyed by. r.repaired counts it.
+func recordGoneHubDrop(r *doctorReport, opts doctorOpts, d goneHubDrop) {
+	what := map[string]string{
+		pruneKindHopspaceRecord: "hopspace record",
+		pruneKindPortsEntry:     "ports entry",
+		pruneKindVolumesEntry:   "volumes entry",
+	}[d.rec.Kind]
+	r.repaired(opts, doctorCheckHopspace, d.rec.Path, "drop %s from %s", what, d.file)
 }
 
 // dedupeRepairs drops every fixed or would-fix record whose check and

@@ -1,0 +1,122 @@
+# --global hubs of one repository share a data-home hopspace: its
+# hop.json records each hub's worktrees under their paths, as do its
+# ports.json and volumes.json. When one hub's directory is deleted by
+# hand, doctor --fix prunes that hub from state and, in the same run,
+# drops its records from all three files, as prune does (--fix -n says
+# so and touches nothing). One --fix is enough: the next doctor is clean.
+# The other hub's records stay, and no volume directory is touched: only
+# the records go.
+#
+# A stub docker on PATH: `compose config` fails, so the raw compose file
+# is parsed.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/glob.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+exec git-hop $WORK/org/glob.git $WORK/g2/app --global
+cd $WORK/g1/app
+exec git-hop add feat/y
+cd $WORK/g2/app
+exec git-hop add feat/y
+cd $WORK
+exec sh -c 'for d in $(find $WORK/data/org/glob/volumes -type d -name "*_data"); do echo kept > "$d/kept"; done'
+exec sh -c 'find $WORK/data/org/glob/volumes -name kept | wc -l'
+stdout '^ *4$'
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/ports.json
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/volumes.json
+
+exec rm -rf $WORK/g1
+exec cp $WORK/data/org/glob/hop.json $WORK/data/org/glob/ports.json $WORK/data/org/glob/volumes.json $WORK/.local/state/git-hop/state.json $WORK
+cd $WORK/g2/app
+
+# --- --fix -n previews every drop and changes nothing. It exits 1:
+# the gone hub's worktree entries are for the real run to ask about ---
+! exec git-hop doctor --fix -n
+stdout '\[dry-run\] Would prune hopspace record: .*:main \(.*/g1/app/hops/main\) from .*/data/org/glob/hop.json'
+stdout '\[dry-run\] Would prune hopspace record: .*:feat/y \(.*/g1/app/hops/feat/y\) from .*/data/org/glob/hop.json'
+stdout '\[dry-run\] Would prune ports entry: .*:main \(.*/g1/app/hops/main\) from .*/data/org/glob/ports.json'
+stdout '\[dry-run\] Would prune volumes entry: .*:feat/y \(.*/g1/app/hops/feat/y\) from .*/data/org/glob/volumes.json'
+! stdout '/g2/app/hops/[^ ]* from'
+cmp $WORK/data/org/glob/hop.json $WORK/hop.json
+cmp $WORK/data/org/glob/ports.json $WORK/ports.json
+cmp $WORK/data/org/glob/volumes.json $WORK/volumes.json
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json
+
+! exec git-hop doctor --fix -n --json
+stdout '"kind": "would-fix",\s+"check": "hopspace",\s+"subject": "[^"]*/g1/app/hops/main",\s+"message": "drop hopspace record from [^"]*/data/org/glob/hop.json"'
+stdout '"kind": "would-fix",\s+"check": "hopspace",\s+"subject": "[^"]*/g1/app/hops/feat/y",\s+"message": "drop ports entry from [^"]*/data/org/glob/ports.json"'
+stdout '"kind": "would-fix",\s+"check": "hopspace",\s+"subject": "[^"]*/g1/app/hops/feat/y",\s+"message": "drop volumes entry from [^"]*/data/org/glob/volumes.json"'
+! stdout '"kind": "fixed"'
+cmp $WORK/data/org/glob/hop.json $WORK/hop.json
+cmp $WORK/data/org/glob/ports.json $WORK/ports.json
+cmp $WORK/data/org/glob/volumes.json $WORK/volumes.json
+
+# --- one --fix drops the gone hub's records; the other hub's stay.
+# The gone hub's worktrees are not merged, so doctor asks about each:
+# delete both entries ---
+stdin $WORK/delete.txt
+exec git-hop doctor --fix
+stdout 'Pruning hopspace record: .*:main \(.*/g1/app/hops/main\) from .*/data/org/glob/hop.json'
+stdout 'Pruning ports entry: .*:feat/y \(.*/g1/app/hops/feat/y\) from .*/data/org/glob/ports.json'
+stdout 'Pruning volumes entry: .*:feat/y \(.*/g1/app/hops/feat/y\) from .*/data/org/glob/volumes.json'
+! grep '/g1/app' $WORK/data/org/glob/hop.json
+! grep '/g1/app' $WORK/data/org/glob/ports.json
+! grep '/g1/app' $WORK/data/org/glob/volumes.json
+! grep '/g1/app' $WORK/.local/state/git-hop/state.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/ports.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/ports.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/volumes.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/volumes.json
+
+# --- no volume directory or data touched ---
+exec sh -c 'find $WORK/data/org/glob/volumes -name kept | wc -l'
+stdout '^ *4$'
+
+# --- the next doctor is clean ---
+exec git-hop doctor
+! stderr 'no longer exists'
+! stderr 'warning'
+! stdout 'Found .* issue'
+stdout 'healthy'
+
+# --- and prune finds nothing left ---
+exec git-hop prune
+stdout 'No orphaned entries found.'
+
+-- delete.txt --
+2
+2
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - data:/data
+      - ${HOP_VOLUME_CACHE}:/cache
+volumes:
+  data:
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0
