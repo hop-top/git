@@ -143,7 +143,7 @@ data-home hopspace, so it follows `hop.dataLayout`).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `hop.gitDomain` | string | `github.com` | Git hosting domain used to expand `org/repo` shorthands |
+| `hop.gitDomain` | string | `github.com` | Git hosting domain used to expand `org/repo` shorthands, and the host of the repo ID (`<host>/<org>/<repo>`) of a repository whose origin has none: a local path, a `file://` URL, no origin. Resolved like `hop.dataLayout`: a hub's own value overrides `--global`, and `git -c` overrides both; outside a repository (a clone shorthand, a hub whose repo cannot be read) only `--global` and `git -c` count |
 | `hop.dataLayout` | string | `{org}/{repo}` | Where each repository's data (hopspace `hop.json`, `ports.json`, `volumes.json`, `deps/`, `hooks/`) lives under the data home. Variables: `{host}` (the host of the origin URL, or `hop.gitDomain` for a local path), `{org}`, `{repo}`; `{org}` and `{repo}` are required. Resolved like any setting: a hub's own value overrides `--global`, and `git -c` overrides both; a `--global` clone, which has no hub yet, reads `--global` and `git -c` only. Hubs sharing one repository's data should agree on it. An invalid value falls back to the `--global` value (or the default when that is invalid too) and `git hop doctor` warns, naming the scope. Changing it does not move data already stored under the old layout: `git hop doctor` warns about a `--global` hub's hopspace left there, and `git hop doctor --fix` moves it |
 | `hop.worktreeLocation` | string | `{hubPath}/hops/{branch}` | Where `git hop add` and `git hop move` put worktrees. Variables: `{hubPath}`, `{branch}`, `{org}`, `{repo}`, `{dataHome}`, `{hopspace}` (the repository's data-home hopspace, `{dataHome}` plus `hop.dataLayout`; use it rather than `{dataHome}/{org}/{repo}` so worktrees follow the layout). A relative result is resolved against the hub |
 | `hop.add.defaultStartPoint` | string | `default-branch` | Start-point for new branches: `default-branch`, `initial` (root commit), or any ref / SHA |
@@ -768,6 +768,13 @@ The state file tracks all repositories and their locations across your system so
 }
 ```
 
+Each repository is keyed by its repo ID, `<host>/<org>/<repo>`: the host
+of its origin URL (`gitlab.example.com` for
+`git@gitlab.example.com:acme/widgets.git`), or `hop.gitDomain` when the
+origin has none (a local path, a `file://` URL, no origin). The same ID
+reaches hooks as `GIT_HOP_REPO_ID`. Two repositories with one org/repo on
+two hosts are two entries.
+
 A repository's `hubs` lists every hub of it, and `worktrees` every
 worktree of those hubs, keyed by the worktree's path. `branch` names the
 branch checked out there and `hubPath` the hub it belongs to, so two hubs
@@ -794,6 +801,26 @@ negative value keeps them).
 git-hop never saves over a `state.json` it cannot parse, or one a newer
 release wrote (a higher major `version`); the command warns and leaves
 the file as it is.
+
+Releases before repo IDs carried the origin's host keyed every repository
+`github.com/<org>/<repo>`, whatever its origin. On load, git-hop reads each
+recorded hub's `hop.json` and moves a repository whose hubs' origin gives
+another key to that key. When one entry held hubs of two hosts, each hub
+moves to its own host's entry with its worktrees. A hub whose `hop.json`
+cannot be read keeps its key. The move follows the rules above: nothing
+is written until a command saves state, and that save backs the old file
+up first. Whether a repository needs moving is read from its hubs, not
+from `version`, so running it again changes nothing and `version` stays
+`2.0.0`. `hop.gitDomain` is resolved in each hub, so changing it (at
+`--global`, or in one hub) moves the repositories whose origin has no
+host the same way.
+
+When the key a repository's origin gives is already taken, git-hop does
+not merge the two entries: both are kept, every command that loads state
+warns, and `git hop doctor` reports it as an issue (exit 1; `--fix`
+leaves it). Merge the entries by hand: copy `state.json`, move the hubs
+doctor names, and their worktrees, from the old entry into the one under
+the new key, and delete the old entry.
 
 An older release can still read a file in the current format: it shows
 worktree paths where it used to show branches, and entries it adds are

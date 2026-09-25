@@ -70,18 +70,20 @@ The XDG kit maps to platform-native locations under the hood (typically `%APPDAT
 
 ### Repository identifier
 
-The hopspace-level lookup keys off a 3-part repository identifier of the shape `<host>/<org>/<repo>` — for example `github.com/acme/widgets`. The runner splits the ID on `/` and only resolves a hopspace hook when there are at least three parts. The org and repo come from the ID; the directory is the repository's hopspace in the data home, laid out by `hop.dataLayout` (default `{org}/{repo}`). So a hook for `github.com/acme/widgets` is looked up at:
+The hopspace-level lookup keys off a 3-part repository identifier of the shape `<host>/<org>/<repo>` — for example `gitlab.example.com/acme/widgets`. The host is the one of the repository's origin URL (`gitlab.example.com` for `git@gitlab.example.com:acme/widgets.git`), or `hop.gitDomain` (default `github.com`, resolved like any setting: the hub's own value over `--global`, `git -c` over both) when the origin has none: a local path, a `file://` URL, no origin. It is the ID state keys the repository by, and hooks see it as `GIT_HOP_REPO_ID`.
+
+The runner splits the ID on `/` and only resolves a hopspace hook when there are three parts. The org and repo come from the ID; the directory is the repository's hopspace in the data home, laid out by `hop.dataLayout` (default `{org}/{repo}`). So a hook for `gitlab.example.com/acme/widgets` is looked up at:
 
 ```
 ~/.local/share/git-hop/acme/widgets/hooks/<hook-name>
 ~/.local/share/git-hop/github.com/acme/widgets/hooks/<hook-name>   # earlier releases
 ```
 
-The first match wins. The ID's host is always `github.com`, whatever the origin; with `hop.dataLayout` set to `{host}/{org}/{repo}` the host of the directory comes from the repository's origin URL instead (`gitlab.example.com` for `git@gitlab.example.com:acme/widgets.git`, `hop.gitDomain` for a local path).
+The first match wins. With `hop.dataLayout` set to `{host}/{org}/{repo}` the first directory is `~/.local/share/git-hop/gitlab.example.com/acme/widgets/hooks/`. The second is always under `github.com`, whatever the origin: earlier releases gave every repository a `github.com` ID.
 
 Earlier releases mirrored hooks to `github.com/<org>/<repo>/hooks/` under the data home. Those hooks keep firing. `git hop doctor` warns about each such directory, and `git hop doctor --fix` moves it to the `hop.dataLayout` location when nothing is there yet (`--fix --dry-run` previews the move). With hooks at both locations it moves nothing and names both, so you can merge them by hand.
 
-A 2-part identifier such as `acme/widgets` **silently skips the hopspace lookup** — `FindHookFile` falls through to the global hook with no warning. For that reason, callers inside git-hop (e.g. `cmd/add.go`) always construct the repoID as `github.com/<org>/<repo>` so the hopspace lookup actually fires.
+A 2-part identifier such as `acme/widgets` **silently skips the hopspace lookup** — `FindHookFile` falls through to the global hook with no warning. For that reason, callers inside git-hop (e.g. `cmd/add.go`) always build the repoID in full, `<host>/<org>/<repo>`, so the hopspace lookup actually fires.
 
 ## Choosing a hook level
 
@@ -323,7 +325,7 @@ That is tolerable when the anchor is a real worktree deep in a known tree. For `
 
 ## Init hooks
 
-`git hop init` fires `post-worktree-add` for the conversion's initial worktree, through the same dispatch as clone (`BuildHookDispatch`), so the hook sees the same variables: `GIT_HOP_WORKTREE_PATH` is the initial worktree, `GIT_HOP_BRANCH` its branch, `GIT_HOP_REPO_ID` `github.com/<org>/<repo>`.
+`git hop init` fires `post-worktree-add` for the conversion's initial worktree, through the same dispatch as clone (`BuildHookDispatch`), so the hook sees the same variables: `GIT_HOP_WORKTREE_PATH` is the initial worktree, `GIT_HOP_BRANCH` its branch, `GIT_HOP_REPO_ID` `<host>/<org>/<repo>` (see [Repository identifier](#repository-identifier)).
 
 | Conversion | Initial worktree (`GIT_HOP_WORKTREE_PATH`) |
 |---|---|
@@ -357,7 +359,7 @@ The dispatch follows the mirror for the reason given in [Why mirror-then-fire](#
 | Repo-level anchor | the **hub**: `<hub>/.git-hop/hooks/<name>`, then the parent walk above it. A hook inside a worktree's `.git-hop/hooks/` is not consulted — including the `hops/<branch>/.git-hop/hooks/` a bare `git hop init` creates, which is why init's hint sends repair hooks to the hub. |
 | `GIT_HOP_WORKTREE_PATH` | the hub path |
 | `GIT_HOP_BRANCH` | set and **empty** — a repair spans every branch |
-| `GIT_HOP_REPO_ID` | `github.com/<org>/<repo>` from the hub's `hop.json`, read at dispatch time; empty when it cannot be read |
+| `GIT_HOP_REPO_ID` | `<host>/<org>/<repo>` from the hub's `hop.json` (see [Repository identifier](#repository-identifier)), read at dispatch time; empty when it cannot be read |
 | Working directory | inherited from git-hop's cwd, as for every hook; `cd "$GIT_HOP_WORKTREE_PATH"` to work in the hub |
 | Executable-bit check, name validation, output | same as every hook |
 
@@ -474,7 +476,7 @@ All hooks receive these environment variables:
 |----------|-------------|---------|
 | `GIT_HOP_HOOK_NAME` | Name of the hook being executed | `post-worktree-add` |
 | `GIT_HOP_WORKTREE_PATH` | Absolute path to the worktree | `/home/user/projects/org/repo/feature-x` |
-| `GIT_HOP_REPO_ID` | Repository identifier | `github.com/org/repo` |
+| `GIT_HOP_REPO_ID` | Repository identifier, `<host>/<org>/<repo>` with the origin's host ([Repository identifier](#repository-identifier)) | `gitlab.example.com/org/repo` |
 | `GIT_HOP_BRANCH` | Branch name | `feature-x` |
 
 Two exceptions:

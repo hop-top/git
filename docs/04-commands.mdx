@@ -874,6 +874,12 @@ git hop doctor --fix --dry-run
   hub (its own config, `git -c`): a warning naming the scope; the
   `--global` value, or the default, is used
 - Orphaned worktrees
+- A repository state still keys by another host than its origin's,
+  because the `<host>/<org>/<repo>` key its origin gives was already
+  taken when state was migrated: an issue (exit 1). Both entries are
+  kept and `--fix` does not merge them; the hint says how to merge them
+  by hand: copy `state.json`, move the named hubs and their worktrees
+  into the entry under the new key, and delete the old entry
 - The current hub's record in state: a hub with a `hop.json` that state
   does not record (converted by a release that did not record
   conversions), or records without some of its worktrees, is an issue:
