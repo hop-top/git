@@ -295,9 +295,11 @@ Worktree Mode:
 			branch, _ := cmd.Flags().GetString("branch")
 
 			if branch != "" && hubErr == nil {
-				if err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath); err != nil {
+				attached, err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath)
+				if err != nil {
 					output.Fatal("Fork-Attach failed: %v", err)
 				}
+				emitRootResult(cmd, forkAttachResult(attached, expandedArg, branch, hubPath))
 				return
 			}
 
@@ -329,6 +331,13 @@ Worktree Mode:
 			refreshRootsCacheAt(fs, clonedHub)
 			if startEnv {
 				startClonedEnv(fs, clonedHub, globalCfg)
+			}
+			if output.IsStructured() {
+				res, err := cloneResult(fs, expandedArg, clonedHub)
+				if err != nil {
+					output.Fatal("Failed to read the cloned hub: %v", err)
+				}
+				emitRootResult(cmd, res)
 			}
 			return
 		}

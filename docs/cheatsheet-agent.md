@@ -99,6 +99,12 @@ exits 0 without prompting.
                                               #   a hook navigated, result still printed
 /usr/bin/git hop --json                       # no <branch>: help, never a result
 
+# Clone / fork-attach (same object as switch; no --dry-run: exit 129)
+/usr/bin/git hop <uri> [<path>] --json        # {action: cloned, branch, path, hub, uri,
+                                              #   default_branch}; progress on stderr
+/usr/bin/git hop <uri> --branch <b> --json    # inside a hub: {action: fork-attached, branch
+                                              #   (<b>-fork-<owner>), path, hub, uri, fork_branch}
+
 # Rename
 /usr/bin/git hop move <old-branch> <new-branch>
 /usr/bin/git hop move <old-branch> <new-branch> --dry-run  # preview; no rename, no hooks
@@ -196,10 +202,10 @@ Structured output rules:
 
 - Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env start`,
   `env stop`, `env generate`, `env gc`, `repair`, `remove`, `move`,
-  `merge`, `git hop <branch>` have a result; other commands ignore the
-  format for stdout.
+  `merge`, `git hop <branch>`, `git hop <uri>` have a result; other
+  commands ignore the format for stdout.
 - Every result is a list (`add`, `init`, `move`, `merge`,
-  `env start|stop|generate`, `git hop <branch>`: one object). Empty = `[]`, never empty stdout.
+  `env start|stop|generate`, `git hop <branch>|<uri>`: one object). Empty = `[]`, never empty stdout.
 - Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
 - `--dry-run` with a result: same shape, would-be values, `dry_run: true`
   in json/yaml.

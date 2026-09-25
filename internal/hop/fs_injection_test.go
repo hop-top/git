@@ -32,7 +32,8 @@ func TestForkAttach_CreatesForkHopspaceOnInjectedFs(t *testing.T) {
 	require.NoError(t, fs.MkdirAll(filepath.Join(hubPath, "hops", "main"), 0o755))
 
 	g := mocks.NewMockGit()
-	require.NoError(t, hop.ForkAttach(fs, g, "https://github.com/forker/repo.git", "feat", hubPath))
+	_, err = hop.ForkAttach(fs, g, "https://github.com/forker/repo.git", "feat", hubPath)
+	require.NoError(t, err)
 
 	forkHopspace := hop.GetHopspacePath(dataHome, hop.RepoRef{Org: "forker", Repo: "repo"})
 	ok, err := afero.Exists(fs, filepath.Join(forkHopspace, "hop.json"))

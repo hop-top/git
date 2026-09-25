@@ -1,6 +1,7 @@
 # A clone follows git clone's streams: its progress and the next steps
-# go to stderr, never stdout, and clone reports no result on stdout. -q
-# leaves only errors, and the structured modes carry no human text.
+# go to stderr, never stdout. The human view and -q report no result on
+# stdout; -q leaves only errors. The structured modes put the result, and
+# nothing else, on stdout, and carry no human text.
 
 exec git init --bare $WORK/org/repo.git
 exec git clone $WORK/org/repo.git $WORK/seed
@@ -36,15 +37,16 @@ exec git-hop -q $WORK/org/repo.git hub-quiet
 ! stderr .
 exists $WORK/hub-quiet/hops/main
 
-# --- --porcelain: no progress, no hints ---
+# --- --porcelain: the result line only; no progress, no hints ---
 exec git-hop --porcelain $WORK/org/repo.git hub-porcelain
-! stdout .
+stdout '^cloned\tmain\t\S+/hub-porcelain/hops/main\t\S+/hub-porcelain$'
+! stdout 'Cloning'
 ! stderr .
 exists $WORK/hub-porcelain/hops/main
 
-# --- --json: no human text on either stream ---
+# --- --json: the result only; no human text on either stream ---
 exec git-hop --json $WORK/org/repo.git hub-json
-! stdout .
+decode json stdout action cloned
 ! stderr '^Cloning '
 ! stderr '^Successfully cloned'
 ! stderr '^hint:'

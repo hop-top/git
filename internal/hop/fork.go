@@ -15,23 +15,30 @@ import (
 	"hop.top/git/internal/state"
 )
 
+// ForkAttachment is what ForkAttach added to the hub: the hub branch the
+// fork's branch was attached as, and its worktree.
+type ForkAttachment struct {
+	Branch string
+	Path   string
+}
+
 // ForkAttach handles "Fork-Attach Mode" (git hop <uri> --branch <branch>)
-func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) error {
+func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (ForkAttachment, error) {
 	// 1. Validate Hub
 	if !IsHub(fs, hubPath) {
-		return fmt.Errorf("not in a git-hop hub")
+		return ForkAttachment{}, fmt.Errorf("not in a git-hop hub")
 	}
 
 	hub, err := LoadHub(fs, hubPath)
 	if err != nil {
-		return fmt.Errorf("failed to load hub: %v", err)
+		return ForkAttachment{}, fmt.Errorf("failed to load hub: %v", err)
 	}
 
 	// 2. Determine Fork Hopspace
 	// $GIT_HOP_DATA_HOME/<hop.dataLayout for the fork>/
 	org, repo := ParseRepoFromURL(uri)
 	if org == "" || repo == "" {
-		return fmt.Errorf("could not parse org/repo from URI: %s", uri)
+		return ForkAttachment{}, fmt.Errorf("could not parse org/repo from URI: %s", uri)
 	}
 
 	dataHome := GetGitHopDataHome()
@@ -44,7 +51,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	// We need to verify that the remote branch shares history with our local compare branch.
 	// Initialize the fork hopspace directory
 	if err := fs.MkdirAll(forkHopspacePath, 0755); err != nil {
-		return fmt.Errorf("failed to create fork hopspace: %v", err)
+		return ForkAttachment{}, fmt.Errorf("failed to create fork hopspace: %v", err)
 	}
 
 	// We need to fetch the remote branch to check ancestry.
@@ -88,7 +95,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 
 	if mainRepoPath == "" {
 		// Fallback: try to find any valid git repo in hub
-		return fmt.Errorf("could not find main repository worktree to perform ancestry check")
+		return ForkAttachment{}, fmt.Errorf("could not find main repository worktree to perform ancestry check")
 	}
 
 	// Fetch the fork branch into the main repo as a temporary remote
@@ -101,7 +108,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	// git fetch <uri> <branch>
 	_, err = g.RunInDir(mainRepoPath, "git", git.FetchArgs(uri, branch)...)
 	if err != nil {
-		return fmt.Errorf("failed to fetch fork branch: %v", err)
+		return ForkAttachment{}, fmt.Errorf("failed to fetch fork branch: %v", err)
 	}
 
 	// Determine compare branch (local default or configured)
@@ -117,7 +124,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	// git merge-base HEAD FETCH_HEAD
 	_, err = g.MergeBase(mainRepoPath, *compareBranch, "FETCH_HEAD")
 	if err != nil {
-		return fmt.Errorf("fork validation failed: branch %s from %s does not share history with %s (use --force to override)", branch, uri, *compareBranch)
+		return ForkAttachment{}, fmt.Errorf("fork validation failed: branch %s from %s does not share history with %s (use --force to override)", branch, uri, *compareBranch)
 	}
 
 	output.Info("Fork ancestry verified.")
@@ -132,7 +139,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 		output.Info("Initializing fork hopspace...")
 		worktreePath := filepath.Join(forkHopspacePath, branch)
 		if err := g.Clone(uri, worktreePath, branch); err != nil {
-			return fmt.Errorf("failed to clone fork branch: %v", err)
+			return ForkAttachment{}, fmt.Errorf("failed to clone fork branch: %v", err)
 		}
 
 		// Initialize Hopspace Config
@@ -153,13 +160,13 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 
 		writer := config.NewWriter(fs)
 		if err := writer.WriteHopspaceConfig(forkHopspacePath, hsCfg); err != nil {
-			return fmt.Errorf("failed to write fork hopspace config: %v", err)
+			return ForkAttachment{}, fmt.Errorf("failed to write fork hopspace config: %v", err)
 		}
 	} else {
 		// Fork hopspace exists, add worktree
 		forkHopspace, err := LoadHopspace(fs, forkHopspacePath)
 		if err != nil {
-			return fmt.Errorf("failed to load fork hopspace: %v", err)
+			return ForkAttachment{}, fmt.Errorf("failed to load fork hopspace: %v", err)
 		}
 
 		wm := NewWorktreeManager(fs, g)
@@ -167,11 +174,11 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 		locationPattern := "{hubPath}/hops/{branch}"
 		worktreePath, err := wm.CreateWorktree(forkHopspace, forkHopspacePath, branch, locationPattern, forkHopspace.Config.Repo.Org, forkHopspace.Config.Repo.Repo, forkHopspace.Config.Repo.DefaultBranch, "")
 		if err != nil {
-			return fmt.Errorf("failed to create worktree in fork: %v", err)
+			return ForkAttachment{}, fmt.Errorf("failed to create worktree in fork: %v", err)
 		}
 
 		if err := forkHopspace.RegisterBranch(branch, worktreePath); err != nil {
-			return fmt.Errorf("failed to register branch in fork hopspace: %v", err)
+			return ForkAttachment{}, fmt.Errorf("failed to register branch in fork hopspace: %v", err)
 		}
 	}
 
@@ -193,14 +200,14 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	sourceWorktreePath := filepath.Join(forkHopspacePath, branch)
 	commitHash, err := g.RunInDir(sourceWorktreePath, "git", "rev-parse", "HEAD")
 	if err != nil {
-		return fmt.Errorf("failed to get commit hash from fork: %v", err)
+		return ForkAttachment{}, fmt.Errorf("failed to get commit hash from fork: %v", err)
 	}
 	commitHash = strings.TrimSpace(commitHash)
 
 	// Create a detached worktree at that commit in the main repo
 	// We use the main repo worktree as the base
 	if _, err := g.RunInDir(mainRepoPath, "git", "worktree", "add", "--detach", forkWorktreePath, commitHash); err != nil {
-		return fmt.Errorf("failed to add fork worktree: %v", err)
+		return ForkAttachment{}, fmt.Errorf("failed to add fork worktree: %v", err)
 	}
 
 	// 5. Update Hub Config
@@ -212,8 +219,9 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 
 	writer := config.NewWriter(fs)
 	if err := writer.WriteHubConfig(hubPath, hub.Config); err != nil {
-		return fmt.Errorf("failed to update hub config: %v", err)
+		return ForkAttachment{}, fmt.Errorf("failed to update hub config: %v", err)
 	}
+	attached := ForkAttachment{Branch: forkBranchName, Path: forkWorktreePath}
 
 	// Update global state
 	// A state file that cannot be read is not replaced.
@@ -221,7 +229,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	if err != nil {
 		output.Warn("Failed to update state: %v", err)
 		output.Info("Successfully attached fork branch as %s", forkBranchName)
-		return nil
+		return attached, nil
 	}
 
 	// Get the main repo ID
@@ -263,5 +271,5 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	}
 
 	output.Info("Successfully attached fork branch as %s", forkBranchName)
-	return nil
+	return attached, nil
 }

@@ -1,0 +1,75 @@
+# Fork-attach (git hop <uri> --branch <branch>, inside a hub) honours the
+# structured output modes.
+#
+# The result is the root command's one object with action fork-attached:
+# the hub branch the fork's branch was attached as, its worktree and the
+# hub, plus the fork's URI and branch in json/yaml. Progress never reaches
+# stdout in those modes; a refusal keeps its exit status and says why on
+# stderr. Fork-attach has no preview: --dry-run is a usage error.
+#
+# The regression this pins: fork-attach printed nothing under --json /
+# --porcelain and its human progress under --format json|yaml.
+
+# --- upstream, a hub of it, and two forks with a branch of their own ---
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git clone --bare $WORK/org/repo.git $WORK/forker/repo.git
+exec git remote add fork $WORK/forker/repo.git
+exec git checkout -b feat
+exec git commit --allow-empty -m 'fork work'
+exec git push fork feat
+exec git clone --bare $WORK/forker/repo.git $WORK/other/repo.git
+cd $WORK
+exec git-hop file://$WORK/org/repo.git hub
+cd $WORK/hub
+
+# --- an unrelated repository to be refused ---
+exec git init $WORK/stranger-seed
+cd $WORK/stranger-seed
+exec git commit --allow-empty -m 'unrelated'
+exec git branch -M feat
+exec git init --bare $WORK/stranger/repo.git
+exec git push $WORK/stranger/repo.git feat
+cd $WORK/hub
+
+# --- an unknown column is refused before anything is attached ---
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat --json --cols nope; echo "exit=$?"'
+stdout '^exit=129$'
+! stdout '\{'
+! exists $WORK/hub/hops/feat-fork-forker
+
+# --- --dry-run is refused: fork-attach has no preview ---
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat --dry-run --porcelain; echo "exit=$?"'
+stdout '^exit=129$'
+! stdout 'fork-attached'
+stderr '^fatal: .*dry-run is not supported'
+! exists $WORK/hub/hops/feat-fork-forker
+
+# --- the attach: one object, nothing human on stdout ---
+exec git-hop file://$WORK/forker/repo.git --branch feat --json
+decode json stdout action fork-attached
+decode json stdout branch feat-fork-forker
+decode json stdout path '~/hub/hops/feat-fork-forker$'
+decode json stdout hub '~/hub$'
+decode json stdout uri '~^file://.*/forker/repo\.git$'
+decode json stdout fork_branch feat
+! decode json stdout default_branch
+! decode json stdout current_updated
+! decode json stdout dry_run
+! stdout 'Attaching'
+! stdout 'Successfully attached'
+exists $WORK/hub/hops/feat-fork-forker
+
+exec git-hop file://$WORK/other/repo.git --branch feat --porcelain
+stdout '^fork-attached\tfeat-fork-other\t\S+/hub/hops/feat-fork-other\t\S+/hub$'
+! stdout 'Attaching'
+
+# --- a refusal keeps exit 1; the error is on stderr, stdout is empty ---
+exec sh -c 'git-hop file://$WORK/stranger/repo.git --branch feat --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr '"level":"error"'
+stderr 'does not share history'

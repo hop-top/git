@@ -1,0 +1,77 @@
+# Clone (git hop <uri> [path]) honours the structured output modes.
+#
+# The result is the root command's one object with action cloned: the
+# default branch and its first worktree, the hub, plus the origin URI and
+# default branch in json/yaml. git clone progress, hook output and the
+# next-step hints never reach stdout in those modes; a refusal keeps its
+# exit status and says why on stderr. Clone has no preview: --dry-run is a
+# usage error.
+#
+# The regression this pins: a clone printed nothing under --json /
+# --porcelain.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- a post-clone hook that talks on stdout ---
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/post-hook $WORK/.config/git-hop/hooks/post-clone
+exec chmod +x $WORK/.config/git-hop/hooks/post-clone
+
+# --- an unknown column is refused before anything is cloned ---
+exec sh -c 'git-hop file://$WORK/org/repo.git hub-cols --json --cols nope; echo "exit=$?"'
+stdout '^exit=129$'
+! stdout '\{'
+! exists $WORK/hub-cols
+
+# --- --dry-run is refused: clone has no preview ---
+exec sh -c 'git-hop file://$WORK/org/repo.git hub-n --dry-run --json; echo "exit=$?"'
+stdout '^exit=129$'
+! stdout '\{'
+stderr '"level":"error"'
+stderr 'dry-run is not supported'
+! exists $WORK/hub-n
+
+# --- the clone: one object, nothing human on stdout ---
+exec git-hop file://$WORK/org/repo.git hub --json
+decode json stdout action cloned
+decode json stdout branch main
+decode json stdout path '~/hub/hops/main$'
+decode json stdout hub '~/hub$'
+decode json stdout uri '~^file://.*/org/repo\.git$'
+decode json stdout default_branch main
+! decode json stdout current_updated
+! decode json stdout fork_branch
+! decode json stdout dry_run
+! stdout 'hook says'
+stderr 'hook says'
+! stdout 'Cloning'
+! stdout 'hint:'
+exists $WORK/hub/hops/main
+
+exec git-hop file://$WORK/org/repo.git hub2 --porcelain
+stdout '^cloned\tmain\t\S+/hub2/hops/main\t\S+/hub2$'
+! stdout 'hook says'
+
+exec git-hop file://$WORK/org/repo.git hub3 --format yaml
+decode yaml stdout action cloned
+decode yaml stdout default_branch main
+decode yaml stdout hub '~/hub3$'
+
+# --- a refusal keeps exit 1; the error is on stderr, stdout is empty ---
+exec sh -c 'git-hop file://$WORK/org/repo.git hub --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr '"level":"error"'
+stderr 'already exists'
+exec sh -c 'git-hop file://$WORK/org/repo.git hub --porcelain; echo "exit=$?"'
+stdout '^exit=1$'
+stderr '^fatal: .*already exists'
+
+-- post-hook --
+#!/bin/sh
+echo 'hook says hi'
