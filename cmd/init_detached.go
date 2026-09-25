@@ -21,9 +21,10 @@ func refuseDetachedHead(fs afero.Fs, g git.GitInterface, repoPath string) {
 	if _, err := hop.CurrentBranchForConversion(g, repoPath); !errors.As(err, &dhe) {
 		return
 	}
-	hints := dhe.Hints()
+	retry := initRetryCommand(initRunFlags)
+	hints := dhe.Hints(retry)
 	if ops := hop.InProgressOperations(fs, filepath.Join(repoPath, ".git")); len(ops) > 0 {
-		hints = (&hop.InProgressError{Ops: ops}).Hints()
+		hints = (&hop.InProgressError{Ops: ops}).Hints(retry)
 	}
 	output.Hint("%s", strings.Join(hints, "\n"))
 	output.Fatal("%s", dhe.Error())

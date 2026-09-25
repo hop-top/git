@@ -33,7 +33,7 @@ func handleRestore(fs afero.Fs, g git.GitInterface, backupPath string, force boo
 		output.Hint("A backup restores to the location it was taken from. To move what\n"+
 			"is there now aside (to %s.pre-restore-<time>, nothing is deleted)\n"+
 			"and restore the backup in its place:\n"+
-			"  git hop init --restore %s --force", res.Target, abs)
+			"  %s", res.Target, initRestoreCommand(abs))
 		os.Exit(1)
 	}
 	if err != nil {
@@ -61,5 +61,5 @@ func handleRestore(fs afero.Fs, g git.GitInterface, backupPath string, force boo
 func restoreHint(backupPath string) string {
 	return "To restore the repository from this backup (the hub now at its\n" +
 		"original location is moved aside, not deleted):\n" +
-		"  git hop init --restore " + backupPath + " --force"
+		"  " + initRestoreCommand(backupPath)
 }

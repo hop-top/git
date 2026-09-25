@@ -18,6 +18,6 @@ func refuseOperationInProgress(fs afero.Fs, repoPath string) {
 	if !errors.As(hop.CheckNoOperationInProgress(fs, repoPath), &ipe) {
 		return
 	}
-	output.Hint("%s", strings.Join(ipe.Hints(), "\n"))
+	output.Hint("%s", strings.Join(ipe.Hints(initRetryCommand(initRunFlags)), "\n"))
 	output.Fatal("%s", ipe.Error())
 }

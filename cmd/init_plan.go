@@ -2,9 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"strings"
-
-	"github.com/spf13/pflag"
 
 	"hop.top/git/internal/git"
 )
@@ -45,35 +42,6 @@ func initConversionPlan(backupRoot, branch string, useBare bool) []string {
 		"  3. Create hop.json configuration",
 		"  4. Register in global registry",
 	)
-}
-
-// initProceedFlags are the init flags that shape a conversion, in the
-// order the dry run's closing hint repeats them.
-var initProceedFlags = []string{
-	"no-prompt", "regular", "force", "keep-backup",
-	"no-hooks", "hooks", "hooks-overwrite", "enable-chdir",
-}
-
-// initProceedCommand is the command the dry run's closing hint offers:
-// init with every conversion flag the user gave, as given, so it runs
-// the conversion just previewed. -n is dropped; unset flags stay unset.
-func initProceedCommand(flags *pflag.FlagSet) string {
-	parts := []string{"git hop init"}
-	if flags == nil {
-		return parts[0]
-	}
-	for _, name := range initProceedFlags {
-		f := flags.Lookup(name)
-		if f == nil || !f.Changed {
-			continue
-		}
-		if f.Value.Type() == "bool" && f.Value.String() == "true" {
-			parts = append(parts, "--"+name)
-			continue
-		}
-		parts = append(parts, fmt.Sprintf("--%s=%s", name, f.Value.String()))
-	}
-	return strings.Join(parts, " ")
 }
 
 // initSetUpStep is the plan's last step, printed after the local config

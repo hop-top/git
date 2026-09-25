@@ -14,7 +14,7 @@ exec git checkout -q --detach
 ! exec git-hop init --no-prompt --no-hooks -n
 stderr '^fatal: HEAD is detached'
 stderr '^hint: .*git switch <branch>'
-stderr '^hint: then run git hop init again$'
+stderr '^hint: then run git hop init --no-prompt --no-hooks --dry-run again$'
 ! stdout 'Conversion plan'
 ! stdout 'detached HEAD\)/'
 ! stderr '%!'
@@ -69,6 +69,7 @@ exec git commit -q -m 'a2'
 ! exec git rebase -q work
 ! exec git-hop init --no-prompt --no-hooks --regular
 stderr '^fatal: HEAD is detached'
+stderr '^hint: then run git hop init --no-prompt --regular --no-hooks again$'
 stderr '^hint: finish the rebase with ''git rebase --continue'' or abort it with ''git rebase --abort''$'
 ! stderr 'git switch'
 exec git rebase --abort

@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -192,11 +193,11 @@ func convertRepo(fs afero.Fs, g git.GitInterface, repoPath string, useBare, isRe
   # OR
   git stash push -m "WIP: Save work"
 
-Then run: git hop init
+Then run: %s
 
 To convert anyway, carrying uncommitted changes into the new worktree,
 staged and unstaged as they are:
-  git hop init --force`)
+  %s`, initProceedCommand(initRunFlags), initForceCommand(initRunFlags))
 			os.Exit(1)
 		}
 	}
@@ -244,6 +245,10 @@ staged and unstaged as they are:
 		}
 		for _, warning := range result.Warnings {
 			output.Warn("%s", warning)
+		}
+		if errors.Is(err, hop.ErrLinkedWorktrees) {
+			output.Hint("To convert to the regular layout, which keeps .git in place:\n  %s",
+				initRegularCommand(initRunFlags))
 		}
 		// A failed conversion keeps its backup: it is what the automatic
 		// rollback restored from.
@@ -469,9 +474,9 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 	if remoteURL == "" {
 		output.Hint("Repository has no remote configured.")
 	}
-	output.Hint("Some git-hop features are limited with this structure.\n" +
-		"Consider converting to worktree structure for full functionality:\n" +
-		"  git hop init --no-prompt")
+	output.Hint("Some git-hop features are limited with this structure.\n"+
+		"Consider converting to worktree structure for full functionality:\n"+
+		"  %s", initConvertCommand(initRunFlags))
 
 	if !noHooks {
 		if err := installInitHooks(fs, repoPath, "", false); err != nil {
@@ -674,7 +679,7 @@ func promptInitChoice() (string, error) {
 // prints. Tests assert each one is actually declared, so a hint can
 // never send a user to a flag that does not exist.
 func initHintedFlags() []string {
-	return []string{"no-prompt", "force", "dry-run", "restore"}
+	return []string{"no-prompt", "regular", "force", "dry-run", "restore"}
 }
 
 func init() {

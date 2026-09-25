@@ -19,12 +19,13 @@ func TestInit_RefusesOperationInProgress(t *testing.T) {
 	}
 
 	for _, tc := range []struct {
-		name string
-		args []string
+		name  string
+		args  []string
+		retry string // the command line the hint offers after concluding
 	}{
-		{"plain", []string{"init", "--no-prompt"}},
-		{"force", []string{"init", "--no-prompt", "--force"}},
-		{"dry-run", []string{"init", "--no-prompt", "--dry-run"}},
+		{"plain", []string{"init", "--no-prompt"}, "git hop init --no-prompt"},
+		{"force", []string{"init", "--no-prompt", "--force"}, "git hop init --no-prompt --force"},
+		{"dry-run", []string{"init", "--no-prompt", "--dry-run"}, "git hop init --no-prompt --dry-run"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -45,7 +46,7 @@ func TestInit_RefusesOperationInProgress(t *testing.T) {
 			for _, want := range []string{
 				"fatal: a merge is in progress",
 				"hint: finish the merge with 'git merge --continue' or abort it with 'git merge --abort'",
-				"hint: then run git hop init again",
+				"hint: then run " + tc.retry + " again\n",
 			} {
 				if !strings.Contains(stderr, want) {
 					t.Errorf("stderr lacks %q:\n%s", want, stderr)

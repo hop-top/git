@@ -50,7 +50,7 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 	if useBare {
 		if err := refuseLinkedWorktrees(c.git, repoPath); err != nil {
 			result.Errors = append(result.Errors, err.Error())
-			return result, fmt.Errorf("linked worktrees present")
+			return result, ErrLinkedWorktrees
 		}
 	}
 

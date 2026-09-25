@@ -26,6 +26,7 @@ stdout '^Repository: .*/p$'
 ! stdout 'Created missing hop.json'
 stdout 'Current repository: Standard git repository'
 stderr 'Conversion failed: linked worktrees present'
+stderr '^hint:   git hop init --no-prompt --regular --no-hooks$'
 ! exists $WORK/p/hop.json
 ! exists $WORK/p-feat/hop.json
 ! exists $WORK/p/hops
