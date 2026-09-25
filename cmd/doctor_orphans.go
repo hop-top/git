@@ -57,7 +57,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 	for _, dir := range validator.ClassifyOrphanedDirectories(hopspace, hubPath, orphanedDirs) {
 		switch dir.Kind {
 		case hop.OrphanWorktree:
-			reportOrphanedWorktree(dir, r)
+			reportOrphanedWorktree(g, dir, r)
 		case hop.OrphanNotEmpty:
 			output.Error("  - %s: not empty; doctor removes only empty directories", dir.Rel)
 			output.Hint("move out what you want to keep from %s, then delete it", dir.Path)
@@ -76,13 +76,27 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 
 // reportOrphanedWorktree reports an orphaned directory that is, or holds,
 // a worktree git has registered: doctor never removes it, whatever is in
-// it. 'git hop repair' records such a worktree in hop.json.
-func reportOrphanedWorktree(dir hop.OrphanDir, r *doctorReport) {
+// it. 'git hop repair' records such a worktree in hop.json; one with
+// uncommitted changes only with --force-dirty, so that is the command
+// named then.
+func reportOrphanedWorktree(g git.GitInterface, dir hop.OrphanDir, r *doctorReport) {
 	wts := strings.Join(dir.Worktrees, ", ")
 	if len(dir.Worktrees) == 1 && dir.Worktrees[0] == dir.Path {
 		output.Error("  - %s: a worktree git has registered but hop.json does not record", dir.Rel)
 	} else {
 		output.Error("  - %s: holds a worktree git has registered but hop.json does not record: %s", dir.Rel, wts)
+	}
+	dirty := false
+	for _, wt := range dir.Worktrees {
+		dirty = dirty || repairSeesDirty(g, wt)
+	}
+	if dirty {
+		output.Hint("doctor never removes a registered worktree; it has uncommitted changes, so\n" +
+			"record it with 'git hop repair --force-dirty', or remove it with\n" +
+			"'git worktree remove' once its work is safe")
+		r.unfixableIssue(doctorCheckWorktrees, dir.Path,
+			"orphaned directory holds a worktree git has registered (%s) with uncommitted changes; record it with 'git hop repair --force-dirty' or remove it with 'git worktree remove'", wts)
+		return
 	}
 	output.Hint("doctor never removes a registered worktree; record it with 'git hop repair',\n" +
 		"or remove it with 'git worktree remove' once its work is safe")
