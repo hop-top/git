@@ -120,7 +120,7 @@ type pruneRecord struct {
 // deleted or, with --dry-run, would delete.
 type envGCRecord struct {
 	Action   string `json:"action" yaml:"action" table:"action" jsonschema:"enum=deleted,enum=would-delete,description=deleted; would-delete under --dry-run"`
-	Key      string `json:"key" yaml:"key" table:"key" jsonschema:"description=Dependency key (<deps dir>.<lockfile hash>); for a store an earlier release left under the data home, its path there (<name>/deps); for a compose override cache, its path under the cache directory (<org>/<repo>/...)"`
+	Key      string `json:"key" yaml:"key" table:"key" jsonschema:"description=Dependency key: its path under the hopspace deps store (<lockfile hash>/<deps dir>; <deps dir>.<lockfile hash> for an install an earlier release made); for a store an earlier release left under the data home, its path there (<name>/deps); for a compose override cache, its path under the cache directory (<org>/<repo>/...)"`
 	Size     int64  `json:"size" yaml:"size" table:"size" jsonschema:"description=Size in bytes"`
 	LastUsed string `json:"last_used" yaml:"last_used" table:"last_used" jsonschema:"description=When a worktree last used it (RFC 3339 in UTC); empty when unknown"`
 	Path     string `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the dependency directory"`

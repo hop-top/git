@@ -132,7 +132,7 @@ switched`), also on exit 93.
 With no arguments, print help (as `git hop --help`) and exit 0, in every
 output mode: help is never a result. To see the
 worktrees, use `git hop list`; for machine-readable output, add `--json`,
-`--format` or `--porcelain` (see [Structured Output](#list)).
+`--format` or `--porcelain` (see [Structured Output](#structured-output)).
 
 **Synopsis:**
 ```bash
@@ -292,10 +292,10 @@ verdict. An issue counts as fixed when a `fixed` (or, under `--dry-run`,
 
 ## Structured Output
 
-Commands that produce a result render it in the format chosen by
-`--format`, `--json` or `--porcelain`. In those modes stdout carries the
-result and nothing else: progress, hints, warnings and hook output go to
-stderr or are suppressed.
+Every command that does something renders a result in the format chosen
+by `--format`, `--json` or `--porcelain`. In those modes stdout carries
+the result and nothing else: progress, hints, warnings and hook output go
+to stderr or are suppressed.
 
 Diagnostics follow git's streams. `error:` and `fatal:` lines always
 print on stderr, in every mode and under `-q` (a JSON record under
@@ -312,34 +312,63 @@ warnings and hints, whatever the format, but never errors.
 | `--format text` | `key=value` lines per record; `--format-opt style=lines` or `style=paragraph` for the other layouts |
 | `--porcelain` | One tab-separated record per line, no header (`--format text` in `lines` style) |
 
+### Result shapes
+
+Each command publishes its shape as an output schema, reflected from the
+same type it renders, so the schema cannot drift from the output.
+
+| Command | Result | Shape |
+|---------|--------|-------|
+| `git hop <branch>`, `git hop <uri>` | object | [root command](#root-command) |
+| `git hop add` | object | [add](#add) |
+| `git hop status` | list | [status](#status) |
+| `git hop list` | list | [list](#list) |
+| `git hop remove` | list | [remove](#remove) |
+| `git hop move` | object | [move](#move) |
+| `git hop merge` | object | [merge](#merge) |
+| `git hop init` | object | [init](#init) |
+| `git hop doctor` | list | [doctor](#doctor) |
+| `git hop prune` | list | [prune](#prune) |
+| `git hop repair` | list | [repair](#repair) |
+| `git hop env start` | object | [env start, env stop](#env-start-env-stop) |
+| `git hop env stop` | object | [env start, env stop](#env-start-env-stop) |
+| `git hop env generate` | object | [env generate](#env-generate) |
+| `git hop env gc` | list | [env gc](#env-gc) |
+
 Rules:
 
 - `--json` with `--porcelain`, or `--json`/`--porcelain` with a different
   `--format`, is refused with exit 129 before the command does anything.
   So is an unknown format or an unknown `--cols` column.
-- Every result is a list of records, except `add`, `init`, `move`,
-  `merge`, `env start`, `env stop`, `env generate` and the root command
-  (`git hop <branch>`, `git hop <uri>`), which return one object. An empty result is `[]` (and no lines under `--porcelain`),
-  never empty stdout.
-- `csv`, `text` and `--porcelain` carry the columns listed for each shape
-  below, in that order. Fields marked *json/yaml only* appear in `json`
-  and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.11): a MINOR bump adds
-  fields or enum values, a MAJOR bump renames or removes them.
-- Under `--dry-run`, `init`, `remove`, `move`, `merge` and branch switch
-  render the result the run would produce, in the same shape; `json` and `yaml` add
-  `dry_run: true` to each record (absent on a real run). A preview
-  the real run would refuse fails the same way, with no result.
-- A refusal or failure keeps its exit status and reports on stderr (the
-  JSON error record under `--json`); stdout then carries no result,
-  except where a shape below says otherwise.
 - A command with no result shape refuses `--json`, `--porcelain` and a
   structured `--format` with exit 129, before it does anything, rather
   than print prose (or nothing) where a result is expected. Only
   `upgrade` and `upgrade preamble` have none. The read-only helpers
   whose output is not a result -- `completion`, `help` and the
   shell-integration plumbing `__current-path` and `__notify-chdir` --
-  accept the output flags and print what they always print.
+  accept the output flags and print what they always print. The bare
+  `git hop` prints help and no result; `--version` prints the version.
+- An object result is one JSON/YAML document; a list result is a list of
+  records, one line each under `--porcelain`. An empty list is `[]` (and
+  no lines under `--porcelain`), never empty stdout.
+- `csv`, `text` and `--porcelain` carry the columns listed for each shape
+  below, in that order. Fields marked *json/yaml only* appear in `json`
+  and `yaml` alone, so the columnar layouts stay stable.
+- Result shapes are versioned together (currently 1.11): a MINOR bump adds
+  fields or enum values, a MAJOR bump renames or removes them.
+- Under `--dry-run`, `init`, `remove`, `move`, `merge`, `doctor --fix`,
+  `prune`, `repair`, `env gc` and branch switch render the result the run
+  would produce, in the same shape; `json` and `yaml` add `dry_run: true`
+  where the shape has the field (absent on a real run), and the list
+  shapes name the would-be action (`would-fix`, `would-prune`,
+  `would-delete`). A preview the real run would refuse fails the same
+  way, with no result.
+- A refusal or failure keeps its exit status and reports on stderr (the
+  JSON error record under `--json`); stdout then carries no result,
+  except where a shape below says otherwise.
+
+The examples below are `--json` output, indented for reading; a real run
+prints them compactly or indented alike. Paths are illustrative.
 
 ### add
 
@@ -351,10 +380,21 @@ One object.
 | `path` | string | Absolute path of the new worktree |
 | `base` | string | Branch `status` and `list` compare this worktree against |
 | `upstream` | string | Upstream the branch tracks (for example `origin/main`); empty when none |
-| `created` | bool | `true` when this run created the local branch |
+| `created` | bool | `true` when this run created the local branch; `false` when an existing local branch was checked out |
 | `ports` | map service → port | *json/yaml only*; present when the worktree has a Docker environment |
 | `task` | string | *json/yaml only*; task id recorded with `--task`; absent when none |
 | `env_started` | bool | *json/yaml only*; `true` when add started the worktree's environment (`--env-start`, `hop.env.autoStart`); absent otherwise |
+
+```json
+{
+  "branch": "feat/login",
+  "path": "/home/me/src/widget/hops/feat/login",
+  "base": "main",
+  "upstream": "",
+  "created": true,
+  "ports": {"db": 10011, "web": 10010}
+}
+```
 
 Columns: `branch path base upstream created`.
 
@@ -375,13 +415,34 @@ human `--all` summary (paths, counts, disk use) is not part of the result.
 |-------|------|---------|
 | `branch` | string | Branch name |
 | `base` | string | Branch the sync status is computed against |
-| `state` | string | `Linked` when the worktree directory exists, `Missing` otherwise |
-| `status` | string | Sync label: `default`, `synced`, `merged`, `merged (N behind)`, `behind (N)`, `N ahead`, `diverged (N ahead, M behind)`, `unknown`; a dirty suffix may follow; `-` when missing |
+| `state` | string | `Linked` when the worktree directory is at its path, `Occupied` when something that is not a directory is (a file, or a symlink to one or to nothing), `Missing` when nothing is |
+| `status` | string | Sync label: `default`, `synced`, `merged`, `merged (N behind)`, `behind (N)`, `N ahead`, `diverged (N ahead, M behind)`, `unknown`; a dirty suffix may follow; `-` when the state is not `Linked` |
 | `path` | string | Absolute path of the worktree |
 | `repository` | string | *json/yaml only*; `status --all` only. Repository id (`host/org/repo`) |
 | `hub` | string | *json/yaml only*. Absolute path of the hub the worktree belongs to; with `--all`, absent when state does not know it |
 | `ports` | map service → port | *json/yaml only*; `status <branch>` only, when ports are allocated |
-| `services` | list of `{service, name, state}` | *json/yaml only*; `status <branch>` only, the worktree's Docker Compose containers |
+| `services` | list of `{service, name, state}` | *json/yaml only*; `status <branch>` only, the worktree's Docker Compose containers (compose service, container name, container state such as `running` or `exited`) |
+
+```json
+[
+  {
+    "branch": "feat/login",
+    "base": "main",
+    "state": "Linked",
+    "status": "2 ahead",
+    "path": "/home/me/src/widget/hops/feat/login",
+    "hub": "/home/me/src/widget"
+  },
+  {
+    "branch": "main",
+    "base": "main",
+    "state": "Linked",
+    "status": "default",
+    "path": "/home/me/src/widget/hops/main",
+    "hub": "/home/me/src/widget"
+  }
+]
+```
 
 Columns: `branch base state status path`.
 
@@ -399,11 +460,26 @@ one.
 | `type` | string | Worktree type recorded in state (`bare` or `linked`) |
 | `path` | string | Absolute path of the worktree |
 | `state` | string | `active` when the worktree directory exists, `missing` otherwise |
-| `status` | string | Sync label, as in `status` |
+| `status` | string | Sync label, as in `status`; `-` when missing |
 | `hub` | string | *json/yaml only*. Absolute path of the hub the worktree belongs to; absent when state does not know it |
 
 Records of two hubs of one repository can share a branch; `path` and
 `hub` tell them apart.
+
+```json
+[
+  {
+    "repository": "github.com/acme/widget",
+    "branch": "feat/login",
+    "base": "main",
+    "type": "linked",
+    "path": "/home/me/src/widget/hops/feat/login",
+    "state": "active",
+    "status": "2 ahead",
+    "hub": "/home/me/src/widget"
+  }
+]
+```
 
 Columns: `repository branch base type path state status`.
 
@@ -427,6 +503,19 @@ gate, failure) the records still print and the exit status is 1.
 | `reason` | string | *json/yaml only*; why the entry was left in place: the safety gate's refusal, a failure, a `--merged` skip (current worktree, missing path), a hopspace still used by another hub; absent when removed |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 
+```json
+[
+  {
+    "kind": "worktree",
+    "branch": "feat/login",
+    "path": "/home/me/src/widget/hops/feat/login",
+    "removed": true,
+    "branch_deleted": true,
+    "remote_deleted": false
+  }
+]
+```
+
 Columns: `kind branch path removed branch_deleted remote_deleted`.
 
 ### move
@@ -441,6 +530,16 @@ One object.
 | `new_path` | string | Absolute worktree path after the move |
 | `current_updated` | bool | `true` when the hub's `current` symlink pointed at the worktree and now follows it (or, under `--dry-run`, would) |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
+
+```json
+{
+  "old_branch": "feat/login",
+  "new_branch": "feat/sign-in",
+  "old_path": "/home/me/src/widget/hops/feat/login",
+  "new_path": "/home/me/src/widget/hops/feat/sign-in",
+  "current_updated": true
+}
+```
 
 Columns: `old_branch new_branch old_path new_path current_updated`.
 
@@ -460,6 +559,18 @@ as `git merge` leaves it.
 | `branch_deleted` | bool | `true` when the local source branch was deleted (or would be) |
 | `remote_deleted` | bool | `true` when the source branch was deleted on origin (`--delete-remote`, `hop.merge.deleteRemote`); under `--dry-run`, `true` when it would try (origin is not probed) |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
+
+```json
+{
+  "source": "feat/login",
+  "into": "main",
+  "result": "fast-forward",
+  "commit": "9f1c2e7b4a0d3c8e6b5f2a1d7c9e0b4f3a6d8c21",
+  "source_removed": true,
+  "branch_deleted": true,
+  "remote_deleted": false
+}
+```
 
 Columns: `source into result commit source_removed branch_deleted remote_deleted`.
 
@@ -487,6 +598,38 @@ result.
 | `current_updated` | bool | *json/yaml only*; `switched` only: `true` when the hub's `current` symlink now points at the worktree (or, under `--dry-run`, would); `false` when writing it failed |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 
+```json
+{
+  "action": "switched",
+  "branch": "feat/login",
+  "path": "/home/me/src/widget/hops/feat/login",
+  "hub": "/home/me/src/widget",
+  "current_updated": true
+}
+```
+
+```json
+{
+  "action": "cloned",
+  "branch": "main",
+  "path": "/home/me/src/widget/hops/main",
+  "hub": "/home/me/src/widget",
+  "uri": "git@github.com:acme/widget.git",
+  "default_branch": "main"
+}
+```
+
+```json
+{
+  "action": "fork-attached",
+  "branch": "feat/login-fork-alice",
+  "path": "/home/me/src/widget/hops/feat/login-fork-alice",
+  "hub": "/home/me/src/widget",
+  "uri": "git@github.com:alice/widget.git",
+  "fork_branch": "feat/login"
+}
+```
+
 Columns: `action branch path hub`.
 
 The shell integration reads only the exit status and asks
@@ -503,10 +646,27 @@ matching `fixed` (or `would-fix`) record, or any repair `failed`; see
 | Field | Type | Meaning |
 |-------|------|---------|
 | `kind` | string | `issue` (makes the installation unhealthy), `warning` (reported, harmless), `fixed` (repaired by `--fix`), `would-fix` (`--fix --dry-run` would repair it), `failed` (`--fix` could not repair it) |
-| `check` | string | `paths`, `hub`, `hopspace` (a stale data-home hopspace copy beside a default hub), `dependencies`, `worktrees`, `state` or `config` (a broken `managers.json`, a leftover `config.json` git-hop does not read, a leftover `hops.json` git-hop no longer uses, a `--global` `hop.*` key left by the old `global.json` migration, a retired `hop.*` setting, or the current hub's repository format). The published output schema lists all seven |
+| `check` | string | `paths`, `hub`, `hopspace` (a stale data-home hopspace copy beside a default hub), `dependencies`, `ports` (a port two worktrees hold, across every hub), `worktrees`, `state` or `config` (a broken `managers.json`, a leftover `config.json` git-hop does not read, a leftover `hops.json` git-hop no longer uses, a `--global` `hop.*` key left by the old `global.json` migration, a retired `hop.*` setting, or the current hub's repository format). The published output schema lists all eight |
 | `subject` | string | What the record is about: a path, a branch, a dependency directory, or a git config key. `state` records about a worktree name the worktree's path (two hubs can each have a worktree of the same branch); only an entry without a path, kept from a state file an earlier release wrote, is named `repository:branch` |
 | `message` | string | Human-readable description; for repairs, the repair itself (`create data directory`) |
 | `fixable` | bool | *json/yaml only*; `issue` records only: `true` when `--fix` has a repair for it (which can still come out `failed`), `false` when it has none and the message or `hint:` says what to do instead (a broken `managers.json`, a state key collision, a missing origin fetch refspec, an unmerged branch's worktree path occupied by something else). Absent on other kinds |
+
+```json
+[
+  {
+    "kind": "issue",
+    "check": "state",
+    "subject": "/home/me/src/widget/hops/feat/old",
+    "message": "worktree missing: /home/me/src/widget/hops/feat/old (github.com/acme/widget:feat/old)"
+  },
+  {
+    "kind": "warning",
+    "check": "config",
+    "subject": "/home/me/.config/git-hop/config.json",
+    "message": "not read; git-hop settings live in git config hop.*; you can delete the file"
+  }
+]
+```
 
 Columns: `kind check subject message`.
 
@@ -527,6 +687,18 @@ with or without `--dry-run`.
 | `path` | string | Worktree, hub or backup path the entry pointed at |
 | `reason` | string | *json/yaml only*, `skipped` entries only: why it was left in place, e.g. `locked in git: on the usb drive` |
 
+```json
+[
+  {
+    "action": "would-prune",
+    "kind": "worktree",
+    "repository": "github.com/acme/widget",
+    "branch": "feat/old",
+    "path": "/home/me/src/widget/hops/feat/old"
+  }
+]
+```
+
 Columns: `action kind repository branch path`.
 
 ### env gc
@@ -538,10 +710,22 @@ structured run has no way to confirm and exits 129 instead of deleting.
 | Field | Type | Meaning |
 |-------|------|---------|
 | `action` | string | `deleted`, or `would-delete` under `--dry-run` |
-| `key` | string | Dependency key (`<deps dir>.<lockfile hash>`) |
+| `key` | string | Dependency key, its path under the hopspace's `deps/`: `<lockfile hash>/<deps dir>`, or `<deps dir>.<lockfile hash>` for an install an earlier release made; for a store an earlier release left under the data home, its path there (`<name>/deps`); for a compose override cache, its path under the cache directory (`<org>/<repo>/...`) |
 | `size` | integer | Size in bytes |
 | `last_used` | string | When a worktree last used it (RFC 3339, UTC); empty when unknown |
 | `path` | string | Absolute path of the dependency directory |
+
+```json
+[
+  {
+    "action": "would-delete",
+    "key": "5e0c7d2a91b4/node_modules",
+    "size": 184320000,
+    "last_used": "2026-08-02T14:05:11Z",
+    "path": "/home/me/src/widget/deps/5e0c7d2a91b4/node_modules"
+  }
+]
+```
 
 Columns: `action key size last_used path`.
 
@@ -561,7 +745,28 @@ result and exit 129 in the structured modes, before anything is restored.
 | `new` | string | Value after the action, when the kind has one |
 | `reason` | string | *json/yaml only*; why the planner chose the action |
 
-Columns: `status path kind old new` (the `repair --porcelain` line format).
+```json
+[
+  {
+    "status": "ok",
+    "path": "/home/me/src/widget/hops/main",
+    "kind": "noop",
+    "old": "",
+    "new": "",
+    "reason": ""
+  },
+  {
+    "status": "repaired",
+    "path": "/home/me/src/widget/hops/feat/old",
+    "kind": "unregister",
+    "old": "",
+    "new": "",
+    "reason": "directory missing on disk but still registered in git"
+  }
+]
+```
+
+Columns: `status path kind old new`, the line format repair --porcelain has always printed.
 
 ### init
 
@@ -593,8 +798,38 @@ target without `--force`, dirty tree) fails the same way as the real run.
 | `dry_run` | bool | *json/yaml only*; `true` when `--dry-run` previewed the run and changed nothing; absent otherwise |
 | `backup_kept` | bool | *json/yaml only*; `true` when the backup is still on disk (`--keep-backup`, `hop.backup.keepBackup`; under `--dry-run`, would be); absent otherwise |
 | `registered` | bool | *json/yaml only*; `true` when this run recorded the hub in git-hop's state (`converted`, `adopted`; under `--dry-run`, would); absent otherwise |
-| `worktrees` | list of `{branch, path, action, moved_from}` | *json/yaml only*; the worktree this run created (`action: created`), then each linked worktree a bare conversion carried into the hub (`action: carried`), in the order of their git admin directories; under `--dry-run`, the ones it would create and carry. `path` is where the worktree is after the conversion; `moved_from`, present only for a carried worktree that sat inside the working tree and moved into `hops/<branch>`, is where it was. `branch` is empty for a carried worktree on a detached HEAD. A prunable linked worktree is left behind and not listed; a regular conversion carries none. `[]` when none |
+| `worktrees` | list of `{branch, path, action, moved_from}` | *json/yaml only*; see below. `[]` when none |
 | `moved_aside` | string | *json/yaml only*; `restored` with `--force`: where what occupied the original location was moved (would be, under `--dry-run`) |
+
+`worktrees` lists the worktree this run created, then each linked
+worktree a bare conversion carried into the hub, in the order of their
+git admin directories; under `--dry-run`, the ones it would create and
+carry. A prunable linked worktree is left behind and not listed; a
+regular conversion carries none.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `branch` | string | Branch checked out in the worktree; empty for a carried worktree on a detached HEAD |
+| `path` | string | Absolute path of the worktree; for a carried one, where it is after the conversion |
+| `action` | string | `created` (init checked the worktree out) or `carried` (a linked worktree of the converted repository, adopted by the hub: one outside the working tree stays where it is, one inside moves to `hops/<branch>`) |
+| `moved_from` | string | `carried` only: the worktree's path before the conversion, when it moved into `hops/`; absent otherwise |
+
+```json
+{
+  "action": "converted",
+  "hub": "/home/me/src/widget",
+  "layout": "bare",
+  "default_branch": "main",
+  "backup": "/home/me/.cache/git-hop/acme-widget/2026-09-25_10-12-03",
+  "registered": true,
+  "worktrees": [
+    {"branch": "main", "path": "/home/me/src/widget/hops/main", "action": "created"},
+    {"branch": "feat/login", "path": "/home/me/src/widget/hops/feat/login", "action": "carried",
+     "moved_from": "/home/me/src/widget/.worktrees/login"},
+    {"branch": "spike", "path": "/home/me/scratch/widget-spike", "action": "carried"}
+  ]
+}
+```
 
 Columns: `action hub layout default_branch backup`.
 
@@ -616,7 +851,31 @@ is empty and `env_started` (`env_stopped`) is `false`. `env start` and
 | `ports` | map service → port | *json/yaml only*; ports allocated to the worktree's services; absent when none |
 | `services` | list of `{service, name, state}` | *json/yaml only*; `docker-compose` only: the worktree's containers after the run, as `docker compose ps` reports them (as in `status <branch>`); absent when it reports none |
 
-Columns: `branch path manager env_started` (`env_stopped` for `env stop`).
+```json
+{
+  "branch": "feat/login",
+  "path": "/home/me/src/widget/hops/feat/login",
+  "manager": "docker-compose",
+  "env_started": true,
+  "ports": {"db": 10011, "web": 10010},
+  "services": [
+    {"service": "db", "name": "widget-feat-login-db-1", "state": "running"},
+    {"service": "web", "name": "widget-feat-login-web-1", "state": "running"}
+  ]
+}
+```
+
+```json
+{
+  "branch": "feat/login",
+  "path": "/home/me/src/widget/hops/feat/login",
+  "manager": "docker-compose",
+  "env_stopped": true,
+  "ports": {"db": 10011, "web": 10010}
+}
+```
+
+Columns: `branch path manager env_started` (env start), `branch path manager env_stopped` (env stop).
 
 ### env generate
 
@@ -630,6 +889,17 @@ One object: the environment files written for the current worktree.
 | `env_file` | string | Absolute path of the worktree's `.env`; empty when not generated |
 | `override` | string | Absolute path of the branch's compose override, which replaces the compose file's hardcoded host ports; empty when the compose file needs none |
 | `ports` | map service → port | *json/yaml only*; ports allocated to the worktree's services; absent when none |
+
+```json
+{
+  "branch": "feat/login",
+  "path": "/home/me/src/widget/hops/feat/login",
+  "generated": true,
+  "env_file": "/home/me/src/widget/hops/feat/login/.env",
+  "override": "/home/me/.cache/git-hop/acme/widget/widget-1a2b3c4d/feat/login/docker-compose.override.yml",
+  "ports": {"db": 10011, "web": 10010}
+}
+```
 
 Columns: `branch path generated env_file override`.
 

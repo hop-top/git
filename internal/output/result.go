@@ -107,6 +107,14 @@ func RegisterResultShape(cmd *cobra.Command, shape any) {
 	resultShapes[cmd] = shape
 }
 
+// ResultShape returns the result type cmd declared (a pointer to the
+// struct or slice its schema was reflected from), and whether it declared
+// one.
+func ResultShape(cmd *cobra.Command) (any, bool) {
+	shape, ok := resultShapes[cmd]
+	return shape, ok
+}
+
 // ValidateResultCols rejects --cols/--columns naming a column cmd's result
 // does not have. kit's Dispatch runs the same check, but only when the
 // result renders -- after a mutating command has already done its work --

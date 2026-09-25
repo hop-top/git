@@ -33,6 +33,8 @@ standard repo it normally prompts for a structure, so **always pass
 /usr/bin/git hop init --no-prompt --json       # {action, hub, layout, default_branch, backup,
                                                #   backup_kept, registered, worktrees, dry_run}
 # action: converted | adopted | already-initialized | restored; -n --json = would-be result, dry_run true
+# worktrees: [{branch, path, action: created|carried, moved_from?}]: the one init created, then
+#   the linked worktrees a bare conversion carried (nested ones moved to hops/<branch>)
 ```
 
 A dirty working tree is refused (exit 1) unless `--force` is given.
@@ -200,15 +202,15 @@ exits 0 without prompting.
 
 Structured output rules:
 
-- Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env start`,
-  `env stop`, `env generate`, `env gc`, `repair`, `remove`, `move`,
-  `merge`, `git hop <branch>`, `git hop <uri>` have a result; other
-  commands ignore the format for stdout.
-- Every result is a list (`add`, `init`, `move`, `merge`,
-  `env start|stop|generate`, `git hop <branch>|<uri>`: one object). Empty = `[]`, never empty stdout.
+- Every command that does something has a result (see Result Shapes).
+  `upgrade` and `upgrade preamble` have none: `--json`, `--porcelain` or a
+  structured `--format` there exits 129 before anything runs. `completion`,
+  `help`, `__current-path`, `__notify-chdir` accept the flags and print
+  what they always print. Bare `git hop` = help, never a result.
+- Object or list per the Result Shapes table. Empty list = `[]`, never empty stdout.
 - Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
-- `--dry-run` with a result: same shape, would-be values, `dry_run: true`
-  in json/yaml.
+- `--dry-run` with a result: same shape, would-be values; `dry_run: true`
+  in json/yaml where the shape has it, `would-*` actions in the list shapes.
 - Refusal / failure: exit status unchanged, error on stderr, no result.
 - `--json` + `--porcelain`, `--json` + another `--format`, an unknown format
   or column: exit 129 before anything changes.
@@ -220,7 +222,40 @@ Structured output rules:
   `--format` the `error:` line is all of stderr. In JSON mode (`--json`,
   or `--format json` on a command with a result) stderr is instead the
   one JSON error record any failure emits: `{"level":"error","msg":...}`.
-- Full field reference: `docs/09-reference.mdx#structured-output`.
+- Full field reference, example JSON: `docs/09-reference.mdx#structured-output`.
+
+---
+
+## Result Shapes
+
+Result schema 1.11 (MINOR = fields or enum values added, MAJOR = renamed or
+removed). Columns = `csv`, `text`, `--porcelain` order; other fields are
+json/yaml only.
+
+| Command | Result | Porcelain columns |
+|---------|--------|-------------------|
+| `git hop <branch>`, `git hop <uri>` | object | `action branch path hub` |
+| `git hop add` | object | `branch path base upstream created` |
+| `git hop status` | list | `branch base state status path` |
+| `git hop list` | list | `repository branch base type path state status` |
+| `git hop remove` | list | `kind branch path removed branch_deleted remote_deleted` |
+| `git hop move` | object | `old_branch new_branch old_path new_path current_updated` |
+| `git hop merge` | object | `source into result commit source_removed branch_deleted remote_deleted` |
+| `git hop init` | object | `action hub layout default_branch backup` |
+| `git hop doctor` | list | `kind check subject message` |
+| `git hop prune` | list | `action kind repository branch path` |
+| `git hop repair` | list | `status path kind old new` |
+| `git hop env start` | object | `branch path manager env_started` |
+| `git hop env stop` | object | `branch path manager env_stopped` |
+| `git hop env generate` | object | `branch path generated env_file override` |
+| `git hop env gc` | list | `action key size last_used path` |
+
+```bash
+/usr/bin/git hop add feat/x --json
+# {"branch":"feat/x","path":"/src/widget/hops/feat/x","base":"main","upstream":"","created":true}
+/usr/bin/git hop add feat/x --porcelain
+# feat/x<TAB>/src/widget/hops/feat/x<TAB>main<TAB><TAB>true
+```
 
 ---
 
@@ -273,6 +308,7 @@ cd <path from list>
 | Services not stopped before remove | `git hop env stop` then retry remove |
 | Unexpected state / unknown branch | `git hop list --json` to enumerate; stop + ask |
 | exited 129: "--dry-run is not supported by ..." | that command has no preview (e.g. `env start`); nothing ran — decide, then run it without `--dry-run` |
+| exited 129: "--json is not supported by ...: it has no structured result" | that command (`upgrade`) has no result shape; nothing ran — run it without `--json` / `--porcelain` / `--format` |
 
 ---
 
