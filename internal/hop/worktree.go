@@ -58,6 +58,7 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 		Org:      org,
 		Repo:     repo,
 		DataHome: dataHome,
+		URI:      hopspaceURI(hopspace),
 	}
 	worktreePath := ExpandWorktreeLocation(locationPattern, ctx)
 
@@ -132,6 +133,7 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 		Org:      org,
 		Repo:     repo,
 		DataHome: dataHome,
+		URI:      hopspaceURI(hopspace),
 	}
 	worktreePath := ExpandWorktreeLocation(locationPattern, ctx)
 
@@ -284,6 +286,7 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 		Org:      org,
 		Repo:     repo,
 		DataHome: dataHome,
+		URI:      hub.Config.Repo.URI,
 	}
 	newPath := filepath.Clean(ExpandWorktreeLocation(locationPattern, ctx))
 
@@ -359,4 +362,13 @@ func (m *WorktreeManager) RemoveWorktree(hopspace *Hopspace, branch string) erro
 	}
 
 	return nil
+}
+
+// hopspaceURI returns the origin URL hopspace records, "" when there is
+// no hopspace or config to read it from.
+func hopspaceURI(hopspace *Hopspace) string {
+	if hopspace == nil || hopspace.Config == nil {
+		return ""
+	}
+	return hopspace.Config.Repo.URI
 }

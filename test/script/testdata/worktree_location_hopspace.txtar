@@ -1,0 +1,36 @@
+# An empty hop.worktreeLocation (the centralized layout) and the
+# {hopspace} placeholder put worktrees in the repository's data-home
+# hopspace, so they follow hop.dataLayout: with {host}/{org}/{repo} they
+# land beside the hopspace config, not in a hand-built <data>/<org>/<repo>.
+#
+# A local origin has no host, so {host} expands to hop.gitDomain
+# (github.com).
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git config --global hop.dataLayout '{host}/{org}/{repo}'
+exec git-hop --global $WORK/org/repo.git hub
+exists $WORK/data/github.com/org/repo/hop.json
+cd $WORK/hub
+
+# --- centralized default ---
+exec git config --global hop.worktreeLocation ''
+exec git-hop add feat/x
+exists $WORK/data/github.com/org/repo/hops/feat/x
+! exists $WORK/data/org/repo
+decode json $WORK/data/github.com/org/repo/hop.json branches.feat/x.path '~/data/github.com/org/repo/hops/feat/x$'
+
+# --- {hopspace} in a template ---
+exec git config --global hop.worktreeLocation '{hopspace}/trees/{branch}'
+exec git-hop add feat/y
+exists $WORK/data/github.com/org/repo/trees/feat/y
+
+# --- templates without it expand as before ---
+exec git config --global hop.worktreeLocation '{dataHome}/{org}/{repo}/wt/{branch}'
+exec git-hop add feat/z
+exists $WORK/data/org/repo/wt/feat/z

@@ -136,7 +136,8 @@ repository. An unset key uses the default below; remove a key with
 
 Setting a key to an empty value is not the same as unsetting it: the empty
 value is used as-is. For `hop.worktreeLocation` an empty value selects the
-centralized layout (`{dataHome}/{org}/{repo}/hops/{branch}`).
+centralized layout (`{hopspace}/hops/{branch}`: inside the repository's
+data-home hopspace, so it follows `hop.dataLayout`).
 
 ### Settings Reference
 
@@ -144,7 +145,7 @@ centralized layout (`{dataHome}/{org}/{repo}/hops/{branch}`).
 |-----|------|---------|-------------|
 | `hop.gitDomain` | string | `github.com` | Git hosting domain used to expand `org/repo` shorthands |
 | `hop.dataLayout` | string | `{org}/{repo}` | Where each repository's data (hopspace `hop.json`, `ports.json`, `volumes.json`, `deps/`, `hooks/`) lives under the data home. Variables: `{host}` (the host of the origin URL, or `hop.gitDomain` for a local path), `{org}`, `{repo}`; `{org}` and `{repo}` are required. Resolved like any setting: a hub's own value overrides `--global`, and `git -c` overrides both; a `--global` clone, which has no hub yet, reads `--global` and `git -c` only. Hubs sharing one repository's data should agree on it. An invalid value falls back to the `--global` value (or the default when that is invalid too) and `git hop doctor` warns, naming the scope. Changing it does not move data already stored under the old layout |
-| `hop.worktreeLocation` | string | `{hubPath}/hops/{branch}` | Where `git hop add` and `git hop move` put worktrees. Variables: `{hubPath}`, `{branch}`, `{org}`, `{repo}`, `{dataHome}`. A relative result is resolved against the hub |
+| `hop.worktreeLocation` | string | `{hubPath}/hops/{branch}` | Where `git hop add` and `git hop move` put worktrees. Variables: `{hubPath}`, `{branch}`, `{org}`, `{repo}`, `{dataHome}`, `{hopspace}` (the repository's data-home hopspace, `{dataHome}` plus `hop.dataLayout`; use it rather than `{dataHome}/{org}/{repo}` so worktrees follow the layout). A relative result is resolved against the hub |
 | `hop.add.defaultStartPoint` | string | `default-branch` | Start-point for new branches: `default-branch`, `initial` (root commit), or any ref / SHA |
 | `hop.env.autoStart` | boolean | `false` | Whether `git hop add` and clone start the new worktree's environment (the same start as `git hop env start`) once the worktree exists. Overridden by `GIT_HOP_AUTO_ENV_START` and, for one run, `--env-start` / `--no-env-start` |
 | `hop.hooks.installMode` | string | `prompt` | How committed `.git-hop/hooks/` scripts are mirrored on clone / init: `prompt`, `symlink`, `copy`, `none` |

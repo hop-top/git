@@ -131,6 +131,7 @@ created or written and no hook runs.`,
 			Org:      hub.Config.Repo.Org,
 			Repo:     hub.Config.Repo.Repo,
 			DataHome: dataHome,
+			URI:      hub.Config.Repo.URI,
 		}
 		worktreePath := hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx)
 		worktreePath = filepath.Clean(worktreePath)
