@@ -175,11 +175,21 @@ git hop
 # Check ports column for duplicates
 ```
 
-If conflicts exist, move the range in the hopspace's `ports.json` or run:
+No two worktrees get the same port, across every hub git-hop knows of.
+Where two hubs already hold one port (from an earlier release, or a
+copied `ports.json`), the hub set up first keeps it. `git hop doctor`
+names the other one; generate its environment again to give it new
+ports:
 
 ```bash
-git hop prune --force
+git hop doctor
+cd path/to/other/hub/hops/feature-x
+git hop env generate
 ```
+
+git-hop does not probe the host: a port something outside git-hop holds
+is not detected. Move the range in the hopspace's `ports.json`
+(`baseRange`) so new ports avoid it.
 
 ### Worktree is broken
 
