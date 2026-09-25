@@ -657,7 +657,9 @@ it. A `--global` hub's hopspace lives in
 the same repository, so it is deleted only when no other hub state
 records still uses it: one whose `hop.json` marks it global
 (`repo.mode: global`) and so resolves to that hopspace. Otherwise it is
-kept, with a `hint:`, and goes with the last hub that uses it.
+kept, with a `hint:`, and goes with the last hub that uses it. A kept
+hopspace loses the removed hub's entries: its worktrees' records in
+`hop.json` and their ports and volumes.
 
 - A hub state records whose directory is gone does not count as using
   it.
@@ -667,7 +669,7 @@ kept, with a `hint:`, and goes with the last hub that uses it.
   unknown and it is kept.
 
 `--dry-run` says whether the hopspace would be kept or deleted, and
-why.
+why, and how many of the hub's `hop.json` records a kept one would lose.
 
 ### `--delete-remote`
 
@@ -916,6 +918,10 @@ git hop doctor --fix --dry-run
   `$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
   (marked `repo.mode: "global"` in its `hop.json`); a data-home copy next
   to an unmarked hub is reported as a warning and left alone
+- Records in a `--global` hopspace of worktrees of a hub that no longer
+  exists: state does not record it and its directory is gone (deleted by
+  hand, then pruned). Nothing reads them: a warning, and `--fix` drops
+  them from the hopspace's `hop.json`
 - Hopspaces of `--global` hubs left at the path another `hop.dataLayout`
   builds (`<org>/<repo>` after switching to `{host}/{org}/{repo}`, or the
   reverse), as the layout in effect for each hub resolves it: a warning.

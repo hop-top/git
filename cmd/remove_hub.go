@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -16,8 +17,10 @@ import (
 )
 
 // removeHub removes the hub at hubPath: its worktrees, the hub directory
-// and its state entry, then the repository's data-home hopspace. It returns one record per worktree in branch order,
-// then the hub's, then the hopspace's when there is one.
+// and its state entry, then the repository's data-home hopspace, or, when
+// other hubs keep that, the hub's records in it. It returns one record per
+// worktree in branch order, then the hub's, then the hopspace's when there
+// is one.
 func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 	output.Info("Removing hub at %s...", hubPath)
 
@@ -89,6 +92,7 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 		recs = append(recs, rec)
 	default:
 		output.Info("Keeping hopspace data at %s: %s", d.path, d.reason())
+		dropHubHopspaceRecords(fs, d, hubPath)
 		if err := services.DropHubEnvEntries(fs, d.path, hubPath); err != nil {
 			output.Warn("Failed to update ports and volumes: %v", err)
 		}
@@ -98,6 +102,42 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 
 	output.Success("Successfully removed hub: %s", hubPath)
 	return recs
+}
+
+// dropHubHopspaceRecords removes the worktree records of the hub removed
+// at hubPath from the data-home hopspace d, kept for the other hubs that
+// share it. A failure is a warning: the hub is gone either way, and
+// doctor reports records whose hub no longer exists.
+func dropHubHopspaceRecords(fs afero.Fs, d dataHomeHopspace, hubPath string) {
+	if !d.ofHub {
+		return
+	}
+	hs, err := hop.LoadHopspace(fs, d.path)
+	if err == nil {
+		var keys []string
+		keys, err = hs.DropHubRecords(hubPath)
+		if len(keys) > 0 {
+			output.Info("Dropped %d record(s) of hub %s from %s", len(keys), hubPath, filepath.Join(d.path, "hop.json"))
+		}
+	}
+	if err != nil {
+		output.Warn("Failed to drop the hub's records from %s: %v", filepath.Join(d.path, "hop.json"), err)
+	}
+}
+
+// previewHubHopspaceRecords says which records dropHubHopspaceRecords
+// would remove.
+func previewHubHopspaceRecords(fs afero.Fs, d dataHomeHopspace, hubPath string) {
+	if !d.ofHub {
+		return
+	}
+	hs, err := hop.LoadHopspace(fs, d.path)
+	if err != nil {
+		return
+	}
+	if keys := hs.HubRecords(hubPath); len(keys) > 0 {
+		output.Info("[dry-run] Would drop %d record(s) of hub %s from %s", len(keys), hubPath, filepath.Join(d.path, "hop.json"))
+	}
 }
 
 // otherHubsInState reports whether state records a hub of repoID other
@@ -136,6 +176,9 @@ type dataHomeHopspace struct {
 	// stateErr is set when state could not be read: which hubs use the
 	// hopspace is then unknown, and it is kept.
 	stateErr error
+	// ofHub reports whether the hub removed uses it (is marked global),
+	// i.e. whether it records that hub's worktrees.
+	ofHub bool
 }
 
 // remove reports whether the hopspace goes with the hub: it is there and
@@ -171,6 +214,7 @@ func (d dataHomeHopspace) record(removed bool) removeRecord {
 func dataHomeHopspaceFor(fs afero.Fs, st *state.State, stErr error, hub *hop.Hub, hubPath string) dataHomeHopspace {
 	path := hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.RepoRefFor(hubPath, hub.Config.Repo))
 	d := dataHomeHopspace{path: path, stateErr: stErr}
+	d.ofHub = state.SamePath(hop.ResolveHopspacePath(hubPath, hub.Config.Repo), path)
 	d.exists, _ = afero.DirExists(fs, path)
 	if !d.exists || stErr != nil {
 		return d

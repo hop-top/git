@@ -50,6 +50,7 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 		createMissingHopspace(fs, hub, hubPath, hopspacePath, opts, r)
 	default:
 		reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
+		checkGoneHubRecords(fs, hubPath, hopspacePath, opts, r)
 	}
 
 	kept := checkBranchWorktrees(fs, g, hub, hopspacePath, opts, r)

@@ -175,6 +175,7 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord
 		output.Info("[dry-run] Would remove hopspace data at %s: %s", d.path, d.reason())
 	default:
 		output.Info("[dry-run] Would keep hopspace data at %s: %s", d.path, d.reason())
+		previewHubHopspaceRecords(fs, d, hubPath)
 	}
 	if d.exists {
 		recs = append(recs, d.record(d.remove()))

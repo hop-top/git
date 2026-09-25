@@ -1,0 +1,74 @@
+# --global hubs of one repository share a data-home hopspace, whose
+# hop.json records each hub's worktrees under their paths. Removing a
+# whole hub drops that hub's records from it (--dry-run says so and
+# touches nothing); the other hub's records stay and doctor there passes.
+#
+# Records of a hub that is gone some other way (its directory deleted by
+# hand, then pruned from state) are a doctor warning, which --fix clears.
+
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/glob.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+exec git-hop $WORK/org/glob.git $WORK/g2/app --global
+cd $WORK/g1/app
+exec git-hop add feat/y
+cd $WORK/g2/app
+exec git-hop add feat/y
+cd $WORK
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g1/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+
+# --- --dry-run previews the drop and touches nothing ---
+exec git-hop remove $WORK/g1/app --dry-run --no-prompt
+stdout '\[dry-run\] Would keep hopspace data at .*/data/org/glob: still used by .*/g2/app'
+stdout '\[dry-run\] Would drop 2 record\(s\) of hub .*/g1/app from .*/data/org/glob/hop.json'
+exists $WORK/g1/app
+grep '"[^"]*/g1/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g1/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+
+# --- removing g1 drops its records, g2's stay ---
+exec git-hop remove $WORK/g1/app --no-prompt
+stdout 'Dropped 2 record\(s\) of hub .*/g1/app from .*/data/org/glob/hop.json'
+! exists $WORK/g1/app
+! grep '/g1/app' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+
+# --- doctor in g2 passes ---
+cd $WORK/g2/app
+exec git-hop doctor
+! stderr 'not in hopspace'
+! stderr 'no longer exists'
+stdout 'healthy'
+
+# --- records of a hub deleted by hand: a warning --fix clears ---
+exec git-hop $WORK/org/glob.git $WORK/g3/app --global
+exec rm -rf $WORK/g3
+exec git-hop prune
+grep '"[^"]*/g3/app/hops/main": \{' $WORK/data/org/glob/hop.json
+
+exec git-hop doctor
+stderr 'warning: hopspace record of .*/g3/app/hops/main belongs to hub .*/g3/app, which no longer exists'
+stdout 'healthy'
+
+exec git-hop doctor --json
+stdout '"kind": "warning"'
+stdout '"subject": ".*/g3/app/hops/main"'
+
+exec git-hop doctor --fix --dry-run
+stdout '\[dry-run\] Would drop hopspace record of .*/g3/app/hops/main'
+grep '"[^"]*/g3/app/hops/main": \{' $WORK/data/org/glob/hop.json
+
+exec git-hop doctor --fix
+stdout 'Dropped hopspace record of .*/g3/app/hops/main'
+! grep '/g3/app' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/main": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+
+exec git-hop doctor
+! stderr 'no longer exists'
