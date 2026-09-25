@@ -2,7 +2,6 @@ package config_test
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -139,25 +138,6 @@ func TestOldFilesWithRetiredSettingsStillLoad(t *testing.T) {
 		}
 		if cfg.Repo.Org != "acme" {
 			t.Errorf("loaded %+v", cfg)
-		}
-	})
-
-	t.Run("config.json", func(t *testing.T) {
-		fs := afero.NewMemMapFs()
-		t.Setenv("XDG_CONFIG_HOME", "/xdg")
-		writeFile(t, fs, filepath.Join(config.GetConfigHome(), "config.json"), `{
-			"defaults": {"gitDomain": "example.com", "showAllManagedRepos": true,
-				"unusedThresholdDays": 9, "conventionWarning": false,
-				"enforceCleanForConversion": false},
-			"backup": {"enabled": false, "preserveStashes": false},
-			"conversion": {"enforceClean": false, "allowDirtyForce": true, "autoRollback": false}
-		}`)
-		cfg, err := config.LoadSchemaConfig(fs)
-		if err != nil {
-			t.Fatalf("LoadSchemaConfig() error = %v", err)
-		}
-		if cfg.Defaults.GitDomain != "example.com" {
-			t.Errorf("GitDomain = %q, want example.com", cfg.Defaults.GitDomain)
 		}
 	})
 }

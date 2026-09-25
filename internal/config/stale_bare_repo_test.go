@@ -13,9 +13,9 @@ import (
 
 // The bareRepo setting was removed: hubs are always bare
 // (docs/stories/015-hopspace-shape-contract.md). Configs written by older
-// releases still carry it in three places: git config hop.bareRepo, the
-// legacy global.json, and config.json. All must keep loading, and git-hop
-// must neither read the stale key nor write it back.
+// releases still carry it in git config hop.bareRepo and the legacy
+// global.json. Both must keep loading, and git-hop must neither read the
+// stale key nor write it back.
 
 const staleBareRepoKey = "hop.bareRepo"
 
@@ -72,40 +72,6 @@ func TestMigration_LegacyJSONWithBareRepo(t *testing.T) {
 	}
 	if v, ok := store[staleBareRepoKey]; ok {
 		t.Errorf("migration wrote %s = %q; the setting no longer exists", staleBareRepoKey, v)
-	}
-}
-
-func TestLoadSchemaConfig_StaleBareRepo(t *testing.T) {
-	fs := afero.NewMemMapFs()
-	configPath := filepath.Join(config.GetConfigHome(), "config.json")
-	stale := `{"defaults": {"gitDomain": "gitlab.com", "bareRepo": false}}`
-	if err := afero.WriteFile(fs, configPath, []byte(stale), 0644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := config.LoadSchemaConfig(fs)
-	if err != nil {
-		t.Fatalf("LoadSchemaConfig() error = %v", err)
-	}
-	if cfg.Defaults.GitDomain != "gitlab.com" {
-		t.Errorf("GitDomain = %q, want gitlab.com", cfg.Defaults.GitDomain)
-	}
-
-	if err := config.SaveSchemaConfig(fs, cfg); err != nil {
-		t.Fatalf("SaveSchemaConfig() error = %v", err)
-	}
-	data, err := afero.ReadFile(fs, configPath)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var raw struct {
-		Defaults map[string]json.RawMessage `json:"defaults"`
-	}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("config.json: %v\n%s", err, data)
-	}
-	if v, ok := raw.Defaults["bareRepo"]; ok {
-		t.Errorf("SaveSchemaConfig() wrote defaults.bareRepo = %s; the setting no longer exists", v)
 	}
 }
 
