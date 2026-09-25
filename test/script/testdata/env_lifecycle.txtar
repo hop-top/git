@@ -1,0 +1,149 @@
+# `git hop env generate | start | stop` drives a worktree's services, and
+# `git hop status --all` reports what is actually running.
+#
+# Ported from the Env case in the Go e2e suite.
+#
+# The status assertions are the point. `env start` reporting success only
+# proves the CLI thinks it started something; the running count in
+# `status --all` is read back from `docker compose ps`, so it only moves
+# when the compose project changes state. Driving the branch start -> stop
+# and asserting the count in both directions means neither answer can be a
+# constant.
+#
+# A stateful stub docker on PATH stands in for compose, as in every other
+# script here: `up` marks the project it was handed with -p as running,
+# `stop` clears the mark, and `ps` lists a container only while the mark is
+# set -- which is what real compose does for `ps` without -a. Keying the
+# mark on the project name means status must ask about the same project
+# start brought up, or the count never moves. `compose config` fails, so the
+# raw compose file is parsed. Real containers are covered by the Docker e2e
+# suite.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+
+# The compose file is committed on main so every branch inherits it. The
+# port and volume values are placeholders: `env generate` writes the real
+# ones into .env, and compose interpolates them from there.
+cp $WORK/docker-compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'initial'
+exec git push origin main
+
+exec git checkout -b feature-1
+cp $WORK/feature.txt feature.txt
+exec git add feature.txt
+exec git commit -m 'feature work'
+exec git push origin feature-1
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature-1
+
+# --- generate ---
+# `add` already generates the environment; running it explicitly proves the
+# command stands on its own and is idempotent.
+cd $WORK/hub/hops/feature-1
+exec git-hop env generate
+stdout 'Environment generated for ''feature-1'''
+
+# The generated .env is what compose interpolates, so it must actually name
+# every variable docker-compose.yml references. A missing one does not fail
+# generation -- it fails later, at `up`, with an empty port binding.
+exists $WORK/hub/hops/feature-1/.env
+grep '^HOP_PORT_WEB=\d+$' $WORK/hub/hops/feature-1/.env
+grep '^HOP_PORT_DB=\d+$' $WORK/hub/hops/feature-1/.env
+grep '^HOP_VOLUME_WEB_DATA=' $WORK/hub/hops/feature-1/.env
+grep '^HOP_VOLUME_DB_DATA=' $WORK/hub/hops/feature-1/.env
+
+# --- nothing is running yet ---
+# Establishes the baseline, so "running" below is a change rather than a
+# state that was always true.
+cd $WORK/hub
+exec git-hop status --all
+stdout 'Running Services\s+0$'
+stdout '0 stopped'
+! stdout 'services running'
+
+# --- start ---
+cd $WORK/hub/hops/feature-1
+exec git-hop env start
+stderr '^Environment Manager: docker-compose$'
+stderr 'Environment started successfully'
+exists $WORK/running
+
+# The count is read back through `compose ps`, not from anything the start
+# command wrote, so this is the assertion that proves the project is up.
+cd $WORK/hub
+exec git-hop status --all
+stdout 'Running Services\s+1$'
+stdout '1 running'
+stdout 'Tracking 2 worktrees across 1 repositories, 1 services running$'
+
+# --- stop ---
+cd $WORK/hub/hops/feature-1
+exec git-hop env stop
+stderr 'Environment stopped successfully'
+! exists $WORK/running
+
+# And back down again. Asserting the count returns to 0 -- rather than just
+# that stop printed something -- is what rules out a status view that
+# reports "running" unconditionally once a compose file exists.
+cd $WORK/hub
+exec git-hop status --all
+stdout 'Running Services\s+0$'
+stdout '0 stopped'
+! stdout 'services running'
+
+-- feature.txt --
+feature line
+-- docker-compose.yml --
+services:
+  web:
+    image: nginx:alpine
+    ports:
+      - "${HOP_PORT_WEB}:80"
+    volumes:
+      - "${HOP_VOLUME_WEB_DATA}:/usr/share/nginx/html"
+  db:
+    image: redis:alpine
+    ports:
+      - "${HOP_PORT_DB}:6379"
+    volumes:
+      - "${HOP_VOLUME_DB_DATA}:/data"
+volumes:
+  web_data:
+  db_data:
+-- docker-stub --
+#!/bin/sh
+# $WORK/running holds the project `up` started; ps answers for it alone.
+project=
+prev=
+for arg in "$@"; do
+	[ "$prev" = "-p" ] && project=$arg
+	prev=$arg
+done
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+*" up "*)
+	echo "$project" > "$WORK/running"
+	;;
+*" stop "*|*" down "*)
+	rm -f "$WORK/running"
+	;;
+*" ps "*)
+	if [ -n "$project" ] && [ -f "$WORK/running" ] && [ "$(cat "$WORK/running")" = "$project" ]; then
+		echo "{\"Service\":\"web\",\"Name\":\"$project-web-1\",\"State\":\"running\"}"
+	fi
+	;;
+esac
+exit 0
