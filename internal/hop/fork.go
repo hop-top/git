@@ -134,6 +134,12 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 	// Since we verified it, we can now add it.
 	// If fork hopspace is empty, we can clone.
 
+	// sourceWorktreePath is where the fork's branch is checked out in the
+	// fork hopspace: the first branch is a clone at <hopspace>/<branch>,
+	// later ones are worktrees wherever CreateWorktree puts them. The hub's
+	// worktree is created from its HEAD, so it must be the path actually
+	// created, never one rebuilt from the branch name.
+	var sourceWorktreePath string
 	isEmpty, _ := afero.IsEmpty(fs, forkHopspacePath)
 	if isEmpty {
 		output.Info("Initializing fork hopspace...")
@@ -162,11 +168,21 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 		if err := writer.WriteHopspaceConfig(forkHopspacePath, hsCfg); err != nil {
 			return ForkAttachment{}, fmt.Errorf("failed to write fork hopspace config: %v", err)
 		}
+		sourceWorktreePath = worktreePath
 	} else {
 		// Fork hopspace exists, add worktree
 		forkHopspace, err := LoadHopspace(fs, forkHopspacePath)
 		if err != nil {
 			return ForkAttachment{}, fmt.Errorf("failed to load fork hopspace: %v", err)
+		}
+
+		// The fork hopspace is a single-branch clone of the fork's first
+		// attached branch: fetch this one so the worktree below starts
+		// from the fork's branch rather than a new branch off the first.
+		base := findBaseWorktree(forkHopspace, forkHopspacePath)
+		refspec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
+		if _, err := g.RunInDir(base, "git", git.FetchArgs("origin", refspec)...); err != nil {
+			return ForkAttachment{}, fmt.Errorf("failed to fetch fork branch into fork hopspace: %v", err)
 		}
 
 		wm := NewWorktreeManager(fs, g)
@@ -180,6 +196,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 		if err := forkHopspace.RegisterBranch(branch, worktreePath); err != nil {
 			return ForkAttachment{}, fmt.Errorf("failed to register branch in fork hopspace: %v", err)
 		}
+		sourceWorktreePath = worktreePath
 	}
 
 	// 4. Create worktree in hub's hops directory
@@ -197,7 +214,6 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 	// (Git won't allow checking out the same branch twice)
 
 	// Get the commit hash from the fork branch
-	sourceWorktreePath := filepath.Join(forkHopspacePath, branch)
 	commitHash, err := g.RunInDir(sourceWorktreePath, "git", "rev-parse", "HEAD")
 	if err != nil {
 		return ForkAttachment{}, fmt.Errorf("failed to get commit hash from fork: %v", err)
