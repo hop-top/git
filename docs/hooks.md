@@ -13,7 +13,7 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | Hook Name | When It Runs | Resolvable levels |
 |-----------|--------------|-------------------|
 | `pre-worktree-add` | `git hop add`, before the worktree is created. Non-zero exit aborts the add. | repo (via parent walk only — the worktree does not exist yet), hopspace, global |
-| `post-worktree-add` | `git hop add`, after the worktree exists and its environment is set up: `.env`, compose override and linked shared deps exist when the hook runs — see [Add hooks](#add-hooks). Also fired by `git hop clone` (after the same set-up) and by `git hop init` (bare or regular conversion) for the initial worktree, after the committed-hook mirror — see [Clone hooks](#clone-hooks) and [Init hooks](#init-hooks). Failure warns, does not roll back. | repo, hopspace, global |
+| `post-worktree-add` | `git hop add`, after the worktree exists and its environment is set up: `.env`, compose override and linked shared deps exist when the hook runs — see [Add hooks](#add-hooks). Also fired by `git hop clone` and by `git hop init` (bare or regular conversion) for the initial worktree, after the same set-up and the committed-hook mirror — see [Clone hooks](#clone-hooks) and [Init hooks](#init-hooks). Failure warns, does not roll back. | repo, hopspace, global |
 | `pre-worktree-remove` | `git hop remove`, before the worktree is deleted. Non-zero exit aborts the remove. | repo, hopspace, global |
 | `post-worktree-remove` | `git hop remove`, after the worktree is gone and state is updated. Failure warns. | hopspace, global (the repo-level file was inside the worktree that was just deleted) |
 | `pre-worktree-move` | `git hop move`, before the rename and after the move's own refusals (target already registered, target an existing local branch the worktree does not have checked out, hopspace unreadable), so a move git-hop rejects never fires it. Non-zero exit aborts the move. Path is the OLD worktree. | repo, hopspace, global |
@@ -254,6 +254,7 @@ What exists when each hook runs:
 |---|---|---|---|---|---|
 | `pre-worktree-add` | no | no | no | no | no |
 | `post-worktree-add` | yes | yes | yes (linked) | no | no |
+| `post-worktree-add` from `git hop init` (bare: `hops/<branch>`; `--regular`: the repo root) | yes | yes | yes (linked) | yes | no |
 
 The `.env` and override exist only for a worktree with a Docker environment (a compose file); the deps only for a worktree with a detected package manager and lockfile. The set-up never fails the add: a generation or deps failure is reported, and `post-worktree-add` still fires, finding whatever did get set up.
 
@@ -325,20 +326,21 @@ That is tolerable when the anchor is a real worktree deep in a known tree. For `
 | regular (`--regular`) | the repo root, which stays the current branch's working tree |
 
 ```
-(conversion; hop.json; current symlink when bare)
+(conversion; hop.json; state; current symlink when bare)
   ↓
 committed-hook mirror
-  ↓
+  ↓  (environment set-up: ports, volumes, .env, compose override, shared deps)
 post-worktree-add
 ```
 
+The initial worktree is set up before `post-worktree-add` through the same function as `git hop add` and `git hop clone` (`services.SetUpWorktree`), so the hook finds its `.env`, compose override and linked shared deps (see [what exists when each hook runs](#add-hooks)). A set-up failure is reported and the conversion stands; the hook still fires. The set-up publishes `git.runtime.deps.installed` when it linked deps. The [behaviour change](#add-hooks) noted for add applies here too.
+
 The dispatch follows the mirror for the reason given in [Why mirror-then-fire](#why-mirror-then-fire): a `post-worktree-add` committed to the repo being converted applies to the worktree that carries it. A failing hook warns; the conversion stands.
 
-- Both conversions fire it. Register-as-is and a re-run on an already-initialized repo convert nothing and fire nothing.
-- Unlike add and clone, init sets up no environment first: its `post-worktree-add` finds no generated `.env`, compose override or linked shared deps.
+- Both conversions set up and fire it. Register-as-is and a re-run on an already-initialized repo convert nothing, set up nothing and fire nothing.
 - Like clone, init fires no `pre-worktree-add`. It fires no `pre-clone` / `post-clone` either: nothing is cloned.
-- `git hop init --dry-run` lists the `post-worktree-add` hook it would run (when one resolves) and runs none.
-- `git hop init --no-hooks` fires nothing: no hooks directory, no committed-hook mirror (unless `--hooks` names a mode), and no `post-worktree-add`. The `--dry-run` preview agrees and lists no hook.
+- `git hop init --dry-run` lists the set-up (the plan's last step) and the `post-worktree-add` hook it would run (when one resolves), and runs neither.
+- `git hop init --no-hooks` fires nothing: no hooks directory, no committed-hook mirror (unless `--hooks` names a mode), and no `post-worktree-add`. The set-up is not a hook and still runs: the worktree is left as ready as one `git hop add` creates. The `--dry-run` preview agrees: it lists the set-up and no hook.
 
 ## Repair hooks
 
@@ -967,7 +969,7 @@ to a JSONL file.
 | `git.runtime.worktree.switched` | `git hop <branch>` | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.env.started` / `git.runtime.env.stopped` | `git hop env start` / `stop` | `action`, `root`, `branch` |
 | `git.runtime.hopspace.initialized` | `git hop init` and `git hop clone`, for the hub they register (`path` is the hub) | `path`, `org`, `repo` |
-| `git.runtime.deps.installed` | `git hop add` and `git hop clone`, after dependency install and after `worktree.created` | `worktree_path`, `branch` |
+| `git.runtime.deps.installed` | `git hop add`, `git hop clone` and `git hop init` (conversions), after dependency install and after `worktree.created` | `worktree_path`, `branch` |
 
 `hopspace_path` is the same for every worktree event of a hub: the hub
 itself for a default clone (so it equals `repo_path`), or

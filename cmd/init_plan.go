@@ -75,3 +75,11 @@ func initProceedCommand(flags *pflag.FlagSet) string {
 	}
 	return strings.Join(parts, " ")
 }
+
+// initSetUpStep is the plan's last step, printed after the local config
+// preview: the initial worktree's set-up (setUpInitWorktree), which runs
+// with or without --no-hooks.
+func initSetUpStep(branch string) string {
+	return fmt.Sprintf("  5. Set up the %s worktree's environment, when it has one: ports,\n"+
+		"     volumes, .env, compose override, then shared dependencies", branch)
+}
