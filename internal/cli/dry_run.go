@@ -8,6 +8,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"hop.top/git/internal/hooks"
+	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
 
@@ -70,8 +71,21 @@ func previewSwitch(fs afero.Fs, uri, hubPath, repoID, branch, worktreePath strin
 	runner := hooks.NewRunner(fs).ForRepo(uri, hubPath)
 	output.Info("[dry-run] Would switch to worktree '%s'", branch)
 	PreviewHook(runner, "pre-worktree-switch", worktreePath, repoID)
-	output.Info("[dry-run] Would point 'current' at %s", worktreePath)
+	if !PreviewCurrentBlocked(fs, hubPath) {
+		output.Info("[dry-run] Would point 'current' at %s", worktreePath)
+	}
 	PreviewHook(runner, "post-worktree-switch", worktreePath, repoID)
+}
+
+// PreviewCurrentBlocked reports whether a real run would leave the hub's
+// 'current' as it is because something other than a symlink is there
+// (see hop.CheckCurrentSymlink), giving the warning the real run gives.
+func PreviewCurrentBlocked(fs afero.Fs, hubPath string) bool {
+	if err := hop.CheckCurrentSymlink(fs, hubPath); err != nil {
+		output.Warn("[dry-run] Would leave 'current' alone: %v", err)
+		return true
+	}
+	return false
 }
 
 // PreviewHook reports the lifecycle hook a real run would dispatch, if one

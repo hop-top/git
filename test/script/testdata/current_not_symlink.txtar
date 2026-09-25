@@ -1,0 +1,86 @@
+# git-hop keeps a `current` symlink in the hub. When something else is
+# there, a file or a directory named current, git-hop never replaces or
+# deletes it: the command that would update the link does its work,
+# warns that it left current alone, and hints to rename it. Previews
+# say the same.
+#
+# The regression this pins: the update removed whatever was at current,
+# a regular file included, before creating the link.
+
+# --- upstream repo and hub ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+
+# --- a file named current ---
+rm current
+cp $WORK/keep.txt current
+
+exec git-hop add feat/a -n
+stderr '^warning: \[dry-run\] Would leave ''current'' alone: ''.*/hub/current'' is a file, not a symlink; git-hop leaves it as it is$'
+! stdout 'point ''current'''
+cmp current $WORK/keep.txt
+
+exec git-hop add feat/a
+cmp current $WORK/keep.txt
+exists hops/feat/a/.git
+stderr '^warning: Failed to update current symlink: ''.*/hub/current'' is a file, not a symlink; git-hop leaves it as it is$'
+stderr '^hint: rename it: while it is there, git-hop cannot keep the ''current'' link$'
+
+exec git-hop feat/a -n
+stderr '^warning: \[dry-run\] Would leave ''current'' alone'
+exec git-hop feat/a
+cmp current $WORK/keep.txt
+stderr '^warning: Failed to update current symlink: ''.*/hub/current'' is a file, not a symlink'
+
+exec git-hop move feat/a feat/b
+cmp current $WORK/keep.txt
+exists hops/feat/b/.git
+
+exec git-hop remove feat/b -n --no-verify --no-prompt
+stderr '^warning: \[dry-run\] Would leave ''current'' alone'
+exec git-hop remove feat/b --no-verify --no-prompt
+cmp current $WORK/keep.txt
+! exists hops/feat/b
+stderr '^warning: Failed to update current symlink: ''.*/hub/current'' is a file, not a symlink'
+
+exec git-hop add feat/c
+exec git-hop merge feat/c main -n
+stderr '^warning: \[dry-run\] Would leave ''current'' alone'
+exec git-hop merge feat/c main
+cmp current $WORK/keep.txt
+! exists hops/feat/c
+stderr '^warning: Failed to update current symlink: ''.*/hub/current'' is a file, not a symlink'
+
+# --- a directory named current, with a file in it ---
+rm current
+mkdir current
+cp $WORK/keep.txt current/keep.txt
+exec git-hop add feat/d
+cmp current/keep.txt $WORK/keep.txt
+stderr '^warning: Failed to update current symlink: ''.*/hub/current'' is a directory, not a symlink; git-hop leaves it as it is$'
+exec git-hop remove feat/d --no-verify --no-prompt
+cmp current/keep.txt $WORK/keep.txt
+
+# --- an empty directory named current is left too ---
+rm current
+mkdir current
+exec git-hop add feat/e
+exists current
+stderr '^warning: Failed to update current symlink: ''.*/hub/current'' is a directory, not a symlink'
+
+# --- renamed away, the link comes back ---
+mv current current.old
+exec git-hop feat/e
+! stderr 'current symlink'
+exec readlink current
+stdout '^hops/feat/e$'
+exists current.old
+
+-- keep.txt --
+uncommitted work

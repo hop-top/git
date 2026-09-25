@@ -241,3 +241,76 @@ func TestRemoveCurrentSymlink(t *testing.T) {
 		}
 	})
 }
+
+// Something other than a symlink named current, a file or a directory
+// (empty or not), is never replaced or deleted: updating and removing
+// the link both refuse, with the reason and a hint, and leave it as it
+// was.
+func TestCurrentSymlink_LeavesNonSymlinkAlone(t *testing.T) {
+	fs := afero.NewOsFs()
+	for _, tc := range []struct {
+		name, kind string
+		setup      func(t *testing.T, current string)
+		check      func(t *testing.T, current string)
+	}{
+		{"file", "a file",
+			func(t *testing.T, current string) {
+				if err := os.WriteFile(current, []byte("work"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			func(t *testing.T, current string) {
+				if got, err := os.ReadFile(current); err != nil || string(got) != "work" {
+					t.Errorf("file must survive unchanged: %q, %v", got, err)
+				}
+			}},
+		{"directory", "a directory",
+			func(t *testing.T, current string) {
+				if err := os.MkdirAll(current, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(filepath.Join(current, "keep.txt"), []byte("work"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+			},
+			func(t *testing.T, current string) {
+				if got, err := os.ReadFile(filepath.Join(current, "keep.txt")); err != nil || string(got) != "work" {
+					t.Errorf("directory contents must survive: %q, %v", got, err)
+				}
+			}},
+		{"empty directory", "a directory",
+			func(t *testing.T, current string) {
+				if err := os.MkdirAll(current, 0o755); err != nil {
+					t.Fatal(err)
+				}
+			},
+			func(t *testing.T, current string) {
+				if info, err := os.Lstat(current); err != nil || !info.IsDir() {
+					t.Errorf("empty directory must survive: %v", err)
+				}
+			}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			hubPath := t.TempDir()
+			worktree := filepath.Join(hubPath, "hops", "main")
+			if err := os.MkdirAll(worktree, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			current := filepath.Join(hubPath, "current")
+			tc.setup(t, current)
+
+			for name, err := range map[string]error{
+				"CheckCurrentSymlink":  hop.CheckCurrentSymlink(fs, hubPath),
+				"UpdateCurrentSymlink": hop.UpdateCurrentSymlink(fs, hubPath, worktree),
+				"RemoveCurrentSymlink": hop.RemoveCurrentSymlink(fs, hubPath),
+			} {
+				want := "'" + current + "' is " + tc.kind + ", not a symlink; git-hop leaves it as it is\n" +
+					"hint: rename it: while it is there, git-hop cannot keep the 'current' link"
+				if err == nil || err.Error() != want {
+					t.Errorf("%s: got %v, want %q", name, err, want)
+				}
+			}
+			tc.check(t, current)
+		})
+	}
+}

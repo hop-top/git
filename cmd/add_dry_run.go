@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/afero"
 
+	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
 	"hop.top/git/internal/git"
@@ -18,6 +19,7 @@ import (
 // addPlan is everything `git hop add` has decided before its first write.
 type addPlan struct {
 	cwd           string
+	fs            afero.Fs
 	hubPath       string
 	hopspace      *hop.Hopspace
 	hubConfig     *config.HubConfig
@@ -70,7 +72,11 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 		}
 	}
 
-	output.Info("[dry-run] Would register '%s' in hop.json and point 'current' at it", p.branch)
+	if cli.PreviewCurrentBlocked(p.fs, p.hubPath) {
+		output.Info("[dry-run] Would register '%s' in hop.json", p.branch)
+	} else {
+		output.Info("[dry-run] Would register '%s' in hop.json and point 'current' at it", p.branch)
+	}
 	if p.envStart {
 		output.Info("[dry-run] Would start environment (when the worktree has one)")
 	}
