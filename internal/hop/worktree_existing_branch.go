@@ -69,7 +69,7 @@ func CheckExistingBranch(g git.GitInterface, dir, branch, startPoint string) (Ex
 // nothing. It also returns the resolved start-point, the name the real run
 // reports.
 func (m *WorktreeManager) PreviewExistingBranch(hopspace *Hopspace, hubPath, branch, startPoint, defaultBranch string) (ExistingBranch, string, error) {
-	base := findBaseWorktree(hopspace, hubPath)
+	base := m.findBaseWorktree(hopspace, hubPath)
 	resolved, _ := m.resolveStartPoint(base, startPoint, defaultBranch)
 	e, err := CheckExistingBranch(m.git, base, branch, resolved)
 	return e, resolved, err

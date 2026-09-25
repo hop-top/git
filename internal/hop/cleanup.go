@@ -67,25 +67,13 @@ func (c *CleanupManager) RemoveEmptyParent(worktreePath, hubPath string) error {
 	return c.fs.Remove(absParent)
 }
 
-// PruneWorktrees removes stale git worktree metadata
-func (c *CleanupManager) PruneWorktrees(hopspace *Hopspace) error {
-	// Find a valid base path to run git commands from
-	var basePath string
-	for _, branch := range hopspace.Config.Branches {
-		if branch.Exists && branch.Path != "" {
-			// Verify the path actually exists before using it
-			exists, err := afero.DirExists(c.fs, branch.Path)
-			if err == nil && exists {
-				basePath = branch.Path
-				break
-			}
-		}
-	}
-
-	if basePath == "" {
-		// No valid worktrees to prune from - this is not an error
+// PruneWorktrees removes the stale worktree metadata of the hub's own
+// repository: git runs in the hub, never in a worktree a shared
+// --global hopspace records, which may be another hub's repository. A
+// hub that is not on disk has nothing to prune.
+func (c *CleanupManager) PruneWorktrees(hubPath string) error {
+	if exists, err := afero.DirExists(c.fs, hubPath); err != nil || !exists {
 		return nil
 	}
-
-	return c.git.WorktreePrune(basePath)
+	return c.git.WorktreePrune(hubPath)
 }

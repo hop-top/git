@@ -130,6 +130,11 @@ $GIT_HOP_DATA_HOME/<org>/<repo>/
 (`git config --global hop.dataLayout '{host}/{org}/{repo}'`, or
 `git config hop.dataLayout ...` inside a hub for that repository alone).
 
+Every `--global` hub of a repository shares that hopspace, but each hub
+is still its own repository: `add`, `remove`, `merge`, `prune` and
+`doctor --fix` run git in the hub they are run in, whatever the shared
+hopspace records for other hubs.
+
 Default `$GIT_HOP_DATA_HOME` by OS:
 - **Linux/Unix**: `~/.local/share/git-hop`
 - **macOS**: `~/Library/Application Support/git-hop`

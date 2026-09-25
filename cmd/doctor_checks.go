@@ -52,7 +52,9 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 		reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
 	}
 
-	return hubPath, checkBranchWorktrees(fs, g, hub, hopspacePath, opts, r)
+	kept := checkBranchWorktrees(fs, g, hub, hopspacePath, opts, r)
+	checkWorktreeRepositories(fs, g, hub, r)
+	return hubPath, kept
 }
 
 // checkOriginFetchRefspec reports a hub whose origin has no fetch

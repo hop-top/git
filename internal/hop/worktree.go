@@ -123,7 +123,8 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 		return "", fmt.Errorf("hub path does not exist: %s", hubPath)
 	}
 
-	baseWorktreePath := findBaseWorktree(hopspace, hubPath)
+	wb := m.findBase(hopspace, hubPath)
+	baseWorktreePath := wb.base
 
 	// Expand worktree location pattern
 	dataHome := GetGitHopDataHome()
@@ -150,9 +151,8 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	resolvedBase, suppressTrack := m.resolveStartPoint(baseWorktreePath, startPoint, defaultBranch)
 
 	if m.Detach {
-		addDir := worktreeAddDir(m.fs, m.git, baseWorktreePath)
-		commit := pinStartPoint(m.git, baseWorktreePath, addDir, resolvedBase)
-		if _, err := m.git.RunInDir(addDir, "git", "worktree", "add", "--detach", worktreePath, commit); err != nil {
+		commit := pinStartPoint(m.git, baseWorktreePath, wb.addDir, resolvedBase)
+		if _, err := m.git.RunInDir(wb.addDir, "git", "worktree", "add", "--detach", worktreePath, commit); err != nil {
 			return "", fmt.Errorf("failed to create worktree: %w", err)
 		}
 		return worktreePath, nil
@@ -173,37 +173,14 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	} else if remote := m.remoteOnlyBranch(baseWorktreePath, branch); remote != "" {
 		resolvedBase, forceCreate = remote, true
 	}
-	addDir := worktreeAddDir(m.fs, m.git, baseWorktreePath)
-	if addDir != baseWorktreePath {
-		resolvedBase = pinStartPoint(m.git, baseWorktreePath, addDir, resolvedBase)
+	if wb.addDir != baseWorktreePath {
+		resolvedBase = pinStartPoint(m.git, baseWorktreePath, wb.addDir, resolvedBase)
 	}
-	if err := m.git.CreateWorktree(addDir, branch, worktreePath, resolvedBase, forceCreate, trackBranch); err != nil {
+	if err := m.git.CreateWorktree(wb.addDir, branch, worktreePath, resolvedBase, forceCreate, trackBranch); err != nil {
 		return "", fmt.Errorf("failed to create worktree: %w", err)
 	}
 
 	return worktreePath, nil
-}
-
-// findBaseWorktree picks the directory git commands run in for a new
-// worktree: a registered worktree of this hub, else any registered worktree
-// of the hopspace, else the hub itself (the bare repo). `git worktree add`
-// itself runs in worktreeAddDir instead.
-func findBaseWorktree(hopspace *Hopspace, hubPath string) string {
-	for _, b := range hopspace.Config.Branches {
-		if b.Exists && b.Path != "" {
-			branchPath := config.ResolveWorktreePath(b.Path, hubPath)
-			if strings.HasPrefix(branchPath, hubPath+string(filepath.Separator)) || strings.HasPrefix(branchPath, hubPath) {
-				return branchPath
-			}
-		}
-	}
-	// No worktree in this hub: a new clone of the same repo can use any.
-	for _, b := range hopspace.Config.Branches {
-		if b.Exists && b.Path != "" {
-			return config.ResolveWorktreePath(b.Path, hubPath)
-		}
-	}
-	return hubPath
 }
 
 // resolveStartPoint maps the caller's startPoint hint to a concrete ref or

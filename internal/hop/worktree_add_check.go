@@ -45,7 +45,7 @@ func (m *WorktreeManager) CheckAdd(hopspace *Hopspace, hubPath, branch, worktree
 // add`, as does branch checked out elsewhere. An unreadable list leaves
 // the verdict to git.
 func (m *WorktreeManager) checkRegistered(hopspace *Hopspace, hubPath, branch, worktreePath string) error {
-	out, err := m.git.WorktreeListPorcelain(findBaseWorktree(hopspace, hubPath))
+	out, err := m.git.WorktreeListPorcelain(m.findBaseWorktree(hopspace, hubPath))
 	if err != nil {
 		return nil
 	}
@@ -97,7 +97,7 @@ func (m *WorktreeManager) CheckStartPoint(hopspace *Hopspace, hubPath, branch, s
 	case "", StartPointDefaultBranch, StartPointInitial:
 		return nil
 	}
-	base := findBaseWorktree(hopspace, hubPath)
+	base := m.findBaseWorktree(hopspace, hubPath)
 	if refResolves(m.git, base, "refs/heads/"+branch) {
 		return nil
 	}
