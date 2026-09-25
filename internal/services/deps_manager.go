@@ -389,6 +389,8 @@ func copyFile(fs afero.Fs, src, dst string, mode os.FileMode) error {
 //   - worktreePath/<DepsDir> exists → keep it local or relocate it.
 //   - the store's directory has content (from a target-dir writer) →
 //     nothing to do.
+//   - neither, but the worktree resolves through Plug'n'Play (usesPnP) →
+//     a local install with no DepsDir.
 //   - neither → install silently produced nothing; error out rather than
 //     leave an empty cache entry behind.
 //
@@ -460,6 +462,12 @@ func (m *DepsManager) installDeps(depsKey, worktreePath string, pm PackageManage
 	if !populated {
 		m.fs.RemoveAll(targetDir)
 		dropCreated()
+		// Case 3: Plug'n'Play (yarn's default linker) resolves packages
+		// through .pnp.cjs in the worktree and writes no DepsDir at all.
+		// The install stays in the worktree; there is nothing to share.
+		if usesPnP(m.fs, worktreePath) {
+			return true, nil
+		}
 		return false, fmt.Errorf("install for package manager %q produced no deps (neither %s/%s nor %s was populated)", pm.Name, worktreePath, pm.DepsDir, targetDir)
 	}
 	return false, nil

@@ -148,6 +148,21 @@ func writeLocalMarker(fs afero.Fs, depsDir, hash string) error {
 	return afero.WriteFile(fs, filepath.Join(depsDir, LocalInstallMarker), []byte(hash+"\n"), 0o644)
 }
 
+// pnpFiles are the files yarn's Plug'n'Play linker writes in the project
+// root instead of a node_modules: .pnp.cjs, or .pnp.js before yarn 3.
+var pnpFiles = []string{".pnp.cjs", ".pnp.js"}
+
+// usesPnP reports whether the worktree resolves its packages through
+// Plug'n'Play, which needs no DepsDir.
+func usesPnP(fs afero.Fs, worktreePath string) bool {
+	for _, name := range pnpFiles {
+		if ok, _ := afero.Exists(fs, filepath.Join(worktreePath, name)); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // isRealDir reports whether path is a directory and not a link to one.
 func isRealDir(fs afero.Fs, path string) bool {
 	info, err := lstat(fs, path)

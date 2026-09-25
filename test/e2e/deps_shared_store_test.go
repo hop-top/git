@@ -325,3 +325,51 @@ func TestDeps_Pnpm_InstalledPerWorktree(t *testing.T) {
 		t.Errorf("doctor should accept the pnpm installs; output:\n%s", out)
 	}
 }
+
+// Yarn 2+ installs through Plug'n'Play by default: .pnp.cjs in the
+// worktree, no node_modules. There is nothing to share and nothing
+// missing, so add sets up each worktree without an error and doctor has
+// nothing to report.
+func TestDeps_YarnPnP_NoNodeModules(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping e2e test in short mode")
+	}
+	env := npmTestEnv(t)
+	env.EnvVars = append(env.EnvVars, "COREPACK_ENABLE_DOWNLOAD_PROMPT=0")
+	if home := os.Getenv("COREPACK_HOME"); home != "" {
+		env.EnvVars = append(env.EnvVars, "COREPACK_HOME="+home)
+	}
+	initSeed(t, env)
+	packTarball(t, env, filepath.Join(env.SeedRepoPath, "pkgs"), "a", "a")
+	WriteFile(t, filepath.Join(env.SeedRepoPath, "package.json"),
+		`{"name":"t","private":true,"packageManager":"yarn@4.9.2","dependencies":{"a":"file:./pkgs/a-1.0.0.tgz"}}`)
+	if out, err := env.RunCommandAllowFail(t, env.SeedRepoPath, "yarn", "--version"); err != nil || !strings.HasPrefix(strings.TrimSpace(out), "4.") {
+		t.Skipf("yarn 4 not available: %s", out)
+	}
+	WriteFile(t, filepath.Join(env.SeedRepoPath, ".gitignore"), ".pnp.*\n.yarn/*\nnode_modules\n")
+	env.RunCommand(t, env.SeedRepoPath, "yarn", "install")
+	env.RunCommand(t, env.SeedRepoPath, "git", "add", ".")
+	env.RunCommand(t, env.SeedRepoPath, "git", "commit", "-m", "init")
+	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main", "main:feat")
+
+	out := env.RunGitHopCombined(t, env.RootDir, env.BareRepoPath, "hub")
+	out += runHop(t, env, "add", "feat")
+	if strings.Contains(out, "produced no deps") || strings.Contains(out, "Failed to ensure dependencies") {
+		t.Errorf("clone and add should set up PnP worktrees without an error; output:\n%s", out)
+	}
+	for _, branch := range []string{"main", "feat"} {
+		wt := filepath.Join(env.HubPath, "hops", branch)
+		if _, err := os.Lstat(filepath.Join(wt, "node_modules")); err == nil {
+			t.Errorf("%s: PnP install should write no node_modules", branch)
+		}
+		stdout, stderr, code := env.RunCommandWithExit(t, wt, "node", "-r", "./.pnp.cjs", "-e", `console.log(require("a"))`)
+		if code != 0 || strings.TrimSpace(stdout) != "a" {
+			t.Errorf("%s: require(a) through PnP: exit %d, %q %s", branch, code, stdout, stderr)
+		}
+	}
+	assertNoStoreInstalls(t, env.RootDir)
+	if out := env.RunGitHopCombined(t, env.HubPath, "doctor"); !strings.Contains(out, "All dependencies are properly configured") {
+		t.Errorf("doctor should accept PnP worktrees; output:\n%s", out)
+	}
+}
