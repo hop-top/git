@@ -2,7 +2,6 @@ package services
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,11 +13,19 @@ import (
 // Trash provides safe file deletion with recovery capabilities
 type Trash struct {
 	fs afero.Fs
+	// rename moves a path in one step, as os.Rename does. It is set only
+	// on the OS filesystem; when it is nil or fails (a move across
+	// filesystems), the path is copied and the original removed.
+	rename func(src, dst string) error
 }
 
 // NewTrash creates a new trash instance
 func NewTrash(fs afero.Fs) *Trash {
-	return &Trash{fs: fs}
+	t := &Trash{fs: fs}
+	if _, ok := fs.(*afero.OsFs); ok {
+		t.rename = os.Rename
+	}
+	return t
 }
 
 // Move moves a path to the backup/trash directory
@@ -35,16 +42,7 @@ func (t *Trash) Move(path string) (string, error) {
 
 	destPath := filepath.Join(backupDir, filepath.Base(path))
 
-	if _, ok := t.fs.(*afero.OsFs); ok {
-		if err := os.Rename(path, destPath); err != nil {
-			if err := t.copyPath(path, destPath); err != nil {
-				return "", fmt.Errorf("failed to copy to backup: %w", err)
-			}
-			if err := t.fs.RemoveAll(path); err != nil {
-				return "", fmt.Errorf("failed to remove original: %w", err)
-			}
-		}
-	} else {
+	if t.rename == nil || t.rename(path, destPath) != nil {
 		if err := t.copyPath(path, destPath); err != nil {
 			return "", fmt.Errorf("failed to copy to backup: %w", err)
 		}
@@ -81,16 +79,7 @@ func (t *Trash) Restore(backupPath, originalPath string) error {
 		return fmt.Errorf("failed to create parent directory: %w", err)
 	}
 
-	if _, ok := t.fs.(*afero.OsFs); ok {
-		if err := os.Rename(backupPath, originalPath); err != nil {
-			if err := t.copyPath(backupPath, originalPath); err != nil {
-				return fmt.Errorf("failed to copy from backup: %w", err)
-			}
-			if err := t.fs.RemoveAll(backupPath); err != nil {
-				return fmt.Errorf("failed to remove backup: %w", err)
-			}
-		}
-	} else {
+	if t.rename == nil || t.rename(backupPath, originalPath) != nil {
 		if err := t.copyPath(backupPath, originalPath); err != nil {
 			return fmt.Errorf("failed to copy from backup: %w", err)
 		}
@@ -224,64 +213,64 @@ type BackupInfo struct {
 	IsDir     bool
 }
 
-// copyPath recursively copies a file or directory
+// copyPath copies src to dst without following symlinks, for a move
+// that cannot rename: a symlink is copied as a symlink with the same
+// target (dangling or relative ones too), a directory entry by entry, a
+// regular file byte for byte, each keeping its mode. Following a link
+// would copy what it points at, a whole shared deps store say, and trash
+// something other than what was there. Anything else (a FIFO, a socket,
+// a device) is refused, so the original stays where it is.
 func (t *Trash) copyPath(src, dst string) error {
-	info, err := t.fs.Stat(src)
+	info, err := lstat(t.fs, src)
 	if err != nil {
 		return err
 	}
-
-	if info.IsDir() {
-		return t.copyDir(src, dst)
-	}
-	return t.copyFile(src, dst)
-}
-
-// copyFile copies a single file
-func (t *Trash) copyFile(src, dst string) error {
-	srcFile, err := t.fs.Open(src)
-	if err != nil {
-		return err
-	}
-	defer srcFile.Close()
-
-	srcInfo, err := t.fs.Stat(src)
-	if err != nil {
-		return err
-	}
-
-	dstFile, err := t.fs.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer dstFile.Close()
-
-	if _, err := io.Copy(dstFile, srcFile); err != nil {
-		return err
-	}
-
-	return t.fs.Chmod(dst, srcInfo.Mode())
-}
-
-// copyDir recursively copies a directory
-func (t *Trash) copyDir(src, dst string) error {
-	return afero.Walk(t.fs, src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
+	mode := info.Mode()
+	switch {
+	case mode&os.ModeSymlink != 0:
+		return t.copySymlink(src, dst)
+	case mode.IsDir():
+		return t.copyDir(src, dst, mode)
+	case mode.IsRegular():
+		if err := copyFile(t.fs, src, dst, mode.Perm()); err != nil {
 			return err
 		}
+		return t.fs.Chmod(dst, mode)
+	default:
+		return fmt.Errorf("cannot copy %s: not a regular file, directory or symlink", src)
+	}
+}
 
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
+// copySymlink recreates the symlink src at dst with the same target.
+func (t *Trash) copySymlink(src, dst string) error {
+	linker, ok := t.fs.(afero.Symlinker)
+	if !ok {
+		return fmt.Errorf("cannot copy symlink %s: the filesystem has no symlinks", src)
+	}
+	target, err := linker.ReadlinkIfPossible(src)
+	if err != nil {
+		return err
+	}
+	return linker.SymlinkIfPossible(target, dst)
+}
+
+// copyDir copies the directory src, entry by entry, to dst. dst stays
+// writable while it is filled and gets src's mode last, so a read-only
+// directory is copied too.
+func (t *Trash) copyDir(src, dst string, mode os.FileMode) error {
+	if err := t.fs.MkdirAll(dst, 0o700); err != nil {
+		return err
+	}
+	entries, err := afero.ReadDir(t.fs, src)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if err := t.copyPath(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())); err != nil {
 			return err
 		}
-		destPath := filepath.Join(dst, relPath)
-
-		if info.IsDir() {
-			return t.fs.MkdirAll(destPath, info.Mode())
-		}
-
-		return t.copyFile(path, destPath)
-	})
+	}
+	return t.fs.Chmod(dst, mode)
 }
 
 // getDirSize calculates the total size of a directory
