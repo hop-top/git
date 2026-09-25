@@ -155,10 +155,11 @@ created or written and no hook runs.`,
 
 		// Everything below writes; the preview must stop before any of it.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
-			previewAdd(g, wm, hookRunner, addPlan{
+			res := previewAdd(g, wm, hookRunner, addPlan{
 				cwd:           cwd,
 				hubPath:       hubPath,
 				hopspace:      hopspace,
+				hubConfig:     hub.Config,
 				fetch:         fetch.fetches(),
 				repoID:        repoID,
 				branch:        branch,
@@ -168,6 +169,9 @@ created or written and no hook runs.`,
 				task:          taskID,
 				envStart:      envStart,
 			})
+			if output.IsStructured() {
+				emitResult(cmd, res)
+			}
 			return
 		}
 

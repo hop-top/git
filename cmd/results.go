@@ -26,18 +26,20 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.11"
+const resultSchemaVersion = "1.12"
 
-// addResult is the result of `git hop add`.
+// addResult is the result of `git hop add`. Under --dry-run it is the
+// result the add would produce, and carries dry_run.
 type addResult struct {
 	Branch     string         `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch checked out in the new worktree"`
 	Path       string         `json:"path" yaml:"path" table:"path" jsonschema:"description=Absolute path of the new worktree"`
 	Base       string         `json:"base" yaml:"base" table:"base" jsonschema:"description=Branch that status and list compare this worktree against"`
-	Upstream   string         `json:"upstream" yaml:"upstream" table:"upstream" jsonschema:"description=Upstream the branch tracks (for example origin/main); empty when it tracks none"`
+	Upstream   string         `json:"upstream" yaml:"upstream" table:"upstream" jsonschema:"description=Upstream the branch tracks (for example origin/main); empty when it tracks none, and under --dry-run for a branch add would create (git sets it on creation)"`
 	Created    bool           `json:"created" yaml:"created" table:"created" jsonschema:"description=True when this run created the local branch; false when an existing local branch was checked out"`
-	Ports      map[string]int `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service when the worktree has a Docker environment"`
+	Ports      map[string]int `json:"ports,omitempty" yaml:"ports,omitempty" jsonschema:"description=Port allocated to each service when the worktree has a Docker environment; absent under --dry-run (allocated once the worktree exists)"`
 	Task       string         `json:"task,omitempty" yaml:"task,omitempty" jsonschema:"description=Task id recorded for the worktree with --task; absent when none"`
-	EnvStarted bool           `json:"env_started,omitempty" yaml:"env_started,omitempty" jsonschema:"description=True when add started the worktree's environment (--env-start or hop.env.autoStart); absent otherwise"`
+	EnvStarted bool           `json:"env_started,omitempty" yaml:"env_started,omitempty" jsonschema:"description=True when add started the worktree's environment (--env-start or hop.env.autoStart); under --dry-run true when add would try; absent otherwise"`
+	DryRun     bool           `json:"dry_run,omitempty" yaml:"dry_run,omitempty" jsonschema:"description=True under --dry-run: the result is what the add would produce; absent otherwise"`
 }
 
 // statusRecord is one worktree row of `git hop status`. Every status view

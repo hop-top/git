@@ -1,0 +1,84 @@
+# `git hop add --dry-run` in the structured modes renders the result the
+# add would produce, marked dry_run in json/yaml, and still writes nothing.
+#
+# Fields only the real run knows stay empty or absent: ports (allocated
+# once the worktree exists) and, for a branch add would create, upstream
+# (git sets it on creation). env_started is true when add would try.
+#
+# The regression this pins: add -n --json exited 0 with empty stdout.
+
+# --- upstream repo, hub, a local branch with an upstream ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git checkout -b existing
+exec git push origin existing
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git fetch origin
+exec git branch --set-upstream-to=origin/existing existing
+
+# --- snapshot everything add would write ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cp stdout $WORK/current.before
+
+# --- json: a new branch from the default branch ---
+exec git-hop add feat/new -n --json
+decode json stdout branch feat/new
+decode json stdout path '~/hub/hops/feat/new$'
+decode json stdout base main
+decode json stdout upstream ''
+decode json stdout created true
+decode json stdout dry_run true
+! decode json stdout ports
+! decode json stdout task
+! decode json stdout env_started
+! stdout 'dry-run\]'
+! stdout 'Would'
+
+# --- yaml: an existing branch keeps its upstream; --from sets the base ---
+exec git-hop add existing --from existing -n --format yaml
+decode yaml stdout branch existing
+decode yaml stdout path '~/hub/hops/existing$'
+decode yaml stdout base existing
+decode yaml stdout upstream origin/existing
+decode yaml stdout created false
+decode yaml stdout dry_run true
+! stdout 'dry-run\]'
+
+# --- json: --task and --env-start show up as they would ---
+exec git-hop add feat/task --task abc-1 --env-start -n --json
+decode json stdout task abc-1
+decode json stdout env_started true
+decode json stdout dry_run true
+
+# --- porcelain: the would-be columns, no dry-run text ---
+exec git-hop add feat/new -n --porcelain
+stdout '^feat/new\t\S+/hub/hops/feat/new\tmain\t\ttrue$'
+! stdout 'dry-run\]'
+
+# --- nothing was created or written ---
+! exists $WORK/hub/hops/feat
+! exists $WORK/hub/hops/existing
+exec git branch --list feat/new feat/task
+! stdout .
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec readlink current
+cmp stdout $WORK/current.before
+
+# --- the human preview is unchanged ---
+exec git-hop add feat/new -n
+stdout '\[dry-run\] Would create branch ''feat/new'' from default branch ''main'''
+! stdout '\{'
+
+# --- control: the real add carries no dry_run ---
+exec git-hop add feat/new --json
+decode json stdout created true
+! decode json stdout dry_run
+exists $WORK/hub/hops/feat/new

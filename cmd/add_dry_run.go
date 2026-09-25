@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/afero"
 
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
@@ -19,6 +20,7 @@ type addPlan struct {
 	cwd           string
 	hubPath       string
 	hopspace      *hop.Hopspace
+	hubConfig     *config.HubConfig
 	repoID        string
 	branch        string
 	worktreePath  string
@@ -33,10 +35,14 @@ type addPlan struct {
 var addHooks = []string{"pre-worktree-add", "post-worktree-add"}
 
 // previewAdd reports what `git hop add` would do for p without doing any
-// of it. Reads only: no worktree, branch, hop.json, state, symlink or
-// dependency writes, and no hook or branch-type detector action runs,
-// since either may mutate the repo.
-func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.Runner, p addPlan) {
+// of it, and returns the result the add would produce. Reads only: no
+// worktree, branch, hop.json, state, symlink or dependency writes, and no
+// hook or branch-type detector action runs, since either may mutate the
+// repo.
+func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.Runner, p addPlan) addResult {
+	// Probed first: the result reports the branch as it is before the add.
+	res := previewAddResult(g, p)
+
 	if p.fetch {
 		output.Info("[dry-run] Would fetch origin")
 	}
@@ -67,6 +73,43 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	if p.envStart {
 		output.Info("[dry-run] Would start environment (when the worktree has one)")
 	}
+	return res
+}
+
+// previewAddResult is the result add would produce for p, marked dry_run.
+// Ports are allocated once the worktree exists, so they are absent; a
+// branch add would create has no upstream yet (git sets it on creation);
+// env_started is true when add would try to start the environment.
+func previewAddResult(g git.GitInterface, p addPlan) addResult {
+	res := addResult{
+		Branch:     p.branch,
+		Path:       p.worktreePath,
+		Created:    !localBranchExists(g, p.hubPath, p.branch),
+		Task:       p.task,
+		EnvStarted: p.envStart,
+		DryRun:     true,
+	}
+	if !res.Created {
+		res.Upstream = localBranchUpstream(g, p.hubPath, p.branch)
+	}
+	// The hub entry add writes: a fresh one carrying the recorded base.
+	var entry config.HubBranch
+	if base := resolveBranchBase(g, p.hubPath, p.startPoint, p.defaultBranch); base != "" {
+		entry.Base = &base
+	}
+	res.Base = resolveCompareBranch(p.hubConfig, entry)
+	return res
+}
+
+// localBranchUpstream returns the upstream of local branch in the
+// repository at dir in its short form (origin/main), or "" when it tracks
+// none.
+func localBranchUpstream(g git.GitInterface, dir, branch string) string {
+	out, err := g.RunInDir(dir, "git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch+"@{upstream}")
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(out)
 }
 
 // previewGitflowStart reports the git flow start add would run to create

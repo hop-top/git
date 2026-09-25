@@ -354,13 +354,13 @@ Rules:
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.11): a MINOR bump adds
+- Result shapes are versioned together (currently 1.12): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
-- Under `--dry-run`, `init`, `remove`, `move`, `merge`, `doctor --fix`,
-  `prune`, `repair`, `env gc` and branch switch render the result the run
-  would produce, in the same shape; `json` and `yaml` add `dry_run: true`
-  where the shape has the field (absent on a real run), and the list
-  shapes name the would-be action (`would-fix`, `would-prune`,
+- Under `--dry-run`, `add`, `init`, `remove`, `move`, `merge`, `doctor
+  --fix`, `prune`, `repair`, `env gc` and branch switch render the result
+  the run would produce, in the same shape; `json` and `yaml` add
+  `dry_run: true` where the shape has the field (absent on a real run),
+  and the list shapes name the would-be action (`would-fix`, `would-prune`,
   `would-delete`). A preview the real run would refuse fails the same
   way, with no result.
 - A refusal or failure keeps its exit status and reports on stderr (the
@@ -379,11 +379,12 @@ One object.
 | `branch` | string | Branch checked out in the new worktree |
 | `path` | string | Absolute path of the new worktree |
 | `base` | string | Branch `status` and `list` compare this worktree against |
-| `upstream` | string | Upstream the branch tracks (for example `origin/main`); empty when none |
-| `created` | bool | `true` when this run created the local branch; `false` when an existing local branch was checked out |
-| `ports` | map service → port | *json/yaml only*; present when the worktree has a Docker environment |
+| `upstream` | string | Upstream the branch tracks (for example `origin/main`); empty when none, and under `--dry-run` for a branch add would create (git sets it on creation) |
+| `created` | bool | `true` when this run created the local branch (or, under `--dry-run`, would); `false` when an existing local branch was checked out |
+| `ports` | map service → port | *json/yaml only*; present when the worktree has a Docker environment; absent under `--dry-run` (allocated once the worktree exists) |
 | `task` | string | *json/yaml only*; task id recorded with `--task`; absent when none |
-| `env_started` | bool | *json/yaml only*; `true` when add started the worktree's environment (`--env-start`, `hop.env.autoStart`); absent otherwise |
+| `env_started` | bool | *json/yaml only*; `true` when add started the worktree's environment (`--env-start`, `hop.env.autoStart`), or under `--dry-run` would try; absent otherwise |
+| `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 
 ```json
 {
