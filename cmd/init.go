@@ -8,6 +8,7 @@ import (
 
 	"github.com/spf13/afero"
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/events"
@@ -31,6 +32,9 @@ var (
 	enableChdirFlag    bool
 	initHooksMode      string
 	initHooksOverwrite bool
+	// initRunFlags is the running command's flag set, for the dry run's
+	// closing hint (initCmd itself cannot be named from convertRepo).
+	initRunFlags *pflag.FlagSet
 )
 
 func init() {
@@ -58,6 +62,7 @@ See docs/hooks.md for details.`,
 		fs := afero.NewOsFs()
 		g := git.New()
 		keepBackupFlagSet = cmd.Flags().Changed("keep-backup")
+		initRunFlags = cmd.Flags()
 
 		if restorePath != "" {
 			handleRestore(fs, g, restorePath, forceFlag)
@@ -221,7 +226,7 @@ staged and unstaged as they are:
 			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)
 		}
 
-		output.Hint("To proceed with conversion, run:\n  git hop init")
+		output.Hint("To proceed with conversion, run:\n  %s", initProceedCommand(initRunFlags))
 		return
 	}
 

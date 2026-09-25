@@ -22,7 +22,13 @@ exec git-hop init -n --no-prompt
 stdout 'Conversion plan'
 ! stdout 'To proceed'
 stderr '^hint: To proceed with conversion, run:$'
-stderr '^hint:   git hop init$'
+stderr '^hint:   git hop init --no-prompt$'
+
+# The hint repeats the flags that shape the conversion, so it runs the
+# conversion just previewed rather than prompting, or converting to bare
+# after a --regular preview.
+exec git-hop init -n --no-prompt --regular --no-hooks
+stderr '^hint:   git hop init --no-prompt --regular --no-hooks$'
 
 # --- conversion: backup, hook and next-step advice are hints ---
 exec git init $WORK/conv
