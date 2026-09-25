@@ -37,8 +37,8 @@ stdout 'Conversion successful'
 stdout 'Dependencies installed\.'
 grep '\Apost-worktree-add main [^ ]*/org/bare/hops/main HOP_PORT_WEB=[0-9]+ override deps\n\z' $WORK/events.log
 ! grep 'HOP_PORT_WEB=8080 ' $WORK/events.log
-exec readlink $WORK/org/bare/hops/main/node_modules
-stdout '/org/bare/deps/[0-9a-f]{6}/node_modules$'
+exec readlink $WORK/org/bare/hops/main/node_modules/installed
+stdout '/org/bare/deps/[0-9a-f]{6}/node_modules/installed$'
 grep -count=1 '"topic":"git.runtime.deps.installed".*"payload":\{"worktree_path":"[^"]*/org/bare/hops/main","branch":"main"\}' $WORK/events.jsonl
 exec git-hop doctor
 ! stderr 'missing node_modules'

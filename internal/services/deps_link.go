@@ -9,11 +9,11 @@ import (
 	"github.com/spf13/afero"
 )
 
-// linkDeps links worktreePath/<DepsDir> to the store's install for hash
-// (GetDepsKey), installing it first when the store has none intact and
-// shareable. An install that cannot be shared (localReasonOf) stays in the
-// worktree as a local install instead, marked with hash; one already
-// marked with hash is left as it is.
+// linkDeps lays worktreePath/<DepsDir> out entry by entry for the store's
+// install for hash (GetDepsKey; see deps_entries.go), installing it first
+// when the store has none intact and shareable. An install that cannot be
+// shared (localReasonOf) stays in the worktree as a local install instead,
+// marked with hash; one already marked with hash is left as it is.
 //
 // An install in the layout earlier releases wrote (flatDepsKey) is never
 // reused or written: Node cannot resolve its packages from one another.
@@ -21,18 +21,21 @@ import (
 // new install is in place; the old install is left as it is.
 //
 // The install command writes ./<DepsDir> of the worktree, so whatever is
-// there goes first (cleanWorktreeDepsPath): a link would let the install
-// write into, or wipe, the install it points to. A local install stays:
-// the package manager updates it in place. If the install or the link
-// then fails, the link taken down is put back, so a failed attempt leaves
-// the worktree linked as it was.
+// there goes first (takeDownDepsDir): a link would let the install write
+// into, or wipe, the install it points to. A local install stays: the
+// package manager updates it in place. If the install or the links then
+// fail, what was taken down is put back (restoreAfterFailure), so a failed
+// attempt leaves the worktree linked as it was.
 func (m *DepsManager) linkDeps(worktreePath, branch string, pm PackageManager, hash, lockfilePath string) error {
 	depsKey := pm.GetDepsKey(hash)
 	depsPath := m.getDepsPath(depsKey)
-	symlinkPath := filepath.Join(worktreePath, pm.DepsDir)
+	depsDir := filepath.Join(worktreePath, pm.DepsDir)
 
-	local := m.isLocalInstall(symlinkPath, worktreePath)
-	if marked, ok := readLocalMarker(m.fs, symlinkPath); local && ok && marked == hash {
+	cur, err := m.readDepsDir(depsDir, worktreePath, pm)
+	if err != nil {
+		return err
+	}
+	if marked, ok := readLocalMarker(m.fs, depsDir); cur.kind == depsDirLocal && ok && marked == hash {
 		return nil
 	}
 
@@ -52,56 +55,37 @@ func (m *DepsManager) linkDeps(worktreePath, branch string, pm PackageManager, h
 		shareable = reason == ""
 	}
 
-	previous, linked := readSymlink(m.fs, symlinkPath)
-	if linked && previous == depsPath && shareable {
+	if shareable {
+		if cur.kind == depsDirLink && cur.install == depsPath {
+			m.Registry.AddUsage(depsKey, branch)
+			return nil
+		}
+		if err := m.linkEntriesInto(depsPath, depsDir, cur); err != nil {
+			return err
+		}
 		m.Registry.AddUsage(depsKey, branch)
 		return nil
 	}
 
-	if !local {
-		if err := m.cleanWorktreeDepsPath(symlinkPath); err != nil {
-			return err
-		}
+	if err := m.takeDownDepsDir(depsDir, cur); err != nil {
+		return err
 	}
-
-	if !shareable {
-		stayed, err := m.installDeps(depsKey, worktreePath, pm, hash)
-		if err != nil {
-			return m.relinkAfterFailure(fmt.Errorf("failed to install deps: %w", err), symlinkPath, previous, linked)
-		}
-		if stayed {
-			return nil
-		}
-		if err := m.writeInstallManifest(depsPath); err != nil {
-			return m.relinkAfterFailure(err, symlinkPath, previous, linked)
-		}
-		m.Registry.UpdateEntryMetadata(depsKey, hash, filepath.Base(lockfilePath))
-	} else if local {
-		// The store has this install; the local one gives way to it.
-		if err := m.cleanWorktreeDepsPath(symlinkPath); err != nil {
-			return err
-		}
+	stayed, err := m.installDeps(depsKey, worktreePath, pm, hash)
+	if err != nil {
+		return m.restoreAfterFailure(fmt.Errorf("failed to install deps: %w", err), depsDir, cur)
 	}
-
-	if err := m.createSymlink(depsPath, symlinkPath); err != nil {
-		return m.relinkAfterFailure(fmt.Errorf("failed to create symlink: %w", err), symlinkPath, previous, linked)
+	if stayed {
+		return nil
+	}
+	if err := m.writeInstallManifest(depsPath); err != nil {
+		return m.restoreAfterFailure(err, depsDir, cur)
+	}
+	m.Registry.UpdateEntryMetadata(depsKey, hash, filepath.Base(lockfilePath))
+	if err := m.layEntryLinks(depsPath, depsDir); err != nil {
+		return m.restoreAfterFailure(fmt.Errorf("failed to link deps: %w", err), depsDir, cur)
 	}
 	m.Registry.AddUsage(depsKey, branch)
 	return nil
-}
-
-// isLocalInstall reports whether depsDir is a local install: a real
-// directory git-hop marked (LocalInstallMarker), or one that could not be
-// shared anyway (localReasonOf).
-func (m *DepsManager) isLocalInstall(depsDir, worktreePath string) bool {
-	if !isRealDir(m.fs, depsDir) {
-		return false
-	}
-	if _, ok := readLocalMarker(m.fs, depsDir); ok {
-		return true
-	}
-	reason, err := localReasonOf(m.fs, depsDir, worktreePath)
-	return err == nil && reason != ""
 }
 
 // relinkAfterFailure puts back the link linkDeps took down before a step

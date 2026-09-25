@@ -73,9 +73,9 @@ func newStoreManager(t *testing.T, hopspace string, pm services.PackageManager) 
 
 func assertStoreAt(t *testing.T, hopspace, worktree, key, wantStore string) {
 	t.Helper()
-	target, err := os.Readlink(filepath.Join(worktree, "node_modules"))
-	require.NoError(t, err, "worktree node_modules must be a symlink")
-	assert.Equal(t, filepath.Join(wantStore, key), target, "symlink target")
+	target, err := os.Readlink(filepath.Join(worktree, "node_modules", "marker"))
+	require.NoError(t, err, "worktree node_modules must link into the store entry by entry")
+	assert.Equal(t, filepath.Join(wantStore, key, "marker"), target, "entry link target")
 	assert.FileExists(t, filepath.Join(wantStore, key, "marker"), "install output in the store")
 	assert.FileExists(t, filepath.Join(wantStore, ".registry.json"), "registry beside the installs")
 	assert.Equal(t, wantStore, services.DepsStorePath(hopspace))

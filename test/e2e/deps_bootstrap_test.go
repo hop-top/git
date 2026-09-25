@@ -168,23 +168,20 @@ func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 		}
 	}
 	assertESMRuns(mainWT)
-	mainTarget, err := os.Readlink(filepath.Join(mainWT, "node_modules"))
-	if err != nil {
-		t.Fatalf("main node_modules should link into the deps store: %v", err)
-	}
+	mainTarget := installOf(t, mainWT)
 
 	env.RunGitHop(t, env.HubPath, "add", "feature-npm")
 
 	// main is left as it was and still works.
-	if after, err := os.Readlink(filepath.Join(mainWT, "node_modules")); err != nil || after != mainTarget {
-		t.Errorf("main node_modules changed by add: %q -> %q (%v)", mainTarget, after, err)
+	if after := installOf(t, mainWT); after != mainTarget {
+		t.Errorf("main node_modules changed by add: %q -> %q", mainTarget, after)
 	}
 	assertESMRuns(mainWT)
 
 	// The new worktree shares the install and resolves through it.
 	featureWT := filepath.Join(env.HubPath, "hops", "feature-npm")
-	if target, err := os.Readlink(filepath.Join(featureWT, "node_modules")); err != nil || target != mainTarget {
-		t.Errorf("feature node_modules = %q (%v), want the shared %q", target, err, mainTarget)
+	if target := installOf(t, featureWT); target != mainTarget {
+		t.Errorf("feature node_modules links into %q, want the shared %q", target, mainTarget)
 	}
 	assertESMRuns(featureWT)
 }

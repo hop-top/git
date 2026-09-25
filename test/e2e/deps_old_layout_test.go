@@ -54,8 +54,8 @@ func TestDeps_OldLayoutLink_DoctorWarnsFixRelinksGCCollects(t *testing.T) {
 	install := filepath.Join(store, hash, "node_modules")
 	feature := filepath.Join(env.HubPath, "hops", "feature")
 	link := filepath.Join(feature, "node_modules")
-	if got, err := os.Readlink(link); err != nil || got != install {
-		t.Fatalf("feature node_modules = %q (%v), want %q", got, err, install)
+	if got, err := os.Readlink(filepath.Join(link, "pkg")); err != nil || got != filepath.Join(install, "pkg") {
+		t.Fatalf("feature node_modules/pkg = %q (%v), want a link into %q", got, err, install)
 	}
 
 	// Put feature back where an earlier release left it.
@@ -65,7 +65,7 @@ func TestDeps_OldLayoutLink_DoctorWarnsFixRelinksGCCollects(t *testing.T) {
 		t.Fatal(err)
 	}
 	WriteFile(t, filepath.Join(old, "pkg", "index.js"), "old\n")
-	if err := os.Remove(link); err != nil {
+	if err := os.RemoveAll(link); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.Symlink(old, link); err != nil {
@@ -97,8 +97,8 @@ func TestDeps_OldLayoutLink_DoctorWarnsFixRelinksGCCollects(t *testing.T) {
 	}
 
 	run("doctor", "--fix")
-	if got, err := os.Readlink(link); err != nil || got != install {
-		t.Errorf("doctor --fix should relink feature to %q; got %q (%v)", install, got, err)
+	if got, err := os.Readlink(filepath.Join(link, "pkg")); err != nil || got != filepath.Join(install, "pkg") {
+		t.Errorf("doctor --fix should relink feature into %q; got %q (%v)", install, got, err)
 	}
 	if data, err := os.ReadFile(filepath.Join(old, "pkg", "index.js")); err != nil || string(data) != "old\n" {
 		t.Errorf("the old install must not be written: %q (%v)", data, err)
@@ -112,6 +112,6 @@ func TestDeps_OldLayoutLink_DoctorWarnsFixRelinksGCCollects(t *testing.T) {
 		t.Errorf("old install should be collected once unlinked; stat err = %v", err)
 	}
 	if _, err := os.Stat(filepath.Join(install, "pkg", "index.js")); err != nil {
-		t.Errorf("the current install must stay: %v", err)
+		t.Errorf("the current install, linked entry by entry, must stay: %v", err)
 	}
 }

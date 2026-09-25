@@ -39,6 +39,29 @@ func writeInstall(t *testing.T, hopspace, key string) string {
 	return install
 }
 
+// assertEntryLinked checks that worktree's node_modules is a real
+// directory linked entry by entry into install.
+func assertEntryLinked(t *testing.T, worktree, install string) {
+	t.Helper()
+	nm := filepath.Join(worktree, "node_modules")
+	info, err := os.Lstat(nm)
+	require.NoError(t, err)
+	require.True(t, info.IsDir(), "node_modules must be a real directory")
+	entries, err := os.ReadDir(install)
+	require.NoError(t, err)
+	for _, e := range entries {
+		if strings.HasPrefix(e.Name(), ".") || strings.HasPrefix(e.Name(), "@") {
+			continue
+		}
+		target, err := os.Readlink(filepath.Join(nm, e.Name()))
+		require.NoError(t, err, "%s must be a link", e.Name())
+		assert.Equal(t, filepath.Join(install, e.Name()), target)
+	}
+	record, err := os.ReadFile(filepath.Join(nm, services.EntryLinksMarker))
+	require.NoError(t, err)
+	assert.Contains(t, string(record), `"install": "`+install+`"`)
+}
+
 type entryLinksFixture struct {
 	hopspace, wt, key, install, nm string
 	dm                             *services.DepsManager

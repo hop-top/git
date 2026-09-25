@@ -29,8 +29,8 @@ exec git config --global hop.events.path $WORK/events.jsonl
 
 exec git-hop $WORK/org/repo.git hub
 stdout 'Dependencies installed\.'
-exec readlink $WORK/hub/hops/main/node_modules
-stdout '/hub/deps/[0-9a-f]{6}/node_modules$'
+exec readlink $WORK/hub/hops/main/node_modules/installed
+stdout '/hub/deps/[0-9a-f]{6}/node_modules/installed$'
 exists $WORK/hub/hops/main/node_modules/installed
 grep -count=1 '"topic":"git.runtime.deps.installed".*"payload":\{"worktree_path":"[^"]*/hub/hops/main","branch":"main"\}' $WORK/events.jsonl
 

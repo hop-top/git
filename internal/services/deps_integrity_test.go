@@ -10,11 +10,11 @@ import (
 	"hop.top/git/internal/services"
 )
 
-// A worktree's DepsDir is a link into the shared store, so anything that
-// empties it through the link (npm ci removes each entry of node_modules
-// before installing; rm -rf node_modules/*) empties the install every other
-// worktree links to. git-hop records the entries of each install it puts in
-// the store, sees one missing, and reinstalls.
+// A store install can still lose entries: emptied through a worktree left
+// with a single link to it by an earlier release (npm ci removes each entry
+// of node_modules before installing; rm -rf node_modules/*), or a crash
+// mid-install. git-hop records the entries of each install it puts in the
+// store, sees one missing, and reinstalls.
 
 // npmLikePM installs two package directories and a hidden lockfile copy into
 // ./node_modules, as npm does, logging each run to log.
@@ -48,11 +48,10 @@ func (f sharedInstallFixture) worktrees() map[string]string {
 	return map[string]string{"main": f.main, "feat": f.feat}
 }
 
-// emptyThroughLink removes the entries of the worktree's DepsDir through
-// its link, as npm ci does, keeping those for which keep is true.
-func emptyThroughLink(t *testing.T, worktree string, keep func(name string) bool) {
+// emptyInstall removes the entries of a store install, as npm ci does
+// through a single link to it, keeping those for which keep is true.
+func emptyInstall(t *testing.T, nm string, keep func(name string) bool) {
 	t.Helper()
-	nm := filepath.Join(worktree, "node_modules")
 	entries, err := os.ReadDir(nm)
 	require.NoError(t, err)
 	for _, e := range entries {
@@ -73,15 +72,38 @@ func TestDepsIntegrity_EnsureDepsReinstallsEmptiedInstall(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			f := newSharedInstallFixture(t)
-			emptyThroughLink(t, f.feat, keep)
+			emptyInstall(t, f.install, keep)
 
 			require.NoError(t, f.dm.EnsureDeps(f.main, "main"))
 
 			assert.Equal(t, 2, installCount(t, f.log), "the damaged install is reinstalled")
-			assertLinkedTo(t, f.main, f.install)
-			assertLinkedTo(t, f.feat, f.install)
+			assertEntryLinked(t, f.main, f.install)
+			assertEntryLinked(t, f.feat, f.install)
 			assert.FileExists(t, filepath.Join(f.feat, "node_modules", "a", "index.js"),
 				"every worktree linked to the install gets it back")
+		})
+	}
+}
+
+// Emptying a worktree's node_modules, as npm ci and rm -rf node_modules/*
+// do, removes its links and leaves the install every other worktree uses.
+func TestDepsIntegrity_EmptyingWorktreeKeepsSharedInstall(t *testing.T) {
+	for name, keep := range map[string]func(string) bool{
+		"npm ci":                nil,
+		"rm -rf node_modules/*": hidden,
+	} {
+		t.Run(name, func(t *testing.T) {
+			f := newSharedInstallFixture(t)
+			emptyInstall(t, filepath.Join(f.feat, "node_modules"), keep)
+
+			issues, err := f.dm.Audit(map[string]string{"main": f.main})
+			require.NoError(t, err)
+			assert.Empty(t, issues, "main is untouched")
+			assert.FileExists(t, filepath.Join(f.main, "node_modules", "a", "index.js"))
+
+			require.NoError(t, f.dm.EnsureDeps(f.feat, "feat"))
+			assert.Equal(t, 1, installCount(t, f.log), "feat is relinked, nothing reinstalled")
+			assertEntryLinked(t, f.feat, f.install)
 		})
 	}
 }
@@ -102,7 +124,7 @@ func TestDepsIntegrity_AddedEntriesKeepInstallIntact(t *testing.T) {
 
 func TestDepsIntegrity_DoctorReportsAndFixesDamagedInstall(t *testing.T) {
 	f := newSharedInstallFixture(t)
-	emptyThroughLink(t, f.feat, hidden)
+	emptyInstall(t, f.install, hidden)
 
 	issues, err := f.dm.Audit(f.worktrees())
 	require.NoError(t, err)
@@ -135,7 +157,7 @@ func TestDepsIntegrity_UnrecordedInstall(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newSharedInstallFixture(t)
 			require.NoError(t, os.Remove(services.InstallManifestPath(f.install)))
-			emptyThroughLink(t, f.feat, tc.keep)
+			emptyInstall(t, f.install, tc.keep)
 
 			require.NoError(t, f.dm.EnsureDeps(f.main, "main"))
 
@@ -149,8 +171,8 @@ func TestDepsIntegrity_GCRemovesManifest(t *testing.T) {
 	f := newSharedInstallFixture(t)
 	manifest := services.InstallManifestPath(f.install)
 	require.FileExists(t, manifest)
-	require.NoError(t, os.Remove(filepath.Join(f.main, "node_modules")))
-	require.NoError(t, os.Remove(filepath.Join(f.feat, "node_modules")))
+	require.NoError(t, os.RemoveAll(filepath.Join(f.main, "node_modules")))
+	require.NoError(t, os.RemoveAll(filepath.Join(f.feat, "node_modules")))
 
 	_, _, err := f.dm.GarbageCollect(f.worktrees(), false)
 	require.NoError(t, err)

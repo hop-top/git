@@ -122,7 +122,7 @@ func TestDepsLocal_LinkKinds(t *testing.T) {
 				assertNotInStore(t, f.hopspace, hash)
 				return
 			}
-			assertLinkedTo(t, wt, filepath.Join(services.DepsStorePath(f.hopspace), hash, "node_modules"))
+			assertEntryLinked(t, wt, filepath.Join(services.DepsStorePath(f.hopspace), hash, "node_modules"))
 			assert.NoFileExists(t, filepath.Join(wt, "node_modules", services.LocalInstallMarker))
 		})
 	}
@@ -261,7 +261,7 @@ func TestDepsLocal_LocalInstallBecomesShared(t *testing.T) {
 	require.NoError(t, f.dm.EnsureDeps(wt, "main"))
 
 	install := filepath.Join(services.DepsStorePath(f.hopspace), hash, "node_modules")
-	assertLinkedTo(t, wt, install)
+	assertEntryLinked(t, wt, install)
 	assert.NoFileExists(t, filepath.Join(install, services.LocalInstallMarker), "the marker stays out of the store")
 	assert.FileExists(t, services.InstallManifestPath(install))
 }

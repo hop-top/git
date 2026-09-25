@@ -551,7 +551,7 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 		}
 
 		switch issue.Type {
-		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps, IssueDamagedInstall, IssueStaleLocal, IssueNeedsLocal:
+		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps, IssueDamagedInstall, IssueStaleLocal, IssueNeedsLocal, IssueEntryLinks:
 		default:
 			continue
 		}
