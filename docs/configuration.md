@@ -35,9 +35,9 @@ git-hop uses different directories for different types of data:
 └── hooks/             # Global hooks
 ```
 
-**macOS:**
+**macOS** (when `XDG_CONFIG_HOME` is unset):
 ```
-~/Library/Preferences/git-hop/
+~/Library/Application Support/git-hop/
 ├── managers.json
 └── hooks/
 ```
@@ -91,9 +91,9 @@ each repository lives under `<host>/<org>/<repo>/` instead (see
 └── state.json         # Repository tracking
 ```
 
-**macOS:**
+**macOS** (when `XDG_STATE_HOME` is unset):
 ```
-~/Library/Application Support/git-hop/state/
+~/Library/Application Support/git-hop/
 └── state.json
 ```
 
@@ -115,15 +115,18 @@ each repository lives under `<host>/<org>/<repo>/` instead (see
 
 ## Environment Variables
 
-Override default directory locations:
+Directories follow the XDG base directories, with `git-hop/` under each;
+only the data home has a git-hop variable of its own:
 
 | Variable | Description | Default (Linux/Unix) | Default (macOS) |
 |----------|-------------|---------------------|-----------------|
-| `GIT_HOP_CONFIG_HOME` | Configuration directory | `~/.config/git-hop` | `~/Library/Preferences/git-hop` |
-| `GIT_HOP_DATA_HOME` | Data/repository storage | `~/.local/share/git-hop` | `~/Library/Application Support/git-hop` |
+| `XDG_CONFIG_HOME` | Configuration (`managers.json`, global hooks) | `~/.config` | `~/Library/Application Support` |
+| `GIT_HOP_DATA_HOME` | Data/repository storage; wins over `XDG_DATA_HOME` | `$XDG_DATA_HOME/git-hop` | `$XDG_DATA_HOME/git-hop` |
+| `XDG_DATA_HOME` | Data, when `GIT_HOP_DATA_HOME` is unset | `~/.local/share` | `~/Library/Application Support` |
 | `XDG_STATE_HOME` | State tracking | `~/.local/state` | `~/Library/Application Support` |
 | `XDG_CACHE_HOME` | Cache directory | `~/.cache` | `~/Library/Caches` |
-| `GIT_HOP_LOG_LEVEL` | Logging verbosity | `info` | `info` |
+| `GIT_HOP_ADD_FROM` | Start-point for `git hop add`'s new branches; overrides `hop.add.defaultStartPoint`, `--from` wins | unset | unset |
+| `GIT_HOP_HOOKS` | How clone and init mirror committed hooks; overrides `hop.hooks.installMode`, `--hooks` wins | unset | unset |
 | `GIT_HOP_AUTO_ENV_START` | Overrides `hop.env.autoStart` (`true`/`false`, git's boolean spellings); `--[no-]env-start` still wins | unset | unset |
 | `GIT_HOP_VERBOSE` | Debug switch, like git's `GIT_TRACE`: stands in for `-V` on every run. `true`/`yes`/`on` is `-V`, `false`/`no`/`off` or empty is off (any case), a number is the `-V` count (`2` is `-VV`); anything else prints a warning and counts as off. A `--verbose` on the command line wins | unset | unset |
 
@@ -134,7 +137,7 @@ Example usage:
 
 ```bash
 export GIT_HOP_DATA_HOME=/mnt/storage/git-hop
-export GIT_HOP_LOG_LEVEL=debug
+export GIT_HOP_VERBOSE=1        # debug output, as with -V
 git hop clone https://github.com/org/repo.git
 ```
 

@@ -19,7 +19,7 @@ git-hop looks for hooks in these locations (in priority order):
 2. `$GIT_HOP_DATA_HOME/<org>/<repo>/hooks/<name>` — the hopspace (laid out
    by `hop.dataLayout`), then `$GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks/<name>`,
    where earlier releases mirrored hooks
-3. `$GIT_HOP_CONFIG_HOME/hooks/<name>` — global
+3. `$XDG_CONFIG_HOME/git-hop/hooks/<name>` — global
 
 First found wins; a missing hook is a silent no-op. Hooks must be executable.
 
@@ -113,10 +113,10 @@ git hop bugfix-123
 
 ### Debug Mode
 
-Enable verbose logging:
+Enable debug output, as `-V` does, for every command:
 
 ```bash
-export GIT_HOP_LOG_LEVEL=debug
+export GIT_HOP_VERBOSE=1
 git hop feature-x
 ```
 

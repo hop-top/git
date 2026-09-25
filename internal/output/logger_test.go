@@ -68,45 +68,6 @@ func TestSetupLogger(t *testing.T) {
 	}
 }
 
-func TestLogLevelFromEnv(t *testing.T) {
-	tests := []struct {
-		name     string
-		envValue string
-	}{
-		{"debug level", "debug"},
-		{"info level", "info"},
-		{"warn level", "warn"},
-		{"warning level", "warning"},
-		{"error level", "error"},
-		{"fatal level", "fatal"},
-		{"invalid level", "invalid"},
-		{"empty level", ""},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Save original
-			orig := os.Getenv("GIT_HOP_LOG_LEVEL")
-			defer os.Setenv("GIT_HOP_LOG_LEVEL", orig)
-
-			// Set test value
-			if tt.envValue != "" {
-				os.Setenv("GIT_HOP_LOG_LEVEL", tt.envValue)
-			} else {
-				os.Unsetenv("GIT_HOP_LOG_LEVEL")
-			}
-
-			// Initialize should not panic
-			output.SetupLogger(output.ModeHuman, false)
-
-			// Logger should be initialized
-			if output.GetLogger() == nil {
-				t.Error("GetLogger() returned nil")
-			}
-		})
-	}
-}
-
 func TestErrorOutput(t *testing.T) {
 	// Capture stderr
 	oldStderr := os.Stderr
