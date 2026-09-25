@@ -147,7 +147,7 @@ git-hop includes built-in support for common package managers:
 |----------------|-------------|----------|----------|
 | npm | package.json | package-lock.json, npm-shrinkwrap.json | node_modules |
 | pnpm | pnpm-lock.yaml | pnpm-lock.yaml | node_modules (per worktree, never shared) |
-| yarn | yarn.lock | yarn.lock | node_modules |
+| yarn | yarn.lock | yarn.lock | node_modules (none with Plug'n'Play) |
 | Go | go.mod | go.sum | vendor |
 | pip | requirements.txt, setup.py | requirements.txt | venv |
 | cargo | Cargo.toml | Cargo.lock | target |
@@ -155,6 +155,22 @@ git-hop includes built-in support for common package managers:
 | bundler | Gemfile | Gemfile.lock | vendor/bundle |
 
 Multiple package managers are supported in a single repository (e.g., Go backend + React frontend).
+
+For JavaScript, the store shares `node_modules`, so sharing applies to
+package managers that install one: npm, yarn 1, and yarn 2+ with
+`nodeLinker: node-modules` in `.yarnrc.yml`. pnpm installs stay in each
+worktree (see [Installs that stay in the worktree](#installs-that-stay-in-the-worktree)).
+
+### Yarn Plug'n'Play
+
+Yarn 2+ installs through Plug'n'Play by default: it writes `.pnp.cjs` in
+the worktree and no `node_modules`. There is nothing for the store to share,
+so each worktree runs its own `yarn install` (yarn's cache still dedupes the
+package archives), and git-hop expects no `node_modules`: a worktree with a
+`.pnp.cjs` (or `.pnp.js`) and no `node_modules` is set up, and `doctor` has
+nothing to report for it. A worktree whose install has not run yet is
+reported missing, and `doctor --fix` runs it. To share installs between
+worktrees instead, set `nodeLinker: node-modules`.
 
 ## Automatic Dependency Setup
 

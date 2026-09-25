@@ -47,6 +47,10 @@ func (m *DepsManager) auditDeps(branch, worktreePath string, pm PackageManager) 
 			return Issue{}, false
 		}
 		if !exists {
+			// Plug'n'Play installs write no DepsDir (usesPnP).
+			if usesPnP(m.fs, worktreePath) {
+				return Issue{}, false
+			}
 			issue.Type = IssueMissingDeps
 			return issue, true
 		}
