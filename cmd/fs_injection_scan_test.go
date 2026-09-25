@@ -22,9 +22,6 @@ var osFilesystemCalls = map[string]bool{
 // osOnFsHolderAllowed lists methods on a type holding an afero.Fs that
 // deliberately act on the real disk, keyed "<file> <Type>.<Method>".
 var osOnFsHolderAllowed = map[string]string{
-	"internal/services/trash.go Trash.Move": "os.Rename only when the held fs is *afero.OsFs: a " +
-		"same-device rename, which afero's copy fallback cannot express; other fs values take the copy path",
-	"internal/services/trash.go Trash.Restore": "same OsFs-guarded os.Rename as Trash.Move",
 	"internal/hop/conversion_index.go Converter.gitDiff": "git writes the diff to a real scratch " +
 		"file (--output); the converter reads it back and removes it from the disk git wrote to",
 	"internal/hop/conversion_index.go Converter.applyCached": "git apply reads the patch from a real " +
