@@ -1,0 +1,62 @@
+# `git hop remove <hub>` drops the hub's entries from the hops registry
+# ($XDG_CONFIG_HOME/git-hop/hops.json), as --dry-run says it will.
+#
+# The regression this pins: hub removal deleted the hub, its worktrees
+# and its state records but left the registry entry clone wrote,
+# pointing at a directory that no longer existed.
+#
+# The registry is keyed <org>/<repo>:<branch>, one entry per branch of a
+# repository, recorded by whichever hub registered it first. Removing a
+# hub drops the entries that point into it and keeps the ones another
+# hub of the same repository owns.
+
+exec git init --bare $WORK/acme/widget.git
+exec git clone $WORK/acme/widget.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/acme/widget.git hub1
+exec git-hop $WORK/acme/widget.git hub2
+decode json $WORK/.config/git-hop/hops.json 'hops.#' 1
+decode json $WORK/.config/git-hop/hops.json 'hops.acme/widget:main.path' '~/hub1/hops/main$'
+
+# --- hub2 owns no entry: removing it keeps hub1's ---
+exec git-hop remove $WORK/hub2 --dry-run --no-prompt
+! stdout 'hops registry'
+stdout 'Would remove hub .*/hub2 from state \(.github.com/acme/widget. keeps its other hubs\)'
+exec git-hop remove $WORK/hub2 --no-prompt
+stdout 'Removed hub .*/hub2 from state'
+! exists $WORK/hub2
+decode json $WORK/.config/git-hop/hops.json 'hops.acme/widget:main.path' '~/hub1/hops/main$'
+
+# --- the dry run names hub1's entry and removes nothing ---
+exec git-hop remove $WORK/hub1 --dry-run --no-prompt
+stdout 'Would remove .github.com/acme/widget. from state'
+stdout 'Would remove .acme/widget:main. from the hops registry'
+exists $WORK/hub1
+decode json $WORK/.config/git-hop/hops.json 'hops.#' 1
+
+# --- and the removal does what the dry run said ---
+exec git-hop remove $WORK/hub1 --no-prompt
+stdout 'Removed .github.com/acme/widget. from state'
+stdout 'Removed .acme/widget:main. from the hops registry'
+! exists $WORK/hub1
+decode json $WORK/.config/git-hop/hops.json 'hops.#' 0
+
+# --- an unreadable registry is never written over ---
+# Its entries cannot be told apart, so neither removing a hub nor
+# recording a new one may replace the file with what little was read.
+exec git-hop $WORK/acme/widget.git hub3
+cp $WORK/broken.json $WORK/.config/git-hop/hops.json
+exec git-hop remove $WORK/hub3 --no-prompt
+stderr 'warning: .*hops registry'
+! exists $WORK/hub3
+cmp $WORK/.config/git-hop/hops.json $WORK/broken.json
+exec git-hop $WORK/acme/widget.git hub4
+stderr 'warning: .*hops registry'
+cmp $WORK/.config/git-hop/hops.json $WORK/broken.json
+
+-- broken.json --
+{"hops": [{"repo": "acme/widget"}]}

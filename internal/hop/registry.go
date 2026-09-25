@@ -10,12 +10,16 @@ import (
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/state"
 )
 
 // Registry manages the global hops registry
 type Registry struct {
 	Config *config.HopsConfig
 	fs     afero.Fs
+	// loadErr is why the file on disk could not be read. Save refuses
+	// to write over it: what Config holds then is not what the file does.
+	loadErr error
 }
 
 // LoadRegistry loads or creates the global hops registry. It reads
@@ -23,21 +27,28 @@ type Registry struct {
 func LoadRegistry(fs afero.Fs) *Registry {
 	path := GetHopsRegistryPath()
 	cfg := &config.HopsConfig{Hops: make(map[string]config.HopEntry)}
+	r := &Registry{Config: cfg, fs: fs}
 
 	if content, err := afero.ReadFile(fs, path); err == nil {
 		if err := json.Unmarshal(content, cfg); err != nil {
 			output.Warn("failed to parse hops registry: %v", err)
+			cfg.Hops = make(map[string]config.HopEntry)
+			r.loadErr = fmt.Errorf("hops registry at %s cannot be read (%v); left as it is", path, err)
 		}
 	}
-
-	return &Registry{
-		Config: cfg,
-		fs:     fs,
+	if cfg.Hops == nil {
+		cfg.Hops = make(map[string]config.HopEntry)
 	}
+
+	return r
 }
 
-// Save persists the registry to disk
+// Save persists the registry to disk. It never writes over a file
+// LoadRegistry could not read.
 func (r *Registry) Save() error {
+	if r.loadErr != nil {
+		return r.loadErr
+	}
 	path := GetHopsRegistryPath()
 	dir := filepath.Dir(path)
 
@@ -74,6 +85,51 @@ func (r *Registry) AddHop(repo, branch, path string) error {
 func (r *Registry) RemoveHop(repo, branch string) error {
 	key := repo + ":" + branch
 	delete(r.Config.Hops, key)
+	return r.Save()
+}
+
+// HubKeys returns, sorted, the keys of the entries that point into the
+// hub at hubPath: an entry whose worktree path lies in the hub
+// directory or is one of worktrees (the hub's worktree paths, which may
+// live elsewhere), or whose project root is the hub. Entries another hub
+// of the same repository recorded are not among them.
+func (r *Registry) HubKeys(hubPath string, worktrees []string) []string {
+	var keys []string
+	for key, e := range r.Config.Hops {
+		if r.entryInHub(e, hubPath, worktrees) {
+			keys = append(keys, key)
+		}
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func (r *Registry) entryInHub(e config.HopEntry, hubPath string, worktrees []string) bool {
+	if e.ProjectRoot != "" && state.SamePath(e.ProjectRoot, hubPath) {
+		return true
+	}
+	if e.Path == "" {
+		return false
+	}
+	if pathWithin(e.Path, hubPath) {
+		return true
+	}
+	for _, wt := range worktrees {
+		if state.SamePath(e.Path, wt) {
+			return true
+		}
+	}
+	return false
+}
+
+// RemoveKeys drops the entries under keys and saves the registry.
+func (r *Registry) RemoveKeys(keys ...string) error {
+	if len(keys) == 0 {
+		return nil
+	}
+	for _, key := range keys {
+		delete(r.Config.Hops, key)
+	}
 	return r.Save()
 }
 

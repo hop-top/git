@@ -14,8 +14,9 @@ import (
 	"hop.top/git/internal/state"
 )
 
-// removeHub removes the hub at hubPath: its worktrees, the hub directory
-// and its state entry, then the repository's data-home hopspace.
+// removeHub removes the hub at hubPath: its worktrees, the hub directory,
+// its state entry and its hops registry entries, then the repository's
+// data-home hopspace.
 func removeHub(fs afero.Fs, hubPath string) {
 	output.Info("Removing hub at %s...", hubPath)
 
@@ -26,6 +27,10 @@ func removeHub(fs afero.Fs, hubPath string) {
 	}
 
 	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+
+	// Read before anything is deleted, as the dry run reads it.
+	registry := hop.LoadRegistry(fs)
+	registryKeys := registry.HubKeys(hubPath, hubWorktreePaths(hub, hubPath))
 
 	// Remove all worktrees
 	for branchName, branchConfig := range hub.Config.Branches {
@@ -47,12 +52,21 @@ func removeHub(fs afero.Fs, hubPath string) {
 	// repository's other hubs, and their worktrees, stay.
 	st, stErr := state.LoadState(fs)
 	if stErr == nil {
+		otherHubs := otherHubsInState(st, repoID, hubPath)
 		if err := st.RemoveHub(repoID, hubPath); err != nil {
 			output.Warn("Failed to update state: %v", err)
+		} else if err := state.SaveState(fs, st); err != nil {
+			output.Warn("Failed to save state: %v", err)
 		} else {
-			if err := state.SaveState(fs, st); err != nil {
-				output.Warn("Failed to save state: %v", err)
-			}
+			output.Info("Removed %s", stateRemoval(repoID, hubPath, otherHubs))
+		}
+	}
+
+	if err := registry.RemoveKeys(registryKeys...); err != nil {
+		output.Warn("Failed to update the hops registry: %v", err)
+	} else {
+		for _, key := range registryKeys {
+			output.Info("Removed '%s' from the hops registry", key)
 		}
 	}
 
@@ -76,6 +90,41 @@ func removeHub(fs afero.Fs, hubPath string) {
 	}
 
 	output.Success("Successfully removed hub: %s", hubPath)
+}
+
+// otherHubsInState reports whether state records a hub of repoID other
+// than the one at hubPath, i.e. whether the repository stays in state
+// once that hub is removed.
+func otherHubsInState(st *state.State, repoID, hubPath string) bool {
+	repo, ok := st.Repositories[repoID]
+	if !ok {
+		return false
+	}
+	for _, h := range repo.Hubs {
+		if h != nil && !state.SamePath(h.Path, hubPath) {
+			return true
+		}
+	}
+	return false
+}
+
+// stateRemoval says what removing the hub at hubPath takes out of state:
+// the whole repository, or only this hub when others stay.
+func stateRemoval(repoID, hubPath string, otherHubs bool) string {
+	if otherHubs {
+		return fmt.Sprintf("hub %s from state ('%s' keeps its other hubs)", hubPath, repoID)
+	}
+	return fmt.Sprintf("'%s' from state", repoID)
+}
+
+// hubWorktreePaths lists the worktree paths hub's hop.json records,
+// resolved against hubPath.
+func hubWorktreePaths(hub *hop.Hub, hubPath string) []string {
+	paths := make([]string, 0, len(hub.Config.Branches))
+	for _, b := range hub.Config.Branches {
+		paths = append(paths, config.ResolveWorktreePath(b.Path, hubPath))
+	}
+	return paths
 }
 
 // dataHomeHopspace is what removing a hub does to its repository's
