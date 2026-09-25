@@ -11,7 +11,7 @@ Common questions and answers about git-hop.
 
 ### What is git-hop?
 
-git-hop is a Git subcommand that wraps `git worktree` with deterministic, isolated, and reproducible multi-branch development environments. It manages ports, volumes, and Docker services automatically.
+git-hop is a Git subcommand that wraps `git worktree` with isolated, stable multi-branch development environments. It manages ports, volumes, and Docker services automatically.
 
 ### Do I need Docker?
 
@@ -56,13 +56,20 @@ Not yet: there are no pre-built binaries. Building from source needs Go.
 
 ### How do ports get allocated?
 
-Ports are allocated using a deterministic hashing algorithm based on the branch name. The same branch always gets the same ports, even across different machines.
+A worktree with a Docker environment gets a block of ports when it is set
+up, recorded in the hopspace's `ports.json`, and keeps them from then on:
 
 ```bash
-# Same branch = same ports
-git hop feature-x  # Gets ports 11500-11502
-git hop feature-x  # Still gets ports 11500-11502
+git hop add feature-x              # Gets ports 10003-10005
+cd hops/feature-x
+git hop env generate               # Still 10003-10005
 ```
+
+New ports go after the highest port in use by any hub git-hop knows of
+(`allocationMode: incremental`, the default), so they depend on what is
+already allocated: the same branch in another hub or on another machine
+can get other ports. Setting `allocationMode` to `hash` in `ports.json`
+opts into placing new blocks where the repository, hub and branch hash to.
 
 ### Can I manually set ports?
 

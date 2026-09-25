@@ -38,7 +38,7 @@ git hop file:///path/to/local/repo
 3. Creates hopspace under `$GIT_HOP_DATA_HOME/org/repo`
 4. Clones repo into hopspace (default branch only)
 5. Symlinks worktree back into hub
-6. Sets up the worktree as add does: deterministic ports and volumes,
+6. Sets up the worktree as add does: its ports and volumes,
    `.env` and, for a compose file with hardcoded host ports, the compose
    override, then shared dependencies. This happens before the
    `post-worktree-add` and `post-clone` hooks, so both see them. A set-up
@@ -114,7 +114,7 @@ git hop add --task T-42                       # branch derived from the task
    that exists only as `origin/<branch>` is created from it and tracks it
 3. Creates the worktree at `hops/&lt;branch&gt;`
 4. Copies git-ignored local files from the fork-source worktree (see below)
-5. Generates deterministic ports and volumes and links shared dependencies,
+5. Generates the worktree's ports and volumes and links shared dependencies,
    before the `post-worktree-add` hook, so the hook finds `.env`, the
    compose override and the deps (see [Add hooks](./hooks#add-hooks))
 6. Points the `current` symlink at the new worktree
@@ -1269,7 +1269,7 @@ worktree add`) into the hub; see [Linked worktrees](#linked-worktrees).
 
 A conversion then sets up its initial worktree (`hops/<branch>` for a
 bare conversion, the repository root for `--regular`) as `add` does:
-deterministic ports and volumes, `.env` and, for a compose file with
+its ports and volumes, `.env` and, for a compose file with
 hardcoded host ports, the compose override, then shared dependencies.
 This happens before the `post-worktree-add` hook, so the hook finds them
 (see [Init hooks](./hooks#init-hooks)). `--no-hooks` skips the hook, not

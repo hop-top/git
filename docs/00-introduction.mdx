@@ -5,7 +5,7 @@ description: What is git-hop and why should you use it?
 
 # Introduction
 
-git-hop is a Git subcommand that wraps `git worktree` with deterministic, isolated, and reproducible multi-branch development environments.
+git-hop is a Git subcommand that wraps `git worktree` with isolated, stable multi-branch development environments.
 
 ## Why git-hop?
 
@@ -26,7 +26,7 @@ Then git-hop is exactly the tool built for you.
 
 - **Git-native**: `git hop` behaves like standard Git commands
 - **Isolated environments**: Each branch gets its own ports, volumes, and networks
-- **Deterministic allocation**: Same branch = same ports (reproducible anywhere)
+- **Stable allocation**: A worktree keeps its ports once allocated, with no conflicts across hubs
 - **Service orchestration**: Start a worktree's Docker services with `git hop env start`, or automatically on add/clone with `hop.env.autoStart`
 - **Zero config needed**: Works out of the box for most use cases
 - **Self-healing**: `git hop doctor` detects and fixes inconsistencies
@@ -52,7 +52,7 @@ Then git-hop is exactly the tool built for you.
 
 | Feature | Manual Worktrees | git-hop |
 |---------|-----------------|---------|
-| Port management | Manual, error-prone | Automatic, deterministic |
+| Port management | Manual, error-prone | Automatic, stable |
 | Service isolation | Requires custom scripts | Built-in |
 | Branch switching | Stop/start services | Keep all running |
 | Cleanup | Fear of breaking things | Safe, automatic |

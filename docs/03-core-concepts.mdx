@@ -143,7 +143,7 @@ A *worktree* is a Git worktree created and managed by git-hop. Each worktree is 
 ### Worktree Isolation
 
 Each worktree has:
-- **Unique ports**: Deterministic allocation prevents conflicts
+- **Unique ports**: No two worktrees get the same port
 - **Isolated volumes**: Separate data per branch
 - **Independent services**: Run different service versions per branch
 - **Symlinked access**: Accessible via hub for convenience
@@ -162,39 +162,50 @@ stateDiagram-v2
     Removed --> [*]
 ```
 
-## Deterministic Allocation
+## Port Allocation
 
-git-hop uses stable hashing to allocate resources:
+git-hop allocates a worktree's ports once and records them in the
+hopspace's `ports.json`:
 
-- **Same branch** = **same ports** (reproducible anywhere)
-- **Different branches** = **different ports** (no conflicts)
-- **Predictable allocation** = **no manual config**
+- **Stable**: a worktree keeps its ports each time its environment is
+  generated (`add`, `env generate`)
+- **No conflicts**: new ports skip every port any hub git-hop knows of
+  already holds
+- **No manual config**: ports come from `baseRange` (default 10000-20000)
 
 ### Port Allocation Algorithm
 
 ```mermaid
 flowchart TD
-    A[Branch Name] --> B[SHA-256 Hash]
-    B --> C[Modulo port range]
-    C --> D[Port Assignment]
-    D --> E{Port Available?}
-    E -->|Yes| F[Allocated]
-    E -->|No| G[Next Hash Iteration]
-    G --> C
-    
-    style F fill:#c8e6c9
-    style D fill:#fff9c4
+    A[Generate environment] --> B{Worktree has ports?}
+    B -->|Yes| C{Held by a hub set up earlier?}
+    C -->|No| D[Keep them]
+    C -->|Yes| E[Warn]
+    B -->|No| F[New block]
+    E --> F
+    F --> G{allocationMode}
+    G -->|incremental, the default| H[After highest port in use]
+    G -->|hash, opt-in| I[Where repository, hub and branch hash to]
+    H --> J[First free block if taken or out of range]
+    I --> J
+
+    style D fill:#c8e6c9
+    style J fill:#c8e6c9
 ```
 
 ### Example
 
-| Branch | Ports |
-|--------|-------|
-| main | 10100-10102 |
-| feature-x | 11500-11502 |
-| pr-123 | 12300-12302 |
+| Worktree | Ports | Set up |
+|----------|-------|--------|
+| main | 10000-10002 | first |
+| feature-x | 10003-10005 | second |
+| pr-123 | 10006-10008 | third |
 
-The same branch always gets the same ports, even across different machines.
+Regenerating `main` keeps 10000-10002. Allocation depends on what is
+already allocated, so the same branch in another hub or on another
+machine can get other ports. See
+[Ports Configuration](./configuration.md#ports-configuration) for
+`ports.json`.
 
 ## Services
 
