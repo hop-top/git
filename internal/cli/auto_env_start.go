@@ -60,6 +60,7 @@ func clonedEnvTarget(fs afero.Fs, hubPath string) (services.EnvTarget, error) {
 	return services.EnvTarget{
 		Root:         resolveSwitchWorktreePath(hub.Config.Branches[branch], hubPath),
 		Branch:       branch,
+		HubPath:      hubPath,
 		HopspacePath: hop.ResolveHopspacePath(hubPath, hub.Config.Repo),
 		Hub:          hub.Config,
 	}, nil

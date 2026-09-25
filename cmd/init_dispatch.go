@@ -71,6 +71,7 @@ func setUpInitWorktree(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, branch
 	target := services.EnvTarget{
 		Root:         worktreePath,
 		Branch:       branch,
+		HubPath:      repoPath,
 		HopspacePath: hop.ResolveHopspacePath(repoPath, hub.Config.Repo),
 		Hub:          hub.Config,
 	}

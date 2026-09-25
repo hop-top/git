@@ -824,12 +824,21 @@ Port and volume configurations are stored per repository for deterministic alloc
         "api": 10234,
         "db": 10235,
         "redis": 10236
-      }
+      },
+      "overrideDir": "/home/user/.cache/git-hop/org/repo/app-1a2b3c4d/main"
     }
   },
   "services": ["api", "db", "redis"]
 }
 ```
+
+`overrideDir` is where the branch's compose override is cached, when its
+compose file has hardcoded host ports: `$XDG_CACHE_HOME/git-hop/<org>/<repo>/<hub key>/<branch>`,
+where the hub key is the hub directory's name and a short hash of its
+path, so two hubs of one repository never share an override. An entry
+without it (written by an earlier release) uses
+`$XDG_CACHE_HOME/git-hop/<org>/<repo>/<branch>` until the environment is
+generated again.
 
 ### Volumes Configuration
 

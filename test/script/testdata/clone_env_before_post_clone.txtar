@@ -55,9 +55,9 @@ override=no-override
 if [ -f "$GIT_HOP_WORKTREE_PATH/.env" ]; then
 	env=$(grep '^HOP_PORT_WEB=' "$GIT_HOP_WORKTREE_PATH/.env")
 fi
-if [ -f "$XDG_CACHE_HOME/git-hop/org/repo/main/docker-compose.override.yml" ]; then
-	override=override
-fi
+for f in "$XDG_CACHE_HOME"/git-hop/org/repo/*/main/docker-compose.override.yml; do
+	[ -f "$f" ] && override=override
+done
 echo "post-clone $env $override" >> "$WORK/events.log"
 -- docker-stub --
 #!/bin/sh

@@ -20,14 +20,15 @@ type WorktreeEnv struct {
 }
 
 // GenerateWorktreeEnv prepares the Docker environment of the worktree at
-// worktreePath on branch: it allocates the branch's ports and volumes,
-// writes the worktree's .env and, for a compose file with hardcoded host
-// ports, the compose override, then records the allocation in the
-// hopspace's ports.json and volumes.json. It is the one path add, clone
+// worktreePath on branch, in the hub at hubPath: it allocates the
+// branch's ports and volumes, writes the worktree's .env and, for a
+// compose file with hardcoded host ports, the compose override (in the
+// hub's own cache directory, HubOverrideDir), then records the
+// allocation in the hopspace's ports.json and volumes.json. It is the one path add, clone
 // and `env generate` share. A worktree without a Docker environment gets
 // nothing: (nil, nil). A failure to record the allocation is reported
 // and does not fail the call.
-func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, worktreePath, branch, org, repo string) (*WorktreeEnv, error) {
+func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, worktreePath, branch, org, repo string) (*WorktreeEnv, error) {
 	if !d.HasDockerEnv(worktreePath) {
 		return nil, nil
 	}
@@ -49,9 +50,16 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, worktreePa
 		}
 	}
 
-	ports, vols, overridePath, err := NewEnvManager(fs, portsCfg, volsCfg, d).Generate(branch, worktreePath, org, repo)
+	manager := NewEnvManager(fs, portsCfg, volsCfg, d)
+	if hubPath != "" {
+		manager.OverrideDir = HubOverrideDir(org, repo, hubPath, branch)
+	}
+	ports, vols, overridePath, err := manager.Generate(branch, worktreePath, org, repo)
 	if err != nil {
 		return nil, err
+	}
+	if overridePath != "" {
+		ports.OverrideDir = filepath.Dir(overridePath)
 	}
 
 	if portsCfg.Branches == nil {

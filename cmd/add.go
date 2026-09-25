@@ -227,6 +227,7 @@ created or written and no hook runs.`,
 		envTarget := services.EnvTarget{
 			Root:         worktreePath,
 			Branch:       branch,
+			HubPath:      hubPath,
 			HopspacePath: hopspacePath,
 			Hub:          hub.Config,
 		}
