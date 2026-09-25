@@ -16,8 +16,9 @@ import (
 
 // removeHub removes the hub at hubPath: its worktrees, the hub directory,
 // its state entry and its hops registry entries, then the repository's
-// data-home hopspace.
-func removeHub(fs afero.Fs, hubPath string) {
+// data-home hopspace. It returns one record per worktree in branch order,
+// then the hub's, then the hopspace's when there is one.
+func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 	output.Info("Removing hub at %s...", hubPath)
 
 	// Load hub to get repo info
@@ -33,20 +34,27 @@ func removeHub(fs afero.Fs, hubPath string) {
 	registryKeys := registry.HubKeys(hubPath, hubWorktreePaths(hub, hubPath))
 
 	// Remove all worktrees
+	recs := make([]removeRecord, 0, len(hub.Config.Branches)+2)
 	for branchName, branchConfig := range hub.Config.Branches {
 		worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
 		output.Info("Removing worktree for branch %s...", branchName)
 
+		rec := removeRecord{Kind: removeKindWorktree, Branch: branchName, Path: worktreePath, Removed: true}
 		if err := fs.RemoveAll(worktreePath); err != nil {
 			output.Warn("Failed to remove worktree %s: %v", branchName, err)
+			rec.Removed = false
+			rec.Reason = fmt.Sprintf("failed to remove worktree: %v", err)
 		}
+		recs = append(recs, rec)
 	}
+	sortRemoveRecords(recs)
 
 	// Remove hub directory
 	output.Info("Removing hub directory...")
 	if err := fs.RemoveAll(hubPath); err != nil {
 		output.Fatal("Failed to remove hub directory: %v", err)
 	}
+	recs = append(recs, removeRecord{Kind: removeKindHub, Path: hubPath, Removed: true})
 
 	// Remove from global state: this hub and its worktrees. The
 	// repository's other hubs, and their worktrees, stay.
@@ -78,18 +86,24 @@ func removeHub(fs afero.Fs, hubPath string) {
 	case !d.exists:
 	case d.remove():
 		output.Info("Cleaning up hopspace data...")
+		rec := d.record(true)
 		if err := fs.RemoveAll(d.path); err != nil {
 			output.Warn("Failed to remove hopspace data: %v", err)
+			rec.Removed = false
+			rec.Reason = fmt.Sprintf("failed to remove hopspace data: %v", err)
 		}
+		recs = append(recs, rec)
 	default:
 		output.Info("Keeping hopspace data at %s: %s", d.path, d.reason())
 		if err := services.DropHubEnvEntries(fs, d.path, hubPath); err != nil {
 			output.Warn("Failed to update ports and volumes: %v", err)
 		}
 		output.Hint("it is removed along with the last hub that uses it")
+		recs = append(recs, d.record(false))
 	}
 
 	output.Success("Successfully removed hub: %s", hubPath)
+	return recs
 }
 
 // otherHubsInState reports whether state records a hub of repoID other
@@ -156,6 +170,15 @@ func (d dataHomeHopspace) reason() string {
 	default:
 		return "no other hub uses it"
 	}
+}
+
+// record is the hopspace's remove record: removed, or kept and why.
+func (d dataHomeHopspace) record(removed bool) removeRecord {
+	rec := removeRecord{Kind: removeKindHopspace, Path: d.path, Removed: removed}
+	if !removed {
+		rec.Reason = d.reason()
+	}
+	return rec
 }
 
 // dataHomeHopspaceFor decides the fate of the data-home hopspace of

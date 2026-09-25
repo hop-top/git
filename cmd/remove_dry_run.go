@@ -20,8 +20,8 @@ import (
 // without doing any of it: no detector action, hook, git, filesystem,
 // hop.json, hopspace, state or symlink write. The safety gate is evaluated
 // exactly as the real run evaluates it, and a removal it would refuse
-// fails here too.
-func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, force, noVerify, noPrompt, deleteRemote bool) {
+// fails here too. It returns the record the removal would produce.
+func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, force, noVerify, noPrompt, deleteRemote bool) removeRecord {
 	worktreePath := config.ResolveWorktreePath(hub.Config.Branches[branch].Path, hubPath)
 	absWorktree, _ := filepath.Abs(worktreePath)
 
@@ -41,12 +41,13 @@ func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath,
 		output.Info("[dry-run] Would ask for confirmation before removing '%s' (--no-prompt skips it)", branch)
 	}
 
-	previewBranchRemoval(fs, g, hub, hubPath, branch, deleteRemote)
+	return previewBranchRemoval(fs, g, hub, hubPath, branch, deleteRemote)
 }
 
 // previewBranchRemoval reports the steps removeBranchWorktreeWithRemote
-// would take for branch, in the order it takes them.
-func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) {
+// would take for branch, in the order it takes them, and returns the
+// record it would produce.
+func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) removeRecord {
 	worktreePath := config.ResolveWorktreePath(hub.Config.Branches[branch].Path, hubPath)
 	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	runner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
@@ -56,16 +57,26 @@ func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 	}
 	cli.PreviewHook(runner, "pre-worktree-remove", worktreePath, repoID)
 	output.Info("[dry-run] Would remove worktree at %s", worktreePath)
-	previewBranchDeletion(branch, g.LocalBranchExists(hubPath, branch), deleteRemote)
+	localExists := g.LocalBranchExists(hubPath, branch)
+	previewBranchDeletion(branch, localExists, deleteRemote)
 	output.Info("[dry-run] Would remove '%s' from hop.json, hopspace and state", branch)
 	cli.PreviewHook(runner, "post-worktree-remove", worktreePath, repoID)
 	output.Info("[dry-run] Would point 'current' at '%s'", hub.Config.Repo.DefaultBranch)
+	return removeRecord{
+		Kind:          removeKindWorktree,
+		Branch:        branch,
+		Path:          worktreePath,
+		Removed:       true,
+		BranchDeleted: localExists,
+		RemoteDeleted: deleteRemote,
+	}
 }
 
 // previewRemoveMerged is runRemoveMerged's preview: the same candidate
-// list and per-candidate gate, with nothing removed. It fails when the
-// real run would, i.e. when any candidate would be refused.
-func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt, deleteRemote bool) {
+// list and per-candidate gate, with nothing removed. It returns the
+// records the run would produce and how many candidates it would refuse;
+// the caller fails when the real run would, i.e. when any would be.
+func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt, deleteRemote bool) ([]removeRecord, int) {
 	hubPath, err := hop.FindHub(fs, cwd)
 	if err != nil {
 		output.Fatal("Not in a hub: %v", err)
@@ -76,12 +87,14 @@ func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noV
 	}
 
 	toRemove, preSkipped := collectMergedCandidates(fs, g, hub, hubPath, cwd)
+	recs := skippedRemoveRecords(preSkipped)
 	for _, sk := range preSkipped {
 		output.Info("Skipping %s: %s", sk.Branch, sk.Reason)
 	}
 	if len(toRemove) == 0 {
 		output.Info("No merged worktrees to remove.")
-		return
+		sortRemoveRecords(recs)
+		return recs, 0
 	}
 	sort.Slice(toRemove, func(i, j int) bool { return toRemove[i].Branch < toRemove[j].Branch })
 
@@ -95,19 +108,20 @@ func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noV
 		output.Info("[dry-run] Safety check for '%s': %s", c.Branch, describeSafety(safety))
 		if err := removeGate(safety, force, noVerify); err != nil {
 			output.Info("[dry-run] Would skip %s: %v", c.Branch, err)
+			recs = append(recs, keptRemoveRecord(c, err.Error()))
 			refused++
 			continue
 		}
-		previewBranchRemoval(fs, g, hub, hubPath, c.Branch, deleteRemote)
+		recs = append(recs, previewBranchRemoval(fs, g, hub, hubPath, c.Branch, deleteRemote))
 	}
 
-	if refused > 0 {
-		output.Fatal("[dry-run] would fail: %d merged worktree(s) could not be removed", refused)
-	}
+	sortRemoveRecords(recs)
+	return recs, refused
 }
 
-// previewRemoveHub reports what removing the hub at hubPath would delete.
-func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) {
+// previewRemoveHub reports what removing the hub at hubPath would delete,
+// and returns the records removeHub would produce.
+func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord {
 	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
 		output.Fatal("Failed to load hub: %v", err)
@@ -121,12 +135,15 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) {
 		branches = append(branches, name)
 	}
 	sort.Strings(branches)
+	recs := make([]removeRecord, 0, len(branches)+2)
 	for _, name := range branches {
 		worktreePath := config.ResolveWorktreePath(hub.Config.Branches[name].Path, hubPath)
 		output.Info("[dry-run] Would remove worktree for branch '%s' at %s", name, worktreePath)
+		recs = append(recs, removeRecord{Kind: removeKindWorktree, Branch: name, Path: worktreePath, Removed: true})
 	}
 
 	output.Info("[dry-run] Would remove hub directory %s", hubPath)
+	recs = append(recs, removeRecord{Kind: removeKindHub, Path: hubPath, Removed: true})
 	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 	st, stErr := state.LoadState(fs)
 	if stErr == nil && st.Repositories[repoID] != nil {
@@ -143,4 +160,8 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) {
 	default:
 		output.Info("[dry-run] Would keep hopspace data at %s: %s", d.path, d.reason())
 	}
+	if d.exists {
+		recs = append(recs, d.record(d.remove()))
+	}
+	return recs
 }

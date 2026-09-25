@@ -89,7 +89,7 @@ func TestRemoveBranchWorktree_DeletesRemoteWhenRequested(t *testing.T) {
 	mockGit := mocks.NewMockGit()
 	mockGit.RemoteBranchExists = true
 
-	err := removeBranchWorktreeWithRemote(fs, mockGit, hub, hubPath, "feature", true)
+	_, err := removeBranchWorktreeWithRemote(fs, mockGit, hub, hubPath, "feature", true)
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, mockGit.HasRemoteBranchCalls,
@@ -106,7 +106,7 @@ func TestRemoveBranchWorktree_SkipsRemoteDeleteWhenAbsent(t *testing.T) {
 	mockGit := mocks.NewMockGit()
 	mockGit.RemoteBranchExists = false
 
-	err := removeBranchWorktreeWithRemote(fs, mockGit, hub, hubPath, "feature", true)
+	_, err := removeBranchWorktreeWithRemote(fs, mockGit, hub, hubPath, "feature", true)
 	require.NoError(t, err)
 
 	assert.NotEmpty(t, mockGit.HasRemoteBranchCalls)

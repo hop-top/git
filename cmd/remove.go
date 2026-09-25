@@ -75,13 +75,26 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 			output.Fatal("Failed to get current directory: %v", err)
 		}
 
-		// --merged path: collect merged worktrees and remove each.
+		// --merged path: collect merged worktrees and remove each. The
+		// records go out before a partial failure's exit status, so a
+		// caller learns what did go.
 		if merged {
 			if dryRun {
-				previewRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
+				recs, refused := previewRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
+				emitRemoveResult(cmd, markDryRun(recs))
+				if refused > 0 {
+					output.Fatal("[dry-run] would fail: %d merged worktree(s) could not be removed", refused)
+				}
 				return
 			}
-			runRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
+			recs, failed := runRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
+			emitRemoveResult(cmd, recs)
+			if failed > 0 {
+				// Mirror single-target remove's exit convention: bubble
+				// up a non-zero status when any candidate was blocked or
+				// failed.
+				output.Fatal("some merged worktrees could not be removed")
+			}
 			return
 		}
 
@@ -111,7 +124,8 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				}
 
 				if dryRun {
-					previewRemoveBranch(fs, g, hub, hubPath, target, force, noVerify, noPrompt, deleteRemote)
+					rec := previewRemoveBranch(fs, g, hub, hubPath, target, force, noVerify, noPrompt, deleteRemote)
+					emitRemoveResult(cmd, markDryRun([]removeRecord{rec}))
 					return
 				}
 
@@ -146,9 +160,11 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 					}
 				}
 
-				if err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, target, deleteRemote); err != nil {
+				rec, err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, target, deleteRemote)
+				if err != nil {
 					output.Fatal("%s", err.Error())
 				}
+				emitRemoveResult(cmd, []removeRecord{rec})
 				return
 			}
 		}
@@ -162,7 +178,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 		// Check if target is a hub
 		if hop.IsHub(fs, targetPath) {
 			if dryRun {
-				previewRemoveHub(fs, targetPath, noPrompt)
+				emitRemoveResult(cmd, markDryRun(previewRemoveHub(fs, targetPath, noPrompt)))
 				return
 			}
 			if !noPrompt {
@@ -190,7 +206,7 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				}
 			}
 
-			removeHub(fs, targetPath)
+			emitRemoveResult(cmd, removeHub(fs, targetPath))
 			return
 		}
 
@@ -247,7 +263,8 @@ func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string) error {
 // failures (detector, pre-hook) are returned as errors so callers can
 // decide whether to abort (single-target) or report-and-continue (--merged).
 func removeBranchWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string) error {
-	return removeBranchWorktreeWithRemote(fs, g, hub, hubPath, branch, false)
+	_, err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, branch, false)
+	return err
 }
 
 // removeBranchWorktreeWithRemote is removeBranchWorktree plus explicit
@@ -260,13 +277,17 @@ func removeBranchWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 // credentials — a local worktree removal has no reason to wait on the
 // network. Deleting the remote branch is a separate, destructive act
 // the user must ask for via --delete-remote.
-func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) error {
+//
+// The returned record says what the removal did; it is meaningful only
+// when the error is nil.
+func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) (removeRecord, error) {
 	output.Info("Removing branch %s from hub...", branch)
 
 	// Get the worktree path from the hub config BEFORE removing from config
 	branchConfig := hub.Config.Branches[branch]
 	// Resolve the worktree path (may be relative like "hops/branch")
 	worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
+	rec := removeRecord{Kind: removeKindWorktree, Branch: branch, Path: worktreePath}
 
 	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
@@ -277,14 +298,14 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	detectorCtx := context.Background()
 	branchInfo, err := detectorMgr.ExecutePreRemove(detectorCtx, branch, hubPath, worktreePath)
 	if err != nil {
-		return fmt.Errorf("branch type detector failed: %v", err)
+		return rec, fmt.Errorf("branch type detector failed: %v", err)
 	}
 
 	// Execute pre-worktree-remove hook with detector env vars
 	hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
 	detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
 	if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-remove", worktreePath, repoID, branch, detectorEnv); err != nil {
-		return fmt.Errorf("hook pre-worktree-remove failed: %v", err)
+		return rec, fmt.Errorf("hook pre-worktree-remove failed: %v", err)
 	}
 
 	// Resolve a live base path for git commands (worktree remove, branch -D).
@@ -327,7 +348,9 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	output.Info("Removing worktree directory: %s", worktreePath)
 	if err := fs.RemoveAll(worktreePath); err != nil {
 		output.Error("Failed to remove worktree directory: %v", err)
+		rec.Reason = fmt.Sprintf("failed to remove worktree directory: %v", err)
 	} else {
+		rec.Removed = true
 		output.Info("Successfully removed worktree directory")
 
 		// Remove parent dir (e.g. feat/, fix/) if now empty.
@@ -344,6 +367,8 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	if g.LocalBranchExists(absBasePath, branch) {
 		if err := g.DeleteLocalBranch(absBasePath, branch); err != nil {
 			output.Warn("Failed to delete local branch: %v", err)
+		} else {
+			rec.BranchDeleted = true
 		}
 	} else {
 		output.Debug("local branch %s already absent; skipping git branch -D", branch)
@@ -355,6 +380,8 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 		if g.HasRemoteBranch(absBasePath, branch) {
 			if err := g.DeleteRemoteBranch(absBasePath, branch); err != nil {
 				output.Warn("Failed to delete remote branch: %v", err)
+			} else {
+				rec.RemoteDeleted = true
 			}
 		}
 	}
@@ -425,7 +452,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	))
 
 	output.Info("Successfully removed %s", branch)
-	return nil
+	return rec, nil
 }
 
 // isWorktreeRegistered reports whether git's worktree registry contains
@@ -539,10 +566,12 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 
 // runRemoveMerged drives the --merged removal flow. Order of operations:
 // snapshot the candidate list, prompt (unless --no-prompt), then loop
-// each candidate through removeGate + removeBranchWorktree. Track removed
-// vs. skipped counts and exit non-zero if any candidate was skipped due
-// to a safety-gate failure.
-func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt, deleteRemote bool) {
+// each candidate through removeGate + removeBranchWorktree.
+//
+// It returns one record per candidate and pre-iteration skip, in branch
+// order, and how many candidates the safety gate refused or failed to
+// remove; the caller turns a non-zero count into the exit status.
+func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt, deleteRemote bool) ([]removeRecord, int) {
 	hubPath, err := hop.FindHub(fs, cwd)
 	if err != nil {
 		output.Fatal("Not in a hub: %v", err)
@@ -558,13 +587,14 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 
 	// Surface pre-iteration skips (cwd-inside, missing path) up front so
 	// the user knows why something they expected to disappear didn't.
+	recs := skippedRemoveRecords(preSkipped)
 	for _, sk := range preSkipped {
 		output.Info("Skipping %s: %s", sk.Branch, sk.Reason)
 	}
 
 	if len(toRemove) == 0 {
 		output.Info("No merged worktrees to remove.")
-		return
+		return recs, 0
 	}
 
 	// Show the candidate list.
@@ -576,7 +606,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 	if !noPrompt {
 		confirmed, err := output.ConfirmAnswer(fmt.Sprintf("Remove %d merged worktree(s)?", len(toRemove)))
 		if !resolveConfirmation(confirmed, err) {
-			return
+			return nil, 0
 		}
 	}
 
@@ -591,25 +621,42 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 			reason := fmt.Sprintf("%s: %s", c.Branch, err.Error())
 			output.Warn("Skipping %s", reason)
 			skippedReasons = append(skippedReasons, reason)
+			recs = append(recs, keptRemoveRecord(c, err.Error()))
 			continue
 		}
 
-		if err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, c.Branch, deleteRemote); err != nil {
+		rec, err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, c.Branch, deleteRemote)
+		if err != nil {
 			reason := fmt.Sprintf("%s: %s", c.Branch, err.Error())
 			output.Warn("Failed to remove %s", reason)
 			skippedReasons = append(skippedReasons, reason)
+			recs = append(recs, keptRemoveRecord(c, err.Error()))
 			continue
 		}
+		recs = append(recs, rec)
 		removed++
 	}
 
 	output.Info("Removed %d, skipped %d (%d reasons)", removed, len(skippedReasons), len(skippedReasons))
 
-	if len(skippedReasons) > 0 {
-		// Mirror single-target remove's exit convention: bubble up a
-		// non-zero status when any candidate was blocked or failed.
-		output.Fatal("some merged worktrees could not be removed")
+	sortRemoveRecords(recs)
+	return recs, len(skippedReasons)
+}
+
+// keptRemoveRecord is the record of a --merged candidate left in place,
+// and why.
+func keptRemoveRecord(c mergedCandidate, reason string) removeRecord {
+	return removeRecord{Kind: removeKindWorktree, Branch: c.Branch, Path: c.WorktreePath, Reason: reason}
+}
+
+// skippedRemoveRecords are the records of the candidates --merged set
+// aside before removing anything.
+func skippedRemoveRecords(skipped []mergedCandidate) []removeRecord {
+	recs := make([]removeRecord, 0, len(skipped))
+	for _, sk := range skipped {
+		recs = append(recs, keptRemoveRecord(sk, sk.Reason))
 	}
+	return recs
 }
 
 func init() {

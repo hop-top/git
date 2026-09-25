@@ -121,6 +121,12 @@ exits 0 without prompting.
 # Bulk removal of merged branches (skips default + current)
 /usr/bin/git hop remove --merged                                  # interactive
 /usr/bin/git hop remove --merged --no-prompt                      # non-interactive
+
+# Result: [{kind, branch, path, removed, branch_deleted, remote_deleted, reason?, dry_run?}]
+# kind: worktree | hub | hopspace; one record per branch, --merged candidate, or hub entry
+# --merged leaving any candidate in place: records still printed, exit 1
+/usr/bin/git hop remove <branch> --no-prompt --json
+/usr/bin/git hop remove --merged --no-prompt --dry-run --json     # would-be records, dry_run: true
 ```
 
 ---
@@ -178,11 +184,14 @@ exits 0 without prompting.
 Structured output rules:
 
 - Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env start`,
-  `env stop`, `env generate`, `env gc`, `repair` have a result; other
-  commands ignore the format for stdout.
+  `env stop`, `env generate`, `env gc`, `repair`, `remove` have a result;
+  other commands ignore the format for stdout.
 - Every result is a list (`add`, `init`, `env start|stop|generate`: one
   object). Empty = `[]`, never empty stdout.
 - Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
+- `--dry-run` with a result: same shape, would-be values, `dry_run: true`
+  in json/yaml.
+- Refusal / failure: exit status unchanged, error on stderr, no result.
 - `--json` + `--porcelain`, `--json` + another `--format`, an unknown format
   or column: exit 129 before anything changes.
 - `repair --list-backups` / `--undo` in a structured mode: exit 129.
