@@ -509,7 +509,7 @@ func TestMirror_DryRunWritesNothing(t *testing.T) {
 				RepoID:       testRepoID,
 				Mode:         mode,
 				Stdin:        strings.NewReader("y\n"),
-				Stdout:       io.Discard,
+				PromptOut:    io.Discard,
 				DryRun:       true,
 			})
 			if err != nil {
