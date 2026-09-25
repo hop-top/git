@@ -3,6 +3,11 @@ worktree, and symlinks "current" to the receiving branch's worktree.
 
 If only one argument is given, the current branch is used as the source.
 
+The source worktree is removed only through 'git worktree remove'. When
+that cannot happen (git refuses, or the recorded directory is not a
+worktree git has registered and is not empty), the merge stands but
+merge exits 1, leaving the worktree, its hop.json entry and its branch.
+
 Usage:
   git-hop merge [source-branch] <into-branch> [flags]
 

@@ -158,29 +158,67 @@ func TestRemoveBranchWorktree_AlreadyAbsentIsQuiet(t *testing.T) {
 	assert.NotContains(t, hub.Config.Branches, "feature")
 }
 
-// TestRemoveBranchWorktree_GenuineWorktreeFailureWarns is the guard
+// TestRemoveBranchWorktree_GenuineWorktreeFailureFails is the guard
 // against over-silencing. The worktree IS registered, so removal is
 // attempted; when git refuses (locked worktree, permission denied) the
-// user must still see it.
-func TestRemoveBranchWorktree_GenuineWorktreeFailureWarns(t *testing.T) {
+// user must see it, and the removal stops there: the worktree's files,
+// its hop.json entry and its branch all stay.
+//
+// This test used to demand a warning and a removal that carried on,
+// deleting the directory git had refused to remove.
+func TestRemoveBranchWorktree_GenuineWorktreeFailureFails(t *testing.T) {
 	fs, hub, hubPath, featurePath := newQuietRemoveHub(t)
+	wip := filepath.Join(featurePath, "wip.txt")
+	require.NoError(t, afero.WriteFile(fs, wip, []byte("work"), 0o644))
 
 	mockGit := mocks.NewMockGit()
 	// Registry lists the feature worktree: it is live, not already gone.
 	mockGit.WorktreeListOut = porcelainFor(filepath.Join(hubPath, "hops", "main"), featurePath)
-	mockGit.LocalBranches = []string{"main"}
+	mockGit.LocalBranches = []string{"main", "feature"}
 	mockGit.WorktreeRemoveErr = errors.New("fatal: validation failed, cannot remove working tree")
 
 	var runErr error
-	_, stderr := captureRemoveOutput(t, func() {
+	captureRemoveOutput(t, func() {
 		runErr = removeBranchWorktree(fs, mockGit, hub, hubPath, "feature")
 	})
-	require.NoError(t, runErr)
 
 	assert.NotEmpty(t, mockGit.WorktreeRemoveCalls,
 		"a registered worktree must still be handed to `git worktree remove`")
-	assert.Contains(t, stderr, "cannot remove working tree",
-		"a genuine worktree-removal failure must stay visible; stderr was:\n%s", stderr)
+	require.Error(t, runErr)
+	assert.Contains(t, runErr.Error(), "cannot remove working tree",
+		"a genuine worktree-removal failure must stay visible")
+	got, err := afero.ReadFile(fs, wip)
+	require.NoError(t, err, "the worktree's files must survive")
+	assert.Equal(t, "work", string(got))
+	assert.Contains(t, hub.Config.Branches, "feature", "the hop.json entry stays")
+	assert.Empty(t, mockGit.DeletedLocalBranches, "the branch stays")
+}
+
+// A directory hop.json records that git has not registered is removed
+// only when empty: with anything in it (a worktree `git worktree move`
+// nested inside, say), the removal stops and everything stays.
+func TestRemoveBranchWorktree_UnregisteredNonEmptyDirStays(t *testing.T) {
+	fs, hub, hubPath, featurePath := newQuietRemoveHub(t)
+	keep := filepath.Join(featurePath, "keep.txt")
+	require.NoError(t, afero.WriteFile(fs, keep, []byte("work"), 0o644))
+
+	mockGit := mocks.NewMockGit()
+	mockGit.WorktreeListOut = porcelainFor(filepath.Join(hubPath, "hops", "main"))
+	mockGit.LocalBranches = []string{"main", "feature"}
+
+	var runErr error
+	captureRemoveOutput(t, func() {
+		runErr = removeBranchWorktree(fs, mockGit, hub, hubPath, "feature")
+	})
+
+	require.Error(t, runErr)
+	assert.Contains(t, runErr.Error(), "is not a worktree git has registered and is not empty")
+	assert.Empty(t, mockGit.WorktreeRemoveCalls)
+	got, err := afero.ReadFile(fs, keep)
+	require.NoError(t, err, "the user's file must survive")
+	assert.Equal(t, "work", string(got))
+	assert.Contains(t, hub.Config.Branches, "feature", "the hop.json entry stays")
+	assert.Empty(t, mockGit.DeletedLocalBranches, "the branch stays")
 }
 
 // TestRemoveBranchWorktree_GenuineBranchFailureWarns is the second

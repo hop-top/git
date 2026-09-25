@@ -89,11 +89,10 @@ func checkGitflowStarted(g git.GitInterface, path, branch string) error {
 // flow start to create branch in, after the start failed, along with the
 // branch if the start got as far as creating it.
 func undoGitflowWorktree(fs afero.Fs, g git.GitInterface, hubPath, worktreePath, branch string) {
-	if err := g.WorktreeRemove(hubPath, worktreePath, true); err != nil {
-		output.Warn("Failed to remove worktree via git: %v", err)
-	}
-	if err := fs.RemoveAll(worktreePath); err != nil {
-		output.Warn("Failed to remove worktree directory: %v", err)
+	// Only `git worktree remove` deletes the worktree's files; when it
+	// cannot, they stay for the user to look at.
+	if err := removeWorktreeFiles(fs, g, hubPath, worktreePath); err != nil {
+		output.Warn("Failed to remove worktree: %v", err)
 	}
 	if err := hop.NewCleanupManager(fs, g).RemoveEmptyParent(worktreePath, hubPath); err != nil {
 		output.Warn("Failed to remove empty parent directory: %v", err)

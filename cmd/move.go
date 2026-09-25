@@ -28,7 +28,14 @@ var moveCmd = &cobra.Command{
 	Use:     "move [old-branch] <new-branch>",
 	Aliases: []string{"rename", "mv"},
 	Short:   "Rename a worktree and its branch",
-	Args:    cobra.RangeArgs(1, 2),
+	Long: `Rename a worktree and its branch.
+
+With one argument, renames the current worktree's branch.
+
+Like add, move refuses a destination a file or a non-empty directory
+occupies, with exit status 1: 'git worktree move' would put the
+worktree inside the directory. An empty directory is taken.`,
+	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
 		g := git.New()
@@ -230,7 +237,7 @@ type movePlan struct {
 // prepare settles every refusal the move can check before its first side
 // effect, and returns the hopspace the move will update.
 func (p movePlan) prepare(fs afero.Fs, g git.GitInterface) (*hop.Hopspace, error) {
-	if err := hop.CheckMove(p.hub, g, p.oldBranch, p.newBranch); err != nil {
+	if err := hop.CheckMove(fs, p.hub, g, p.oldBranch, p.newBranch, p.newPath); err != nil {
 		return nil, err
 	}
 	hopspacePath := hop.ResolveHopspacePath(p.hubPath, p.hub.Config.Repo)

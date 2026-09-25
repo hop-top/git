@@ -251,9 +251,15 @@ func (m *WorktreeManager) resolveStartPoint(basePath, startPoint, defaultBranch 
 }
 
 // CheckMove reports why MoveWorktree would refuse to rename oldBranch to
-// newBranch in hub. It only reads the hub config and git refs, so callers
-// can settle it before running anything with side effects.
-func CheckMove(hub *Hub, g git.GitInterface, oldBranch, newBranch string) error {
+// newBranch in hub, moving its worktree to newPath. It only reads the hub
+// config, git refs and what is at newPath, so callers can settle it
+// before running anything with side effects.
+//
+// Like add, move refuses a file or a non-empty directory at newPath:
+// `git worktree move` would put the worktree inside such a directory,
+// while hop.json recorded the directory itself. An empty directory is
+// taken (MoveWorktree removes it first).
+func CheckMove(fs afero.Fs, hub *Hub, g git.GitInterface, oldBranch, newBranch, newPath string) error {
 	if oldBranch == "" || newBranch == "" {
 		return fmt.Errorf("branch names cannot be empty")
 	}
@@ -276,6 +282,10 @@ func CheckMove(hub *Hub, g git.GitInterface, oldBranch, newBranch string) error 
 			return fmt.Errorf("branch '%s' already exists and is not checked out in '%s'", newBranch, oldBranch)
 		}
 	}
+	if occupied(fs, newPath) {
+		return fmt.Errorf("'%s' already exists and is not an empty directory\n"+
+			"hint: move it away, or pick another branch name", newPath)
+	}
 	return nil
 }
 
@@ -283,11 +293,6 @@ func CheckMove(hub *Hub, g git.GitInterface, oldBranch, newBranch string) error 
 // and updates hub and hopspace configs.
 // Returns (oldPath, newPath, error).
 func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, newBranch string, locationPattern, org, repo string) (string, string, error) {
-	if err := CheckMove(hub, m.git, oldBranch, newBranch); err != nil {
-		return "", "", err
-	}
-	oldPath := config.ResolveWorktreePath(hub.Config.Branches[oldBranch].Path, hub.Path)
-
 	// Compute new path from location pattern
 	dataHome := GetGitHopDataHome()
 	ctx := WorktreeLocationContext{
@@ -299,6 +304,19 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 		URI:      hub.Config.Repo.URI,
 	}
 	newPath := filepath.Clean(ExpandWorktreeLocation(locationPattern, ctx))
+
+	if err := CheckMove(m.fs, hub, m.git, oldBranch, newBranch, newPath); err != nil {
+		return "", "", err
+	}
+	oldPath := config.ResolveWorktreePath(hub.Config.Branches[oldBranch].Path, hub.Path)
+
+	// `git worktree move` into an existing directory, even an empty one,
+	// puts the worktree inside it; the empty one CheckMove let through
+	// goes first, so the worktree lands at newPath itself. The removal
+	// fails on a directory something was put in since.
+	if err := NewCleanupManager(m.fs, m.git).RemoveEmptyDirectory(newPath); err != nil {
+		return oldPath, newPath, fmt.Errorf("failed to move worktree: %w", err)
+	}
 
 	// Find a base path for git commands (any other worktree)
 	var basePath string
