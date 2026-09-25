@@ -11,6 +11,13 @@ import (
 // elsewhere in the store. The next install lays them again.
 const IssueEntryLinks IssueType = "entry_links"
 
+// IssueSingleLink marks a DepsDir that is a single link to the intact,
+// shareable install for the current lockfile, as earlier releases made
+// it: npm ci or rm -rf node_modules/* through it empties the install for
+// every worktree. A warning: the next install converts it to the
+// per-entry layout, without reinstalling or writing the install.
+const IssueSingleLink IssueType = "single_link"
+
 // auditEntryLinks classifies depsDir, a real directory linked entry by
 // entry into install. Something real where a link belongs means the
 // package manager installed into the worktree (npm install replaces every

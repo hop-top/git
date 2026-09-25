@@ -70,9 +70,10 @@ const (
 // overstated the problem and made `doctor` look broken on healthy repos.
 // Old-layout links are warnings too: the next install relinks them. So
 // are local installs made from an older lockfile: the next install
-// refreshes them in place.
+// refreshes them in place. And single links to the current install: the
+// next install converts them to the per-entry layout.
 func (t IssueType) Severity() Severity {
-	if t == IssueStaleSymlink || t == IssueOldLayout || t == IssueStaleLocal {
+	if t == IssueStaleSymlink || t == IssueOldLayout || t == IssueStaleLocal || t == IssueSingleLink {
 		return SeverityWarning
 	}
 	return SeverityError
@@ -551,7 +552,7 @@ func (m *DepsManager) Fix(issues []Issue, force bool) error {
 		}
 
 		switch issue.Type {
-		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps, IssueDamagedInstall, IssueStaleLocal, IssueNeedsLocal, IssueEntryLinks:
+		case IssueLocalFolder, IssueBrokenSymlink, IssueStaleSymlink, IssueOldLayout, IssueMissingDeps, IssueDamagedInstall, IssueStaleLocal, IssueNeedsLocal, IssueEntryLinks, IssueSingleLink:
 		default:
 			continue
 		}
