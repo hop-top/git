@@ -34,10 +34,11 @@ stdout '-n, --dry-run'
 # command. Without it, deleting doctor entirely would also satisfy the
 # negative assertion.
 #
-# Each command's Short surfaces in the root command list, so the two rows
-# there are the cleanest side-by-side proof that these are two commands
-# with two descriptions rather than one command under two names.
-exec git-hop --help
+# Each command's Short surfaces in the top-level command list (both are
+# management commands), so the two rows there are the cleanest
+# side-by-side proof that these are two commands with two descriptions
+# rather than one command under two names.
+exec git-hop --help-management
 stdout 'doctor\s+Check and repair the environment'
 stdout 'repair\s+Safely repair stale worktree metadata'
 

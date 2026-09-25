@@ -1,0 +1,57 @@
+# Top-level help sorts commands into kit's two built-in groups: the
+# default group (daily commands) and MANAGEMENT (doctor, repair, prune:
+# diagnosing and repairing hubs and state), which default help leaves out.
+# --help-all adds it; --help-management and `help management` show it alone.
+
+# --- default help: daily commands, no management commands ---
+exec git-hop --help
+stdout '^  add '
+stdout '^  list '
+stdout '^  status '
+! stdout '^  doctor '
+! stdout '^  repair '
+! stdout '^  prune '
+
+# --- bare help is the same ---
+exec git-hop help
+! stdout '^  doctor '
+stdout '^  add '
+
+# --- --help-all: both groups, management titled ---
+exec git-hop --help-all
+stdout '^  add '
+stdout '^MANAGEMENT$'
+stdout '^  doctor '
+stdout '^  repair '
+stdout '^  prune '
+
+# --- --help-management: management commands only ---
+exec git-hop --help-management
+stdout '^MANAGEMENT$'
+stdout '^  doctor '
+stdout '^  repair '
+stdout '^  prune '
+! stdout '^  add '
+! stdout '^  status '
+cp stdout mgmt-flag.txt
+
+exec git-hop help management
+cmp stdout mgmt-flag.txt
+
+# --- a management command's help, either way, is unchanged ---
+exec git-hop doctor --help
+cp stdout doctor-flag.txt
+exec git-hop help doctor
+cmp stdout doctor-flag.txt
+stdout '^Run diagnostics on git-hop'
+
+# --- management commands still complete ---
+exec git-hop __complete ''
+stdout '^doctor'
+stdout '^repair'
+stdout '^prune'
+
+# --- --admin lists hidden helpers, not the management group ---
+exec git-hop --admin
+stdout 'completion'
+! stdout 'doctor'

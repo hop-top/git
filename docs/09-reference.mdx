@@ -134,6 +134,10 @@ output mode: help is never a result. To see the
 worktrees, use `git hop list`; for machine-readable output, add `--json`,
 `--format` or `--porcelain` (see [Structured Output](#structured-output)).
 
+Help lists the daily commands. `doctor`, `repair` and `prune` form the
+MANAGEMENT group, left out of `--help`: `--help-all` lists every command,
+`--help-management` or `git hop help management` only those three.
+
 **Synopsis:**
 ```bash
 git hop [flags]

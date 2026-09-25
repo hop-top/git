@@ -20,6 +20,7 @@ import (
 var pruneCmd = &cobra.Command{
 	Use:     "prune",
 	Args:    cobra.NoArgs,
+	GroupID: cli.GroupManagement,
 	Aliases: []string{"cleanup", "clean"},
 	Short:   "Remove orphaned worktrees and hubs from state and hop.json",
 	Long: `Remove worktrees and hubs that no longer exist on the filesystem.

@@ -258,6 +258,13 @@ Path: /path/to/hub/hops/feature-x
 With no arguments, prints help, as `git hop --help` does, and exits 0.
 To see the worktrees, use [`git hop list`](#git-hop-list).
 
+Help lists the daily commands. The ones that diagnose and repair hubs and
+state, [`doctor`](#git-hop-doctor), [`repair`](#git-hop-repair) and
+[`prune`](#git-hop-prune), form the MANAGEMENT group: `git hop --help-all`
+lists them too, and `git hop --help-management` (or
+`git hop help management`) lists them alone. They run and complete like
+any other command.
+
 ### Usage
 
 ```bash
