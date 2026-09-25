@@ -117,6 +117,16 @@ func (w LinkedWorktree) FinalPath(hub string) string {
 	return w.Path
 }
 
+// Carried is the worktree as the conversion of the repository at hub
+// leaves it: where it is then, and where it moved from when it moves.
+func (w LinkedWorktree) Carried(hub string) config.CarriedWorktree {
+	carried := config.CarriedWorktree{Path: w.FinalPath(hub), Branch: w.Branch}
+	if w.Dest != "" {
+		carried.MovedFrom = w.Path
+	}
+	return carried
+}
+
 // LinkedCarryPlan is what a bare conversion does with the repository's
 // linked worktrees.
 type LinkedCarryPlan struct {

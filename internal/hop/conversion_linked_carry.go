@@ -147,11 +147,7 @@ func (c *Converter) finishLinkedCarry(repoPath string, result *config.Conversion
 				return err
 			}
 		}
-		carried := config.CarriedWorktree{Path: final, Branch: w.Branch}
-		if w.Dest != "" {
-			carried.MovedFrom = w.Path
-		}
-		result.Carried = append(result.Carried, carried)
+		result.Carried = append(result.Carried, w.Carried(repoPath))
 	}
 	for _, p := range c.linked.Prunable {
 		result.Warnings = append(result.Warnings, fmt.Sprintf(

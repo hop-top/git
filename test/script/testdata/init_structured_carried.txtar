@@ -1,0 +1,82 @@
+# The structured result of a bare conversion lists, after the default
+# worktree it created, every linked worktree it carried: one outside the
+# repository where it is, one inside its working tree at hops/<branch>
+# with moved_from its old path. action tells them apart (created or
+# carried), the carried ones in the order of their git admin dirs.
+# --dry-run lists the same worktrees, where they would be, and
+# moves nothing. A prunable linked worktree is left behind, not listed.
+# A regular conversion carries none: its linked worktrees stay linked to
+# .git as they are.
+
+exec git init -q $WORK/p
+cd $WORK/p
+cp $WORK/gitignore .gitignore
+exec git add .gitignore
+exec git commit -q -m initial
+exec git worktree add -q $WORK/ext/wt-a -b feat-a
+exec git worktree add -q $WORK/p/.worktrees/d -b feat-d
+exec git worktree add -q --detach $WORK/ext/det
+exec git worktree add -q $WORK/ext/gone -b feat-gone
+rm $WORK/ext/gone
+
+# --- --dry-run: the worktrees init would create and carry ---
+exec git-hop init --no-prompt --no-hooks -n --json
+decode json stdout dry_run true
+decode json stdout action converted
+decode json stdout 'worktrees.#' 4
+decode json stdout worktrees.0.branch main
+decode json stdout worktrees.0.path '~/p/hops/main$'
+decode json stdout worktrees.0.action created
+! decode json stdout worktrees.0.moved_from
+decode json stdout worktrees.1.branch feat-d
+decode json stdout worktrees.1.path '~/p/hops/feat-d$'
+decode json stdout worktrees.1.action carried
+decode json stdout worktrees.1.moved_from '~/p/\.worktrees/d$'
+decode json stdout worktrees.2.branch ''
+decode json stdout worktrees.2.path '~/ext/det$'
+decode json stdout worktrees.2.action carried
+! decode json stdout worktrees.2.moved_from
+decode json stdout worktrees.3.branch feat-a
+decode json stdout worktrees.3.path '~/ext/wt-a$'
+decode json stdout worktrees.3.action carried
+! decode json stdout worktrees.3.moved_from
+! stdout 'gone'
+! exists $WORK/p/hop.json
+exists $WORK/p/.worktrees/d
+
+# --porcelain keeps its one line: the worktrees are json/yaml only
+exec git-hop init --no-prompt --no-hooks -n --porcelain
+stdout -count=1 '\n'
+stdout '^converted\t\S+/p\tbare\tmain\t$'
+
+# --- the conversion: the same list, now done ---
+exec git-hop init --no-prompt --no-hooks --format yaml
+decode yaml stdout action converted
+! decode yaml stdout dry_run
+decode yaml stdout 'worktrees.#' 4
+decode yaml stdout worktrees.0.path '~/p/hops/main$'
+decode yaml stdout worktrees.0.action created
+decode yaml stdout worktrees.1.branch feat-d
+decode yaml stdout worktrees.1.path '~/p/hops/feat-d$'
+decode yaml stdout worktrees.1.moved_from '~/p/\.worktrees/d$'
+decode yaml stdout worktrees.1.action carried
+decode yaml stdout worktrees.2.path '~/ext/det$'
+decode yaml stdout worktrees.2.action carried
+decode yaml stdout worktrees.3.path '~/ext/wt-a$'
+decode yaml stdout worktrees.3.action carried
+! stdout 'gone'
+exists $WORK/p/hops/feat-d
+
+# --- a regular conversion carries none ---
+exec git init -q $WORK/r
+cd $WORK/r
+exec git commit -q --allow-empty -m initial
+exec git worktree add -q $WORK/ext/r-a -b r-a
+exec git-hop init --no-prompt --no-hooks --regular --json
+decode json stdout layout regular
+decode json stdout 'worktrees.#' 1
+decode json stdout worktrees.0.path '~/r$'
+decode json stdout worktrees.0.action created
+
+-- gitignore --
+.worktrees/

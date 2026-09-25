@@ -32,14 +32,46 @@ type initResult struct {
 	DryRun        bool           `json:"dry_run,omitempty" yaml:"dry_run,omitempty" jsonschema:"description=True when --dry-run previewed the run and changed nothing; absent otherwise"`
 	BackupKept    bool           `json:"backup_kept,omitempty" yaml:"backup_kept,omitempty" jsonschema:"description=True when the backup is still on disk after the conversion (--keep-backup or hop.backup.keepBackup; under --dry-run: would be); absent otherwise"`
 	Registered    bool           `json:"registered,omitempty" yaml:"registered,omitempty" jsonschema:"description=True when this run recorded the hub in git-hop's state (converted and adopted; under --dry-run: would); absent otherwise"`
-	Worktrees     []initWorktree `json:"worktrees" yaml:"worktrees" jsonschema:"description=Worktrees this run created (or would create under --dry-run); empty when it created none"`
+	Worktrees     []initWorktree `json:"worktrees" yaml:"worktrees" jsonschema:"description=Worktrees this run created and then the linked worktrees a bare conversion carried into the hub (under --dry-run: would create and carry); empty when there are none"`
 	MovedAside    string         `json:"moved_aside,omitempty" yaml:"moved_aside,omitempty" jsonschema:"description=restored with --force only: where what occupied the original location was moved (under --dry-run: would be); absent otherwise"`
 }
 
-// initWorktree is one worktree `git hop init` created.
+// What `git hop init` did with a worktree of its result.
+const (
+	initWorktreeCreated = "created"
+	initWorktreeCarried = "carried"
+)
+
+// initWorktree is one worktree `git hop init` created, or one linked
+// worktree a bare conversion carried into the hub.
 type initWorktree struct {
-	Branch string `json:"branch" yaml:"branch" jsonschema:"description=Branch checked out in the worktree"`
-	Path   string `json:"path" yaml:"path" jsonschema:"description=Absolute path of the worktree"`
+	Branch    string `json:"branch" yaml:"branch" jsonschema:"description=Branch checked out in the worktree; empty for a carried worktree on a detached HEAD"`
+	Path      string `json:"path" yaml:"path" jsonschema:"description=Absolute path of the worktree (for carried: where it is after the conversion)"`
+	Action    string `json:"action" yaml:"action" jsonschema:"enum=created,enum=carried,description=created: init checked the worktree out; carried: a linked worktree of the converted repository adopted by the hub (one outside the working tree stays where it is and one inside moves to hops/<branch>). Under --dry-run: what init would do"`
+	MovedFrom string `json:"moved_from,omitempty" yaml:"moved_from,omitempty" jsonschema:"description=carried only: the worktree's path before the conversion when it moved into hops/; absent otherwise"`
+}
+
+// initCarriedWorktrees lists the linked worktrees a bare conversion
+// carried (or, from the plan, would carry) as result worktrees.
+func initCarriedWorktrees(carried []config.CarriedWorktree) []initWorktree {
+	out := make([]initWorktree, 0, len(carried))
+	for _, w := range carried {
+		out = append(out, initWorktree{Branch: w.Branch, Path: w.Path, Action: initWorktreeCarried, MovedFrom: w.MovedFrom})
+	}
+	return out
+}
+
+// initPlannedCarry is what the carry plan would leave in the hub at
+// repoPath, in the plan's order; nil without a plan.
+func initPlannedCarry(plan *hop.LinkedCarryPlan, repoPath string) []config.CarriedWorktree {
+	if plan == nil {
+		return nil
+	}
+	carried := make([]config.CarriedWorktree, 0, len(plan.Worktrees))
+	for _, w := range plan.Worktrees {
+		carried = append(carried, w.Carried(repoPath))
+	}
+	return carried
 }
 
 // initLayout names the layout of a conversion.
@@ -51,8 +83,9 @@ func initLayout(useBare bool) string {
 }
 
 // initConversionResult is the result of a conversion of repoPath that
-// leaves branch checked out at worktreePath.
-func initConversionResult(repoPath, branch, worktreePath string, useBare bool) initResult {
+// leaves branch checked out at worktreePath and carries the linked
+// worktrees in carried.
+func initConversionResult(repoPath, branch, worktreePath string, useBare bool, carried []config.CarriedWorktree) initResult {
 	res := initResult{
 		Action:        initActionConverted,
 		Hub:           repoPath,
@@ -61,8 +94,9 @@ func initConversionResult(repoPath, branch, worktreePath string, useBare bool) i
 		Worktrees:     []initWorktree{},
 	}
 	if worktreePath != "" {
-		res.Worktrees = append(res.Worktrees, initWorktree{Branch: branch, Path: worktreePath})
+		res.Worktrees = append(res.Worktrees, initWorktree{Branch: branch, Path: worktreePath, Action: initWorktreeCreated})
 	}
+	res.Worktrees = append(res.Worktrees, initCarriedWorktrees(carried)...)
 	return res
 }
 

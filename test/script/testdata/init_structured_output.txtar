@@ -26,6 +26,7 @@ decode json stdout default_branch main
 decode json stdout 'worktrees.#' 1
 decode json stdout worktrees.0.branch main
 decode json stdout worktrees.0.path '~/p1/hops/main$'
+decode json stdout worktrees.0.action created
 decode json stdout backup '~/\.cache/git-hop/.+-p1/'
 ! decode json stdout backup_kept
 decode json stdout registered true
