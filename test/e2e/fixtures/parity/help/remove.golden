@@ -12,6 +12,9 @@ is removed silently. Anything else needs explicit flags:
 --force covers the not-merged check; --no-verify covers uncommitted or
 untracked files (merged or not) and unpushed commits. Neither implies
 the other: pushing protects commits, not the files in the worktree.
+With hop.gitflow.enabled, a branch git flow finish handles skips the
+not-merged and unpushed checks, since finish merges it into its parent
+first, but its worktree must be clean whatever the flags.
 --no-prompt only skips the confirmation prompt; it never satisfies the
 gate. --no-verify does not skip pre-/post-worktree-remove hooks.
 

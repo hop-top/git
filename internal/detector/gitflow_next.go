@@ -67,6 +67,13 @@ func (d *GitFlowNextDetector) StartsBranch(info *BranchTypeInfo) bool {
 	return d.actions && info != nil && info.Source == d.Name()
 }
 
+// FinishesBranch reports whether OnRemove runs `git flow <type> finish`
+// for the branch info describes: info is one of this detector's and
+// actions are on. Finish merges the branch into the type's parent.
+func (d *GitFlowNextDetector) FinishesBranch(info *BranchTypeInfo) bool {
+	return d.actions && info != nil && info.Source == d.Name()
+}
+
 func (d *GitFlowNextDetector) Name() string {
 	return "gitflow-next"
 }

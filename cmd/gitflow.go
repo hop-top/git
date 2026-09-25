@@ -105,6 +105,15 @@ func undoGitflowWorktree(fs afero.Fs, g git.GitInterface, hubPath, worktreePath,
 	}
 }
 
+// gitflowFinishes reports whether removing branch from the hub at hubPath
+// runs git flow finish for it, detected as removeBranchWorktree detects
+// it. A detection error reports false: the removal itself fails on it.
+func gitflowFinishes(fs afero.Fs, g git.GitInterface, hubPath, branch string) bool {
+	gitflow := newGitflowDetector(g, hubPath)
+	info, err := branchDetectors(fs, g, gitflow).DetectBranch(branch, hubPath)
+	return err == nil && gitflow.FinishesBranch(info)
+}
+
 func gitflowEnabled(repoPath string) bool {
 	return config.NewGitConfigIn(repoPath).GetBoolOrDefault(config.KeyGitflowEnabled)
 }

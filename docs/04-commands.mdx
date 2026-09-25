@@ -550,6 +550,22 @@ The dirty check applies whether or not the branch is merged. Pushing
 protects a branch's commits, not the uncommitted or untracked files in
 its worktree, so `--force` alone never discards them.
 
+With `hop.gitflow.enabled`, a branch whose prefix matches a git-flow
+type is finished (`git flow <type> finish`) before its worktree is
+removed, which merges it into the type's parent. For such a branch:
+
+| Branch state (git flow finish runs) | Required flags |
+|--------------|----------------|
+| Clean, merged or not, pushed or not | (none — silent pass) |
+| Dirty (uncommitted or untracked) | refused, whatever the flags |
+
+Unpushed commits need no `--no-verify`: the merge keeps them on the
+parent. A dirty worktree is refused because finish runs in it and the
+removal would then discard the changes; commit or stash them, or
+remove the branch unfinished with
+`git -c hop.gitflow.enabled=false hop remove <branch> --force --no-verify`.
+If finish fails, nothing is removed.
+
 When the gate is not satisfied, `remove` exits with status 1 and
 prints which flag(s) to add. The gate cannot be bypassed any other
 way.

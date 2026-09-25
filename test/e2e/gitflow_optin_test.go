@@ -74,13 +74,17 @@ func setupGitflowEnv(t *testing.T) *gitflowEnv {
 // argument, else the type's parent) and checks it out where it runs.
 // `finish` only records the call. A start fails while @LOG@.fail exists,
 // and creates the branch without checking it out while @LOG@.nocheckout
-// does.
+// does; a finish fails while @LOG@.finishfail exists.
 const gitflowStub = `#!/bin/sh
 echo "$*" >> '@LOG@'
 echo "$(pwd -P) $(git branch --show-current 2>/dev/null | grep . || echo -)" >> '@LOG@.where'
 if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != true ]; then
 	echo "Error: failed to open repository: $(pwd) is not inside a git work tree" >&2
 	exit 3
+fi
+if [ "$2" = finish ] && [ -e '@LOG@.finishfail' ]; then
+	echo "Error: finish failed" >&2
+	exit 1
 fi
 if [ "$2" = start ]; then
 	[ -e '@LOG@.fail' ] && { echo "Error: start failed" >&2; exit 1; }

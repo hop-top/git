@@ -57,6 +57,9 @@ is removed silently. Anything else needs explicit flags:
 --force covers the not-merged check; --no-verify covers uncommitted or
 untracked files (merged or not) and unpushed commits. Neither implies
 the other: pushing protects commits, not the files in the worktree.
+With hop.gitflow.enabled, a branch git flow finish handles skips the
+not-merged and unpushed checks, since finish merges it into its parent
+first, but its worktree must be clean whatever the flags.
 --no-prompt only skips the confirmation prompt; it never satisfies the
 gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 	Args: removeArgs,
@@ -135,14 +138,13 @@ gate. --no-verify does not skip pre-/post-worktree-remove hooks.`,
 				// when the worktree is missing on disk (nothing to lose).
 				gateRequired := false
 				if _, err := fs.Stat(absWorktree); err == nil {
-					safety := inspectBranchSafety(g, absWorktree, target, hub.Config.Repo.DefaultBranch)
+					safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, target, hub.Config.Repo.DefaultBranch)
 					if err := removeGate(safety, force, noVerify); err != nil {
 						output.Fatal("%s", err.Error())
 					}
-					// Gate fired (and was satisfied by flags) when any of
-					// these are true. We use this to decide whether the
+					// Gate fired (and was satisfied by flags): the
 					// confirmation prompt is appropriate.
-					gateRequired = !safety.Merged || !safety.Clean
+					gateRequired = safety.risky()
 				}
 
 				// Only prompt when the operation is risky. Clean+merged
@@ -610,7 +612,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 		// Re-check the gate per-candidate. The earlier collection only
 		// confirmed Merged=true; the gate also enforces the dirty-state
 		// rule when --no-verify isn't set.
-		safety := inspectBranchSafety(g, c.WorktreePath, c.Branch, hub.Config.Repo.DefaultBranch)
+		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.Branch, hub.Config.Repo.DefaultBranch)
 		if err := removeGate(safety, force, noVerify); err != nil {
 			reason := fmt.Sprintf("%s: %s", c.Branch, err.Error())
 			output.Warn("Skipping %s", reason)

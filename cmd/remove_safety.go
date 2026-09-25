@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/afero"
+
 	"hop.top/git/internal/git"
 )
 
@@ -18,10 +20,32 @@ import (
 //
 // A field is true only when we proved the positive. On any git error
 // or missing ref, we set the field false so the gate fails closed.
+//
+// Finishes is not probed from the worktree: it says the removal runs
+// git flow finish for the branch (hop.gitflow.enabled and a git-flow
+// branch type), which merges it into the type's parent first.
 type branchSafety struct {
-	Merged bool
-	Pushed bool
-	Clean  bool
+	Merged   bool
+	Pushed   bool
+	Clean    bool
+	Finishes bool
+}
+
+// inspectRemoveSafety is inspectBranchSafety plus whether the removal of
+// branch from the hub at hubPath runs git flow finish.
+func inspectRemoveSafety(fs afero.Fs, g git.GitInterface, hubPath, dir, branch, defaultBranch string) branchSafety {
+	s := inspectBranchSafety(g, dir, branch, defaultBranch)
+	s.Finishes = gitflowFinishes(fs, g, hubPath, branch)
+	return s
+}
+
+// risky reports whether the removal needs the confirmation prompt: the
+// gate asked for a flag (or would have, had it been passed).
+func (s branchSafety) risky() bool {
+	if s.Finishes {
+		return !s.Clean
+	}
+	return !s.Merged || !s.Clean
 }
 
 // inspectBranchSafety probes the worktree at dir to populate
@@ -185,6 +209,14 @@ func branchContentMergedInto(g git.GitInterface, dir, branch, defaultBranch stri
 // pushed protects the branch's commits, never its worktree files, so a
 // dirty worktree always needs --no-verify.
 //
+// A branch git flow finish handles (s.Finishes) skips the not-merged
+// check and the unpushed-commits check: finish merges the branch into
+// its type's parent before the worktree goes, so its commits stay on the
+// parent, local like any git flow finish leaves them. Its worktree must
+// be clean whatever the flags: finish runs there, checking the parent
+// out over any changes, and the removal would then discard them, so
+// --no-verify does not cover it.
+//
 // The hint names the complete flag set for the branch's state, not just
 // the flags still missing, plus --no-prompt. Satisfying the gate is
 // necessary but not sufficient for a scripted removal: any branch that
@@ -194,6 +226,15 @@ func branchContentMergedInto(g git.GitInterface, dir, branch, defaultBranch stri
 // one shot.
 func removeGate(s branchSafety, force, noVerify bool) error {
 	dirty := !s.Clean
+	if s.Finishes {
+		if !dirty {
+			return nil
+		}
+		return fmt.Errorf(
+			"worktree has uncommitted changes or untracked files, and git flow finish runs in it before it is removed; " +
+				"commit or stash them first; to discard them and remove the branch unfinished: " +
+				"git -c hop.gitflow.enabled=false hop remove <branch> --force --no-verify")
+	}
 	needForce := !s.Merged
 	needNoVerify := dirty || (!s.Merged && !s.Pushed)
 
