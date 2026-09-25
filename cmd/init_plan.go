@@ -43,7 +43,7 @@ func initConversionPlan(backupRoot, branch string, useBare bool, linked *hop.Lin
 	}
 	return append(plan,
 		"  3. Create hop.json configuration",
-		"  4. Register in global registry",
+		"  4. Register the hub in state",
 	)
 }
 

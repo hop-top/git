@@ -97,21 +97,6 @@ func TestIsWorktree_SymlinkIsJudgedByTarget(t *testing.T) {
 	})
 }
 
-// The hops registry is read from the filesystem it is later saved to.
-func TestLoadRegistry_ReadsInjectedFs(t *testing.T) {
-	withHumanMode(t)
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
-	fs := afero.NewMemMapFs()
-	raw := `{"hops": {"acme/widget:main": {"repo": "acme/widget", "branch": "main", "path": "/hub/hops/main"}}}`
-	require.NoError(t, afero.WriteFile(fs, hop.GetHopsRegistryPath(), []byte(raw), 0o644))
-
-	r := hop.LoadRegistry(fs)
-
-	e, ok := r.Config.Hops["acme/widget:main"]
-	assert.True(t, ok, "registry entry must be read from the injected fs")
-	assert.Equal(t, "/hub/hops/main", e.Path)
-}
-
 // currentHub makes <root>/hub/hops/main on the real disk.
 func currentHub(t *testing.T) (root, hub, worktree string) {
 	t.Helper()

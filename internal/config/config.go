@@ -135,23 +135,6 @@ type BranchVolumes struct {
 	Volumes map[string]string `json:"volumes"`
 }
 
-// HopsConfig represents $XDG_CONFIG_HOME/git-hop/hops.json
-type HopsConfig struct {
-	Hops map[string]HopEntry `json:"hops"` // key: "org/repo:branch"
-}
-
-// HopEntry represents a single managed worktree
-type HopEntry struct {
-	Repo         string    `json:"repo"`        // "org/repo"
-	Branch       string    `json:"branch"`      // "main"
-	Path         string    `json:"path"`        // Absolute path to worktree
-	ProjectRoot  string    `json:"projectRoot"` // Absolute path to project root (bare repo)
-	AddedAt      time.Time `json:"addedAt"`
-	LastSeen     time.Time `json:"lastSeen"`
-	EnvState     string    `json:"envState"` // "up", "down", "none"
-	HasDockerEnv bool      `json:"hasDockerEnv"`
-}
-
 // GlobalConfig holds global preferences: scalars come from git config
 // hop.* keys, manager lists from managers.json. Its JSON shape is the legacy
 // global.json format.

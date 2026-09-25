@@ -223,7 +223,7 @@ func TestE2E_RegisterAsIsWithoutRemote(t *testing.T) {
 	t.Skip("Interactive registration requires user input - will implement with option flag")
 
 	// After registration, verify:
-	// 1. Repository is registered in global registry
+	// 1. Repository is registered in state
 	// 2. Uses local path for org/repo naming
 }
 

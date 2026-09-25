@@ -1,0 +1,88 @@
+# git-hop keeps no hub registry in $XDG_CONFIG_HOME/git-hop/hops.json:
+# state records every hub and worktree. clone and init do not create the
+# file, and neither reads nor rewrites one an earlier release left, and
+# remove leaves it alone. doctor warns while it exists (exit 0) with a
+# hint that it can be deleted by hand, and never deletes it: not under
+# --fix, not in the --fix dry run.
+
+exec git init --bare $WORK/acme/widget.git
+exec git clone $WORK/acme/widget.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- clone and init create no hops.json ---
+exec git-hop $WORK/acme/widget.git hub
+! stdout 'Registered in|hops registry'
+! stderr 'Registered in|hops registry'
+! exists $WORK/.config/git-hop/hops.json
+exec git init $WORK/proj
+cd $WORK/proj
+exec git commit --allow-empty -m 'initial'
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+! stdout 'Registered in|hops registry'
+! exists $WORK/.config/git-hop/hops.json
+
+# --- no file, no warning ---
+cd $WORK/hub
+exec git-hop doctor --porcelain
+! stdout 'hops\.json'
+
+# --- a leftover file: a warning in every mode, the file intact ---
+mkdir $WORK/.config/git-hop
+cp $WORK/old-hops.json $WORK/.config/git-hop/hops.json
+
+exec sh -c 'git-hop doctor; echo "exit=$?"'
+stdout '^exit=0$'
+stderr '^warning: .*/git-hop/hops\.json is not used; git-hop records hubs and worktrees in state$'
+stderr '^hint: you can delete it by hand$'
+cmp $WORK/.config/git-hop/hops.json $WORK/old-hops.json
+
+exec git-hop doctor --porcelain
+stdout '^warning	config	.*/git-hop/hops\.json	not used; git-hop records hubs and worktrees in state; you can delete the file$'
+
+exec sh -c 'git-hop doctor --fix --dry-run --porcelain; echo "exit=$?"'
+stdout '^exit=0$'
+stdout '^warning	config	.*/git-hop/hops\.json	'
+! stdout 'would-fix	config	.*hops\.json'
+cmp $WORK/.config/git-hop/hops.json $WORK/old-hops.json
+
+exec sh -c 'git-hop doctor --fix --porcelain; echo "exit=$?"'
+stdout '^exit=0$'
+stdout '^warning	config	.*/git-hop/hops\.json	'
+! stdout 'fixed	config	.*hops\.json'
+cmp $WORK/.config/git-hop/hops.json $WORK/old-hops.json
+
+# --- clone over a leftover, even an unreadable one, leaves it alone ---
+cp $WORK/bad-hops.json $WORK/.config/git-hop/hops.json
+cd $WORK
+exec git-hop $WORK/acme/widget.git hub2
+! stderr 'hops\.json|hops registry'
+cmp $WORK/.config/git-hop/hops.json $WORK/bad-hops.json
+
+# --- remove says nothing of it and leaves it alone ---
+# The leftover names the hub being removed, as an earlier clone wrote it.
+exec sh -c 'printf ''{"hops": {"acme/widget:main": {"repo": "acme/widget", "branch": "main", "path": "%s/hub/hops/main"}}}\n'' "$WORK" > $WORK/hub-hops.json'
+cp $WORK/hub-hops.json $WORK/.config/git-hop/hops.json
+exec git-hop remove $WORK/hub --dry-run --no-prompt
+! stdout 'Registered in|hops registry'
+exec git-hop remove $WORK/hub --no-prompt
+! stdout 'Registered in|hops registry'
+! stderr 'Registered in|hops registry'
+! exists $WORK/hub
+cmp $WORK/.config/git-hop/hops.json $WORK/hub-hops.json
+
+-- old-hops.json --
+{
+  "hops": {
+    "acme/widget:main": {
+      "repo": "acme/widget",
+      "branch": "main",
+      "path": "/somewhere/hub/hops/main"
+    }
+  }
+}
+-- bad-hops.json --
+{not json

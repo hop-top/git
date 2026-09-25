@@ -199,7 +199,7 @@ var dryRunCases = []dryRunCase{
 }
 
 // -n never changes anything, whatever init would do for real: the
-// directory tree, git config, registry and state, hopspace, rc files and
+// directory tree, git config, state, hopspace, rc files and
 // backups are byte-identical before and after, in every init mode.
 func TestInitDryRun_ChangesNothingInAnyMode(t *testing.T) {
 	t.Parallel()

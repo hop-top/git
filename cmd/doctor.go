@@ -81,6 +81,10 @@ Checks:
 - A config.json in the config directory: git-hop does not read it
   (settings live in git config hop.*); a warning, and --fix leaves the
   file for you to delete
+- A hops.json in the config directory: the hub registry of earlier
+  releases, which git-hop no longer writes or reads (state records every
+  hub and worktree); a warning, and --fix leaves the file for you to
+  delete
 - --global hop.* keys the old global.json migration wrote but the user
   never set (--fix unsets them)
 - Retired hop.* settings (hop.autoEnvStart, hop.bareRepo and the other
@@ -299,7 +303,7 @@ func runDoctor(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts) doc
 // The config directory ($XDG_CONFIG_HOME/git-hop) is shown but not
 // required. It holds only what the user (or a command acting for them)
 // has configured, every writer creates it on demand (managers.json,
-// hops.json, the global hooks), and every reader treats its absence as
+// the global hooks), and every reader treats its absence as
 // "nothing configured". A fresh install without it is
 // healthy, and --fix leaves creating it to the first writer.
 //

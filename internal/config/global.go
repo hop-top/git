@@ -220,6 +220,18 @@ func RetiredConfigPath() string {
 	return filepath.Join(dir, "config.json")
 }
 
+// RetiredHopsRegistryPath is $XDG_CONFIG_HOME/git-hop/hops.json, the hub
+// registry earlier releases wrote on clone and init. Nothing writes or
+// reads it now: state records every hub and worktree. doctor points out a
+// leftover copy; nothing removes it.
+func RetiredHopsRegistryPath() string {
+	dir, err := xdg.ConfigDir("git-hop")
+	if err != nil {
+		return filepath.Join(".config", "git-hop", "hops.json")
+	}
+	return filepath.Join(dir, "hops.json")
+}
+
 // ManagersFileError reports why managers.json cannot be used, naming the
 // file; nil when it is absent or valid.
 func (l *GlobalLoader) ManagersFileError() error {

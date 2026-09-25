@@ -90,6 +90,7 @@ cd $WORK/hub
 exec git config --local --unset hop.backup.enabled
 
 # --- a migration-written retired key is reported once ---
+mkdir $WORK/.config/git-hop
 cp $WORK/bak.json $WORK/.config/git-hop/global.json.bak
 exec git config --global hop.migrated true
 exec git config --global hop.autoEnvStart false

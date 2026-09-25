@@ -77,7 +77,7 @@ func previewShellIntegration() {
 // would record and the closing steps it would take.
 func previewRegisterAsIs(fs afero.Fs, g git.GitInterface, org, repo, branch, repoPath string, noHooks, enableChdir bool) {
 	fmt.Println(initDryRunBanner)
-	fmt.Println("Would register the repository as-is, in the global registry and state:")
+	fmt.Println("Would register the repository as-is, in state:")
 	fmt.Printf("  Repo: %s/%s\n", org, repo)
 	fmt.Printf("  Branch: %s\n", branch)
 	fmt.Printf("  Path: %s\n", repoPath)

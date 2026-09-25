@@ -15,9 +15,8 @@ import (
 	"hop.top/git/internal/state"
 )
 
-// removeHub removes the hub at hubPath: its worktrees, the hub directory,
-// its state entry and its hops registry entries, then the repository's
-// data-home hopspace. It returns one record per worktree in branch order,
+// removeHub removes the hub at hubPath: its worktrees, the hub directory
+// and its state entry, then the repository's data-home hopspace. It returns one record per worktree in branch order,
 // then the hub's, then the hopspace's when there is one.
 func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 	output.Info("Removing hub at %s...", hubPath)
@@ -29,10 +28,6 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 	}
 
 	repoID := repoid.For(hubPath, hub.Config.Repo)
-
-	// Read before anything is deleted, as the dry run reads it.
-	registry := hop.LoadRegistry(fs)
-	registryKeys := registry.HubKeys(hubPath, hubWorktreePaths(hub, hubPath))
 
 	// Remove all worktrees
 	recs := make([]removeRecord, 0, len(hub.Config.Branches)+2)
@@ -68,14 +63,6 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 			output.Warn("Failed to save state: %v", err)
 		} else {
 			output.Info("Removed %s", stateRemoval(repoID, hubPath, otherHubs))
-		}
-	}
-
-	if err := registry.RemoveKeys(registryKeys...); err != nil {
-		output.Warn("Failed to update the hops registry: %v", err)
-	} else {
-		for _, key := range registryKeys {
-			output.Info("Removed '%s' from the hops registry", key)
 		}
 	}
 
@@ -130,16 +117,6 @@ func stateRemoval(repoID, hubPath string, otherHubs bool) string {
 		return fmt.Sprintf("hub %s from state ('%s' keeps its other hubs)", hubPath, repoID)
 	}
 	return fmt.Sprintf("'%s' from state", repoID)
-}
-
-// hubWorktreePaths lists the worktree paths hub's hop.json records,
-// resolved against hubPath.
-func hubWorktreePaths(hub *hop.Hub, hubPath string) []string {
-	paths := make([]string, 0, len(hub.Config.Branches))
-	for _, b := range hub.Config.Branches {
-		paths = append(paths, config.ResolveWorktreePath(b.Path, hubPath))
-	}
-	return paths
 }
 
 // dataHomeHopspace is what removing a hub does to its repository's
