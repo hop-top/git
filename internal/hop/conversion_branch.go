@@ -16,13 +16,14 @@ func (e *DetachedHeadError) Error() string {
 	return "HEAD is detached; git hop init names the hub's worktree after the current branch"
 }
 
-// Hints tells the user how to get onto a branch, then how to retry.
-func (e *DetachedHeadError) Hints() []string {
+// Hints tells the user how to get onto a branch, then to run retry, the
+// caller's command line for the refused init, again.
+func (e *DetachedHeadError) Hints(retry string) []string {
 	return []string{
 		"check out a branch first, or create one at this commit:",
 		"  git switch <branch>",
 		"  git switch -c <new-branch>",
-		"then run git hop init again",
+		"then run " + retry + " again",
 	}
 }
 

@@ -49,7 +49,7 @@ func TestConvert_RefusesDetachedHead(t *testing.T) {
 			if strings.Contains(err.Error(), "%!") {
 				t.Errorf("garbled error: %q", err.Error())
 			}
-			if hints := strings.Join(dhe.Hints(), "\n"); !strings.Contains(hints, "git switch") {
+			if hints := strings.Join(dhe.Hints("git hop init"), "\n"); !strings.Contains(hints, "git switch") {
 				t.Errorf("hints %q do not say how to check out a branch", hints)
 			}
 			if _, err := os.Stat(conv.BackupRoot); !os.IsNotExist(err) {

@@ -143,13 +143,14 @@ func (e *InProgressError) Error() string {
 	return fmt.Sprintf("a %s are in progress; converting would abandon them", strings.Join(names, " and a "))
 }
 
-// Hints returns one hint per operation, then how to retry.
-func (e *InProgressError) Hints() []string {
+// Hints returns one hint per operation, then to run retry, the caller's
+// command line for the refused init, again.
+func (e *InProgressError) Hints(retry string) []string {
 	hints := make([]string, 0, len(e.Ops)+1)
 	for _, op := range e.Ops {
 		hints = append(hints, op.Hint())
 	}
-	return append(hints, "then run git hop init again")
+	return append(hints, "then run "+retry+" again")
 }
 
 // CheckNoOperationInProgress refuses a bare conversion of repoPath while

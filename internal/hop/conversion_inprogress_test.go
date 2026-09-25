@@ -132,7 +132,7 @@ func TestConvertBare_RefusesOperationInProgress(t *testing.T) {
 			if !strings.Contains(ipe.Error(), tc.op) {
 				t.Errorf("error %q does not name the %s", ipe.Error(), tc.op)
 			}
-			if hints := strings.Join(ipe.Hints(), "\n"); !strings.Contains(hints, tc.abort) {
+			if hints := strings.Join(ipe.Hints("git hop init"), "\n"); !strings.Contains(hints, tc.abort) {
 				t.Errorf("hints %q do not name %q", hints, tc.abort)
 			}
 

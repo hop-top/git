@@ -12,7 +12,7 @@ stdout 'Repository registered successfully'
 ! stdout 'Consider converting'
 stderr '^hint: Repository has no remote configured\.$'
 stderr '^hint: Some git-hop features are limited with this structure\.$'
-stderr '^hint:   git hop init --no-prompt$'
+stderr '^hint:   git hop init --no-prompt --no-hooks$'
 
 # --- dry run: the next-step advice is a hint ---
 exec git init $WORK/dry

@@ -1,6 +1,7 @@
 package hop
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -36,6 +37,10 @@ func linkedWorktrees(g git.GitInterface, repo string) ([]string, error) {
 	}
 	return paths, nil
 }
+
+// ErrLinkedWorktrees is the refusal of a bare conversion of a repository
+// with linked worktrees; the details are in the result's errors.
+var ErrLinkedWorktrees = errors.New("linked worktrees present")
 
 // refuseLinkedWorktrees stops a bare conversion of a repository that has
 // linked worktrees. Their admin dirs live in the .git directory the

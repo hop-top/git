@@ -9,9 +9,16 @@ exec git commit --allow-empty -m 'initial'
 cp $WORK/wip wip.txt
 ! exec git-hop init --no-prompt --no-hooks
 stderr '^error: Repository has uncommitted changes$'
-stderr '^hint:   git hop init --force$'
+stderr '^hint: Then run: git hop init --no-prompt --no-hooks$'
+stderr '^hint:   git hop init --no-prompt --force --no-hooks$'
 ! stderr 'regular'
 exists $WORK/dirty/.git
+
+# The advice repeats the flags given: after --regular, the commands it
+# offers convert to the regular layout, not to bare.
+! exec git-hop init --no-prompt --no-hooks --regular
+stderr '^hint: Then run: git hop init --no-prompt --regular --no-hooks$'
+stderr '^hint:   git hop init --no-prompt --regular --force --no-hooks$'
 
 # --- --force: bare conversion goes through, the file moves to hops/main ---
 exec git-hop init --no-prompt --no-hooks --force
