@@ -304,6 +304,10 @@ Worktree Mode:
 			if branch != "" && hubErr == nil {
 				attached, err := hop.ForkAttach(fs, g, expandedArg, branch, hubPath)
 				if err != nil {
+					var refusal *hop.AttachRefusal
+					if errors.As(err, &refusal) && refusal.Hint != "" {
+						output.Hint("%s", refusal.Hint)
+					}
 					output.Fatal("Fork-Attach failed: %v", err)
 				}
 				emitRootResult(cmd, forkAttachResult(attached, expandedArg, branch, hubPath))
