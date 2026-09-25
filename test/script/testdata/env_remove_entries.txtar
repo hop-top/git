@@ -1,0 +1,69 @@
+# Removing a worktree frees its ports: its ports.json and volumes.json
+# entries go, the others stay, in a hub's own hopspace and in a --global
+# one. Removing a whole hub drops its entries from the --global hopspace
+# the other hubs keep.
+#
+# A stub docker on PATH: `compose config` fails, so the raw compose file
+# is parsed.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+exec git push $WORK/org/glob.git main
+cd $WORK
+
+# --- a hub's own hopspace ---
+exec git-hop $WORK/org/repo.git $WORK/hub
+cd $WORK/hub
+exec git-hop add feat/x
+grep '"feat/x"' $WORK/hub/ports.json
+grep '"feat/x"' $WORK/hub/volumes.json
+exec git-hop remove feat/x --no-verify --no-prompt
+! grep '"feat/x"' $WORK/hub/ports.json
+! grep '"feat/x"' $WORK/hub/volumes.json
+grep '"main"' $WORK/hub/ports.json
+cd $WORK
+
+# --- a --global hopspace: only the removed worktree's entry ---
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+exec git-hop $WORK/org/glob.git $WORK/g2/app --global
+cd $WORK/g1/app
+exec git-hop add feat/y
+grep '"/.*/g1/app/hops/feat/y"' $WORK/data/org/glob/ports.json
+grep '"/.*/g1/app/hops/feat/y"' $WORK/data/org/glob/volumes.json
+exec git-hop remove feat/y --no-verify --no-prompt
+! grep '"/.*/g1/app/hops/feat/y"' $WORK/data/org/glob/ports.json
+! grep '"/.*/g1/app/hops/feat/y"' $WORK/data/org/glob/volumes.json
+grep '"/.*/g1/app/hops/main"' $WORK/data/org/glob/ports.json
+grep '"/.*/g2/app/hops/main"' $WORK/data/org/glob/ports.json
+cd $WORK
+
+# --- removing a hub drops its entries from the hopspace kept ---
+exec git-hop remove $WORK/g1/app --no-prompt
+! grep '"/.*/g1/app/' $WORK/data/org/glob/ports.json
+grep '"/.*/g2/app/hops/main"' $WORK/data/org/glob/ports.json
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

@@ -10,6 +10,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 )
 
@@ -68,6 +69,9 @@ func removeHub(fs afero.Fs, hubPath string) {
 		}
 	default:
 		output.Info("Keeping hopspace data at %s: %s", d.path, d.reason())
+		if err := services.DropHubEnvEntries(fs, d.path, hubPath); err != nil {
+			output.Warn("Failed to update ports and volumes: %v", err)
+		}
 		output.Hint("it is removed along with the last hub that uses it")
 	}
 

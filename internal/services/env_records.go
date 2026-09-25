@@ -355,3 +355,58 @@ func (c EnvClaim) Worktree() string {
 	}
 	return c.Key
 }
+
+// DropEnvEntry removes the ports.json and volumes.json entries of the
+// worktree at worktreePath on branch, in the hub at hubPath, so its ports
+// are free for others. An entry an earlier release wrote in a shared
+// hopspace goes only if it is this hub's (EnvRecords.Self). A missing
+// file or entry is left alone.
+func DropEnvEntry(fs afero.Fs, hopspacePath, hubPath, worktreePath, branch string) error {
+	recs, _ := LoadEnvRecords(fs, hubPath)
+	self, found := recs.Self(hopspacePath, hubPath, worktreePath, branch)
+	if !found {
+		return nil
+	}
+	return dropEnvEntries(fs, hopspacePath, func(key string, _ config.BranchPorts) bool { return key == self.Key })
+}
+
+// DropHubEnvEntries removes from hopspacePath the entries recorded for
+// the hub at hubPath, for a hub removed from a hopspace other hubs keep.
+func DropHubEnvEntries(fs afero.Fs, hopspacePath, hubPath string) error {
+	return dropEnvEntries(fs, hopspacePath, func(_ string, e config.BranchPorts) bool {
+		return e.Hub != "" && state.SamePath(e.Hub, hubPath)
+	})
+}
+
+// dropEnvEntries removes the ports.json entries drop selects, and the
+// volumes.json entries under the same keys.
+func dropEnvEntries(fs afero.Fs, hopspacePath string, drop func(string, config.BranchPorts) bool) error {
+	loader, writer := config.NewLoader(fs), config.NewWriter(fs)
+	ports, err := loader.LoadPortsConfig(hopspacePath)
+	if err != nil {
+		return nil
+	}
+	var keys []string
+	for k, e := range ports.Branches {
+		if drop(k, e) {
+			keys = append(keys, k)
+		}
+	}
+	if len(keys) == 0 {
+		return nil
+	}
+	for _, k := range keys {
+		delete(ports.Branches, k)
+	}
+	if err := writer.WritePortsConfig(hopspacePath, ports); err != nil {
+		return err
+	}
+	vols, err := loader.LoadVolumesConfig(hopspacePath)
+	if err != nil {
+		return nil
+	}
+	for _, k := range keys {
+		delete(vols.Branches, k)
+	}
+	return writer.WriteVolumesConfig(hopspacePath, vols)
+}
