@@ -9,7 +9,7 @@ git-hop offers advanced features for power users and complex workflows.
 
 ## Custom Hooks
 
-Create custom lifecycle hooks to automate workflows. These are git-hop's own hooks, not git's — they never live in `.git/hooks/`, and hook names like `pre-commit` mean nothing here. See [Hooks System](https://github.com/jadb/git-hop/blob/main/docs/hooks.md) for the exhaustive list of valid names.
+Create custom lifecycle hooks to automate workflows. These are git-hop's own hooks, not git's — they never live in `.git/hooks/`, and hook names like `pre-commit` mean nothing here. See [Hooks System](https://github.com/hop-top/git/blob/main/docs/hooks.md) for the exhaustive list of valid names.
 
 ### Hook Locations
 
@@ -65,7 +65,7 @@ fi
 
 The from-state variables are **absent, not empty**, when there was no previous worktree.
 
-> **Environment services**: hooks around `git hop env start` / `env stop` are a *different* mechanism — shell command strings declared in `hop.json` under `settings.environment.hooks`, not files. A file named `post-env-start` will never fire. See [Hooks System](https://github.com/jadb/git-hop/blob/main/docs/hooks.md).
+> **Environment services**: hooks around `git hop env start` / `env stop` are a *different* mechanism — shell command strings declared in `hop.json` under `settings.environment.hooks`, not files. A file named `post-env-start` will never fire. See [Hooks System](https://github.com/hop-top/git/blob/main/docs/hooks.md).
 
 ## Port Manual Allocation
 

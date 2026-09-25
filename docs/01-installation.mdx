@@ -10,7 +10,7 @@ git-hop is a single binary with minimal dependencies. Get it running in seconds.
 ## Requirements
 
 - **Git**: 2.7 or higher
-- **Go**: 1.21 or higher (for building from source)
+- **Go**: 1.26 or higher (for building from source)
 - **Docker**: Optional (for service orchestration)
 - **Operating System**: Linux, macOS, or Windows
 
@@ -20,11 +20,11 @@ Build git-hop from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/jadb/git-hop.git
+git clone https://github.com/hop-top/git.git git-hop
 cd git-hop
 
 # Build the binary
-go build -o git-hop ./cmd/git-hop
+make build
 
 # Install to your PATH
 sudo mv git-hop /usr/local/bin/
@@ -35,7 +35,7 @@ sudo mv git-hop /usr/local/bin/
 If you don't have sudo access:
 
 ```bash
-go build -o git-hop ./cmd/git-hop
+make build
 mkdir -p ~/.local/bin
 mv git-hop ~/.local/bin/
 

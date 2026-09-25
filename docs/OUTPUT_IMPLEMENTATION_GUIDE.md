@@ -43,7 +43,7 @@ The `git hop list` command has been updated to demonstrate the new system:
 
 **Implementation**:
 ```go
-import "github.com/jadb/git-hop/internal/output"
+import "hop.top/git/internal/output"
 
 // Show header
 fmt.Println(output.SimpleHeader("Cloning github.com/org/repo"))

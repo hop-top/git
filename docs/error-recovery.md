@@ -281,7 +281,7 @@ If you encounter an issue that `git hop doctor --fix` can't resolve:
 
 1. Run `git hop doctor` and review the output
 2. Check this documentation for your specific scenario
-3. File an issue at [github.com/jadb/git-hop/issues](https://github.com/jadb/git-hop/issues) with:
+3. File an issue at [hop.top/git/issues](https://github.com/hop-top/git/issues) with:
    - The command you ran
    - The error message
    - Output of `git hop doctor`

@@ -29,30 +29,28 @@ Yes! git-hop can manage worktrees you've already created. Run `git hop` in a dir
 
 ### How do I install git-hop?
 
-The easiest way is from source:
+Build from source:
 
 ```bash
-go install github.com/jadb/git-hop@latest
-```
-
-Or build from the repository:
-
-```bash
-git clone https://github.com/jadb/git-hop.git
+git clone https://github.com/hop-top/git.git git-hop
 cd git-hop
-go build -o git-hop ./cmd/git-hop
+make build
 sudo mv git-hop /usr/local/bin/
 ```
 
+git runs `git hop` by finding a `git-hop` binary on `PATH`. Don't use
+`go install hop.top/git@latest`: it names the binary `git`, which shadows
+git itself.
+
 ### What are the requirements?
 
-- Git 2.7 or higher
-- Go 1.21 or higher (for building)
+- Git 2.7 or higher (2.38+ for content-based merge detection in `remove`)
+- Go 1.26 or higher (for building)
 - Docker (optional, for services)
 
 ### Can I install git-hop without Go?
 
-Yes, download pre-built binaries from the [releases page](https://github.com/jadb/git-hop/releases).
+Not yet: there are no pre-built binaries. Building from source needs Go.
 
 ## Usage
 
@@ -228,7 +226,10 @@ Yes! git-hop works great in CI/CD pipelines:
 ```yaml
 # GitHub Actions
 - name: Install git-hop
-  run: go install github.com/jadb/git-hop@latest
+  run: |
+    git clone --depth 1 https://github.com/hop-top/git.git /tmp/git-hop
+    make -C /tmp/git-hop build
+    echo /tmp/git-hop >> $GITHUB_PATH
   
 - name: Create environment
   run: |
@@ -285,8 +286,7 @@ Yes! git-hop works with any Git repository, public or private. It uses your exis
 
 ### Where can I get help?
 
-- [GitHub Issues](https://github.com/jadb/git-hop/issues) - Report bugs
-- [GitHub Discussions](https://github.com/jadb/git-hop/discussions) - Ask questions
+- [GitHub Issues](https://github.com/hop-top/git/issues) - Report bugs
 - [Documentation](.) - Full documentation
 
 ### How do I report a bug?
@@ -301,7 +301,7 @@ When reporting bugs, include:
 
 ### How can I contribute?
 
-Contributions are welcome! See the [contributing guide](https://github.com/jadb/git-hop/blob/main/CONTRIBUTING.md) on GitHub.
+Contributions are welcome! See the [contributing guide](https://github.com/hop-top/git/blob/main/CONTRIBUTING.md) on GitHub.
 
 ## What's Next?
 

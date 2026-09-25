@@ -5,7 +5,7 @@ Modern, polished CLI output for git-hop using Charm's Bubbles and Lipgloss.
 ## 🎨 Quick Start
 
 ```go
-import "github.com/jadb/git-hop/internal/output"
+import "hop.top/git/internal/output"
 
 // Success card
 card := output.SuccessCard("Operation Complete", []output.CardField{
