@@ -1,0 +1,53 @@
+# Adapted from hop-top/.github; version fields are repo-specific.
+name: Bug report
+description: Something broke
+labels: ["type:fix"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, what you got instead.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact `git hop` commands, plus repo layout (regular clone or bare-worktree hub) if relevant.
+      placeholder: |
+        1. git hop ...
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: git-hop version
+      description: Output of `git hop --version`.
+    validations:
+      required: true
+  - type: input
+    id: git-version
+    attributes:
+      label: git version
+      description: Output of `git --version`.
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: macOS 15.6 / Ubuntu 24.04 / Windows 11
+  - type: input
+    id: terminal
+    attributes:
+      label: Terminal / shell
+      placeholder: iTerm2 + zsh / Windows Terminal + pwsh
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: I searched existing issues for duplicates
+          required: true

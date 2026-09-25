@@ -1,0 +1,10 @@
+# Adapted from hop-top/.github; a repo-level ISSUE_TEMPLATE folder replaces
+# the org default wholesale, so this file must exist here too.
+blank_issues_enabled: true
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/hop-top/.github/blob/main/SECURITY.md
+    about: Do not open a public issue — email security@hop.top.
+  - name: Docs
+    url: https://hop.top/git
+    about: Install paths, commands, configuration.
