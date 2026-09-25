@@ -198,7 +198,8 @@ func assertStartRolledBack(t *testing.T, e *gitflowEnv, msg string) {
 
 // The real git-flow-next, when installed: a full add/commit/remove cycle
 // in a bare hub merges into develop (checked out nowhere) and leaves the
-// default-branch worktree alone. Started from main with --from, the
+// default-branch worktree alone; the remove needs no --force for the
+// unmerged, unpushed branch, and refuses while the worktree is dirty. Started from main with --from, the
 // branch still finishes into its type's parent, develop.
 func TestGitflowBareHub_RealGitflowNext(t *testing.T) {
 	t.Parallel()
@@ -267,10 +268,27 @@ func realGitflowCycle(t *testing.T, from []string, wantBase string) {
 	env.RunCommand(t, wt, "git", "add", "feature.txt")
 	env.RunCommand(t, wt, "git", "commit", "-m", "feature")
 
-	// Pushed and --force: remove's unmerged-work gate runs before finish
-	// merges the branch.
-	env.RunCommand(t, wt, "git", "push", "-q", "origin", "feat/z")
-	env.RunGitHop(t, env.HubPath, "remove", "feat/z", "--force", "--no-prompt")
+	// Untracked work in the worktree: finish would run there and the
+	// removal then discard it, so the remove is refused, --no-verify or
+	// not, before git-flow runs.
+	WriteFile(t, filepath.Join(wt, "scratch.txt"), "keep me\n")
+	if _, stderr, code := env.RunCommandWithExit(t, env.HubPath, env.BinPath, "remove", "feat/z", "--force", "--no-verify", "--no-prompt"); code == 0 {
+		t.Fatalf("remove of a dirty feat/z succeeded\nstderr: %s", stderr)
+	}
+	if _, err := os.Stat(filepath.Join(wt, "scratch.txt")); err != nil {
+		t.Fatalf("untracked work lost: %v", err)
+	}
+	if out := env.RunCommand(t, env.HubPath, "git", "log", "--format=%s", "develop"); strings.Contains(out, "feature") {
+		t.Fatalf("develop got the feature from a refused remove:\n%s", out)
+	}
+	if err := os.Remove(filepath.Join(wt, "scratch.txt")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Neither merged into main nor pushed, and no flags: finish merges
+	// the branch into develop, so remove's not-merged gate does not
+	// apply, and the merge keeps the unpushed commit.
+	env.RunGitHop(t, env.HubPath, "remove", "feat/z")
 
 	if _, err := env.RunCommandAllowFail(t, env.HubPath, "git", "rev-parse", "--verify", "--quiet", "refs/heads/feat/z"); err == nil {
 		t.Error("feat/z survived remove")

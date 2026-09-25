@@ -235,6 +235,11 @@ git hop remove --merged [flags]
 | `--merged` | Remove every worktree whose branch is merged into the default branch (skips the default branch and the active worktree) |
 | `--delete-remote` | Also delete the branch on `origin`; without it removal stays local |
 
+With `hop.gitflow.enabled`, a branch `git flow finish` handles needs
+neither flag for being unmerged or unpushed: finish merges it into its
+type's parent before the worktree goes. Its worktree must be clean, whatever
+the flags (see Git-Flow Integration in `docs/hooks.md`).
+
 **Exit Codes:**
 | Code | Description |
 |------|-------------|

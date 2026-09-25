@@ -28,12 +28,12 @@ func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath,
 
 	gateRequired := false
 	if _, err := fs.Stat(absWorktree); err == nil {
-		safety := inspectBranchSafety(g, absWorktree, branch, hub.Config.Repo.DefaultBranch)
+		safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, branch, hub.Config.Repo.DefaultBranch)
 		output.Info("[dry-run] Safety check for '%s': %s", branch, describeSafety(safety))
 		if err := removeGate(safety, force, noVerify); err != nil {
 			refuseDryRun(fmt.Sprintf("remove '%s'", branch), err)
 		}
-		gateRequired = !safety.Merged || !safety.Clean
+		gateRequired = safety.risky()
 	} else {
 		output.Info("[dry-run] Worktree for '%s' is missing on disk; safety check skipped", branch)
 	}
@@ -105,7 +105,7 @@ func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noV
 
 	refused := 0
 	for _, c := range toRemove {
-		safety := inspectBranchSafety(g, c.WorktreePath, c.Branch, hub.Config.Repo.DefaultBranch)
+		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.Branch, hub.Config.Repo.DefaultBranch)
 		output.Info("[dry-run] Safety check for '%s': %s", c.Branch, describeSafety(safety))
 		if err := removeGate(safety, force, noVerify); err != nil {
 			output.Info("[dry-run] Would skip %s: %v", c.Branch, err)

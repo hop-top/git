@@ -57,6 +57,15 @@ func TestRemoveGate(t *testing.T) {
 		{"merged clean: no flags", branchSafety{Merged: true, Clean: true}, false, false, false, ""},
 		{"merged clean pushed: no flags", branchSafety{Merged: true, Pushed: true, Clean: true}, false, false, false, ""},
 		{"merged clean: extra flags", branchSafety{Merged: true, Clean: true}, true, true, false, ""},
+
+		// Case 5: git flow finish merges the branch before removal, so
+		// neither the not-merged nor the unpushed check applies, but a
+		// dirty worktree is refused whatever the flags: finish runs in it
+		// and the removal would discard the changes.
+		{"finish unmerged unpushed clean: no flags", branchSafety{Clean: true, Finishes: true}, false, false, false, ""},
+		{"finish unmerged dirty: no flags", branchSafety{Finishes: true}, false, false, true, "git flow finish"},
+		{"finish unmerged dirty: both flags", branchSafety{Finishes: true}, true, true, true, "commit or stash"},
+		{"finish merged dirty: no-verify", branchSafety{Merged: true, Finishes: true}, false, true, true, "uncommitted"},
 	}
 
 	for _, tc := range cases {

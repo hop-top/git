@@ -44,6 +44,9 @@ func describeSafety(s branchSafety) string {
 	if s.Clean {
 		parts[2] = "clean"
 	}
+	if s.Finishes {
+		parts = append(parts, "git flow finish merges it")
+	}
 	return strings.Join(parts, ", ")
 }
 
