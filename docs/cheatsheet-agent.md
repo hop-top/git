@@ -80,6 +80,8 @@ exits 0 without prompting.
 /usr/bin/git hop add <branch>                 # create worktree + env; auto-cd if
                                               #   shell integration active
 /usr/bin/git hop add <branch> --dry-run       # preview branch + path; no writes, no hooks
+/usr/bin/git hop add <branch> -n --json       # would-be {branch, path, base, upstream,
+                                              #   created, task?, env_started?, dry_run}
 /usr/bin/git hop add <branch> --task <id>     # record task id: hop.json branches.<b>.task,
                                               #   GIT_HOP_TASK in add hooks; id never in name
 /usr/bin/git hop add --task <id>              # derive <type>/<slug> branch from the task via
@@ -228,7 +230,7 @@ Structured output rules:
 
 ## Result Shapes
 
-Result schema 1.11 (MINOR = fields or enum values added, MAJOR = renamed or
+Result schema 1.12 (MINOR = fields or enum values added, MAJOR = renamed or
 removed). Columns = `csv`, `text`, `--porcelain` order; other fields are
 json/yaml only.
 
