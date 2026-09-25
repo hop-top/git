@@ -118,25 +118,17 @@ func DetectRepoStructure(fs afero.Fs, g git.GitInterface, path string) config.St
 	return config.StandardRepo
 }
 
+// IsWorktree reports whether path/.git is a gitfile ("gitdir: <dir>"),
+// the shape of a linked worktree. A symlinked .git is judged by its
+// target, as git judges it: a link alone is not a worktree.
 func IsWorktree(fs afero.Fs, path string) bool {
 	gitFile := filepath.Join(path, ".git")
-	info, err := os.Stat(gitFile)
-	if err != nil {
+	info, err := fs.Stat(gitFile)
+	if err != nil || !info.Mode().IsRegular() {
 		return false
 	}
-
-	if info.Mode()&os.ModeSymlink != 0 {
-		return true
-	}
-
-	if info.Mode().IsRegular() {
-		content, err := afero.ReadFile(fs, gitFile)
-		if err == nil {
-			return strings.Contains(string(content), "gitdir:")
-		}
-	}
-
-	return false
+	content, err := afero.ReadFile(fs, gitFile)
+	return err == nil && strings.Contains(string(content), "gitdir:")
 }
 
 func FindProjectRoot(fs afero.Fs, g git.GitInterface, path string) (string, error) {

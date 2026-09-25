@@ -89,7 +89,7 @@ func TestHandleAlreadyInitialized_BareWorktreeRoot(t *testing.T) {
 func TestHandleAlreadyInitialized_WorktreeChild(t *testing.T) {
 	dataHome := isolateDataHome(t)
 
-	// IsWorktree uses os.Stat, so we need a real tmpdir.
+	// A real tmpdir: DetectRepoStructure also asks git about the path.
 	worktreePath := t.TempDir()
 	g := git.New()
 	fs := afero.NewOsFs()

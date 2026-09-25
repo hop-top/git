@@ -273,15 +273,16 @@ func installHook(fs afero.Fs, mode, srcPath, dstPath string, srcInfo os.FileInfo
 
 	switch mode {
 	case ModeSymlink:
-		// afero.MemMapFs doesn't support symlinks; fall through to OsFs path.
-		// We bind to os.Symlink directly, which works for OsFs callers.
-		// Tests using MemMapFs should use mode=copy to exercise the install
-		// path; symlink tests use t.TempDir() with afero.NewOsFs().
+		// afero.MemMapFs has no symlinks; tests on it use mode=copy.
 		absSrc, err := filepath.Abs(srcPath)
 		if err != nil {
 			return fmt.Errorf("abs src: %w", err)
 		}
-		if err := os.Symlink(absSrc, dstPath); err != nil {
+		linker, ok := fs.(afero.Linker)
+		if !ok {
+			return fmt.Errorf("symlink: %w", afero.ErrNoSymlink)
+		}
+		if err := linker.SymlinkIfPossible(absSrc, dstPath); err != nil {
 			return fmt.Errorf("symlink: %w", err)
 		}
 		return nil
@@ -306,10 +307,7 @@ func installHook(fs afero.Fs, mode, srcPath, dstPath string, srcInfo os.FileInfo
 
 func removePathIfPresent(fs afero.Fs, path string) error {
 	if err := fs.Remove(path); err != nil && !os.IsNotExist(err) {
-		// Fall back to os.Remove for symlinks afero may not handle on OsFs.
-		if rerr := os.Remove(path); rerr != nil && !os.IsNotExist(rerr) {
-			return fmt.Errorf("remove existing %s: %w", path, err)
-		}
+		return fmt.Errorf("remove existing %s: %w", path, err)
 	}
 	return nil
 }

@@ -90,7 +90,7 @@ func resolveCurrentWorktree(fs afero.Fs, dir string) (string, bool) {
 		target = filepath.Join(hubPath, target)
 	}
 
-	info, err := os.Stat(target)
+	info, err := fs.Stat(target)
 	if err != nil || !info.IsDir() {
 		return "", false
 	}

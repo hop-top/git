@@ -157,8 +157,8 @@ func TestMirror_PromptYesInstalls(t *testing.T) {
 		t.Fatalf("err: %v", err)
 	}
 	// Prompt installs via copy fallback path on MemMapFs would fail with
-	// symlink; but the helper hardcodes ModeSymlink for prompt-yes which
-	// uses os.Symlink — and that fails for MemMapFs paths. Test only
+	// symlink; but the helper hardcodes ModeSymlink for prompt-yes, and
+	// MemMapFs has no symlinks. Test only
 	// counters: Installed should reflect the prompt's intent. We use a
 	// real OsFs case below for prompt-yes too.
 	_ = res

@@ -301,7 +301,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 			}
 		}
 		for _, p := range candidates {
-			if info, err := os.Stat(p); err == nil && info.IsDir() {
+			if info, err := fs.Stat(p); err == nil && info.IsDir() {
 				return p
 			}
 		}
