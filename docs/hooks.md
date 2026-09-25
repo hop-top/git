@@ -48,17 +48,17 @@ This allows you to:
 
 ### Directory Locations by OS
 
-git-hop resolves all paths through the XDG Base Directory specification. Linux and macOS share the same layout because the underlying `hop.top/kit/xdg` package follows XDG everywhere, including macOS — it does **not** use `~/Library/Preferences` or `~/Library/Application Support`.
+git-hop resolves its paths through the `hop.top/kit/xdg` package. A set `XDG_*` variable wins on every platform; unset, the default is the platform's own location, so macOS uses `~/Library/Application Support`, not `~/.config` or `~/.local/share`.
 
-**Linux and macOS:**
+| Level | Linux default | macOS default |
+|-------|---------------|---------------|
+| Global | `~/.config/git-hop/hooks/` | `~/Library/Application Support/git-hop/hooks/` |
+| Hopspace | `~/.local/share/git-hop/<org>/<repo>/hooks/` | `~/Library/Application Support/git-hop/<org>/<repo>/hooks/` |
+| Repo | `<worktree>/.git-hop/hooks/` | `<worktree>/.git-hop/hooks/` |
 
-| Level | Default path |
-|-------|--------------|
-| Global | `~/.config/git-hop/hooks/` |
-| Hopspace | `~/.local/share/git-hop/<org>/<repo>/hooks/` (the directory follows `hop.dataLayout`) |
-| Repo | `<worktree>/.git-hop/hooks/` |
+The hopspace directory follows `hop.dataLayout`. On macOS global and hopspace hooks share one base directory: `git-hop/hooks/` there holds the global hooks, `git-hop/<org>/<repo>/hooks/` a repository's hopspace hooks.
 
-Override with the standard XDG environment variables:
+Override with the standard XDG environment variables (the macOS defaults above apply only while they are unset):
 
 - `XDG_CONFIG_HOME` — relocates the global hooks dir (e.g. `$XDG_CONFIG_HOME/git-hop/hooks/`)
 - `XDG_DATA_HOME` — relocates the hopspace base
@@ -414,7 +414,8 @@ Also worth reading there: why the hooks install at hopspace level rather than re
 Global hooks apply to all repositories unless overridden:
 
 ```bash
-# Create hooks directory (same path on Linux and macOS)
+# Create hooks directory (Linux default; on macOS it is
+# ~/Library/Application Support/git-hop/hooks unless XDG_CONFIG_HOME is set)
 mkdir -p ~/.config/git-hop/hooks
 
 # Create a hook

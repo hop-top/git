@@ -193,15 +193,23 @@ is not detected. Move the range in the hopspace's `ports.json`
 
 ### Worktree is broken
 
-Repair a corrupted worktree:
+A worktree directory that is gone: `git hop doctor --fix` checks the
+branch out again at the same path. A branch already merged into the
+default branch is cleaned up instead; `git hop add feature-x` checks it
+out again if you still want it.
 
 ```bash
-# Remove the broken worktree
-git worktree remove feature-x
-
-# Re-create with git-hop
 cd my-project
-git hop feature-x
+git hop doctor --fix -n   # preview
+git hop doctor --fix
+```
+
+A worktree that is there but that git no longer recognises (a stale
+`.git` pointer after a move, a missing registration): `git hop repair`
+fixes the metadata, with a backup (`-n` previews, `--undo` reverts).
+
+```bash
+git hop repair
 ```
 
 ## Performance

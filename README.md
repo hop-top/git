@@ -323,7 +323,7 @@ git-hop runs your own executable scripts at points in the worktree lifecycle. Th
 - `pre-worktree-move` / `post-worktree-move` - Around `git hop move`
 - `pre-worktree-switch` / `post-worktree-switch` - Around `git hop <branch>`; the `post-` hook also fires on a plain `cd` into a registered worktree
 - `pre-clone` / `post-clone` - Around `git hop clone`
-- `pre-repair` / `post-repair` - Around `git hop repair` (global-level only; resolved by a separate code path)
+- `pre-repair` / `post-repair` - Around `git hop repair`; the repo level is anchored on the hub (`<hub>/.git-hop/hooks/`), then hopspace and global as for every hook
 
 `pre-env-start`, `post-env-start`, `pre-env-stop`, and `post-env-stop` are accepted as names but are **never dispatched**. Environment services use a separate, config-declared hook mechanism instead.
 
