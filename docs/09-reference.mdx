@@ -311,17 +311,17 @@ Rules:
 - `--json` with `--porcelain`, or `--json`/`--porcelain` with a different
   `--format`, is refused with exit 129 before the command does anything.
   So is an unknown format or an unknown `--cols` column.
-- Every result is a list of records, except `add`, `init`, `env start`,
-  `env stop` and `env generate`, which return one object. An empty result is `[]` (and no lines under
-  `--porcelain`), never empty stdout.
+- Every result is a list of records, except `add`, `init`, `move`, `env start`,
+  `env stop` and `env generate`, which return one object. An empty
+  result is `[]` (and no lines under `--porcelain`), never empty stdout.
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
 - Result shapes are versioned together (currently 1.9): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
-- Under `--dry-run`, `init` and `remove` render the result the run would
-  produce, in the same shape; `json` and `yaml` add `dry_run: true` to
-  each record (absent on a real run). A preview
+- Under `--dry-run`, `init`, `remove` and `move` render the result the
+  run would produce, in the same shape; `json` and `yaml` add
+  `dry_run: true` to each record (absent on a real run). A preview
   the real run would refuse fails the same way, with no result.
 - A refusal or failure keeps its exit status and reports on stderr (the
   JSON error record under `--json`); stdout then carries no result,
@@ -416,6 +416,21 @@ gate, failure) the records still print and the exit status is 1.
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 
 Columns: `kind branch path removed branch_deleted remote_deleted`.
+
+### move
+
+One object.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `old_branch` | string | Branch before the move |
+| `new_branch` | string | Branch after the move |
+| `old_path` | string | Absolute worktree path before the move |
+| `new_path` | string | Absolute worktree path after the move |
+| `current_updated` | bool | `true` when the hub's `current` symlink pointed at the worktree and now follows it (or, under `--dry-run`, would) |
+| `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
+
+Columns: `old_branch new_branch old_path new_path current_updated`.
 
 ### doctor
 

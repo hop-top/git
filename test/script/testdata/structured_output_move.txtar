@@ -1,0 +1,73 @@
+# move honours the structured output modes.
+#
+# The result is one object: the branch and worktree path before and after,
+# and whether the `current` symlink followed the worktree. --dry-run
+# renders the result the move would produce, marked dry_run in json/yaml.
+# Human progress never reaches stdout in those modes; a refusal keeps its
+# exit status and says why on stderr.
+#
+# The regression this pins: move printed nothing under --json /
+# --porcelain and its human progress under --format json|yaml.
+
+# --- upstream repo, hub, two branches; current points at feat/old ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/old
+exec git-hop add feat/taken
+exec git-hop feat/old
+
+# --- an unknown column is refused before anything moves ---
+exec sh -c 'git-hop move feat/old feat/new --json --cols nope; echo "exit=$?"'
+stdout '^exit=129$'
+exists $WORK/hub/hops/feat/old
+
+# --- --dry-run: the would-be result, nothing moved ---
+exec git-hop move feat/old feat/new --dry-run --json
+decode json stdout old_branch feat/old
+decode json stdout new_branch feat/new
+decode json stdout old_path '~/hub/hops/feat/old$'
+decode json stdout new_path '~/hub/hops/feat/new$'
+decode json stdout current_updated true
+decode json stdout dry_run true
+! stdout 'dry-run\]'
+exists $WORK/hub/hops/feat/old
+! exists $WORK/hub/hops/feat/new
+
+exec git-hop move feat/old feat/new --dry-run --porcelain
+stdout '^feat/old\tfeat/new\t\S+/hub/hops/feat/old\t\S+/hub/hops/feat/new\ttrue$'
+
+# --- a refusal keeps exit 1; the error is on stderr, stdout is empty ---
+exec sh -c 'git-hop move feat/old feat/taken --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr '"level":"error"'
+stderr 'already exists'
+exec sh -c 'git-hop move feat/old feat/taken --dry-run --porcelain; echo "exit=$?"'
+stdout '^exit=1$'
+stderr '^fatal: .*already exists'
+
+# --- the move: current followed the worktree ---
+exec git-hop move feat/old feat/new --format yaml
+decode yaml stdout old_branch feat/old
+decode yaml stdout new_branch feat/new
+decode yaml stdout old_path '~/hub/hops/feat/old$'
+decode yaml stdout new_path '~/hub/hops/feat/new$'
+decode yaml stdout current_updated true
+! decode yaml stdout dry_run
+! stdout 'Moved'
+! stdout 'Moving'
+! stdout 'Worktree:'
+exists $WORK/hub/hops/feat/new
+! exists $WORK/hub/hops/feat/old
+
+# --- a worktree current does not point at: current left alone ---
+exec git-hop move feat/taken feat/renamed --porcelain
+stdout '^feat/taken\tfeat/renamed\t\S+/hub/hops/feat/taken\t\S+/hub/hops/feat/renamed\tfalse$'
+! stdout 'Moved'
+exists $WORK/hub/hops/feat/renamed

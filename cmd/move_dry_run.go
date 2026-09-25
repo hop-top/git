@@ -16,8 +16,9 @@ import (
 // previewMove reports what `git hop move` would do for p without doing any
 // of it: no hook, branch rename, worktree move, hop.json, hopspace, state,
 // ports, volumes or symlink write. A move the real run would reject fails
-// here too, checked in the same order.
-func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) {
+// here too, checked in the same order. It returns the result the move
+// would produce.
+func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) moveResult {
 	refuse := func(err error) {
 		refuseDryRun(fmt.Sprintf("move '%s'", p.oldBranch), err)
 	}
@@ -40,15 +41,24 @@ func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) {
 	output.Info("[dry-run] Would move worktree %s -> %s", p.oldPath, p.newPath)
 	output.Info("[dry-run] Would rekey '%s' to '%s' in hop.json, hopspace, state, ports and volumes", p.oldBranch, p.newBranch)
 
+	res := moveResult{
+		OldBranch: p.oldBranch,
+		NewBranch: p.newBranch,
+		OldPath:   p.oldPath,
+		NewPath:   p.newPath,
+		DryRun:    true,
+	}
 	if target, err := hop.GetCurrentSymlink(fs, p.hubPath); err == nil {
 		absTarget, _ := filepath.Abs(filepath.Join(p.hubPath, target))
 		absOld, _ := filepath.Abs(p.oldPath)
 		if absTarget == absOld {
 			output.Info("[dry-run] Would point 'current' at %s", p.newPath)
+			res.CurrentUpdated = true
 		}
 	}
 
 	// Repo-level hooks travel with the worktree, so the post hook is
 	// resolved where they live now.
 	cli.PreviewHook(runner, "post-worktree-move", p.oldPath, p.repoID)
+	return res
 }
