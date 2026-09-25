@@ -114,6 +114,15 @@ type BranchPorts struct {
 	// override. Empty in an entry an earlier release wrote, whose
 	// override is in the repository-wide cache directory of the branch.
 	OverrideDir string `json:"overrideDir,omitempty"`
+	// Project is the compose project the worktree's environment runs as.
+	// Empty in an entry an earlier release wrote, which runs as
+	// <org>-<repo>-<branch>.
+	Project string `json:"project,omitempty"`
+	// Branch, Worktree and Hub say whose entry it is. An earlier release
+	// wrote none of them; its entries are keyed by branch.
+	Branch   string `json:"branch,omitempty"`
+	Worktree string `json:"worktree,omitempty"`
+	Hub      string `json:"hub,omitempty"`
 }
 
 // VolumesConfig represents volumes.json

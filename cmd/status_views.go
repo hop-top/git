@@ -34,7 +34,7 @@ func targetStatusRecords(fs afero.Fs, g git.GitInterface, d *docker.Docker, hubP
 
 	hopspacePath := hop.ResolveHopspacePath(hub.Path, hub.Config.Repo)
 	if portsCfg, _ := config.NewLoader(fs).LoadPortsConfig(hopspacePath); portsCfg != nil {
-		if bp, ok := portsCfg.Branches[branch.HopspaceBranch]; ok && len(bp.Ports) > 0 {
+		if bp, ok := services.LookupEnvEntry(portsCfg, hopspacePath, hub.Path, r.Path, branch.HopspaceBranch); ok && len(bp.Ports) > 0 {
 			r.Ports = bp.Ports
 		}
 	}

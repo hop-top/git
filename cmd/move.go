@@ -18,6 +18,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 	"hop.top/kit/go/runtime/bus"
 )
@@ -174,21 +175,8 @@ var moveCmd = &cobra.Command{
 
 		// Rekey ports/volumes configs
 		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
-		loader := config.NewLoader(fs)
-		writer := config.NewWriter(fs)
-		if portsCfg, err := loader.LoadPortsConfig(hopspacePath); err == nil {
-			if entry, ok := portsCfg.Branches[oldBranch]; ok {
-				delete(portsCfg.Branches, oldBranch)
-				portsCfg.Branches[newBranch] = entry
-				_ = writer.WritePortsConfig(hopspacePath, portsCfg)
-			}
-		}
-		if volsCfg, err := loader.LoadVolumesConfig(hopspacePath); err == nil {
-			if entry, ok := volsCfg.Branches[oldBranch]; ok {
-				delete(volsCfg.Branches, oldBranch)
-				volsCfg.Branches[newBranch] = entry
-				_ = writer.WriteVolumesConfig(hopspacePath, volsCfg)
-			}
+		if err := services.RekeyEnvEntry(fs, hopspacePath, hubPath, actualOldPath, actualNewPath, oldBranch, newBranch); err != nil {
+			output.Warn("Failed to update ports and volumes: %v", err)
 		}
 
 		// Post-worktree-move hook

@@ -805,15 +805,16 @@ Tracks shared dependencies across worktrees. See [Dependency Sharing](dependency
 
 ## Ports and Volumes
 
-Port and volume configurations are stored per repository for deterministic allocation.
+Port and volume allocations are recorded in the hopspace: `<hub>` for a
+default clone, `$GIT_HOP_DATA_HOME/<org>/<repo>` for a `--global` one.
 
 ### Ports Configuration
 
-`$GIT_HOP_DATA_HOME/<org>/<repo>/ports.json`
+`<hopspace>/ports.json`
 
 ```json
 {
-  "allocationMode": "hash-based",
+  "allocationMode": "incremental",
   "baseRange": {
     "start": 10000,
     "end": 15000
@@ -825,24 +826,48 @@ Port and volume configurations are stored per repository for deterministic alloc
         "db": 10235,
         "redis": 10236
       },
-      "overrideDir": "/home/user/.cache/git-hop/org/repo/app-1a2b3c4d/main"
+      "overrideDir": "/home/user/.cache/git-hop/org/repo/app-1a2b3c4d/main",
+      "project": "org-repo-main",
+      "branch": "main",
+      "worktree": "/home/user/src/app/hops/main",
+      "hub": "/home/user/src/app"
     }
   },
   "services": ["api", "db", "redis"]
 }
 ```
 
+An entry is keyed by branch in a hub's own hopspace, and by worktree path
+in a `--global` hopspace, which every `--global` hub of the repository
+shares: each hub's worktree of a branch has its own entry.
+
+Ports are allocated against every hub git-hop knows of (all hubs in its
+state, of every repository), so no two worktrees get the same port:
+
+- A worktree keeps the ports its entry records, each time its environment
+  is generated.
+- New ports go after the highest port in use (`incremental`, the default)
+  or where the repository, hub and branch hash to (`hash`), skipping any
+  port in use; when the range runs out, the first free block is used.
+- Where two entries already hold one port, the hub set up first keeps it.
+  The other hub gets new ports the next time its environment is generated
+  (`git hop env generate`), with a warning.
+
 `overrideDir` is where the branch's compose override is cached, when its
 compose file has hardcoded host ports: `$XDG_CACHE_HOME/git-hop/<org>/<repo>/<hub key>/<branch>`,
 where the hub key is the hub directory's name and a short hash of its
-path, so two hubs of one repository never share an override. An entry
-without it (written by an earlier release) uses
-`$XDG_CACHE_HOME/git-hop/<org>/<repo>/<branch>` until the environment is
-generated again.
+path, so two hubs of one repository never share an override. `project` is
+the compose project the environment runs as.
+
+An entry an earlier release wrote has only `ports`. It keeps its ports and
+runs as `<org>-<repo>-<branch>`, with its override in
+`$XDG_CACHE_HOME/git-hop/<org>/<repo>/<branch>`, until its environment is
+generated again; then the other fields are filled in, the ports and
+project unchanged.
 
 ### Volumes Configuration
 
-`$GIT_HOP_DATA_HOME/<org>/<repo>/volumes.json`
+`<hopspace>/volumes.json`, keyed as `ports.json` is.
 
 ```json
 {
