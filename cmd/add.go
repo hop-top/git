@@ -87,7 +87,10 @@ skipped with a hint.
 
 With --dry-run, add reports the fetch, branch, start-point, worktree path,
 hooks and environment start it would run, then stops: nothing is fetched,
-created or written and no hook runs.`,
+created or written and no hook runs. An add the real run would refuse
+(the worktree exists, the branch name is invalid or checked out in
+another worktree, the start-point is not a commit) fails the same way,
+with exit status 1.`,
 	Args: addArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
@@ -218,7 +221,7 @@ created or written and no hook runs.`,
 				output.Info("\nRun 'git hop doctor --fix' to resolve these issues")
 				os.Exit(1)
 			}
-			output.Fatal("Failed to create worktree: %v", err)
+			refuseAdd(err)
 		}
 
 		// The detector's add action: git flow start for a new git-flow

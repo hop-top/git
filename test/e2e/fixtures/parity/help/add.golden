@@ -49,7 +49,10 @@ skipped with a hint.
 
 With --dry-run, add reports the fetch, branch, start-point, worktree path,
 hooks and environment start it would run, then stops: nothing is fetched,
-created or written and no hook runs.
+created or written and no hook runs. An add the real run would refuse
+(the worktree exists, the branch name is invalid or checked out in
+another worktree, the start-point is not a commit) fails the same way,
+with exit status 1.
 
 Usage:
   git-hop add [branch] [flags]

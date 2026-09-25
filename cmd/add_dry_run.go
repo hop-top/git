@@ -42,6 +42,7 @@ var addHooks = []string{"pre-worktree-add", "post-worktree-add"}
 func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.Runner, p addPlan) addResult {
 	// Probed first: the result reports the branch as it is before the add.
 	res := previewAddResult(g, p)
+	previewRefusals(wm, p)
 
 	if p.fetch {
 		output.Info("[dry-run] Would fetch origin")
@@ -74,6 +75,27 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 		output.Info("[dry-run] Would start environment (when the worktree has one)")
 	}
 	return res
+}
+
+// previewRefusals fails the preview when the real add would refuse to
+// create the worktree (see hop.WorktreeManager.CheckAdd), with its
+// message and exit status. The start-point is left unchecked when add
+// would fetch first: the fetch may bring it.
+func previewRefusals(wm *hop.WorktreeManager, p addPlan) {
+	if err := wm.CheckAdd(p.hopspace, p.hubPath, p.branch, p.worktreePath); err != nil {
+		refuseAdd(err)
+	}
+	if p.fetch {
+		return
+	}
+	if err := wm.CheckStartPoint(p.hopspace, p.hubPath, p.branch, p.startPoint); err != nil {
+		refuseAdd(err)
+	}
+}
+
+// refuseAdd ends add the way a refused worktree creation does.
+func refuseAdd(err error) {
+	output.Fatal("Failed to create worktree: %v", err)
 }
 
 // previewAddResult is the result add would produce for p, marked dry_run.
@@ -158,7 +180,7 @@ func previewBranch(g git.GitInterface, p addPlan) {
 func previewEnforcedBranch(wm *hop.WorktreeManager, p addPlan) {
 	e, target, err := wm.PreviewExistingBranch(p.hopspace, p.hubPath, p.branch, p.startPoint, p.defaultBranch)
 	if err != nil {
-		output.Fatal("Failed to create worktree: %v", err)
+		refuseAdd(err)
 	}
 	switch {
 	case !e.Exists:
