@@ -490,7 +490,7 @@ func showWorktreeStatus(fs afero.Fs, g git.GitInterface, d *docker.Docker, path 
 		if status != nil {
 			if hubPath, err := hop.FindHub(fs, root); err == nil {
 				if hub, err := hop.LoadHub(fs, hubPath); err == nil {
-					project = services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, status.Branch)
+					project = services.EnvProjectName(fs, hubPath, root, status.Branch, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 				}
 			}
 		}
@@ -545,7 +545,7 @@ func showTargetStatus(fs afero.Fs, d *docker.Docker, hubPath, target string) {
 	output.Info("\nServices:")
 	fullPath := config.ResolveWorktreePath(branch.Path, hubPath)
 	if _, err := fs.Stat(filepath.Join(fullPath, "docker-compose.yml")); err == nil {
-		project := services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, branch.HopspaceBranch)
+		project := services.EnvProjectName(fs, hubPath, fullPath, branch.HopspaceBranch, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 		ps, err := d.ComposePs(fullPath, project)
 		if err == nil {
 			fmt.Println(ps)
@@ -647,7 +647,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 			composePath := filepath.Join(wt.Path, "docker-compose.yml")
 			if exists, _ := afero.Exists(fs, composePath); exists {
 				// Check if services are running
-				project := services.ComposeProjectName(repo.Org, repo.Repo, branch)
+				project := services.EnvProjectName(fs, wt.HubPath, wt.Path, branch, repo.Org, repo.Repo)
 				if ps, err := d.ComposePs(wt.Path, project); err == nil && composePsHasRunning(ps) {
 					runningServices++
 				}
@@ -685,7 +685,7 @@ func showSystemStatus(fs afero.Fs, d *docker.Docker) {
 				branch := wt.Branch
 				composePath := filepath.Join(wt.Path, "docker-compose.yml")
 				if exists, _ := afero.Exists(fs, composePath); exists {
-					project := services.ComposeProjectName(repo.Org, repo.Repo, branch)
+					project := services.EnvProjectName(fs, wt.HubPath, wt.Path, branch, repo.Org, repo.Repo)
 					if ps, err := d.ComposePs(wt.Path, project); err == nil && composePsHasRunning(ps) {
 						repoRunning++
 					}

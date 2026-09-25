@@ -40,7 +40,7 @@ func targetStatusRecords(fs afero.Fs, g git.GitInterface, d *docker.Docker, hubP
 	}
 
 	if exists, _ := afero.Exists(fs, filepath.Join(r.Path, "docker-compose.yml")); exists {
-		project := services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, branch.HopspaceBranch)
+		project := services.EnvProjectName(fs, hub.Path, r.Path, branch.HopspaceBranch, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 		if ps, err := d.ComposePs(r.Path, project); err == nil {
 			r.Services = parseComposePs(ps)
 		}

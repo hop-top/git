@@ -827,7 +827,7 @@ default clone, `$GIT_HOP_DATA_HOME/<org>/<repo>` for a `--global` one.
         "redis": 10236
       },
       "overrideDir": "/home/user/.cache/git-hop/org/repo/app-1a2b3c4d/main",
-      "project": "org-repo-main",
+      "project": "org-repo-app-1a2b3c4d-main",
       "branch": "main",
       "worktree": "/home/user/src/app/hops/main",
       "hub": "/home/user/src/app"
@@ -857,7 +857,9 @@ state, of every repository), so no two worktrees get the same port:
 compose file has hardcoded host ports: `$XDG_CACHE_HOME/git-hop/<org>/<repo>/<hub key>/<branch>`,
 where the hub key is the hub directory's name and a short hash of its
 path, so two hubs of one repository never share an override. `project` is
-the compose project the environment runs as.
+the compose project the environment runs as (`docker compose -p`):
+`<org>-<repo>-<hub key>-<branch>`, so two hubs never share containers,
+networks or named volumes.
 
 An entry an earlier release wrote has only `ports`. It keeps its ports and
 runs as `<org>-<repo>-<branch>`, with its override in

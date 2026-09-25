@@ -72,7 +72,7 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	if overridePath != "" {
 		ports.OverrideDir = filepath.Dir(overridePath)
 	}
-	ports.Project = projectFor(self, found && keep != nil, org, repo, branch)
+	ports.Project = projectFor(self, found && keep != nil, org, repo, hubPath, branch)
 	ports.Branch = branch
 	ports.Worktree = state.WorktreeKey(worktreePath)
 	ports.Hub = hubPath
@@ -122,11 +122,20 @@ func keptPorts(recs *EnvRecords, self EnvClaim, found bool) map[string]int {
 	return nil
 }
 
-// projectFor returns the compose project the worktree runs as: the one
-// its entry records when it keeps its ports, else <org>-<repo>-<branch>.
-func projectFor(self EnvClaim, kept bool, org, repo, branch string) string {
-	if kept && self.Entry.Project != "" {
-		return self.Entry.Project
+// projectFor returns the compose project the worktree runs as. One that
+// keeps its ports keeps its project: the one its entry records, or
+// <org>-<repo>-<branch> for an entry an earlier release wrote, so its
+// running containers stay reachable. One with new ports runs as its
+// hub's own (HubComposeProjectName).
+func projectFor(self EnvClaim, kept bool, org, repo, hubPath, branch string) string {
+	if kept {
+		if self.Entry.Project != "" {
+			return self.Entry.Project
+		}
+		return ComposeProjectName(org, repo, branch)
 	}
-	return ComposeProjectName(org, repo, branch)
+	if hubPath == "" {
+		return ComposeProjectName(org, repo, branch)
+	}
+	return HubComposeProjectName(org, repo, hubPath, branch)
 }

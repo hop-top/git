@@ -45,7 +45,7 @@ exec git config --global --unset hop.autoEnvStart
 exec git config --global hop.env.autoStart true
 exec git-hop add feat/auto
 grep -count=1 '^up ' $WORK/up.log
-grep '^up compose -p org-repo-feat-auto up -d in .*/hub/hops/feat/auto on feat/auto$' $WORK/up.log
+grep '^up compose -p org-repo-hub-[0-9a-f]{8}-feat-auto up -d in .*/hub/hops/feat/auto on feat/auto$' $WORK/up.log
 ! stderr 'warning:'
 
 # --- the start is progress, not add's result: all of it goes to stderr,

@@ -38,7 +38,7 @@ exec git-hop $WORK/org/repo.git $WORK/two/app
 exec sh -c 'grep -h "^HOP_PORT_WEB=" $WORK/one/app/hops/main/.env $WORK/two/app/hops/main/.env | sort -u | wc -l'
 stdout '^ *2$'
 grep '"hub": ".*/one/app"' $WORK/one/app/ports.json
-grep '"project": "org-repo-main"' $WORK/one/app/ports.json
+grep '"project": "org-repo-app-[0-9a-f]{8}-main"' $WORK/one/app/ports.json
 
 # --- generating again keeps the ports ---
 exec sh -c 'grep "^HOP_PORT_WEB=" $WORK/one/app/hops/main/.env > $WORK/before'
@@ -68,10 +68,12 @@ cd $WORK/y/second/hops/main
 exec git-hop env generate
 stderr 'warning: port 16000 \(WEB\) is also allocated to main of .*/x/first, set up first; allocating new ports'
 ! grep '^HOP_PORT_WEB=16000$' .env
+grep '"project": "org-coll-second-[0-9a-f]{8}-main"' $WORK/y/second/ports.json
 cd $WORK/x/first/hops/main
 exec git-hop env generate
 ! stderr 'allocating new ports'
 grep '^HOP_PORT_WEB=16000$' .env
+grep '"project": "org-coll-main"' $WORK/x/first/ports.json
 cd $WORK
 
 # --- hubs sharing a --global hopspace: one entry each, by worktree path ---

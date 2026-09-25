@@ -76,6 +76,9 @@ func composeSlugify(s string) string {
 
 // EnvironmentManager represents an environment manager (docker-compose, podman, etc.)
 type EnvironmentManager struct {
+	// Project is the compose project to run as; empty means
+	// ComposeProjectName of the repository and branch.
+	Project     string
 	Name        string
 	DetectFiles []string
 	Commands    EnvCommands
@@ -375,7 +378,10 @@ func (m *EnvironmentManager) buildComposeCommand(cmdParts []string, worktreePath
 		return cmdParts
 	}
 
-	projectName := ComposeProjectName(org, repo, branch)
+	projectName := m.Project
+	if projectName == "" {
+		projectName = ComposeProjectName(org, repo, branch)
+	}
 
 	result := make([]string, 0, len(cmdParts)+8)
 	result = append(result, cmdParts[0], cmdParts[1]) // "docker", "compose"

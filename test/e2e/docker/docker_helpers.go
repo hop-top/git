@@ -30,7 +30,7 @@ func hopComposeProject(dir, branch string) string {
 	if err != nil {
 		return ""
 	}
-	return services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, branch)
+	return services.EnvProjectName(fs, hubPath, dir, branch, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 }
 
 // composeArgs returns the leading `compose -p <project>` args for a docker

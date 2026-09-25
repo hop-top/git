@@ -1,7 +1,7 @@
 # Two hubs of one repository get environments that do not collide: each
-# has its own compose override directory. An entry an earlier release
-# wrote keeps the override it names, or the repository-wide one when it
-# names none.
+# has its own compose override directory and compose project. An entry an
+# earlier release wrote keeps the override it names, or the
+# repository-wide one when it names none, and runs as <org>-<repo>-<branch>.
 #
 # A stub docker on PATH stands in for compose: `compose config` fails (so
 # the raw compose file is parsed) and each `up` is logged with its
@@ -36,13 +36,21 @@ cd $WORK/two/app/hops/main
 exec git-hop env start
 exec sh -c 'grep -o "\-f [^ ]*override.yml" $WORK/up.log | sort -u | wc -l'
 stdout '^ *2$'
+grep '^up compose -p org-repo-app-[0-9a-f]{8}-main .* in .*/one/app/hops/main$' $WORK/up.log
+grep '^up compose -p org-repo-app-[0-9a-f]{8}-main .* in .*/two/app/hops/main$' $WORK/up.log
+exec sh -c 'grep -o "^up compose -p [^ ]*" $WORK/up.log | sort -u | wc -l'
+stdout '^ *2$'
+cd $WORK/one/app/hops/main
+exec git-hop env stop
+grep '^stop compose -p org-repo-app-[0-9a-f]{8}-main .* in .*/one/app/hops/main$' $WORK/up.log
+cd $WORK/two/app/hops/main
 
 # --- an entry without an override directory uses the repository-wide one ---
 cp $WORK/legacy-ports.json $WORK/two/app/ports.json
 mkdir $WORK/.cache/git-hop/org/repo/main
 cp $WORK/compose.yml $WORK/.cache/git-hop/org/repo/main/docker-compose.override.yml
 exec git-hop env start
-grep ' -f .*/.cache/git-hop/org/repo/main/docker-compose.override.yml .* in .*/two/app/hops/main$' $WORK/up.log
+grep '^up compose -p org-repo-main -f .*/.cache/git-hop/org/repo/main/docker-compose.override.yml .* in .*/two/app/hops/main$' $WORK/up.log
 
 -- compose.yml --
 services:
@@ -57,6 +65,10 @@ services:
 case " $* " in
 *" up "*)
 	echo "up $* in $PWD" >> "$WORK/up.log"
+	exit 0
+	;;
+*" stop "*)
+	echo "stop $* in $PWD" >> "$WORK/up.log"
 	exit 0
 	;;
 *" config "*)
