@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/spf13/afero"
@@ -28,15 +30,10 @@ import (
 //
 // A nil error means nothing is left at path.
 func removeWorktreeFiles(fs afero.Fs, g git.GitInterface, basePath, path string) error {
-	registered := isWorktreeRegistered(g, basePath, path)
-	if !registered {
-		if own, ok := worktreeRepository(g, path); ok {
-			basePath, registered = own, true
-		}
-	}
+	basePath, registered := worktreeRemovalBase(g, basePath, path)
 	if registered {
 		if err := g.WorktreeRemove(basePath, path, true); err != nil {
-			return fmt.Errorf("git could not remove the worktree at '%s', so its files stay: %v", path, err)
+			return gitRefusedRemoval(path, err)
 		}
 	} else {
 		output.Debug("worktree %s not registered; skipping git worktree remove", path)
@@ -48,9 +45,91 @@ func removeWorktreeFiles(fs afero.Fs, g git.GitInterface, basePath, path string)
 	case registered:
 		return fmt.Errorf("git removed the worktree at '%s', but something is left there, so it stays: %v", path, err)
 	default:
-		return fmt.Errorf("'%s' is not a worktree git has registered and is not empty, so it stays\n"+
-			"hint: move out what you want to keep, delete it, then try again", path)
+		return unregisteredNotEmpty(path)
 	}
+}
+
+// checkWorktreeRemoval is removeWorktreeFiles' preview: it changes
+// nothing and returns the error removeWorktreeFiles would return for
+// path, as far as that is known before git runs:
+//
+//   - a path no git has registered that holds anything is refused, as
+//     the real run refuses it;
+//   - a registered worktree git has locked is refused: the real run
+//     passes --force once, and git removes a locked worktree only with
+//     it twice;
+//   - a registered worktree whose directory is there without a .git
+//     file is refused: git's validation stops the removal.
+//
+// Uncommitted or untracked files are not among them: --force removes
+// them, and the safety gate is what asks for them. What git or the
+// filesystem would hit only while deleting the files (a permission or
+// I/O error) cannot be known in advance and is not predicted.
+func checkWorktreeRemoval(fs afero.Fs, g git.GitInterface, basePath, path string) error {
+	basePath, registered := worktreeRemovalBase(g, basePath, path)
+	if !registered {
+		if emptyOrGone(fs, path) {
+			return nil
+		}
+		return unregisteredNotEmpty(path)
+	}
+	if reason, locked := gitWorktreeLock(g, basePath, path); locked {
+		cause := "it is locked"
+		if reason != "" {
+			cause = fmt.Sprintf("it is locked (%s)", reason)
+		}
+		return gitRefusedRemoval(path, fmt.Errorf("%s\nhint: run 'git worktree unlock %s' first", cause, path))
+	}
+	if exists, _ := afero.DirExists(fs, path); exists {
+		dotGit := filepath.Join(path, ".git")
+		info, err := fs.Stat(dotGit)
+		switch {
+		case os.IsNotExist(err):
+			return gitRefusedRemoval(path, fmt.Errorf("'%s' does not exist", dotGit))
+		case err == nil && !info.Mode().IsRegular():
+			return gitRefusedRemoval(path, fmt.Errorf("'%s' is not a file", dotGit))
+		}
+	}
+	return nil
+}
+
+// worktreeRemovalBase returns where `git worktree remove` for path runs,
+// basePath or the repository another worktree's .git names, and whether
+// any git has path registered at all.
+func worktreeRemovalBase(g git.GitInterface, basePath, path string) (string, bool) {
+	if isWorktreeRegistered(g, basePath, path) {
+		return basePath, true
+	}
+	if own, ok := worktreeRepository(g, path); ok {
+		return own, true
+	}
+	return basePath, false
+}
+
+// gitRefusedRemoval is the error for a worktree git will not remove.
+func gitRefusedRemoval(path string, cause error) error {
+	return fmt.Errorf("git could not remove the worktree at '%s', so its files stay: %v", path, cause)
+}
+
+// unregisteredNotEmpty is the error for a directory no git has
+// registered that holds anything.
+func unregisteredNotEmpty(path string) error {
+	return fmt.Errorf("'%s' is not a worktree git has registered and is not empty, so it stays\n"+
+		"hint: move out what you want to keep, delete it, then try again", path)
+}
+
+// emptyOrGone reports whether RemoveEmptyDirectory would remove path or
+// find it gone already: nothing is there, or an empty directory is.
+func emptyOrGone(fs afero.Fs, path string) bool {
+	info, err := fs.Stat(path)
+	if os.IsNotExist(err) {
+		return true
+	}
+	if err != nil || !info.IsDir() {
+		return false
+	}
+	empty, err := afero.IsEmpty(fs, path)
+	return err == nil && empty
 }
 
 // worktreeRepository returns the repository path, a worktree of which

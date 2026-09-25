@@ -1,0 +1,129 @@
+# `git hop remove -n` and `git hop merge -n` refuse a worktree git has
+# locked, as the real run does: both pass --force to `git worktree
+# remove` once, and git removes a locked worktree only with it twice.
+# The preview fails with the real run's exit status (1), worded
+# `[dry-run] would refuse to remove|merge ...`; under --json stdout
+# stays empty and the error record goes to stderr. `remove --merged -n`
+# skips the locked worktree and says why. Each case also runs for real,
+# so preview and run cannot drift apart.
+#
+# The regression this pins: the previews said "Would remove worktree"
+# and exited 0 while the real run refused.
+
+# --- upstream repo, hub, three merged worktrees git has locked, one of
+# --- them with its directory gone (a drive that is not mounted) ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/locked
+exec git-hop add feat/why
+exec git-hop add feat/away
+exec git-hop main
+exec git worktree lock hops/feat/locked
+exec git worktree lock --reason 'on a usb drive' hops/feat/why
+exec git worktree lock hops/feat/away
+rm hops/feat/away
+
+# --- snapshot what a refused removal must leave alone ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cp stdout $WORK/worktrees.before
+
+# --- remove -n: locked, no reason ---
+exec sh -c 'git-hop remove feat/locked -n --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to remove ''feat/locked'': git could not remove the worktree at ''.*/hub/hops/feat/locked'', so its files stay: it is locked$' err
+grep '^hint: run ''git worktree unlock .*/hub/hops/feat/locked'' first$' err
+! grep 'Would remove worktree' out
+exec sh -c 'git-hop remove feat/locked -n --no-prompt --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to remove ''feat/locked'': git could not remove the worktree at ''.*/hub/hops/feat/locked'', so its files stay: it is locked' err
+
+# --- remove -n: locked with a reason ---
+exec sh -c 'git-hop remove feat/why -n --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to remove ''feat/why'': git could not remove the worktree at ''.*/hub/hops/feat/why'', so its files stay: it is locked \(on a usb drive\)$' err
+exec sh -c 'git-hop remove feat/why -n --no-prompt --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to remove ''feat/why'': .*it is locked \(on a usb drive\)' err
+
+# --- remove -n: locked, directory gone (no safety check to run) ---
+exec sh -c 'git-hop remove feat/away -n --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep 'missing on disk; safety check skipped' out
+grep '^fatal: \[dry-run\] would refuse to remove ''feat/away'': git could not remove the worktree at ''.*/hub/hops/feat/away'', so its files stay: it is locked$' err
+exec sh -c 'git-hop remove feat/away -n --no-prompt --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to remove ''feat/away'': .*it is locked' err
+
+# --- remove --merged -n: both present ones skipped, with the reason
+# --- (the missing one is left to prune, as the real run leaves it) ---
+exec sh -c 'git-hop remove --merged -n --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^\[dry-run\] Would skip feat/locked: git could not remove the worktree at ''.*/hub/hops/feat/locked'', so its files stay: it is locked$' out
+grep '^\[dry-run\] Would skip feat/why: .*it is locked \(on a usb drive\)$' out
+! grep 'Would remove worktree' out
+grep '^fatal: \[dry-run\] would fail: 2 merged worktree\(s\) could not be removed$' err
+exec sh -c 'git-hop remove --merged -n --no-prompt --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+decode json out '#' 3
+decode json out 0.branch feat/away
+decode json out 0.reason '~worktree path missing'
+decode json out 1.branch feat/locked
+decode json out 1.removed false
+decode json out 1.reason '~^git could not remove the worktree at .*, so its files stay: it is locked'
+decode json out 2.branch feat/why
+decode json out 2.removed false
+decode json out 2.reason '~it is locked \(on a usb drive\)'
+grep '"msg":"\[dry-run\] would fail: 2 merged worktree\(s\) could not be removed"' err
+
+# --- merge -n ---
+exec sh -c 'git-hop merge feat/locked main -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to merge ''feat/locked'' into ''main'': the merge would stand, but its worktree would not be removed: git could not remove the worktree at ''.*/hub/hops/feat/locked'', so its files stay: it is locked$' err
+grep '^hint: run ''git worktree unlock .*/hub/hops/feat/locked'' first$' err
+! grep 'Would remove worktree' out
+exec sh -c 'git-hop merge feat/locked main -n --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to merge ''feat/locked'' into ''main'': the merge would stand, but its worktree would not be removed: git could not remove .*it is locked' err
+
+# --- the previews changed nothing ---
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cmp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cmp stdout $WORK/worktrees.before
+
+# --- the real runs refuse the same worktrees ---
+exec sh -c 'git-hop remove feat/away --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: git could not remove the worktree at ''.*/hub/hops/feat/away'', so its files stay: .*locked working tree' err
+exec sh -c 'git-hop remove feat/locked --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: git could not remove the worktree at ''.*/hub/hops/feat/locked'', so its files stay: .*locked working tree' err
+exec sh -c 'git-hop remove --merged --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep 'Failed to remove feat/locked: git could not remove the worktree' err
+grep 'Failed to remove feat/why: git could not remove the worktree' err
+exec sh -c 'git-hop merge feat/locked main >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Merged ''feat/locked'' into ''main'', but did not remove its worktree: git could not remove the worktree at ''.*/hub/hops/feat/locked''' err
+exists hops/feat/locked/.git
+exists hops/feat/why/.git
+cmp hop.json $WORK/hop.json.before
+exec git branch --list feat/locked feat/why
+stdout 'feat/locked'
+stdout 'feat/why'

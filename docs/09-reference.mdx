@@ -248,7 +248,7 @@ the flags (see Git-Flow Integration in `docs/hooks.md`).
 | Code | Description |
 |------|-------------|
 | 0 | Removed, or the prompt was answered `n` (`Cancelled.`) |
-| 1 | Target not found, the safety gate refused (also under `--dry-run`), or removal failed |
+| 1 | Target not found, the safety gate refused, the worktree could not be removed (git refused, or the directory is not a registered worktree and is not empty), or removal failed; the gate and the worktree refusals also under `--dry-run` |
 | 129 | Usage error: no target and no `--merged`, a target beside `--merged`, or more than one target; or the confirmation prompt has no readable stdin (pass `--no-prompt`) |
 
 ### git hop prune
