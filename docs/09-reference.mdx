@@ -165,7 +165,10 @@ Start the current worktree's environment services. Alias: `up`.
 git hop env start
 ```
 
-No flags of its own; `--dry-run` is refused.
+No flags of its own; `--dry-run` is refused. Uses the hub's
+`settings.environmentManager` when set, otherwise the first environment
+manager whose detect files the worktree has, and runs the hub's
+`settings.environmentConfig.hooks.preStart` / `postStart` around it.
 
 **Exit Codes:**
 | Code | Description |
@@ -183,7 +186,8 @@ Stop the current worktree's environment services. Alias: `down`.
 git hop env stop
 ```
 
-No flags of its own; `--dry-run` is refused.
+No flags of its own; `--dry-run` is refused. Runs the hub's `preStop` /
+`postStop` hooks the same way.
 
 **Exit Codes:**
 | Code | Description |
@@ -457,122 +461,82 @@ Columns: `status path kind old new` (the `repair --porcelain` line format).
 
 ### hop.json Schema
 
+A hub's `hop.json` (which is also its hopspace's for a default clone):
+
 ```json
 {
-  "port_base": number,
-  "port_limit": number,
-  "ports": object,
-  "volumes": object,
-  "services": object,
-  "docker": object
+  "repo": {
+    "uri": string,
+    "org": string,
+    "repo": string,
+    "defaultBranch": string,
+    "mode": "global"
+  },
+  "branches": {
+    "<branch>": {
+      "path": string,
+      "hopspaceBranch": string,
+      "base": string,
+      "task": string,
+      "fork": string,
+      "exists": boolean,
+      "lastSync": string,
+      "packageManagers": { "<pm>": { "installCmd": [string] } }
+    }
+  },
+  "settings": {
+    "compareBranch": string,
+    "environmentManager": string,
+    "environmentConfig": {
+      "hooks": {
+        "preStart": [string], "postStart": [string],
+        "preStop": [string], "postStop": [string]
+      }
+    }
+  },
+  "packageManagers": { "<pm>": { "installCmd": [string] } },
+  "forks": object
 }
 ```
 
 ### Fields
 
+`repo` and `branches` are written by git-hop; edit them only to repair a
+hub (`git hop repair` does it for you).
+
+| Field | Description |
+|-------|-------------|
+| `repo.mode` | `global` for a hub cloned with `--global`: its hopspace lives in `$GIT_HOP_DATA_HOME/<org>/<repo>`. Absent otherwise |
+| `branches.<b>.base` | Branch the worktree was created from; `status` and `list` compare against it |
+| `branches.<b>.task` | Task id recorded by `git hop add --task` |
+| `settings.compareBranch` | Comparison branch for worktrees without a `base`; default `repo.defaultBranch` |
+| `settings.environmentManager` | Environment manager to use by name (built-in `docker-compose` or one from `managers.json`); `none` disables it |
+| `settings.environmentConfig.hooks` | Command lists run around `env start` / `env stop` |
+| `packageManagers.<pm>.installCmd` | Install command for package manager `<pm>` in this repository |
+| `branches.<b>.packageManagers.<pm>.installCmd` | The same for one branch; wins over the repository's |
+
 Whether add and clone start the new worktree's environment is not a
 `hop.json` field: it is `git config hop.env.autoStart` (default `false`),
 overridden by `$GIT_HOP_AUTO_ENV_START` and `--[no-]env-start`. An old
-`settings.autoEnvStart` in `hop.json` is kept but not read.
+`settings.autoEnvStart` in `hop.json` is kept but not read. Neither is
+`settings.envPatterns`, which git-hop writes with its defaults.
 
-#### port_base / port_limit
+### ports.json and volumes.json
 
-**Type:** `number`  
-**Default:** `10000 / 5000`
+The hopspace's `ports.json` holds the port range and allocation mode, and
+each worktree's ports; `volumes.json` the volume base path and each
+worktree's volume directories. git-hop creates both the first time a
+worktree with a compose file gets its environment generated.
 
-Configure port allocation range.
+| Field | Default | Description |
+|-------|---------|-------------|
+| `ports.json` `baseRange.start` / `baseRange.end` | `10000` / `20000` | Range new ports come from |
+| `ports.json` `allocationMode` | `incremental` | `incremental`: after the highest port in use; `hash` (any other value): where the repository, hub and branch hash to |
+| `volumes.json` `basePath` | `<hopspace>/volumes` | Where volume directories go |
 
-**Example:**
-```json
-{
-  "port_base": 20000,
-  "port_limit": 10000
-}
-```
-Allocates ports from 20000 to 29999.
-
-#### ports
-
-**Type:** `object`
-
-Manual port allocation per branch.
-
-**Example:**
-```json
-{
-  "ports": {
-    "main": {
-      "web": 8080,
-      "db": 5432
-    },
-    "feature-x": {
-      "web": 8081,
-      "db": 5433
-    }
-  }
-}
-```
-
-#### volumes
-
-**Type:** `object`
-
-Named volume definitions.
-
-**Example:**
-```json
-{
-  "volumes": {
-    "main": "myproject_main_db",
-    "feature-x": "myproject_featurex_db"
-  }
-}
-```
-
-#### services
-
-**Type:** `object`
-
-Service configuration.
-
-**Example:**
-```json
-{
-  "services": {
-    "template": "services.template.yml",
-    "variables": {
-      "WEB_IMAGE": "nginx:alpine",
-      "WEB_PORT": 8080
-    }
-  }
-}
-```
-
-#### docker
-
-**Type:** `object`
-
-Docker-specific configuration.
-
-**Fields:**
-| Field | Type | Default | Description |
-|--------|-------|----------|-------------|
-| `compose` | string | `docker-compose` | Docker Compose command |
-| `project_prefix` | string | `git-hop` | Project name prefix |
-| `network` | string | `git-hop` | Default network |
-| `remove_orphans` | boolean | `true` | Remove orphaned containers |
-
-**Example:**
-```json
-{
-  "docker": {
-    "compose": "docker-compose",
-    "project_prefix": "myproject",
-    "network": "myproject",
-    "remove_orphans": true
-  }
-}
-```
+A worktree keeps the ports and volume directories its entry records. Ports
+are allocated against every hub git-hop knows of; see
+[Configuration](configuration.md#ports-and-volumes).
 
 ## Environment Variables
 

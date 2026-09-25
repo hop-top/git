@@ -20,13 +20,11 @@ graph TD
     D --> E
     
     E --> F[hop.json]
-    E --> G[ports/]
-    E --> H[volumes/]
-    E --> I[services/]
+    E --> G[ports.json]
+    E --> H[volumes.json]
     
     G --> J[Port Allocation]
     H --> K[Volume Allocation]
-    I --> L[Service Orchestration]
     
     style A fill:#e1f5e1
     style E fill:#fff4e1
@@ -58,14 +56,26 @@ my-project/
 
 ### Hub Configuration
 
-Each hub has a `hop.json` file for configuration:
+Each hub has a `hop.json` file. git-hop maintains most of it (`repo`,
+`branches`); the `settings` object holds the few per-hub choices:
 
 ```json
 {
-  "port_base": 10000,
-  "port_limit": 5000
+  "settings": {
+    "compareBranch": "develop",
+    "environmentManager": "docker-compose",
+    "environmentConfig": {
+      "hooks": {
+        "preStart": ["scripts/load-secrets.sh"]
+      }
+    }
+  }
 }
 ```
+
+See [Configuration](configuration.md#hub-configuration) for every field.
+Port ranges are not a `hop.json` setting: they live in the hopspace's
+`ports.json`.
 
 Whether `add` and clone start the new worktree's environment is not a
 hub setting: it is git config `hop.env.autoStart` (off by default).
@@ -98,7 +108,9 @@ A *hopspace* is the canonical storage location for all worktrees of a single rep
 
 ### Location
 
-Hopspaces are stored at:
+By default the hub is its own hopspace: its `hop.json`, `ports.json` and
+`volumes.json` sit in the hub directory. A hub cloned with `--global` keeps
+its hopspace at:
 
 ```
 $GIT_HOP_DATA_HOME/<org>/<repo>/
@@ -116,19 +128,11 @@ Default `$GIT_HOP_DATA_HOME` by OS:
 ### Hopspace Structure
 
 ```
-~/.local/share/git-hop/github.com/org/my-project/
-  hop.json
-  ports/
-    main.json
-    feature-x.json
-  volumes/
-    main/
-    feature-x/
-  services/
-    docker-compose.main.yml
-    docker-compose.feature-x.yml
-  main/
-  feature-x/
+<hopspace>/
+  hop.json        # repo, branches, settings, package manager overrides
+  ports.json      # port range, allocation mode, ports per worktree
+  volumes.json    # volume base path, volumes per worktree
+  deps/           # shared dependency installs
 ```
 
 ## Worktrees
@@ -197,11 +201,11 @@ git-hop automatically detects and orchestrates Docker services when service defi
 
 ### Service Detection
 
-git-hop looks for:
+git-hop looks in the worktree for, in order (first match wins):
+- `compose.yaml`
+- `compose.yml`
 - `docker-compose.yml`
 - `docker-compose.yaml`
-- `docker-compose.<branch>.yml`
-- `.git-hop/services.yml`
 
 ### Service Lifecycle
 

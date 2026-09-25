@@ -123,7 +123,7 @@ git-hop has two mechanisms that both call themselves "hooks". They share vocabul
 | | **File-based lifecycle hooks** (this document) | **Config-declared environment hooks** |
 |---|---|---|
 | What a hook *is* | An executable file named after the hook | A shell command string in config |
-| Where it lives | `.git-hop/hooks/<name>`, hopspace, or `~/.config/git-hop/hooks/<name>` | `hop.json` → `settings.environment.hooks.{preStart,postStart,preStop,postStop}` (arrays) |
+| Where it lives | `.git-hop/hooks/<name>`, hopspace, or `~/.config/git-hop/hooks/<name>` | `hop.json` → `settings.environmentConfig.hooks.{preStart,postStart,preStop,postStop}` (arrays) |
 | Names | `pre-worktree-add`, `post-worktree-switch`, … | `preStart`, `postStart`, `preStop`, `postStop` |
 | Env var prefix | `GIT_HOP_*` (`GIT_HOP_WORKTREE_PATH`, `GIT_HOP_BRANCH`, …) | `HOP_*` (`HOP_WORKTREE_PATH`, `HOP_BRANCH`, `HOP_REPO_PATH`, `HOP_COMMAND`) |
 | Fired by | `add`, `remove`, `move`, `<branch>`, `clone`, `init`, `repair`, plain `cd` | `git hop env start` / `git hop env stop` only |
@@ -136,7 +136,7 @@ The trap: `ValidHookNames` contains `pre-env-start` / `post-env-start` / `pre-en
 // hop.json
 {
   "settings": {
-    "environment": {
+    "environmentConfig": {
       "hooks": {
         "preStart":  ["scripts/load-secrets.sh"],
         "postStart": ["bash scripts/seed-db.sh"],

@@ -66,16 +66,13 @@ git hop feature-x  # Still gets ports 11500-11502
 
 ### Can I manually set ports?
 
-Yes! Configure them in `hop.json`:
+git-hop allocates them, and a worktree keeps its ports from then on. You
+can move the range new ports come from: edit `baseRange` in
+the hopspace's `ports.json` (in the hub for a default clone):
 
 ```json
 {
-  "ports": {
-    "feature-x": {
-      "web": 8080,
-      "db": 5432
-    }
-  }
+  "baseRange": { "start": 20000, "end": 30000 }
 }
 ```
 
@@ -154,11 +151,11 @@ sudo systemctl start docker  # Linux
 open -a Docker            # macOS
 ```
 
-Then check service configuration:
+Then check the environment git-hop generated:
 
 ```bash
 cd your-branch
-cat hop.json
+cat .env        # HOP_PORT_* and HOP_VOLUME_* values
 git hop doctor
 ```
 
@@ -171,7 +168,7 @@ git hop
 # Check ports column for duplicates
 ```
 
-If conflicts exist, manually configure in `hop.json` or run:
+If conflicts exist, move the range in the hopspace's `ports.json` or run:
 
 ```bash
 git hop prune --force
@@ -202,19 +199,12 @@ Each hopspace shares the git object database with the hub. Only working files ar
 
 ### Can I limit disk usage?
 
-Yes! Regular pruning and shared volumes help:
+Yes. Regular pruning helps, and dependency installs are shared across
+worktrees with the same lockfile:
 
 ```bash
 # Regular pruning
 git hop prune
-
-# Use shared volumes
-# In hop.json:
-{
-  "volumes": {
-    "shared": "myproject_data"
-  }
-}
 ```
 
 ## Advanced

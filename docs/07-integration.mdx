@@ -90,87 +90,33 @@ curl -X POST "$SLACK_WEBHOOK" \
 
 git-hop automatically detects and orchestrates Docker services.
 
-### Service Detection Order
+### Service Detection
 
-git-hop looks for service definitions in this order:
+A worktree has a Docker environment when it holds one of these compose
+files; the first one found is used:
 
-```bash tab=".git-hop/services.yml"
-# Highest priority
+1. `compose.yaml`
+2. `compose.yml`
+3. `docker-compose.yml`
+4. `docker-compose.yaml`
+
+There are no branch-specific compose files, service templates or service
+settings in `hop.json`. git-hop allocates a port per service from the
+hopspace's `ports.json` range and writes the ports and volume paths to the
+worktree's `.env` as `HOP_PORT_<SERVICE>` and `HOP_VOLUME_<NAME>`, which the
+compose file can reference:
+
+```yaml
+# compose.yaml
 services:
   web:
     image: nginx:alpine
     ports:
-      - 8080
+      - "${HOP_PORT_WEB}:80"
 ```
 
-```bash tab="docker-compose.<branch>.yml"
-# Branch-specific
-version: '3.8'
-services:
-  web:
-    image: nginx:alpine
-```
-
-```bash tab="docker-compose.yml"
-# Default
-version: '3.8'
-services:
-  web:
-    image: nginx:alpine
-```
-
-### Service Templates
-
-Create reusable service templates:
-
-```bash tab="Template"
-# .git-hop/services.template.yml
-version: '3.8'
-services:
-  web:
-    image: ${WEB_IMAGE}
-    ports:
-      - "${WEB_PORT}:80"
-  db:
-    image: ${DB_IMAGE}
-    ports:
-      - "${DB_PORT}:5432"
-```
-
-```bash tab="Instantiation"
-# hop.json
-{
-  "services": {
-    "template": "services.template.yml",
-    "variables": {
-      "WEB_IMAGE": "nginx:alpine",
-      "WEB_PORT": 8080,
-      "DB_IMAGE": "postgres:15",
-      "DB_PORT": 5432
-    }
-  }
-}
-```
-
-### Custom Service Configuration
-
-Override service settings per branch:
-
-```bash tab="Main Branch"
-# docker-compose.main.yml
-version: '3.8'
-services:
-  db:
-    image: postgres:14
-```
-
-```bash tab="Feature Branch"
-# docker-compose.feature-x.yml
-version: '3.8'
-services:
-  db:
-    image: postgres:15
-```
+A compose file with hardcoded host ports gets a generated override file
+that remaps them, so branches do not collide.
 
 ## CI/CD Integration
 
