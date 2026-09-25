@@ -18,7 +18,7 @@ import (
 // warnings; --fix drops them. A hub's own hopspace has no such records:
 // it goes with the hub.
 func checkGoneHubRecords(fs afero.Fs, hubPath, hopspacePath string, opts doctorOpts, r *doctorReport) {
-	if state.SamePath(hopspacePath, hubPath) {
+	if !hop.SharedHopspace(hopspacePath, hubPath) {
 		return
 	}
 	hs, err := hop.LoadHopspace(fs, hopspacePath)

@@ -111,7 +111,7 @@ func (h *Hopspace) Update(hubPath string, fn func(cfg *config.HopspaceConfig) er
 		if cfg.Branches == nil {
 			cfg.Branches = make(map[string]config.HopspaceBranch)
 		}
-		if sharedHopspace(h.Path, hubPath) {
+		if SharedHopspace(h.Path, hubPath) {
 			if err := h.migrateLocked(cfg, hubPath); err != nil {
 				return err
 			}
@@ -146,7 +146,7 @@ func (h *Hopspace) RegisterBranch(hubPath, branch, worktreePath string) error {
 		entry.Exists = true
 		entry.Path = worktreePath
 		entry.LastSync = time.Now()
-		if sharedHopspace(h.Path, hubPath) {
+		if SharedHopspace(h.Path, hubPath) {
 			entry.Branch = branch
 			entry.Hub = state.WorktreeKey(hubPath)
 		}

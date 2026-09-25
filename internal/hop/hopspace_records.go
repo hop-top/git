@@ -26,21 +26,29 @@ import (
 //     wrote (migrateSharedEntries moves it to its path) or branch-level
 //     settings with no worktree (packageManagers).
 //
-// ports.json and volumes.json key the same way (services.EnvRecordKey).
+// ports.json and volumes.json key the same way: every record of a
+// hopspace, in any of its files, is keyed by HopspaceKey.
 
 // HopspaceKey is the key the worktree at worktreePath, on branch, of the
-// hub at hubPath is recorded under in the hopspace at hopspacePath.
+// hub at hubPath is recorded under in the hopspace at hopspacePath, in
+// its hop.json, ports.json and volumes.json: the branch in a hub's own
+// hopspace, where a branch has one worktree, and the worktree's path in
+// a hopspace several hubs share (SharedHopspace), where each hub has its
+// own.
 func HopspaceKey(hopspacePath, hubPath, worktreePath, branch string) string {
-	if !sharedHopspace(hopspacePath, hubPath) {
+	if !SharedHopspace(hopspacePath, hubPath) {
 		return branch
 	}
 	return state.WorktreeKey(worktreePath)
 }
 
-// sharedHopspace reports whether the hopspace at hopspacePath is not the
-// hub at hubPath itself: a --global hub's data-home hopspace.
-func sharedHopspace(hopspacePath, hubPath string) bool {
-	return hubPath != "" && !samePath(hopspacePath, hubPath)
+// SharedHopspace reports whether the hopspace at hopspacePath is not the
+// hub at hubPath itself but a --global hub's data-home hopspace, which
+// every --global hub of the repository shares, so its records are keyed
+// by worktree path (HopspaceKey). An unknown hub ("") counts as the
+// hopspace's own.
+func SharedHopspace(hopspacePath, hubPath string) bool {
+	return hubPath != "" && !state.SamePath(hopspacePath, hubPath)
 }
 
 // Entry returns the hopspace's record of the worktree at worktreePath, on
@@ -59,7 +67,7 @@ func (h *Hopspace) Entry(hubPath, branch, worktreePath string) (config.HopspaceB
 // same directory under another key: another spelling of the path, or a
 // branch key an earlier release wrote.
 func findEntry(cfg *config.HopspaceConfig, hopspacePath, hubPath, branch, worktreePath string) (string, config.HopspaceBranch, bool) {
-	if !sharedHopspace(hopspacePath, hubPath) {
+	if !SharedHopspace(hopspacePath, hubPath) {
 		e, ok := cfg.Branches[branch]
 		return branch, e, ok
 	}

@@ -13,7 +13,7 @@ import (
 // migrated first (migrateSharedEntries). A hub's own hopspace has none to
 // report: it goes with the hub.
 func (h *Hopspace) HubRecords(hubPath string) []string {
-	if h == nil || h.Config == nil || !sharedHopspace(h.Path, hubPath) {
+	if h == nil || h.Config == nil || !SharedHopspace(h.Path, hubPath) {
 		return nil
 	}
 	cfg := &config.HopspaceConfig{Branches: maps.Clone(h.Config.Branches)}
@@ -32,7 +32,7 @@ func (h *Hopspace) HubRecords(hubPath string) []string {
 // while other hubs keep the hopspace. It returns the keys removed. A
 // hub's own hopspace is left alone.
 func (h *Hopspace) DropHubRecords(hubPath string) ([]string, error) {
-	if !sharedHopspace(h.Path, hubPath) {
+	if !SharedHopspace(h.Path, hubPath) {
 		return nil, nil
 	}
 	return h.DropRecords(hubPath, func(_ string, e config.HopspaceBranch) bool {
