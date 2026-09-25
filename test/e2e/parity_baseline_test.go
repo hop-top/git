@@ -382,24 +382,6 @@ func TestParityLogPrefixes(t *testing.T) {
 			t.Errorf("expected some error output")
 		}
 	})
-
-	t.Run("log_level_env", func(t *testing.T) {
-		// GIT_HOP_LOG_LEVEL=debug should enable debug output
-		stdout, _, _ := env.runWithEnv(t,
-			[]string{"GIT_HOP_LOG_LEVEL=debug"},
-			"doctor",
-		)
-		assertNoANSI(t, stdout)
-	})
-
-	t.Run("warn_on_stderr", func(t *testing.T) {
-		// GIT_HOP_LOG_LEVEL=warn should suppress info but not warnings
-		stdout, _, _ := env.runWithEnv(t,
-			[]string{"GIT_HOP_LOG_LEVEL=warn"},
-			"--help",
-		)
-		assertNoANSI(t, stdout)
-	})
 }
 
 // TestParityOutputFormat verifies --json stdout is ANSI-free and

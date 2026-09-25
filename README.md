@@ -331,7 +331,7 @@ git-hop runs your own executable scripts at points in the worktree lifecycle. Th
 
 1. Repo-level hook — `<worktree>/.git-hop/hooks/<name>` (the runner also walks parent directories)
 2. Hopspace-level hook — `$GIT_HOP_DATA_HOME/<org>/<repo>/hooks/<name>` (per `hop.dataLayout`; hooks earlier releases left under `github.com/<org>/<repo>/hooks/` are still read)
-3. Global hook — `$GIT_HOP_CONFIG_HOME/hooks/<name>`
+3. Global hook — `$XDG_CONFIG_HOME/git-hop/hooks/<name>`
 
 First found wins. A missing hook is a silent no-op.
 

@@ -38,12 +38,16 @@ Set environment variables to control git-hop behavior:
 ### Paths
 
 ```bash
-export GIT_HOP_DATA_HOME="$HOME/.local/share/git-hop"
-export GIT_HOP_CONFIG_HOME="$HOME/.config/git-hop"
-export GIT_HOP_CACHE_DIR="$HOME/.cache/git-hop"
+export GIT_HOP_DATA_HOME="$HOME/.local/share/git-hop"   # data (hopspaces)
+export XDG_CONFIG_HOME="$HOME/.config"                  # config: $XDG_CONFIG_HOME/git-hop
+export XDG_CACHE_HOME="$HOME/.cache"                    # cache: $XDG_CACHE_HOME/git-hop
 ```
 
-For logging configuration, see [Logging](./05b-logging).
+Config, state and cache follow the XDG base directories; only the data
+home has a git-hop variable. See
+[Environment Variables](./09-reference#environment-variables).
+
+For debug output (`GIT_HOP_VERBOSE`, `-V`), see [Logging](./05b-logging).
 
 ## Global Configuration
 

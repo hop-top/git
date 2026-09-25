@@ -713,9 +713,9 @@ are allocated against every hub git-hop knows of; see
 | Variable | Description | Default |
 |----------|-------------|----------|
 | `GIT_HOP_DATA_HOME` | Data directory | `$XDG_DATA_HOME/git-hop` (Linux/Unix: `~/.local/share/git-hop`, macOS: `~/Library/Application Support/git-hop`, Windows: `%LOCALAPPDATA%\git-hop`) |
-| `GIT_HOP_CONFIG_HOME` | Config directory | `$XDG_CONFIG_HOME/git-hop` |
-| `GIT_HOP_CACHE_DIR` | Cache directory | `$XDG_CACHE_HOME/git-hop` |
-| `GIT_HOP_LOG_LEVEL` | Log level | `info` |
+| `XDG_CONFIG_HOME`, `XDG_STATE_HOME`, `XDG_CACHE_HOME` | Config, state and cache directories, with `git-hop/` under each; there are no git-hop variables for them | OS defaults (Linux/Unix: `~/.config`, `~/.local/state`, `~/.cache`) |
+| `GIT_HOP_ADD_FROM` | Start-point for `git hop add`'s new branches; overrides `git config hop.add.defaultStartPoint`, `--from` wins | unset |
+| `GIT_HOP_HOOKS` | How clone and init mirror committed `.git-hop/hooks/`; overrides `git config hop.hooks.installMode`, `--hooks` wins | unset |
 | `GIT_HOP_AUTO_ENV_START` | Overrides `git config hop.env.autoStart` for add and clone (`true`/`false`, git's boolean spellings; anything else is fatal); `--[no-]env-start` wins over it | unset |
 | `GIT_HOP_NO_CHDIR_HOOK` | When non-empty, the shell integration stops dispatching `post-worktree-switch` on a plain `cd` | unset |
 | `GIT_HOP_VERBOSE` | Debug switch, like git's `GIT_TRACE`: stands in for `-V` on every run. `true`/`yes`/`on` is `-V`, `false`/`no`/`off` or empty is off (any case), a number is the `-V` count (`2` is `-VV`); anything else prints a warning and counts as off. A `--verbose` on the command line wins, so `--verbose=0` turns it off for one run | unset |
@@ -735,6 +735,7 @@ git-hop exports these *into* lifecycle hooks; you do not set them yourself. See 
 | `GIT_HOP_OLD_BRANCH`, `GIT_HOP_NEW_BRANCH`, `GIT_HOP_OLD_PATH`, `GIT_HOP_NEW_PATH` | `pre/post-worktree-move` | Before/after branch and path |
 | `GIT_HOP_FROM_BRANCH`, `GIT_HOP_FROM_WORKTREE_PATH` | `pre/post-worktree-switch` | Worktree being left. **Absent, not empty**, when there is no previous worktree |
 | `GIT_HOP_TRIGGER` | `pre/post-worktree-switch` | `hop` or `chdir` |
+| `GIT_HOP_TASK` | `pre/post-worktree-add` with `--task` | The task id. **Absent, not empty**, without `--task` |
 | `GIT_HOP_BRANCH_TYPE`, `GIT_HOP_BRANCH_NAME`, `GIT_HOP_BRANCH_PREFIX`, `GIT_HOP_BRANCH_PARENT`, `GIT_HOP_BRANCH_START_POINT`, `GIT_HOP_DETECTOR_SOURCE` | hooks dispatched with a detector | Branch-type detection results |
 
 `pre-repair` and `post-repair` receive **none** of the above; they run with the hub as their working directory and the ambient environment only.

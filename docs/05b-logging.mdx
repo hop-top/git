@@ -9,26 +9,18 @@ git-hop uses [charmbracelet/log](https://github.com/charmbracelet/log) for beaut
 
 ## Log Levels
 
-git-hop supports the following log levels:
+git-hop logs at these levels:
 
-- **debug** - Detailed diagnostic information
+- **debug** - Detailed diagnostic information, with `-V`
 - **info** - General informational messages (default)
 - **warn** - Warning messages
 - **error** - Error messages
 - **fatal** - Fatal errors that cause program exit
 
+There is no log-level setting: `-V` (or `GIT_HOP_VERBOSE`) adds debug
+output and `-q` drops everything but errors.
+
 ## Configuration
-
-### Environment Variable
-
-Set the log level using the `GIT_HOP_LOG_LEVEL` environment variable:
-
-```bash
-export GIT_HOP_LOG_LEVEL=debug
-git hop doctor
-```
-
-Supported values: `debug`, `info`, `warn`, `warning`, `error`, `fatal`
 
 ### Command-Line Flags
 
@@ -172,7 +164,7 @@ output.WithField("service", "api").
 ### Debug Logging
 
 ```bash
-GIT_HOP_LOG_LEVEL=debug git hop add feature-x
+GIT_HOP_VERBOSE=1 git hop add feature-x   # or: git hop -V add feature-x
 ```
 
 ### JSON Output for CI/CD
