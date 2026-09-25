@@ -140,9 +140,9 @@ deps=no-deps
 if [ -f "$GIT_HOP_WORKTREE_PATH/.env" ]; then
 	env=$(grep '^HOP_PORT_WEB=' "$GIT_HOP_WORKTREE_PATH/.env")
 fi
-if [ -f "$XDG_CACHE_HOME/git-hop/${GIT_HOP_REPO_ID#*/}/$GIT_HOP_BRANCH/docker-compose.override.yml" ]; then
-	override=override
-fi
+for f in "$XDG_CACHE_HOME"/git-hop/"${GIT_HOP_REPO_ID#*/}"/*/"$GIT_HOP_BRANCH"/docker-compose.override.yml; do
+	[ -f "$f" ] && override=override
+done
 if [ -f "$GIT_HOP_WORKTREE_PATH/node_modules/installed" ]; then
 	deps=deps
 fi
