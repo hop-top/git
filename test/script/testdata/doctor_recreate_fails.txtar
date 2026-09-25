@@ -42,9 +42,13 @@ stderr '^error: Cannot fix: branch feat does not exist'
 decode json $WORK/hub/hop.json branches.feat.hopspaceBranch feat
 
 # --- something in the way of the path: a dangling symlink ---
-# An unmerged feat again, so the only obstacle left is the path.
+# An unmerged feat again, so the only obstacle left is the path. Its
+# commit carries content: an empty one adds nothing to main, and doctor
+# would count the branch as merged.
 exec git -C $WORK/hub/hops/main switch -c feat
-exec git -C $WORK/hub/hops/main commit --allow-empty -m 'more work'
+cp $WORK/work.txt $WORK/hub/hops/main/work.txt
+exec git -C $WORK/hub/hops/main add work.txt
+exec git -C $WORK/hub/hops/main commit -m 'more work'
 exec git -C $WORK/hub/hops/main switch main
 symlink $WORK/hub/hops/feat -> $WORK/nowhere
 ! exec git-hop doctor --fix --dry-run --json
@@ -63,3 +67,5 @@ exists $WORK/hub/hops/feat/.git
 
 -- delete.txt --
 2
+-- work.txt --
+more work

@@ -82,6 +82,18 @@ func TestDoctor_MissingWorktree_Merged_AutoDeleted(t *testing.T) {
 	}
 }
 
+// commitWork commits a new file in the worktree at dir. Unmerged work
+// needs content: a branch whose only commits are empty adds nothing to
+// default, so doctor (like remove and status) counts it as merged.
+func commitWork(t *testing.T, env *TestEnv, dir, msg string) {
+	t.Helper()
+	if err := os.WriteFile(filepath.Join(dir, "work.txt"), []byte(msg+"\n"), 0o644); err != nil {
+		t.Fatalf("write work.txt: %v", err)
+	}
+	env.RunCommand(t, dir, "git", "add", "work.txt")
+	env.RunCommand(t, dir, "git", "commit", "-m", msg)
+}
+
 // TestDoctor_MissingWorktree_Unmerged_Recreated covers a worktree removed
 // by hand whose branch carries unmerged work: git still registers the
 // directory, so recreating it means clearing that stale registration
@@ -90,7 +102,7 @@ func TestDoctor_MissingWorktree_Unmerged_Recreated(t *testing.T) {
 	t.Parallel()
 	env, featurePath := setupDoctorMissingEnv(t)
 
-	env.RunCommand(t, featurePath, "git", "commit", "--allow-empty", "-m", "unmerged work")
+	commitWork(t, env, featurePath, "unmerged work")
 	if err := os.RemoveAll(featurePath); err != nil {
 		t.Fatalf("failed to remove feature worktree dir: %v", err)
 	}
@@ -134,7 +146,7 @@ func TestDoctor_MissingWorktree_DryRun(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			env, featurePath := setupDoctorMissingEnv(t)
-			env.RunCommand(t, featurePath, "git", "commit", "--allow-empty", "-m", "work")
+			commitWork(t, env, featurePath, "work")
 			if tc.merged {
 				mainPath := filepath.Join(env.HubPath, "hops", "main")
 				env.RunCommand(t, mainPath, "git", "merge", "feature/gone", "--no-ff", "-m", "Merge feature/gone")

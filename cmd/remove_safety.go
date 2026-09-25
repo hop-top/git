@@ -71,8 +71,9 @@ func inspectBranchSafety(g git.GitInterface, dir, branch, defaultBranch string) 
 // under rewritten commits: squash-merged (branchContentMergedInto) or
 // rebase-merged (branchPatchesInDefault). Each probe misses what the
 // other sees, so the branch counts as merged when either says so. It is
-// the one test of a rewritten merge that remove's gate, remove --merged
-// and status's "merged" label share.
+// the one test of a rewritten merge that remove's gate, remove --merged,
+// status's "merged" label and doctor's missing-worktree cleanup
+// (mergedIntoDefault) share.
 func branchWorkLandedIn(g git.GitInterface, dir, branch, defaultBranch string) bool {
 	return branchContentMergedInto(g, dir, branch, defaultBranch) ||
 		branchPatchesInDefault(g, dir, branch, defaultBranch)

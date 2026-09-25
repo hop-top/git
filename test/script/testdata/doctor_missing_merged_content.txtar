@@ -1,0 +1,128 @@
+# doctor --fix treats a missing worktree whose branch shipped under
+# rewritten commits as cleanup: a squash-merged and a rebase-merged
+# branch get their state entry removed without a prompt, the same verdict
+# `remove` and status's "merged" label reach. A branch with no work on
+# main, and one with only part of its work on main, are still put to the
+# user.
+#
+# The regression this pins: doctor asked `git branch --merged main`,
+# which only sees branches whose tip is reachable from main. A squash- or
+# rebase-merged branch never is, so each one was prompted for (or, in the
+# hub check, had its worktree recreated) instead of being cleaned up.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/f0.txt f.txt
+cp $WORK/f0.txt g.txt
+exec git add f.txt g.txt
+exec git commit -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub
+exec git-hop add squashed
+exec git-hop add rebased
+exec git-hop add unmerged
+exec git-hop add partial
+
+# squashed: two commits, landed on main as one.
+cd $WORK/hub/hops/squashed
+cp $WORK/f0.txt s.txt
+exec git add s.txt
+exec git commit -m 'squashed: first'
+cp $WORK/f1.txt s.txt
+exec git commit -am 'squashed: second'
+
+# rebased: two commits changing f.txt's line.
+cd $WORK/hub/hops/rebased
+cp $WORK/f1.txt f.txt
+exec git commit -am 'rebased: first'
+cp $WORK/f2.txt f.txt
+exec git commit -am 'rebased: second'
+
+# unmerged: work main never gets.
+cd $WORK/hub/hops/unmerged
+cp $WORK/f0.txt u.txt
+exec git add u.txt
+exec git commit -m 'unmerged: never shipped'
+
+# partial: one commit main takes, one it never gets.
+cd $WORK/hub/hops/partial
+cp $WORK/f1.txt g.txt
+exec git commit -am 'partial: shipped'
+cp $WORK/f0.txt h.txt
+exec git add h.txt
+exec git commit -m 'partial: never shipped'
+
+# Squash-merge squashed; rebase-merge rebased onto a main that moved on,
+# then rewrite the same line again so only the patch-id probe sees it.
+cd $WORK/hub/hops/main
+exec git merge --squash squashed
+exec git commit -m 'squash-merge squashed'
+exec git cherry-pick rebased~1 rebased partial~1
+cp $WORK/f3.txt f.txt
+exec git commit -am 'later main work on the same line'
+
+# None of the four is reachable from main.
+exec git branch --merged main
+! stdout 'squashed|rebased|unmerged|partial'
+
+# The worktree directories go; the branch refs stay in the hub.
+cd $WORK
+rm $WORK/hub/hops/squashed
+rm $WORK/hub/hops/rebased
+rm $WORK/hub/hops/unmerged
+rm $WORK/hub/hops/partial
+exec git -C $WORK/hub rev-parse --verify -q refs/heads/squashed
+exec git -C $WORK/hub rev-parse --verify -q refs/heads/rebased
+exec git -C $WORK/hub rev-parse --verify -q refs/heads/unmerged
+exec git -C $WORK/hub rev-parse --verify -q refs/heads/partial
+
+# --- the preview, from outside the hub (state check only) ---
+! exec git-hop doctor --fix --dry-run
+stdout 'Would remove entry: branch .squashed. is merged into .main.'
+stdout 'Would remove entry: branch .rebased. is merged into .main.'
+stdout 'Would prompt to relocate, delete, or keep entry for .unmerged.'
+stdout 'Would prompt to relocate, delete, or keep entry for .partial.'
+! stdout 'Would prompt .* for .(squashed|rebased).'
+grep '"branch": "squashed"' $WORK/.local/state/git-hop/state.json
+grep '"branch": "rebased"' $WORK/.local/state/git-hop/state.json
+
+# --- the real run, with no answer on stdin: merged entries go without a
+# prompt, the unanswered prompts keep theirs ---
+stdin /dev/null
+! exec git-hop doctor --fix
+stdout 'Branch .squashed. is merged into .main.; auto-removing entry'
+stdout 'Branch .rebased. is merged into .main.; auto-removing entry'
+! stdout 'Branch .(unmerged|partial). is merged'
+! grep '"branch": "squashed"' $WORK/.local/state/git-hop/state.json
+! grep '"branch": "rebased"' $WORK/.local/state/git-hop/state.json
+grep '"branch": "unmerged"' $WORK/.local/state/git-hop/state.json
+grep '"branch": "partial"' $WORK/.local/state/git-hop/state.json
+
+# --- the hub check agrees: the merged branches' hop.json rows are not
+# recreated as worktrees; the unmerged ones are ---
+cd $WORK/hub
+exec git-hop doctor --fix
+stdout 'Branch squashed is merged into main; not recreating its worktree'
+stdout 'Branch rebased is merged into main; not recreating its worktree'
+! stdout 'Branch (unmerged|partial) is merged'
+! decode json $WORK/hub/hop.json branches.squashed
+! decode json $WORK/hub/hop.json branches.rebased
+decode json $WORK/hub/hop.json branches.unmerged.hopspaceBranch unmerged
+decode json $WORK/hub/hop.json branches.partial.hopspaceBranch partial
+! exists $WORK/hub/hops/squashed
+! exists $WORK/hub/hops/rebased
+exists $WORK/hub/hops/unmerged
+exists $WORK/hub/hops/partial
+
+-- f0.txt --
+zero
+-- f1.txt --
+one
+-- f2.txt --
+two
+-- f3.txt --
+three

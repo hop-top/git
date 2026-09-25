@@ -1001,7 +1001,11 @@ doctor run that is not repairing never mutates.
 
 When `--fix` finds a hub branch whose worktree directory is gone (for
 example removed with `rm -rf`), it checks whether the branch is merged
-into the hub's default branch:
+into the hub's default branch. Squash- and rebase-merged branches count
+as merged, by the same test `remove` and `status` use: the branch tip is
+reachable from default, its content is already there, or every one of
+its commits has a patch-equivalent commit there. A branch whose ref no
+longer exists cannot be checked and counts as not merged.
 
 - **Merged**: the worktree is not recreated. Doctor drops the branch's
   `hop.json` row and state entry without prompting. The reasoning: the
