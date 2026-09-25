@@ -26,7 +26,7 @@ import (
 
 // resultSchemaVersion is the MAJOR.MINOR of the result shapes below.
 // Bump MINOR for additive fields, MAJOR for renames and removals.
-const resultSchemaVersion = "1.12"
+const resultSchemaVersion = "1.13"
 
 // addResult is the result of `git hop add`. Under --dry-run it is the
 // result the add would produce, and carries dry_run.
@@ -111,10 +111,10 @@ func (doctorRecord) JSONSchemaExtend(s *jsonschema.Schema) {
 // would remove.
 type pruneRecord struct {
 	Action     string `json:"action" yaml:"action" table:"action" jsonschema:"enum=pruned,enum=would-prune,enum=skipped,description=pruned; would-prune under --dry-run; skipped: left in place although its path is missing (see reason)"`
-	Kind       string `json:"kind" yaml:"kind" table:"kind" jsonschema:"enum=worktree,enum=hub,enum=hop-json-entry,enum=repair-backup,enum=conversion-backup,enum=state-backup,description=worktree and hub: entries in the state file; hop-json-entry: a hub's hop.json branch entry; repair-backup: an expired repair backup directory; conversion-backup: an expired init conversion backup; state-backup: an expired state.json backup (prune --all)"`
-	Repository string `json:"repository" yaml:"repository" table:"repository" jsonschema:"description=Repository id (host/org/repo) the entry belongs to; empty for state-backup"`
-	Branch     string `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch of a worktree or hop-json-entry; empty for hub and backups"`
-	Path       string `json:"path" yaml:"path" table:"path" jsonschema:"description=Worktree or hub or backup path the entry pointed at"`
+	Kind       string `json:"kind" yaml:"kind" table:"kind" jsonschema:"enum=worktree,enum=hub,enum=hop-json-entry,enum=repair-backup,enum=conversion-backup,enum=state-backup,enum=temp-file,description=worktree and hub: entries in the state file; hop-json-entry: a hub's hop.json branch entry; repair-backup: an expired repair backup directory; conversion-backup: an expired init conversion backup; state-backup: an expired state.json backup (prune --all); temp-file: a temp file an interrupted save of hop.json or (prune --all) state.json left behind"`
+	Repository string `json:"repository" yaml:"repository" table:"repository" jsonschema:"description=Repository id (host/org/repo) the entry belongs to; empty for state-backup and a state.json temp-file"`
+	Branch     string `json:"branch" yaml:"branch" table:"branch" jsonschema:"description=Branch of a worktree or hop-json-entry; empty for hub, backups and temp-file"`
+	Path       string `json:"path" yaml:"path" table:"path" jsonschema:"description=Worktree or hub or backup or temp file path the entry pointed at"`
 	Reason     string `json:"reason,omitempty" yaml:"reason,omitempty" jsonschema:"description=Why a skipped entry was left in place (a worktree git has locked, with git's lock reason); absent otherwise"`
 }
 

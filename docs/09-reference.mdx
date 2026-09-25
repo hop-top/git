@@ -249,8 +249,9 @@ the flags (see Git-Flow Integration in `docs/hooks.md`).
 
 ### git hop prune
 
-Remove orphaned state entries, `hop.json` rows, and aged-out repair
-and conversion backups; with `--all`, aged-out state backups too. Scoped
+Remove orphaned state entries, `hop.json` rows, aged-out repair and
+conversion backups, and temp files interrupted `hop.json` saves left;
+with `--all`, aged-out state backups and `state.json` temp files too. Scoped
 to the current repository unless `--all` is given.
 
 **Synopsis:**
@@ -359,7 +360,7 @@ Rules:
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.12): a MINOR bump adds
+- Result shapes are versioned together (currently 1.13): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
 - Under `--dry-run`, `add`, `init`, `remove`, `move`, `merge`, `doctor
   --fix`, `prune`, `repair`, `env gc` and branch switch render the result
@@ -680,17 +681,17 @@ Columns: `kind check subject message`.
 
 A list of the entries removed, or with `--dry-run` the entries that would
 be, in the order the passes run: hop.json entries, state worktrees, state
-hubs, repair backups, conversion backups, and with `--all` state backups. Entries left in place although
+hubs, repair backups, conversion backups, `hop.json` temp files, and with `--all` state backups and `state.json` temp files. Entries left in place although
 their path is missing (a worktree git has locked) are listed as `skipped`,
 with or without `--dry-run`.
 
 | Field | Type | Meaning |
 |-------|------|---------|
 | `action` | string | `pruned`, or `would-prune` under `--dry-run`; `skipped` for an entry left in place (see `reason`) |
-| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup), `state-backup` (an expired copy of `state.json`, `--all` only) |
-| `repository` | string | Repository id the entry belongs to; empty for `state-backup` |
+| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup), `state-backup` (an expired copy of `state.json`, `--all` only), `temp-file` (a temp file an interrupted save of `hop.json`, or with `--all` of `state.json`, left behind) |
+| `repository` | string | Repository id the entry belongs to; empty for `state-backup` and a `state.json` `temp-file` |
 | `branch` | string | Branch of a `worktree` or `hop-json-entry`; empty otherwise |
-| `path` | string | Worktree, hub or backup path the entry pointed at |
+| `path` | string | Worktree, hub, backup or temp file path the entry pointed at |
 | `reason` | string | *json/yaml only*, `skipped` entries only: why it was left in place, e.g. `locked in git: on the usb drive` |
 
 ```json

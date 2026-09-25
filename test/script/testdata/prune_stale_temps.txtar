@@ -1,0 +1,76 @@
+# A save of hop.json or state.json writes a temp file beside it and
+# renames it into place; a run that dies in between leaves the temp file.
+# prune removes those an hour old (state.json's only with --all, as they
+# belong to no one repository); doctor warns about them, exit 0, and
+# --fix removes them. Only files named exactly as a save names its temp
+# files are touched; fresh ones are kept.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+
+# --- leftovers of crashed saves, and files that only look like them ---
+env STATE=$WORK/.local/state/git-hop
+exec sh -c 'for f in "$STATE/state.json.123456789.tmp" "$WORK/hub/hop-config-123456789.tmp" "$WORK/hub/hop-config-1.tmp.bak" "$WORK/hub/notes.tmp" "$STATE/state.json.tmp"; do echo x > "$f"; touch -t 202001010000 "$f"; done'
+exec sh -c 'echo x > "$STATE/state.json.555.tmp"; echo x > "$WORK/hub/hop-config-555.tmp"'
+
+# --- doctor warns, exits 0, and changes nothing ---
+cd $WORK/hub
+exec git-hop doctor
+stderr 'stale temp file left by an interrupted save: .*state\.json\.123456789\.tmp'
+stderr 'stale temp file left by an interrupted save: .*hop-config-123456789\.tmp'
+! stderr '555\.tmp'
+! stderr 'notes\.tmp'
+! stderr '1\.tmp\.bak'
+stderr 'hint: run .git hop doctor --fix. to remove the stale temp files'
+exists $STATE/state.json.123456789.tmp
+exists $WORK/hub/hop-config-123456789.tmp
+
+# --- prune: the hub's only, previewed first ---
+exec git-hop prune --dry-run --json
+decode json stdout '#' 1
+decode json stdout 0.kind temp-file
+decode json stdout 0.action would-prune
+decode json stdout 0.path ~/hub/hop-config-123456789\.tmp$
+exists $WORK/hub/hop-config-123456789.tmp
+
+exec git-hop prune
+stdout 'Pruned 0 worktree\(s\), 0 hub\(s\), 0 hop.json entry\(ies\), 0 repair backup\(s\), 0 conversion backup\(s\), 0 state backup\(s\), and 1 temp file\(s\)'
+! exists $WORK/hub/hop-config-123456789.tmp
+exists $STATE/state.json.123456789.tmp
+
+# --- prune --all: state.json's too ---
+exec git-hop prune --all --dry-run
+stdout '\[dry-run\] Would prune .*state\.json\.123456789\.tmp'
+stdout 'and 1 temp file\(s\)'
+exists $STATE/state.json.123456789.tmp
+exec git-hop prune --all
+stdout 'and 1 temp file\(s\)'
+! exists $STATE/state.json.123456789.tmp
+
+# --- nothing else was touched ---
+exists $STATE/state.json.555.tmp
+exists $STATE/state.json.tmp
+exists $WORK/hub/hop-config-555.tmp
+exists $WORK/hub/hop-config-1.tmp.bak
+exists $WORK/hub/notes.tmp
+exists $STATE/state.json
+exists $WORK/hub/hop.json
+
+# --- doctor --fix removes them ---
+exec sh -c 'for f in "$STATE/state.json.987654321.tmp" "$WORK/hub/hop-config-987654321.tmp"; do echo x > "$f"; touch -t 202001010000 "$f"; done'
+exec git-hop doctor --fix --dry-run
+stdout '\[dry-run\] Would remove .*state\.json\.987654321\.tmp'
+exists $STATE/state.json.987654321.tmp
+exec git-hop doctor --fix --json
+stdout '"kind": "fixed"'
+! exists $STATE/state.json.987654321.tmp
+! exists $WORK/hub/hop-config-987654321.tmp
+exists $STATE/state.json.555.tmp
+exists $WORK/hub/hop-config-555.tmp
+exec git-hop doctor
+! stderr 'stale temp file'

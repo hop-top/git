@@ -47,7 +47,7 @@ exists $WORK/.cache/git-hop/org-repo/old
 exec git-hop prune -n
 stdout 'Would prune conversion backup: .*org-repo/old'
 stderr '^hint: kept backup of a failed conversion: .*org-repo/failed$'
-stdout '0 repair backup\(s\), 2 conversion backup\(s\), and 0 state backup\(s\)'
+stdout '0 repair backup\(s\), 2 conversion backup\(s\), 0 state backup\(s\), and 0 temp file\(s\)'
 exists $WORK/.cache/git-hop/org-repo/old
 
 exec git-hop prune
