@@ -101,7 +101,7 @@ git hop add [&lt;branch&gt;] --task &lt;id&gt; [flags]
 | `--task <id>` | Record a task id for the worktree as `branches.<branch>.task` in `hop.json`, export it to the add hooks as `GIT_HOP_TASK`, and include it as `task` in the `--format json` result. Metadata only: the id is never part of the branch name. Without `<branch>`, the branch is derived as `<type>/<slug>` from the task (see [Branch from a task](#branch-from-a-task)). |
 | `--env-start` / `--no-env-start` | Start the new worktree's environment once it exists, through the same code as `git hop env start`. Default follows `GIT_HOP_AUTO_ENV_START`, then `hop.env.autoStart` (`false`). Skipped silently when the worktree has no environment; a failed start prints a warning and a hint, and add still exits 0. The start's output goes to stderr, as `git hop env start`'s does. |
 | `--fetch` / `--no-fetch` | Run `git fetch origin` before resolving the start-point, or skip it. Default follows `hop.add.fetch`; unset, add fetches only when the start-point is an origin ref (the default branch or an explicit `origin/<branch>`). A requested fetch that fails is fatal; the automatic one only warns. |
-| `--dry-run` | Preview the branch, start-point, worktree path, task, hooks and environment start without writing anything or running any hook. |
+| `--dry-run` | Preview the branch, start-point, worktree path, task, hooks and environment start without writing anything or running any hook. An add the real run would refuse (the worktree exists, the branch name is invalid or checked out in another worktree, the start-point is not a commit) fails the same way, with exit status 1. |
 
 ### Examples
 

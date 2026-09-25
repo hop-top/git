@@ -70,7 +70,14 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 	// Clean the path to resolve .. and . segments
 	worktreePath = filepath.Clean(worktreePath)
 
-	// Step 2: Pre-flight validation
+	// Step 2: Pre-flight validation. Refusals come first, so a refused
+	// add clears nothing; a preview runs the same checks.
+	if err := m.CheckAdd(hopspace, hubPath, branch, worktreePath); err != nil {
+		return worktreePath, err
+	}
+	if err := m.CheckStartPoint(hopspace, hubPath, branch, startPoint); err != nil {
+		return worktreePath, err
+	}
 	validator := NewStateValidator(m.fs, m.git)
 	validation, err := validator.ValidateWorktreeAdd(hopspace, hubPath, branch, worktreePath)
 	if err != nil {
