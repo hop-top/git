@@ -273,7 +273,8 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 		}
 	}
 
-	// 10. Record the worktrees hop.json gained in state, as add does.
+	// 10. Record the worktrees hop.json gained in state, as add does, and
+	// in a --global hub's hopspace; drop the records of rows it lost.
 	recordRepairedWorktrees(fs, hubPath, plan)
 
 	// 11. post-repair hook (advisory, ignore exit).
