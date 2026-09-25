@@ -178,10 +178,9 @@ merge exits 1, leaving the worktree, its hop.json entry and its branch.`,
 		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 		if hopspace, err := hop.LoadHopspace(fs, hopspacePath); err == nil {
 			hopspace.UnregisterBranch(sourceBranch)
-			cleanup := hop.NewCleanupManager(fs, g)
-			if err := cleanup.PruneWorktrees(hopspace); err != nil {
-				output.Warn("Failed to prune worktrees: %v", err)
-			}
+		}
+		if err := hop.NewCleanupManager(fs, g).PruneWorktrees(hubPath); err != nil {
+			output.Warn("Failed to prune worktrees: %v", err)
 		}
 
 		// Update global state

@@ -389,16 +389,14 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 
 	// Load Hopspace to unregister
 	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
-	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
-	if err == nil {
+	if hopspace, err := hop.LoadHopspace(fs, hopspacePath); err == nil {
 		// Unregister from hopspace (silent if branch doesn't exist)
 		hopspace.UnregisterBranch(branch)
+	}
 
-		// Prune stale git metadata
-		cleanup := hop.NewCleanupManager(fs, g)
-		if err := cleanup.PruneWorktrees(hopspace); err != nil {
-			output.Warn("Failed to prune worktrees: %v", err)
-		}
+	// Prune the hub's stale git metadata
+	if err := hop.NewCleanupManager(fs, g).PruneWorktrees(hubPath); err != nil {
+		output.Warn("Failed to prune worktrees: %v", err)
 	}
 
 	// Update global state

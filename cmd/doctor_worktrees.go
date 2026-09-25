@@ -84,10 +84,10 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 
 		if base, merged := mergedMissingBranch(g, hub, b.HopspaceBranch); merged {
 			output.Info("Branch %s is merged into %s; not recreating its worktree", name, base)
-			clearStaleRegistration(fs, g, hopspacePath, linkPath, opts, r)
+			clearStaleRegistration(fs, g, hub.Path, linkPath, opts, r)
 			continue
 		}
-		if !recreateWorktree(fs, g, *registry, name, b.HopspaceBranch, linkPath, hopspacePath, opts, r) {
+		if !recreateWorktree(fs, g, *registry, name, b.HopspaceBranch, linkPath, hub.Path, hopspacePath, opts, r) {
 			kept.add(linkPath)
 		}
 	}
@@ -133,10 +133,12 @@ func mergedIntoDefault(g git.GitInterface, dir, branch, defaultBranch string) bo
 }
 
 // recreateWorktree checks out branch again at linkPath, the directory its
-// hop.json row points at. registry is git's worktree list as the hub
-// check read it. Returns whether the worktree was recreated (under
-// --dry-run: would be); every failure is recorded.
-func recreateWorktree(fs afero.Fs, g git.GitInterface, registry, name, branch, linkPath, hopspacePath string, opts doctorOpts, r *doctorReport) bool {
+// hop.json row points at, in the hub's repository at hubPath: never
+// through the hopspace, which for a --global hub is a data-home
+// directory shared with the repository's other hubs. registry is git's
+// worktree list as the hub check read it. Returns whether the worktree
+// was recreated (under --dry-run: would be); every failure is recorded.
+func recreateWorktree(fs afero.Fs, g git.GitInterface, registry, name, branch, linkPath, hubPath, hopspacePath string, opts doctorOpts, r *doctorReport) bool {
 	// Feasibility is checked before branching on dry-run so a preview
 	// reports the same "cannot fix" verdicts a real run would hit, rather
 	// than promising a repair that would fail.
@@ -151,12 +153,12 @@ func recreateWorktree(fs afero.Fs, g git.GitInterface, registry, name, branch, l
 		r.failed(doctorCheckHub, name, "cannot recreate worktree: branch %s not found in hopspace", branch)
 		return false
 	}
-	if blocker := recreateBlocker(fs, g, registry, hopspacePath, branch, linkPath); blocker != "" {
+	if blocker := recreateBlocker(fs, g, registry, hubPath, branch, linkPath); blocker != "" {
 		output.Error("Cannot fix: %s", blocker)
 		r.failed(doctorCheckHub, name, "cannot recreate worktree: %s", blocker)
 		return false
 	}
-	if !clearStaleRegistration(fs, g, hopspacePath, linkPath, opts, r) {
+	if !clearStaleRegistration(fs, g, hubPath, linkPath, opts, r) {
 		return false
 	}
 
@@ -173,7 +175,7 @@ func recreateWorktree(fs afero.Fs, g git.GitInterface, registry, name, branch, l
 		r.failed(doctorCheckHub, name, "recreate worktree: create parent directory: %v", err)
 		return false
 	}
-	if err := g.CreateWorktree(hopspacePath, branch, linkPath, "", false, "origin/"+branch); err != nil {
+	if err := g.CreateWorktree(hubPath, branch, linkPath, "", false, "origin/"+branch); err != nil {
 		output.Error("Failed to recreate worktree: %v", err)
 		r.failed(doctorCheckHub, name, "recreate worktree: %v", err)
 		return false

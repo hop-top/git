@@ -1,0 +1,113 @@
+package hop
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/git"
+)
+
+// hopspaceRecording returns a hopspace that records each branch at the
+// given path, as a shared --global hopspace does: one path per branch
+// name, whichever hub registered it last.
+func hopspaceRecording(path string, branches map[string]string) *Hopspace {
+	cfg := &config.HopspaceConfig{Branches: map[string]config.HopspaceBranch{}}
+	for b, p := range branches {
+		cfg.Branches[b] = config.HopspaceBranch{Path: p, Exists: true}
+	}
+	return &Hopspace{Path: path, Config: cfg}
+}
+
+// findBase keeps every git command of an add in the hub's own
+// repository, whatever the hopspace records.
+func TestFindBase(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewWorktreeManager(afero.NewOsFs(), git.New())
+
+	seed := filepath.Join(dir, "seed")
+	runGit(t, "init", "-q", "-b", "main", seed)
+	runGit(t, "-C", seed, "commit", "-q", "--allow-empty", "-m", "one")
+
+	g1 := filepath.Join(dir, "g1", "app")
+	g2 := filepath.Join(dir, "g2", "app")
+	for _, hub := range []string{g1, g2} {
+		runGit(t, "clone", "-q", "--bare", seed, hub)
+		runGit(t, "-C", hub, "worktree", "add", "-q", "hops/main", "main")
+	}
+	runGit(t, "-C", g2, "worktree", "add", "-q", "-b", "feat", "hops/feat")
+	// Listed before main, but gone from disk: never the base.
+	runGit(t, "-C", g1, "worktree", "add", "-q", "-b", "gone", "hops/gone")
+	if err := os.RemoveAll(filepath.Join(g1, "hops", "gone")); err != nil {
+		t.Fatal(err)
+	}
+	g2Main := filepath.Join(g2, "hops", "main")
+
+	empty := filepath.Join(dir, "empty")
+	runGit(t, "clone", "-q", "--bare", seed, empty)
+
+	reg := filepath.Join(dir, "reg")
+	runGit(t, "clone", "-q", seed, reg)
+
+	dotBare := filepath.Join(dir, "dotbare")
+	runGit(t, "clone", "-q", "--bare", seed, filepath.Join(dotBare, ".git"))
+	runGit(t, "-C", dotBare, "worktree", "add", "-q", "hops/main", "main")
+
+	// Another hub's worktrees, all the shared hopspace knows.
+	shared := hopspaceRecording(filepath.Join(dir, "data"), map[string]string{
+		"main": g2Main,
+		"feat": filepath.Join(g2, "hops", "feat"),
+	})
+
+	for _, tc := range []struct {
+		name, hub, addDir string
+		bases             []string // any one of them
+	}{
+		{"bare hub, hopspace records only another hub", g1, g1, []string{filepath.Join(g1, "hops", "main")}},
+		{"the other hub keeps its own", g2, g2, []string{g2Main, filepath.Join(g2, "hops", "feat")}},
+		{"bare hub without worktrees", empty, empty, []string{empty}},
+		{"--regular hub", reg, reg, []string{reg}},
+		{"bare repository kept in .git", dotBare, filepath.Join(dotBare, ".git"), []string{filepath.Join(dotBare, "hops", "main")}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := m.findBase(shared, tc.hub)
+			baseOK := false
+			for _, b := range tc.bases {
+				baseOK = baseOK || samePath(got.base, b)
+			}
+			if !baseOK || !samePath(got.addDir, tc.addDir) {
+				t.Fatalf("findBase(%s) = %+v, want base in %v, addDir %s", tc.hub, got, tc.bases, tc.addDir)
+			}
+		})
+	}
+
+	// A fork's hopspace is no repository: its worktrees are. Only one
+	// recorded under it is used, never one elsewhere.
+	t.Run("not a repository: a worktree recorded under it", func(t *testing.T) {
+		fork := filepath.Join(dir, "fork")
+		forkMain := filepath.Join(fork, "main")
+		runGit(t, "clone", "-q", seed, forkMain)
+		hs := hopspaceRecording(fork, map[string]string{"main": forkMain})
+		if got := m.findBase(hs, fork); got.base != forkMain || got.addDir != forkMain {
+			t.Fatalf("findBase = %+v, want %s for both", got, forkMain)
+		}
+		hs = hopspaceRecording(fork, map[string]string{"main": g2Main})
+		if got := m.findBase(hs, fork); got.base != fork {
+			t.Fatalf("findBase = %+v, want the hopspace itself, not %s", got, g2Main)
+		}
+	})
+
+	t.Run("a directory inside a repository is not its root", func(t *testing.T) {
+		if repo, ok := hubRepository(git.New(), filepath.Join(g2, "hops")); ok {
+			t.Fatalf("hubRepository = %s, want none", repo)
+		}
+		if repo, ok := hubRepository(git.New(), g2Main); ok {
+			t.Fatalf("hubRepository(linked worktree) = %s, want none", repo)
+		}
+	})
+}

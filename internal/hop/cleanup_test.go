@@ -7,7 +7,6 @@ import (
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 )
 
@@ -69,119 +68,38 @@ func (m *MockCommandRunner) RunInDir(dir string, cmd string, args ...string) (st
 	return "", nil
 }
 
+// TestPruneWorktrees: git worktree prune runs in the hub, the one
+// repository the hub owns, never in a worktree a shared --global
+// hopspace records (another hub's repository, as like as not).
 func TestPruneWorktrees(t *testing.T) {
 	fs := afero.NewMemMapFs()
-
-	// Create a mock command runner
-	var capturedDir string
-	var capturedCmd string
-	var capturedArgs []string
-	mockRunner := &MockCommandRunner{
-		RunInDirFunc: func(dir string, cmd string, args ...string) (string, error) {
-			capturedDir = dir
-			capturedCmd = cmd
-			capturedArgs = args
+	var dirs []string
+	var args [][]string
+	g := &git.Git{Runner: &MockCommandRunner{
+		RunInDirFunc: func(dir string, cmd string, a ...string) (string, error) {
+			dirs = append(dirs, dir)
+			args = append(args, append([]string{cmd}, a...))
 			return "", nil
 		},
-	}
+	}}
+	require.NoError(t, fs.MkdirAll("/g1/app/hops/main", 0o755))
 
-	// Create git wrapper with mock runner
-	g := &git.Git{Runner: mockRunner}
-	cleanup := NewCleanupManager(fs, g)
+	require.NoError(t, NewCleanupManager(fs, g).PruneWorktrees("/g1/app"))
 
-	// Create the directory structure in the memory filesystem
-	require.NoError(t, fs.MkdirAll("/test/hopspace/hops/main", 0755))
-	require.NoError(t, fs.MkdirAll("/test/hopspace/hops/feature", 0755))
-
-	// Create a hopspace with branches
-	hopspace := &Hopspace{
-		Path: "/test/hopspace",
-		Config: &config.HopspaceConfig{
-			Branches: map[string]config.HopspaceBranch{
-				"main": {
-					Exists: true,
-					Path:   "/test/hopspace/hops/main",
-				},
-				"feature": {
-					Exists: true,
-					Path:   "/test/hopspace/hops/feature",
-				},
-			},
-		},
-	}
-
-	// Prune worktrees
-	err := cleanup.PruneWorktrees(hopspace)
-	require.NoError(t, err)
-
-	// Verify git worktree prune was called with correct arguments
-	// Note: map iteration is non-deterministic, so either path is valid
-	assert.Contains(t, []string{"/test/hopspace/hops/main", "/test/hopspace/hops/feature"}, capturedDir)
-	assert.Equal(t, "git", capturedCmd)
-	assert.Equal(t, []string{"worktree", "prune"}, capturedArgs)
+	assert.Equal(t, []string{"/g1/app"}, dirs)
+	assert.Equal(t, [][]string{{"git", "worktree", "prune"}}, args)
 }
 
-func TestPruneWorktrees_NoWorktrees(t *testing.T) {
-	fs := afero.NewMemMapFs()
-
-	mockRunner := &MockCommandRunner{}
-	g := &git.Git{Runner: mockRunner}
-	cleanup := NewCleanupManager(fs, g)
-
-	// Create a hopspace with no existing worktrees
-	hopspace := &Hopspace{
-		Path: "/test/hopspace",
-		Config: &config.HopspaceConfig{
-			Branches: map[string]config.HopspaceBranch{
-				"main": {
-					Exists: false,
-					Path:   "",
-				},
-			},
-		},
-	}
-
-	// Should not error when no worktrees exist
-	err := cleanup.PruneWorktrees(hopspace)
-	assert.NoError(t, err)
-}
-
-// TestPruneWorktrees_NonExistentPaths tests that pruning with stale/non-existent
-// paths in the config doesn't cause errors (Bug 2 regression test)
-func TestPruneWorktrees_NonExistentPaths(t *testing.T) {
-	fs := afero.NewMemMapFs()
-
-	mockRunner := &MockCommandRunner{
+// TestPruneWorktrees_MissingHub: a hub that is not on disk has nothing
+// to prune, and git is never run.
+func TestPruneWorktrees_MissingHub(t *testing.T) {
+	g := &git.Git{Runner: &MockCommandRunner{
 		RunInDirFunc: func(dir string, cmd string, args ...string) (string, error) {
-			// Should never be called since no valid paths exist
-			t.Error("git command was called with non-existent path")
+			t.Errorf("git ran in %s", dir)
 			return "", nil
 		},
-	}
-
-	g := &git.Git{Runner: mockRunner}
-	cleanup := NewCleanupManager(fs, g)
-
-	// Create a hopspace with paths that don't exist on filesystem
-	hopspace := &Hopspace{
-		Path: "/test/hopspace",
-		Config: &config.HopspaceConfig{
-			Branches: map[string]config.HopspaceBranch{
-				"main": {
-					Exists: true,
-					Path:   "/non/existent/path/main",
-				},
-				"feature": {
-					Exists: true,
-					Path:   "/another/invalid/path/feature",
-				},
-			},
-		},
-	}
-
-	// Should not error when all paths are invalid - should just skip pruning
-	err := cleanup.PruneWorktrees(hopspace)
-	assert.NoError(t, err)
+	}}
+	assert.NoError(t, NewCleanupManager(afero.NewMemMapFs(), g).PruneWorktrees("/gone"))
 }
 
 // TestRemoveEmptyParent tests that the parent directory is removed when empty.
@@ -260,48 +178,4 @@ func TestRemoveEmptyParent_NonExistentParent(t *testing.T) {
 
 	err := cleanup.RemoveEmptyParent(worktreePath, hubPath)
 	assert.NoError(t, err)
-}
-
-// TestPruneWorktrees_MixedValidInvalidPaths tests that pruning selects
-// the first valid path when some paths are invalid
-func TestPruneWorktrees_MixedValidInvalidPaths(t *testing.T) {
-	fs := afero.NewMemMapFs()
-
-	var capturedDir string
-	mockRunner := &MockCommandRunner{
-		RunInDirFunc: func(dir string, cmd string, args ...string) (string, error) {
-			capturedDir = dir
-			return "", nil
-		},
-	}
-
-	g := &git.Git{Runner: mockRunner}
-	cleanup := NewCleanupManager(fs, g)
-
-	// Create one valid path and one invalid path
-	validPath := "/test/hopspace/hops/feature"
-	require.NoError(t, fs.MkdirAll(validPath, 0755))
-
-	hopspace := &Hopspace{
-		Path: "/test/hopspace",
-		Config: &config.HopspaceConfig{
-			Branches: map[string]config.HopspaceBranch{
-				"main": {
-					Exists: true,
-					Path:   "/non/existent/path/main", // Invalid
-				},
-				"feature": {
-					Exists: true,
-					Path:   validPath, // Valid
-				},
-			},
-		},
-	}
-
-	// Should successfully prune using the valid path
-	err := cleanup.PruneWorktrees(hopspace)
-	assert.NoError(t, err)
-
-	// Should have called git with the valid path (not the invalid one)
-	assert.Equal(t, validPath, capturedDir)
 }

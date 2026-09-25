@@ -1,0 +1,116 @@
+# Two --global hubs of one repository share a data-home hopspace, but
+# each is its own repository: add registers a new worktree in the hub it
+# runs in, never in the other hub's repository (whichever hub the
+# hopspace last recorded a branch for). remove and merge touch only
+# their own hub's worktrees, and prune only their own hub's stale
+# registrations; doctor --fix recreates a missing worktree in its own
+# hub. doctor reports a worktree an earlier release registered in the
+# other hub's repository, and its hint moves it back.
+
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/glob.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+exec git-hop $WORK/org/glob.git $WORK/g2/app --global
+exists $WORK/data/org/glob/hop.json
+
+# --- add in g1: the hopspace's main is g2's, the worktree is g1's ---
+cd $WORK/g1/app
+exec git-hop add feat/y
+exec git -C $WORK/g1/app worktree list --porcelain
+stdout '^worktree .*/g1/app/hops/feat/y$'
+exec git -C $WORK/g2/app worktree list --porcelain
+! stdout 'feat/y'
+exec git -C $WORK/g1/app/hops/feat/y rev-parse --path-format=absolute --git-common-dir
+stdout '/g1/app$'
+
+# --- add in g2, including the branch g1 just added ---
+cd $WORK/g2/app
+exec git-hop add feat/z
+exec git-hop add feat/y
+exec git -C $WORK/g2/app worktree list --porcelain
+stdout '^worktree .*/g2/app/hops/feat/z$'
+stdout '^worktree .*/g2/app/hops/feat/y$'
+exec git -C $WORK/g1/app worktree list --porcelain
+! stdout 'feat/z'
+! stdout '/g2/'
+
+# --- a stale registration in each hub, for prune to leave alone ---
+exec git -C $WORK/g1/app worktree add -q $WORK/g1/app/hops/stale1 -b stale1
+exec git -C $WORK/g2/app worktree add -q $WORK/g2/app/hops/stale2 -b stale2
+exec rm -rf $WORK/g1/app/hops/stale1 $WORK/g2/app/hops/stale2
+
+# --- remove in g1: only g1's feat/y goes, and only g1 is pruned ---
+cd $WORK/g1/app
+exec git-hop remove feat/y --no-verify --no-prompt
+! exists $WORK/g1/app/hops/feat/y
+exists $WORK/g2/app/hops/feat/y
+exec git -C $WORK/g1/app worktree list --porcelain
+! stdout 'feat/y'
+! stdout 'stale1'
+exec git -C $WORK/g2/app worktree list --porcelain
+stdout '^worktree .*/g2/app/hops/feat/y$'
+stdout '^worktree .*/g2/app/hops/stale2$'
+exec git -C $WORK/g2/app rev-parse --verify --quiet refs/heads/feat/y
+
+# --- merge in g2: only g2's feat/z goes; g1 is untouched ---
+cd $WORK/g2/app/hops/feat/z
+cp $WORK/z.txt z.txt
+exec git add z.txt
+exec git commit -q -m 'z'
+cd $WORK/g1/app
+exec git-hop add feat/z
+cd $WORK/g2/app
+exec git-hop merge feat/z main
+! exists $WORK/g2/app/hops/feat/z
+exists $WORK/g2/app/hops/main/z.txt
+exists $WORK/g1/app/hops/feat/z
+! exists $WORK/g1/app/hops/main/z.txt
+exec git -C $WORK/g1/app worktree list --porcelain
+stdout '^worktree .*/g1/app/hops/feat/z$'
+exec git -C $WORK/g2/app worktree list --porcelain
+! stdout '/hops/feat/z$'
+! stdout 'stale2'
+
+# --- doctor --fix recreates a missing worktree in its own hub ---
+cd $WORK/g1/app/hops/feat/z
+cp $WORK/z.txt w.txt
+exec git add w.txt
+exec git commit -q -m 'w'
+exec rm -rf $WORK/g1/app/hops/feat/z
+cd $WORK/g1/app
+exec git-hop doctor --fix
+exists $WORK/g1/app/hops/feat/z/w.txt
+exec git -C $WORK/g1/app worktree list --porcelain
+stdout '^worktree .*/g1/app/hops/feat/z$'
+! stdout 'prunable'
+exec git -C $WORK/g2/app worktree list --porcelain
+! stdout '/g1/'
+
+# --- doctor reports a worktree another hub's repository holds ---
+# What add did before: g1's feat/m is registered in g2's repository.
+exec git-hop add feat/m
+exec rm -rf $WORK/g1/app/hops/feat/m
+exec git -C $WORK/g1/app worktree prune
+exec git -C $WORK/g2/app worktree add -q $WORK/g1/app/hops/feat/m -b feat/m
+! exec git-hop doctor
+stderr '^error: Worktree of branch feat/m at .*/g1/app/hops/feat/m is registered in .*/g2/app, not in this hub''s repository$'
+stderr '^hint: commit its work, then fetch the branch into this hub \(git -C .*/g1/app fetch .*/g2/app feat/m:feat/m\)'
+! exec git-hop doctor --fix
+stderr 'registered in .*/g2/app'
+
+# --- following the hint moves it into g1 ---
+exec git -C $WORK/g1/app fetch -q $WORK/g2/app feat/m:feat/m
+exec git -C $WORK/g2/app worktree remove $WORK/g1/app/hops/feat/m
+exec git-hop doctor --fix
+exec git-hop doctor
+! stderr 'registered in'
+exec git -C $WORK/g1/app/hops/feat/m rev-parse --path-format=absolute --git-common-dir
+stdout '/g1/app$'
+
+-- z.txt --
+z

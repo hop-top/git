@@ -63,9 +63,11 @@ func TestDoctor_RecreatePreconditions(t *testing.T) {
 		{
 			name: "branch missing",
 			setup: func(t *testing.T, fs afero.Fs, g *registryGit, hopspacePath string) {
+				// Asked in the hub's repository: the hub is --global, and
+				// its data-home hopspace is no repository at all.
 				g.Runner.Errors = map[string]error{
-					hopspacePath + ":git rev-parse --verify --quiet refs/heads/feat/gone^{commit}": errors.New("exit 1"),
-					hopspacePath + ":git rev-parse --verify --quiet origin/feat/gone^{commit}":     errors.New("exit 1"),
+					hubPath + ":git rev-parse --verify --quiet refs/heads/feat/gone^{commit}": errors.New("exit 1"),
+					hubPath + ":git rev-parse --verify --quiet origin/feat/gone^{commit}":     errors.New("exit 1"),
 				}
 			},
 			want: "branch feat/gone does not exist",

@@ -191,7 +191,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 		// The fork hopspace is a single-branch clone of the fork's first
 		// attached branch: fetch this one so the worktree below starts
 		// from the fork's branch rather than a new branch off the first.
-		base := findBaseWorktree(forkHopspace, forkHopspacePath)
+		base := NewWorktreeManager(fs, g).findBaseWorktree(forkHopspace, forkHopspacePath)
 		refspec := fmt.Sprintf("+refs/heads/%s:refs/remotes/origin/%s", branch, branch)
 		if _, err := g.RunInDir(base, "git", git.FetchArgs("origin", refspec)...); err != nil {
 			return ForkAttachment{}, fmt.Errorf("failed to fetch fork branch into fork hopspace: %v", err)
