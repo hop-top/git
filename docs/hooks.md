@@ -150,8 +150,6 @@ The trap: `ValidHookNames` contains `pre-env-start` / `post-env-start` / `pre-en
 
 Paths are resolved relative to the worktree, and the command runs with the worktree as its working directory.
 
-(There is a third, separate thing again: `HooksSchema` in `internal/config/schema_config.go` declares `preWorktreeAdd` / `preEnvStart` / … fields. Nothing reads them. They are inert config surface.)
-
 ## Switch hooks
 
 `pre-worktree-switch` and `post-worktree-switch` fire when the user moves between worktrees. There are two ways that happens, and they are not symmetric.
