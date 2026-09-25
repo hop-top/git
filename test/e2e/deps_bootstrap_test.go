@@ -103,38 +103,53 @@ func TestAdd_GoProject_VendorPreservedWhenVendored(t *testing.T) {
 
 // --- pnpm/npm node_modules should not break existing worktrees ---
 
+// An npm project whose dependency imports another dependency, as ES
+// modules. Node resolves a package's imports from its real path, so a
+// worktree's node_modules links into the shared store only work when the
+// install there sits in a directory named node_modules. The deps come from
+// tarballs committed to the repo, so no registry is needed.
 func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
 		t.Skip("Skipping e2e test in short mode")
 	}
 
-	// Pre-existing structural bug: git-hop's deps cache directory is
-	// named node_modules.<hash> (e.g. node_modules.744630). The worktree's
-	// node_modules symlinks to it, but Node's resolver follows the symlink
-	// to the real path before walking up to find sibling node_modules —
-	// and "node_modules.<hash>" is not recognized as "node_modules", so
-	// transitive deps (is-odd → is-number) fail with MODULE_NOT_FOUND.
-	// Pre-dates the kit v0.4 migration; fix requires rethinking the
-	// cache-naming strategy (rename caches to plain node_modules and
-	// disambiguate via parent dirs, or symlink per-package).
-	t.Skip("known pre-existing: cache dir naming breaks Node transitive resolution")
-
 	env := SetupTestEnv(t)
 
-	// Skip if npm not available
-	if _, err := env.RunCommandAllowFail(t, env.RootDir, "npm", "--version"); err != nil {
-		t.Skip("npm not available")
+	for _, bin := range []string{"npm", "node"} {
+		if _, err := env.RunCommandAllowFail(t, env.RootDir, bin, "--version"); err != nil {
+			t.Skip(bin + " not available")
+		}
 	}
 
 	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
 	env.RunCommand(t, env.RootDir, "git", "clone", env.BareRepoPath, env.SeedRepoPath)
 
-	// Minimal npm project
+	// a imports b; both ESM, packed into the repo.
+	pkgs := filepath.Join(env.SeedRepoPath, "pkgs")
+	if err := os.MkdirAll(pkgs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, src := range map[string]string{
+		"a": `import { b } from "b"; export const a = () => "a+" + b();`,
+		"b": `export const b = () => "b";`,
+	} {
+		dir := filepath.Join(env.RootDir, "pkgsrc", name)
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		WriteFile(t, filepath.Join(dir, "package.json"),
+			`{"name":"`+name+`","version":"1.0.0","type":"module","exports":"./index.js"}`)
+		WriteFile(t, filepath.Join(dir, "index.js"), src+"\n")
+		env.RunCommand(t, dir, "npm", "pack", "--silent", "--pack-destination", pkgs)
+	}
 	WriteFile(t, filepath.Join(env.SeedRepoPath, "package.json"),
-		`{"name":"test","version":"1.0.0","dependencies":{"is-odd":"3.0.1"}}`)
-	// Run npm install to generate lockfile
-	env.RunCommand(t, env.SeedRepoPath, "npm", "install")
+		`{"name":"test","version":"1.0.0","private":true,"type":"module",`+
+			`"dependencies":{"a":"file:pkgs/a-1.0.0.tgz","b":"file:pkgs/b-1.0.0.tgz"}}`)
+	WriteFile(t, filepath.Join(env.SeedRepoPath, "index.js"), `import { a } from "a"; console.log(a());`+"\n")
+	WriteFile(t, filepath.Join(env.SeedRepoPath, ".gitignore"), "node_modules\n")
+	// Generates the lockfile.
+	env.RunCommand(t, env.SeedRepoPath, "npm", "install", "--no-audit", "--no-fund")
 	env.RunCommand(t, env.SeedRepoPath, "git", "add", ".")
 	env.RunCommand(t, env.SeedRepoPath, "git", "commit", "-m", "init: npm project")
 	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main")
@@ -142,57 +157,36 @@ func TestAdd_NpmProject_ExistingWorktreeDepsIntact(t *testing.T) {
 	env.RunCommand(t, env.SeedRepoPath, "git", "checkout", "-b", "feature-npm")
 	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "feature-npm")
 
-	// Clone and setup
 	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
 
 	mainWT := filepath.Join(env.HubPath, "hops", "main")
-
-	// Verify main worktree has working node_modules before adding feature
-	mainNodeMod := filepath.Join(mainWT, "node_modules")
-	mainModuleBefore, err := os.Lstat(mainNodeMod)
-	if err != nil {
-		t.Fatalf("main worktree missing node_modules before add: %v", err)
-	}
-	mainIsSymlinkBefore := mainModuleBefore.Mode()&os.ModeSymlink != 0
-
-	// Now add the feature worktree
-	env.RunGitHop(t, env.HubPath, "add", "feature-npm")
-
-	// ASSERT: main worktree node_modules still works after adding feature
-	mainModuleAfter, err := os.Stat(mainNodeMod)
-	if err != nil {
-		t.Errorf("main worktree node_modules broken after adding feature: %v", err)
-	} else {
-		// If it was a symlink, verify target still exists
-		if mainIsSymlinkBefore || mainModuleAfter.Mode()&os.ModeSymlink != 0 {
-			target, err := os.Readlink(mainNodeMod)
-			if err == nil {
-				// Resolve relative symlink targets against parent dir
-				if !filepath.IsAbs(target) {
-					target = filepath.Join(filepath.Dir(mainNodeMod), target)
-				}
-				if _, err := os.Stat(target); err != nil {
-					t.Errorf("main worktree node_modules symlink target "+
-						"broken after adding feature: %s -> %s: %v",
-						mainNodeMod, target, err)
-				}
-			}
+	assertESMRuns := func(wt string) {
+		t.Helper()
+		out, stderr, code := env.RunCommandWithExit(t, wt, "node", "index.js")
+		if code != 0 || strings.TrimSpace(out) != "a+b" {
+			t.Errorf("node index.js in %s: exit %d, stdout=%q stderr=%s", wt, code, out, stderr)
 		}
 	}
+	assertESMRuns(mainWT)
+	mainTarget, err := os.Readlink(filepath.Join(mainWT, "node_modules"))
+	if err != nil {
+		t.Fatalf("main node_modules should link into the deps store: %v", err)
+	}
 
-	// ASSERT: feature worktree has working node_modules
+	env.RunGitHop(t, env.HubPath, "add", "feature-npm")
+
+	// main is left as it was and still works.
+	if after, err := os.Readlink(filepath.Join(mainWT, "node_modules")); err != nil || after != mainTarget {
+		t.Errorf("main node_modules changed by add: %q -> %q (%v)", mainTarget, after, err)
+	}
+	assertESMRuns(mainWT)
+
+	// The new worktree shares the install and resolves through it.
 	featureWT := filepath.Join(env.HubPath, "hops", "feature-npm")
-	featureNodeMod := filepath.Join(featureWT, "node_modules")
-	if _, err := os.Stat(featureNodeMod); err != nil {
-		t.Errorf("feature worktree missing node_modules: %v", err)
+	if target, err := os.Readlink(filepath.Join(featureWT, "node_modules")); err != nil || target != mainTarget {
+		t.Errorf("feature node_modules = %q (%v), want the shared %q", target, err, mainTarget)
 	}
-
-	// ASSERT: can actually require a module in the feature worktree
-	out, stderr, exitCode := env.RunCommandWithExit(t, featureWT,
-		"node", "-e", "require('is-odd')")
-	if exitCode != 0 {
-		t.Errorf("node require('is-odd') failed in feature worktree: stdout=%s stderr=%s", out, stderr)
-	}
+	assertESMRuns(featureWT)
 }
 
 func TestAdd_PnpmProject_ExistingWorktreeDepsIntact(t *testing.T) {

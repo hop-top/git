@@ -13,16 +13,36 @@ import (
 // unlinkedLegacyDepsStores returns the deps stores earlier releases wrote
 // that no worktree of any hub links into (services.FindLegacyDepsStores).
 // Two hubs could share one such store, so the scope is every hub state
-// records, plus hubPath (when not "") in case it is not recorded. An
-// unreadable state is an error: without it no store can be shown
-// unlinked.
+// records (depsLinkScope). An unreadable state is an error: without it no
+// store can be shown unlinked.
 func unlinkedLegacyDepsStores(fs afero.Fs, hubPath string) ([]services.LegacyDepsStore, error) {
-	st, err := state.LoadState(fs)
+	hopspaces, worktrees, err := depsLinkScope(fs, hubPath)
 	if err != nil {
 		return nil, err
 	}
 
-	var hopspaces, worktrees []string
+	stores, err := services.FindLegacyDepsStores(fs, hopspaces, worktrees)
+	if err != nil {
+		return nil, err
+	}
+	unlinked := stores[:0]
+	for _, s := range stores {
+		if !s.Linked() {
+			unlinked = append(unlinked, s)
+		}
+	}
+	return unlinked, nil
+}
+
+// depsLinkScope returns the hopspaces and worktrees of every hub state
+// records, plus hubPath (when not "") in case it is not recorded: where a
+// link into a deps install left by an earlier release may be.
+func depsLinkScope(fs afero.Fs, hubPath string) (hopspaces, worktrees []string, err error) {
+	st, err := state.LoadState(fs)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	addHub := func(path, mode string, ref hop.RepoRef) {
 		if hub, err := hop.LoadHub(fs, path); err == nil {
 			hopspaces = append(hopspaces, hop.ResolveHopspacePath(path, hub.Config.Repo))
@@ -48,18 +68,7 @@ func unlinkedLegacyDepsStores(fs afero.Fs, hubPath string) ([]services.LegacyDep
 	if hubPath != "" {
 		addHub(hubPath, "", hop.RepoRef{})
 	}
-
-	stores, err := services.FindLegacyDepsStores(fs, hopspaces, worktrees)
-	if err != nil {
-		return nil, err
-	}
-	unlinked := stores[:0]
-	for _, s := range stores {
-		if !s.Linked() {
-			unlinked = append(unlinked, s)
-		}
-	}
-	return unlinked, nil
+	return hopspaces, worktrees, nil
 }
 
 // legacyStoreKey names a legacy store in results: its path under the data

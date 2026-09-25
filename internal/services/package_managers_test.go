@@ -350,6 +350,9 @@ func TestPackageManager_FindLockfile(t *testing.T) {
 	}
 }
 
+// The key is the install's path under the deps store: a hash directory
+// holding a directory named like DepsDir, so that Node, which resolves
+// from real paths, finds the install's packages under a node_modules.
 func TestPackageManager_GetDepsKey(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -364,7 +367,7 @@ func TestPackageManager_GetDepsKey(t *testing.T) {
 				DepsDir: "node_modules",
 			},
 			hash:        "abc123",
-			expectedKey: "node_modules.abc123",
+			expectedKey: "abc123/node_modules",
 		},
 		{
 			name: "go generates correct key",
@@ -373,7 +376,7 @@ func TestPackageManager_GetDepsKey(t *testing.T) {
 				DepsDir: "vendor",
 			},
 			hash:        "def456",
-			expectedKey: "vendor.def456",
+			expectedKey: "def456/vendor",
 		},
 		{
 			name: "bundler with nested path generates correct key",
@@ -382,7 +385,7 @@ func TestPackageManager_GetDepsKey(t *testing.T) {
 				DepsDir: "vendor/bundle",
 			},
 			hash:        "xyz789",
-			expectedKey: "vendor_bundle.xyz789",
+			expectedKey: "xyz789/vendor/bundle",
 		},
 	}
 

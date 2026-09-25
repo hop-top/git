@@ -195,8 +195,8 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 	}
 
 	// Only error-severity issues make the installation unhealthy. Stale
-	// symlinks are warnings: the deps still work and the next install
-	// refreshes them, so they must not on their own drive the "issues
+	// and old-layout symlinks are warnings: the next install refreshes
+	// them, so they must not on their own drive the "issues
 	// found" verdict — while staying visible in the report.
 	if hasErrorSeverity(issues) {
 		r.issuesFound = true
@@ -213,11 +213,14 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 			msg = fmt.Sprintf("local %s (%.1fMB) instead of symlink", issue.PM.DepsDir, sizeMB)
 			totalReclaimableSize += issue.Size
 		case services.IssueBrokenSymlink:
-			output.Error("  %s: broken symlink %s -> %s (missing)", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget))
-			msg = fmt.Sprintf("broken symlink %s -> %s (missing)", issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget))
+			output.Error("  %s: broken symlink %s -> %s (missing)", issue.Branch, issue.PM.DepsDir, issue.TargetName())
+			msg = fmt.Sprintf("broken symlink %s -> %s (missing)", issue.PM.DepsDir, issue.TargetName())
 		case services.IssueStaleSymlink:
-			output.Warn("  %s: stale symlink %s -> %s (lockfile changed to %s); refreshed by the next install", issue.Branch, issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
-			msg = fmt.Sprintf("stale symlink %s -> %s (lockfile changed to %s); refreshed by the next install", issue.PM.DepsDir, filepath.Base(issue.SymlinkTarget), issue.ExpectedHash[:6])
+			output.Warn("  %s: stale symlink %s -> %s (lockfile changed to %s); refreshed by the next install", issue.Branch, issue.PM.DepsDir, issue.TargetName(), issue.ExpectedHash[:6])
+			msg = fmt.Sprintf("stale symlink %s -> %s (lockfile changed to %s); refreshed by the next install", issue.PM.DepsDir, issue.TargetName(), issue.ExpectedHash[:6])
+		case services.IssueOldLayout:
+			output.Warn("  %s: symlink %s -> %s is in the old store layout, which Node cannot resolve from; relinked by the next install", issue.Branch, issue.PM.DepsDir, issue.TargetName())
+			msg = fmt.Sprintf("symlink %s -> %s is in the old store layout, which Node cannot resolve from; relinked by the next install", issue.PM.DepsDir, issue.TargetName())
 		case services.IssueMissingDeps:
 			output.Error("  %s: missing %s", issue.Branch, issue.PM.DepsDir)
 			msg = fmt.Sprintf("missing %s", issue.PM.DepsDir)

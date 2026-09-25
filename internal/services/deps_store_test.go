@@ -129,61 +129,59 @@ func legacyStore(dataHome, hopspace string) string {
 	return filepath.Join(dataHome, tail, "deps")
 }
 
-// Deps installed at the old location keep resolving: live links are left
-// alone, a new worktree with the same lockfile reuses the old install
-// instead of reinstalling, audit finds nothing to repair, and gc never
-// touches the old store. Only an install the old store cannot satisfy
-// goes to the new one.
-func TestDepsStore_LegacyLocationKeepsResolving(t *testing.T) {
+// An install at the old location is in the old layout (a directory named
+// node_modules.<hash>, which Node cannot resolve from), so it is no longer
+// reused: a new worktree with the same lockfile installs into the new
+// store. A live link into it is never broken or modified by that: it is
+// reported as old-layout, left alone by the new worktree's install and by
+// gc, and relinked only once an install in the new layout is in place.
+// The old install itself is never written.
+func TestDepsStore_LegacyInstallNotReused(t *testing.T) {
 	dataHome, hub := storeFixture{dataHome: "d", hopspace: "a-much-longer-hub-directory"}.setup(t)
 	legacy := legacyStore(dataHome, hub)
 	require.NotEqual(t, services.DepsStorePath(hub), legacy, "fixture must hit the old slicing bug")
 
 	lock := "lockfileVersion: 6\n"
 	wtA, key := newWorktree(t, filepath.Join(hub, "hops", "a"), lock)
-	legacyInstall := filepath.Join(legacy, key)
+	legacyInstall := filepath.Join(legacy, flatKey(key))
 	require.NoError(t, os.MkdirAll(legacyInstall, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(legacyInstall, "marker"), []byte("legacy\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(legacy, ".registry.json"),
-		[]byte(`{"entries":{"`+key+`":{"lockfileHash":"x","usedBy":["a"]}}}`), 0o644))
+		[]byte(`{"entries":{"`+flatKey(key)+`":{"lockfileHash":"x","usedBy":["a"]}}}`), 0o644))
 	require.NoError(t, os.Symlink(legacyInstall, filepath.Join(wtA, "node_modules")))
+	before := snapshotTree(t, legacy)
 
 	log := filepath.Join(t.TempDir(), "install.log")
 	dm := newStoreManager(t, hub, installLoggingPM(log))
 
-	// Existing worktree: link untouched, no reinstall.
-	require.NoError(t, dm.EnsureDeps(wtA, "a"))
-	target, err := os.Readlink(filepath.Join(wtA, "node_modules"))
+	// Audit: the link works but is in the old layout; a warning.
+	issues, err := dm.Audit(map[string]string{"a": wtA})
 	require.NoError(t, err)
-	assert.Equal(t, legacyInstall, target, "live link into the old store is kept")
-	assert.NoFileExists(t, log, "no reinstall for deps the old store holds")
+	require.Len(t, issues, 1)
+	assert.Equal(t, services.IssueOldLayout, issues[0].Type)
+	assert.Equal(t, services.SeverityWarning, issues[0].Type.Severity())
 
-	// New worktree, same lockfile: reuses the old install.
+	// New worktree, same lockfile: installs in the new layout; the live
+	// link into the old store is left as it is.
 	wtB, _ := newWorktree(t, filepath.Join(hub, "hops", "b"), lock)
 	require.NoError(t, dm.EnsureDeps(wtB, "b"))
-	target, err = os.Readlink(filepath.Join(wtB, "node_modules"))
-	require.NoError(t, err)
-	assert.Equal(t, legacyInstall, target, "same lockfile links the old install")
-	assert.NoFileExists(t, log, "no reinstall for deps the old store holds")
-
-	// Audit: links into the old store are healthy.
-	issues, err := dm.Audit(map[string]string{"a": wtA, "b": wtB})
-	require.NoError(t, err)
-	assert.Empty(t, issues, "links into the old store are not issues")
+	assertStoreAt(t, hub, wtB, key, filepath.Join(hub, "deps"))
+	assert.Equal(t, 1, installCount(t, log), "the old install is not reused")
+	assertLinkedTo(t, wtA, legacyInstall)
 
 	// gc never deletes from the old store.
 	orphaned, _, err := dm.GarbageCollect(map[string]string{"a": wtA, "b": wtB}, false)
 	require.NoError(t, err)
-	assert.Empty(t, orphaned, "old-store installs are not this store's orphans")
-	assert.FileExists(t, filepath.Join(wtA, "node_modules", "marker"))
-	assert.FileExists(t, filepath.Join(wtB, "node_modules", "marker"))
-	assert.FileExists(t, filepath.Join(legacy, ".registry.json"), "old registry left alone")
+	assert.Empty(t, orphaned)
+	assertLinkedTo(t, wtA, legacyInstall)
 
-	// A lockfile the old store has no install for goes to the new store.
-	wtC, keyC := newWorktree(t, filepath.Join(hub, "hops", "c"), "lockfileVersion: 9\n")
-	require.NoError(t, dm.EnsureDeps(wtC, "c"))
-	assertStoreAt(t, hub, wtC, keyC, filepath.Join(hub, "deps"))
-	assert.FileExists(t, log, "a new lockfile installs")
+	// The next install for the old worktree (env start) relinks it to the
+	// new install; no second install, since that one is populated.
+	require.NoError(t, dm.EnsureDeps(wtA, "a"))
+	assertStoreAt(t, hub, wtA, key, filepath.Join(hub, "deps"))
+	assert.Equal(t, 1, installCount(t, log))
+
+	assert.Equal(t, before, snapshotTree(t, legacy), "the old store is never written")
 }
 
 // A link into the old store whose install is gone is broken; doctor --fix
@@ -194,7 +192,7 @@ func TestDepsStore_LegacyLinkBrokenRepairsIntoNewStore(t *testing.T) {
 
 	wt, key := newWorktree(t, filepath.Join(hub, "hops", "a"), "lockfileVersion: 6\n")
 	require.NoError(t, os.MkdirAll(legacy, 0o755))
-	require.NoError(t, os.Symlink(filepath.Join(legacy, key), filepath.Join(wt, "node_modules")))
+	require.NoError(t, os.Symlink(filepath.Join(legacy, flatKey(key)), filepath.Join(wt, "node_modules")))
 
 	log := filepath.Join(t.TempDir(), "install.log")
 	dm := newStoreManager(t, hub, installLoggingPM(log))
