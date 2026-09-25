@@ -10,8 +10,9 @@ import (
 )
 
 // Some installs cannot be shared through the store, and stay in the
-// worktree that made them (a local install). Package managers link file:,
-// link: and workspace dependencies with relative links out of
+// worktree that made them (a local install): pnpm installs
+// (LocalReasonPnpm), and any with links out of them. Package managers
+// link file:, link: and workspace dependencies with relative links out of
 // node_modules. A relative link resolves from the directory it sits in, so
 // moved into the store it resolves from the store, not the worktree. Even
 // kept absolute it would be wrong: every worktree sharing the install
@@ -33,13 +34,24 @@ const (
 	// LocalReasonLinks: the install has links out of it (file:, link:
 	// or workspace dependencies), see hasOutwardLink.
 	LocalReasonLinks LocalReason = "links"
+	// LocalReasonPnpm: pnpm made the install (pnpmModulesFile). pnpm
+	// refuses to install through a link to a directory outside the
+	// project (ERR_PNPM_UNSAFE_MODULES_DIR), and already shares packages
+	// through its own content-addressable store.
+	LocalReasonPnpm LocalReason = "pnpm"
 )
+
+// pnpmModulesFile is the file pnpm writes into every node_modules it
+// installs.
+const pnpmModulesFile = ".modules.yaml"
 
 // String says why an install with this reason cannot be shared.
 func (r LocalReason) String() string {
 	switch r {
 	case LocalReasonLinks:
 		return "it has links out of it (file:, link: or workspace dependencies)"
+	case LocalReasonPnpm:
+		return "pnpm installs into a directory of the worktree only"
 	}
 	return string(r)
 }
@@ -51,6 +63,9 @@ var errOutwardLink = errors.New("outward link")
 // it can. worktree is the worktree the install was made in, or "" for an
 // install in the store.
 func localReasonOf(fs afero.Fs, dir, worktree string) (LocalReason, error) {
+	if isPnpmInstall(fs, dir) {
+		return LocalReasonPnpm, nil
+	}
 	found, err := hasOutwardLink(fs, dir, worktree)
 	if err != nil {
 		return "", err
@@ -59,6 +74,12 @@ func localReasonOf(fs afero.Fs, dir, worktree string) (LocalReason, error) {
 		return LocalReasonLinks, nil
 	}
 	return "", nil
+}
+
+// isPnpmInstall reports whether pnpm made the install at dir.
+func isPnpmInstall(fs afero.Fs, dir string) bool {
+	ok, _ := afero.Exists(fs, filepath.Join(dir, pnpmModulesFile))
+	return ok
 }
 
 // hasOutwardLink reports whether a symlink below dir (directory links are

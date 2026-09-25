@@ -279,3 +279,49 @@ func TestDeps_NpmLinkedDeps_InstalledPerWorktree(t *testing.T) {
 		})
 	}
 }
+
+// pnpm refuses to install through a link to a directory outside the
+// project (ERR_PNPM_UNSAFE_MODULES_DIR), so each worktree gets its own
+// pnpm install, where pnpm itself can run.
+func TestDeps_Pnpm_InstalledPerWorktree(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping e2e test in short mode")
+	}
+	env := npmTestEnv(t)
+	if _, err := env.RunCommandAllowFail(t, env.RootDir, "pnpm", "--version"); err != nil {
+		t.Skip("pnpm not available")
+	}
+	initSeed(t, env)
+	packTarball(t, env, filepath.Join(env.SeedRepoPath, "pkgs"), "a", "a")
+	WriteFile(t, filepath.Join(env.SeedRepoPath, "package.json"),
+		`{"name":"t","version":"1.0.0","private":true,"dependencies":{"a":"file:pkgs/a-1.0.0.tgz"}}`)
+	WriteFile(t, filepath.Join(env.SeedRepoPath, ".gitignore"), "node_modules\n")
+	env.RunCommand(t, env.SeedRepoPath, "pnpm", "install")
+	env.RunCommand(t, env.SeedRepoPath, "git", "add", ".")
+	env.RunCommand(t, env.SeedRepoPath, "git", "commit", "-m", "init")
+	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main", "main:feat")
+	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
+	runHop(t, env, "add", "feat")
+
+	for _, branch := range []string{"main", "feat"} {
+		wt := filepath.Join(env.HubPath, "hops", branch)
+		nm := filepath.Join(wt, "node_modules")
+		if info, err := os.Lstat(nm); err != nil || !info.IsDir() {
+			t.Errorf("%s: node_modules must be a real directory: %v", branch, err)
+		}
+		if _, err := os.Stat(filepath.Join(nm, ".git-hop-local")); err != nil {
+			t.Errorf("%s: local install not marked: %v", branch, err)
+		}
+		if _, stderr, code := env.RunCommandWithExit(t, wt, "pnpm", "install", "--frozen-lockfile"); code != 0 {
+			t.Errorf("%s: pnpm install: exit %d: %s", branch, code, stderr)
+		}
+		if got := nodeOutput(t, env, wt, `console.log(require("a"))`); got != "a" {
+			t.Errorf("%s: require(a) = %s", branch, got)
+		}
+	}
+	assertNoStoreInstalls(t, env.RootDir)
+	if out := env.RunGitHopCombined(t, env.HubPath, "doctor"); !strings.Contains(out, "All dependencies are properly configured") {
+		t.Errorf("doctor should accept the pnpm installs; output:\n%s", out)
+	}
+}
