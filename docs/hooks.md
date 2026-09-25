@@ -123,7 +123,7 @@ git-hop has two mechanisms that both call themselves "hooks". They share vocabul
 | Env var prefix | `GIT_HOP_*` (`GIT_HOP_WORKTREE_PATH`, `GIT_HOP_BRANCH`, …) | `HOP_*` (`HOP_WORKTREE_PATH`, `HOP_BRANCH`, `HOP_REPO_PATH`, `HOP_COMMAND`) |
 | Fired by | `add`, `remove`, `move`, `<branch>`, `clone`, `init`, `repair`, plain `cd` | `git hop env start` / `git hop env stop` only |
 | Implementation | `internal/hooks/runner.go` | `internal/services/env_hooks.go`, driven from `internal/services/env_managers.go` |
-| Timeout | none | 5 minutes per hook list |
+| Timeout | none | 5 minutes per hook list; a hook still running then is killed with every process it started (process group on unix, job object on Windows, best-effort) |
 
 The trap: `ValidHookNames` contains `pre-env-start` / `post-env-start` / `pre-env-stop` / `post-env-stop`, so a file with one of those names installs cleanly and mirrors cleanly, and looks for all the world like it will run when you start services. It will not. The env lifecycle only ever consults the config-declared list. If you want a script to run around `env start`, declare it in config:
 
