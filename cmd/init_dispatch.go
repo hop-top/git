@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -8,10 +9,13 @@ import (
 	"github.com/spf13/afero"
 
 	"hop.top/git/internal/cli"
+	"hop.top/git/internal/config"
+	"hop.top/git/internal/docker"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/services"
 )
 
 // initRepoID resolves the 3-part repo ID ("host/org/repo") init uses for
@@ -46,6 +50,32 @@ func dispatchInitWorktreeAdd(fs afero.Fs, g git.GitInterface, repoPath, worktree
 	if err := cli.BuildHookDispatch(fs).PostWorktreeAdd(worktreePath, repoID, branch); err != nil {
 		output.Warn("post-worktree-add hook failed: %v", err)
 	}
+}
+
+// setUpInitWorktree prepares the conversion's initial worktree (see
+// initWorktreePath) through the same path as add and clone
+// (services.SetUpWorktree): ports, volumes, .env and compose override,
+// then shared deps, publishing deps.installed when it linked them. Init
+// runs it before post-worktree-add, so the hook finds them. It is not a
+// hook, so --no-hooks does not skip it. Like add, it never fails the
+// conversion.
+func setUpInitWorktree(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, branch string) {
+	if hub == nil || worktreePath == "" {
+		return
+	}
+	loader := config.NewGlobalLoader()
+	globalConfig, err := loader.Load()
+	if err != nil {
+		globalConfig = loader.GetDefaults()
+	}
+	target := services.EnvTarget{
+		Root:         worktreePath,
+		Branch:       branch,
+		HopspacePath: hop.ResolveHopspacePath(repoPath, hub.Config.Repo),
+		Hub:          hub.Config,
+	}
+	services.SetUpWorktree(fs, docker.New(), target, globalConfig).
+		PublishDepsInstalled(context.Background(), cli.EventBus)
 }
 
 // initWorktreePath is the working tree a conversion leaves the current

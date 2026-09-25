@@ -222,6 +222,7 @@ staged and unstaged as they are:
 			fmt.Println(step)
 		}
 		previewLocalConfig(g, repoPath, branch, useBare)
+		fmt.Println(initSetUpStep(branch))
 
 		if !noHooks {
 			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)
@@ -353,6 +354,10 @@ staged and unstaged as they are:
 		hookInstallPath = mainWorktreePath
 	}
 	mirrorInitHooks(fs, g, hookInstallPath, repoPath, initHooksMode, initHooksOverwrite, noHooks)
+
+	// Environment and shared deps before post-worktree-add, as add and
+	// clone do. Not a hook: runs under --no-hooks too.
+	setUpInitWorktree(fs, hub, repoPath, mainWorktreePath, currentBranchName)
 
 	// After the mirror, as clone does: a committed hook then applies to
 	// the worktree that carried it. The initial worktree is hops/<branch>

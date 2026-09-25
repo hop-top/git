@@ -1,0 +1,168 @@
+# git hop init sets up the environment of the conversion's initial worktree
+# before post-worktree-add fires, as add and clone do for theirs: ports,
+# volumes, .env and compose override, then the shared dependencies. The
+# initial worktree is hops/<branch> for a bare conversion and the repo root
+# for --regular. deps.installed is published for linked deps. A failed
+# set-up is reported; the hook still fires and the conversion succeeds.
+# --no-hooks skips only the hook: the set-up is not a hook and still runs.
+# --dry-run lists the set-up and runs nothing.
+# Register-as-is converts nothing and fires no hook, so it sets up nothing.
+#
+# The regression this pins: init fired post-worktree-add with no set-up at
+# all, so the hook found no .env, override or deps, and doctor reported
+# "main: missing node_modules" right after a conversion.
+#
+# A global post-worktree-add hook logs what it found to events.log; stub
+# docker / npm on PATH stand in for the real tools.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+cp $WORK/npm-stub $WORK/bin/npm
+chmod 755 $WORK/bin/docker
+chmod 755 $WORK/bin/npm
+env PATH=$WORK/bin${:}$PATH
+
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/hook $WORK/.config/git-hop/hooks/post-worktree-add
+chmod 755 $WORK/.config/git-hop/hooks/post-worktree-add
+
+exec git config --global hop.events.sink jsonl
+exec git config --global hop.events.path $WORK/events.jsonl
+
+# --- bare conversion: set-up, then post-worktree-add for hops/main ---
+exec sh $WORK/seed.sh $WORK/org/bare
+cd $WORK/org/bare
+exec git-hop init --no-prompt
+stdout 'Conversion successful'
+stdout 'Dependencies installed\.'
+grep '\Apost-worktree-add main [^ ]*/org/bare/hops/main HOP_PORT_WEB=[0-9]+ override deps\n\z' $WORK/events.log
+! grep 'HOP_PORT_WEB=8080 ' $WORK/events.log
+exec readlink $WORK/org/bare/hops/main/node_modules
+stdout '/org/bare/deps/node_modules\.[0-9a-f]{6}$'
+grep -count=1 '"topic":"git.runtime.deps.installed".*"payload":\{"worktree_path":"[^"]*/org/bare/hops/main","branch":"main"\}' $WORK/events.jsonl
+exec git-hop doctor
+! stderr 'missing node_modules'
+
+# --- regular conversion: the repo root is the initial worktree ---
+rm $WORK/events.log
+exec sh $WORK/seed.sh $WORK/org/regular
+cd $WORK/org/regular
+exec git-hop init --no-prompt --regular
+stdout 'Conversion successful'
+grep '\Apost-worktree-add main [^ ]*/org/regular HOP_PORT_WEB=[0-9]+ override deps\n\z' $WORK/events.log
+exec git-hop doctor
+! stderr 'missing node_modules'
+
+# --- --dry-run lists the set-up ahead of the hook and runs neither ---
+rm $WORK/events.log
+exec sh $WORK/seed.sh $WORK/org/dry
+cd $WORK/org/dry
+exec git-hop init --no-prompt --dry-run
+stdout '^  5\. Set up the main worktree''s environment'
+stdout 'Would run hook post-worktree-add'
+! exists $WORK/events.log
+! exists $WORK/org/dry/.env
+! exists $WORK/org/dry/node_modules
+! exists $WORK/org/dry/hop.json
+
+# --- --no-hooks: no hook, but the set-up still runs ---
+exec sh $WORK/seed.sh $WORK/org/nohooks
+cd $WORK/org/nohooks
+exec git-hop init --no-prompt --no-hooks --dry-run
+stdout '^  5\. Set up the main worktree''s environment'
+! stdout 'Would run hook'
+exec git-hop init --no-prompt --no-hooks
+stdout 'Conversion successful'
+! exists $WORK/events.log
+grep '^HOP_PORT_WEB=[0-9]+$' $WORK/org/nohooks/hops/main/.env
+exists $WORK/org/nohooks/hops/main/node_modules/installed
+
+# --- a deps failure warns; the hook still fires and the conversion stands ---
+exec sh $WORK/seed.sh $WORK/org/depsfail
+cd $WORK/org/depsfail
+env STUB_NPM_FAIL=1
+exec git-hop init --no-prompt
+stdout 'Conversion successful'
+stderr 'Failed to ensure dependencies'
+grep '\Apost-worktree-add main [^ ]*/org/depsfail/hops/main HOP_PORT_WEB=[0-9]+ override no-deps\n\z' $WORK/events.log
+env STUB_NPM_FAIL=
+rm $WORK/events.log
+
+# --- a generation failure is reported; the hook still fires ---
+# A file where the override's cache directory belongs fails generation.
+exec sh $WORK/seed.sh $WORK/org/genfail
+cd $WORK/org/genfail
+env XDG_CACHE_HOME=$WORK/broken-cache
+mkdir $WORK/broken-cache/git-hop
+cp $WORK/compose.yml $WORK/broken-cache/git-hop/org
+exec git-hop init --no-prompt
+stdout 'Conversion successful'
+stderr 'Failed to generate environment'
+grep '\Apost-worktree-add main [^ ]*/org/genfail/hops/main no-env no-override deps\n\z' $WORK/events.log
+exists $WORK/org/genfail/hop.json
+env XDG_CACHE_HOME=$WORK/.cache
+rm $WORK/events.log
+
+# --- register-as-is converts nothing: no set-up, no hook ---
+exec sh $WORK/seed.sh $WORK/org/asis
+cd $WORK/org/asis
+stdin $WORK/choice3.txt
+exec git-hop init
+stdout 'Repository registered successfully'
+! exists $WORK/events.log
+! exists $WORK/org/asis/.env
+! exists $WORK/org/asis/node_modules
+
+-- seed.sh --
+set -e
+git init -q "$1"
+cd "$1"
+cp "$WORK/compose.yml" docker-compose.yml
+cp "$WORK/package.json" package.json
+cp "$WORK/package.json" package-lock.json
+git add docker-compose.yml package.json package-lock.json
+git commit -q -m 'compose and npm'
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- package.json --
+{}
+-- choice3.txt --
+3
+-- hook --
+#!/bin/sh
+env=no-env
+override=no-override
+deps=no-deps
+if [ -f "$GIT_HOP_WORKTREE_PATH/.env" ]; then
+	env=$(grep '^HOP_PORT_WEB=' "$GIT_HOP_WORKTREE_PATH/.env")
+fi
+if [ -f "$XDG_CACHE_HOME/git-hop/${GIT_HOP_REPO_ID#*/}/$GIT_HOP_BRANCH/docker-compose.override.yml" ]; then
+	override=override
+fi
+if [ -f "$GIT_HOP_WORKTREE_PATH/node_modules/installed" ]; then
+	deps=deps
+fi
+echo "$GIT_HOP_HOOK_NAME $GIT_HOP_BRANCH $GIT_HOP_WORKTREE_PATH $env $override $deps" >> "$WORK/events.log"
+-- npm-stub --
+#!/bin/sh
+if [ -n "$STUB_NPM_FAIL" ]; then
+	echo "stub: npm failed" >&2
+	exit 1
+fi
+mkdir -p node_modules && echo ok > node_modules/installed
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" up "*)
+	echo "up" >> "$WORK/events.log"
+	exit 0
+	;;
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

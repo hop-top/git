@@ -1153,6 +1153,16 @@ admin directories live in the `.git` directory the conversion replaces,
 so they would be disconnected. Remove them with `git worktree remove`
 first, or convert with `--regular`, which keeps `.git` in place.
 
+A conversion then sets up its initial worktree (`hops/<branch>` for a
+bare conversion, the repository root for `--regular`) as `add` does:
+deterministic ports and volumes, `.env` and, for a compose file with
+hardcoded host ports, the compose override, then shared dependencies.
+This happens before the `post-worktree-add` hook, so the hook finds them
+(see [Init hooks](./hooks#init-hooks)). `--no-hooks` skips the hook, not
+the set-up, and `--dry-run` lists the set-up as the plan's last step. A
+set-up failure is reported; the conversion still succeeds. Register
+as-is sets up nothing.
+
 ### What carries over
 
 A regular conversion (`--regular`) keeps `.git` where it is, so its local
