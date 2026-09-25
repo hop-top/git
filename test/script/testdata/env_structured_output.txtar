@@ -68,7 +68,7 @@ decode json stdout branch main
 decode json stdout path '~/hub/hops/main$'
 decode json stdout generated true
 decode json stdout env_file '~/hub/hops/main/\.env$'
-decode json stdout override '~/org/repo/main/docker-compose\.override\.yml$'
+decode json stdout override '~/org/repo/.+/docker-compose\.override\.yml$'
 decode json stdout ports.WEB '~^[0-9]+$'
 ! stdout 'Environment generated'
 exists $WORK/hub/hops/main/.env
@@ -76,6 +76,19 @@ exists $WORK/hub/hops/main/.env
 exec git-hop env generate --porcelain
 stdout -count=1 '\n'
 stdout '^main\t\S+/hub/hops/main\ttrue\t\S+/\.env\t\S+/docker-compose\.override\.yml$'
+
+# --- a hopspace several hubs share (--global): ports are recorded per
+# worktree, not per branch, and the result still finds them ---
+cd $WORK
+exec git-hop -g $WORK/org/repo.git hub-global
+cd $WORK/hub-global/hops/main
+env STUB_STATE=running
+exec git-hop env start --json
+decode json stdout manager docker-compose
+decode json stdout ports.WEB '~^[0-9]+$'
+exec git-hop env generate --json
+decode json stdout ports.WEB '~^[0-9]+$'
+cd $WORK/hub/hops/main
 
 # --- a failed start: exit 1, nothing on stdout ---
 env STUB_FAIL=1
@@ -93,7 +106,7 @@ stderr 'unknown output format'
 stderr 'unknown column'
 ! exec git-hop env start -n --json
 stderr 'dry-run'
-grep -count=2 '^up ' $WORK/up.log
+grep -count=3 '^up ' $WORK/up.log
 
 # --- no environment: an empty result, not an error ---
 cd $WORK/hub
