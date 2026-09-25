@@ -206,8 +206,10 @@ func TestApplier_UpdateHopJSON_AddsExistingPath(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The branch comes from git, via the plan; see repair_branch_test.go
+	// for a directory name that differs from it.
 	a := NewApplier(fs, g)
-	plan := &Plan{HubPath: hub, Actions: []Action{{Kind: ActionUpdateHopJSON, WorktreePath: wt}}}
+	plan := &Plan{HubPath: hub, Actions: []Action{{Kind: ActionUpdateHopJSON, WorktreePath: wt, NewValue: "extra"}}}
 	mut, err := a.Apply(plan)
 	if err != nil {
 		t.Fatalf("Apply: %v", err)

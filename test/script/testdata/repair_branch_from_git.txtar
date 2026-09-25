@@ -1,0 +1,37 @@
+# `git hop repair` records a worktree git knows but hop.json lacks under
+# the branch git says it has checked out, not under its directory name.
+#
+# The regression this pins: repair keyed the new hop.json entry, and its
+# hopspaceBranch, by the directory's basename. A worktree at
+# hops/daemon-leak-fix on branch fix/daemon-test-leak was recorded as
+# branch "daemon-leak-fix", which does not exist, and status showed the
+# healthy worktree as "unknown".
+#
+# A worktree on a detached HEAD has no branch; repair leaves it out of
+# hop.json with a warning rather than invent one.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git worktree add -b fix/daemon-test-leak $WORK/hub/hops/daemon-leak-fix main
+exec git worktree add --detach $WORK/hub/hops/scratch main
+
+exec git-hop repair -n --porcelain
+stdout 'update-hopjson\s+\S*\s+fix/daemon-test-leak'
+stderr 'warning: .*hops/scratch.*detached HEAD'
+
+exec git-hop repair
+decode json hop.json 'branches.fix/daemon-test-leak.hopspaceBranch' fix/daemon-test-leak
+decode json hop.json 'branches.fix/daemon-test-leak.path' '~^/.*/hub/hops/daemon-leak-fix$'
+! decode json hop.json branches.daemon-leak-fix
+! decode json hop.json branches.scratch
+
+exec git-hop status
+stdout 'fix/daemon-test-leak\s+main\s+Linked\s+synced'
+! stdout 'unknown'
