@@ -198,9 +198,26 @@ func assertStartRolledBack(t *testing.T, e *gitflowEnv, msg string) {
 
 // The real git-flow-next, when installed: a full add/commit/remove cycle
 // in a bare hub merges into develop (checked out nowhere) and leaves the
-// default-branch worktree alone.
+// default-branch worktree alone. Started from main with --from, the
+// branch still finishes into its type's parent, develop.
 func TestGitflowBareHub_RealGitflowNext(t *testing.T) {
 	t.Parallel()
+	for _, c := range []struct {
+		name string
+		from []string
+		base string
+	}{
+		{"type start point", nil, "develop"},
+		{"from main", []string{"--from", "main"}, "main"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
+			realGitflowCycle(t, c.from, c.base)
+		})
+	}
+}
+
+func realGitflowCycle(t *testing.T, from []string, wantBase string) {
 	if _, err := exec.LookPath("git-flow"); err != nil {
 		t.Skip("git-flow not installed")
 	}
@@ -232,15 +249,15 @@ func TestGitflowBareHub_RealGitflowNext(t *testing.T) {
 		env.RunCommand(t, env.HubPath, "git", "branch", "develop", "origin/develop")
 	}
 
-	env.RunGitHop(t, env.HubPath, "add", "feat/z")
+	env.RunGitHop(t, env.HubPath, append([]string{"add", "feat/z"}, from...)...)
 
 	wt := filepath.Join(env.HubPath, "hops", "feat", "z")
 	main := filepath.Join(env.HubPath, "hops", "main")
 	if got := strings.TrimSpace(env.RunCommand(t, wt, "git", "branch", "--show-current")); got != "feat/z" {
 		t.Fatalf("worktree is on %q, want feat/z", got)
 	}
-	if got := strings.TrimSpace(env.RunCommand(t, env.HubPath, "git", "config", "gitflow.branch.feat/z.base")); got != "develop" {
-		t.Errorf("gitflow.branch.feat/z.base = %q, want develop", got)
+	if got := strings.TrimSpace(env.RunCommand(t, env.HubPath, "git", "config", "gitflow.branch.feat/z.base")); got != wantBase {
+		t.Errorf("gitflow.branch.feat/z.base = %q, want %q", got, wantBase)
 	}
 	if got := strings.TrimSpace(env.RunCommand(t, main, "git", "branch", "--show-current")); got != "main" {
 		t.Errorf("default-branch worktree switched to %q", got)
