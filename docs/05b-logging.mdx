@@ -32,10 +32,24 @@ Supported values: `debug`, `info`, `warn`, `warning`, `error`, `fatal`
 
 ### Command-Line Flags
 
-Use the `--verbose` or `-v` flag for debug-level logging:
+Use the `--verbose` or `-V` flag for debug-level logging:
 
 ```bash
 git hop --verbose doctor
+```
+
+### Debug Switch
+
+`GIT_HOP_VERBOSE` turns on `-V` for every run, the way `GIT_TRACE` does for
+git. `true`, `yes` and `on` mean `-V`; `false`, `no`, `off` and an empty
+value mean off (any case); a number is the `-V` count, so `2` is `-VV`.
+Any other value prints a warning and counts as off. A `--verbose` on the
+command line wins, so `--verbose=0` turns it off for one run:
+
+```bash
+export GIT_HOP_VERBOSE=1
+git hop add feature-x              # debug lines, as with -V
+git hop --verbose=0 add feature-y  # none
 ```
 
 Use the `--quiet` or `-q` flag to suppress all output except errors:

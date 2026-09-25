@@ -718,6 +718,9 @@ are allocated against every hub git-hop knows of; see
 | `GIT_HOP_LOG_LEVEL` | Log level | `info` |
 | `GIT_HOP_AUTO_ENV_START` | Overrides `git config hop.env.autoStart` for add and clone (`true`/`false`, git's boolean spellings; anything else is fatal); `--[no-]env-start` wins over it | unset |
 | `GIT_HOP_NO_CHDIR_HOOK` | When non-empty, the shell integration stops dispatching `post-worktree-switch` on a plain `cd` | unset |
+| `GIT_HOP_VERBOSE` | Debug switch, like git's `GIT_TRACE`: stands in for `-V` on every run. `true`/`yes`/`on` is `-V`, `false`/`no`/`off` or empty is off (any case), a number is the `-V` count (`2` is `-VV`); anything else prints a warning and counts as off. A `--verbose` on the command line wins, so `--verbose=0` turns it off for one run | unset |
+
+No other global flag has an environment variable.
 
 ### Variables set for hooks
 
