@@ -7,6 +7,8 @@ import (
 	"io"
 	"os"
 	"strings"
+
+	"github.com/mattn/go-isatty"
 )
 
 // ErrPromptUnanswerable reports that a confirmation prompt could not be
@@ -65,12 +67,32 @@ func bufferedPromptIn() *bufio.Reader {
 	return promptReader
 }
 
-// readPromptLine reads one answer from promptIn. It returns
-// ErrPromptUnanswerable when nothing at all could be read — EOF on an
-// empty stdin, or a read failure. A partial final line without a
-// trailing newline still counts as an answer.
-func readPromptLine() (string, error) {
+// promptInIsTerminal reports whether promptIn is a terminal. A variable
+// so tests can stand in for one.
+var promptInIsTerminal = func() bool {
+	f, ok := promptIn.(*os.File)
+	if !ok {
+		return false
+	}
+	fd := f.Fd()
+	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
+}
+
+// readPromptLine reads one answer from promptIn and ends the prompt's
+// line on w. It returns ErrPromptUnanswerable when nothing at all could
+// be read — EOF on an empty stdin, or a read failure. A partial final
+// line without a trailing newline still counts as an answer.
+//
+// A terminal echoes the answer and the Enter that ends it, which closes
+// the line. Nothing else does: an answer piped in is never echoed, and
+// neither is an EOF, on a terminal or not. Then the line is closed here,
+// so whatever is printed next (a hint:, a warning:, the next prompt)
+// starts at column zero instead of after the prompt.
+func readPromptLine(w io.Writer) (string, error) {
 	response, err := bufferedPromptIn().ReadString('\n')
+	if !strings.HasSuffix(response, "\n") || !promptInIsTerminal() {
+		fmt.Fprintln(w)
+	}
 	if err != nil && response == "" {
 		return "", ErrPromptUnanswerable
 	}
@@ -93,11 +115,8 @@ func ConfirmAnswer(prompt string) (bool, error) {
 
 	fmt.Fprintf(w, "%s (y/n): ", prompt)
 
-	response, err := readPromptLine()
+	response, err := readPromptLine(w)
 	if err != nil {
-		// Close the dangling prompt line so the following error message
-		// starts at column zero.
-		fmt.Fprintln(w)
 		return false, err
 	}
 
@@ -146,11 +165,8 @@ func ChoiceAnswer(prompt string, validChoices []string) (string, error) {
 	for attempt := 0; attempt < maxPromptRetries; attempt++ {
 		fmt.Fprint(w, prompt)
 
-		response, err := readPromptLine()
+		response, err := readPromptLine(w)
 		if err != nil {
-			// Close the dangling prompt line so the following error
-			// message starts at column zero.
-			fmt.Fprintln(w)
 			return "", err
 		}
 
@@ -242,7 +258,7 @@ func Select(prompt string, options []string) (int, string) {
 	fmt.Fprintln(w)
 	fmt.Fprint(w, "Select option: ")
 
-	response, err := readPromptLine()
+	response, err := readPromptLine(w)
 	if err != nil {
 		return -1, ""
 	}
@@ -266,7 +282,7 @@ func Input(prompt string) string {
 
 	fmt.Fprintf(w, "%s: ", prompt)
 
-	response, err := readPromptLine()
+	response, err := readPromptLine(w)
 	if err != nil {
 		return ""
 	}
@@ -284,7 +300,7 @@ func InputWithDefault(prompt string, defaultValue string) string {
 	defaultHint := Paint(StyleMuted, fmt.Sprintf(" [%s]", defaultValue))
 	fmt.Fprintf(w, "%s%s: ", prompt, defaultHint)
 
-	response, err := readPromptLine()
+	response, err := readPromptLine(w)
 	if err != nil {
 		return defaultValue
 	}
