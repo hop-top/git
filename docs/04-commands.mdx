@@ -855,6 +855,15 @@ git hop doctor --fix --dry-run
   `$GIT_HOP_DATA_HOME/<org>/<repo>` for a hub cloned with `--global`
   (marked `repo.mode: "global"` in its `hop.json`); a data-home copy next
   to an unmarked hub is reported as a warning and left alone
+- Hopspaces of `--global` hubs left at the path another `hop.dataLayout`
+  builds (`<org>/<repo>` after switching to `{host}/{org}/{repo}`, or the
+  reverse), as the layout in effect for each hub resolves it: a warning.
+  `--fix` renames the directory to the current location when nothing is
+  there yet (`--fix --dry-run` previews the move). With data at both
+  locations, a worktree inside the old one or a worktree link into it
+  (a deps store link), or hubs of the repository that resolve the layout
+  differently, nothing is moved and the reason is named. Nothing is
+  deleted or overwritten; emptied parent directories stay
 - Hopspace hooks earlier releases mirrored to
   `$GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks`, where they still
   fire: a warning. `--fix` moves the directory to the `hop.dataLayout`

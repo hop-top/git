@@ -1,0 +1,100 @@
+# A --global hub's hopspace stays where it was created when hop.dataLayout
+# changes. doctor warns about a hopspace left at another layout's path
+# (exit 0, with a hint), and --fix moves it by rename when nothing is at
+# the new path. It never overwrites or deletes, leaves emptied parent
+# directories alone, and with data at both paths moves nothing.
+#
+# A local origin has no host, so {host} expands to hop.gitDomain
+# (github.com).
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git init --bare $WORK/org/other.git
+exec git push $WORK/org/other.git main
+cd $WORK
+
+exec git-hop --global $WORK/org/repo.git hub
+exec git-hop --global $WORK/org/other.git otherhub
+exists $WORK/data/org/repo/hop.json
+exists $WORK/data/org/other/hop.json
+
+# --- {org}/{repo} -> {host}/{org}/{repo}: a warning and a hint, exit 0 ---
+exec git config --global hop.dataLayout '{host}/{org}/{repo}'
+cd $WORK/hub
+exec git-hop doctor
+stderr 'warning: hopspace at .*/data/org/repo is not where hop.dataLayout puts it: .*/data/github.com/org/repo'
+stderr 'hint: run ''git hop doctor --fix'' to move it'
+! stderr 'Hopspace does not exist'
+exec git-hop doctor --json
+stdout '"check": "hopspace"'
+stdout '"subject": ".*/data/org/repo"'
+! stdout 'hopspace does not exist'
+
+# --- --fix --dry-run previews only ---
+exec git-hop doctor --fix --dry-run
+stdout '\[dry-run\] Would move .*/data/org/repo -> .*/data/github.com/org/repo'
+! stdout 'Would create hopspace'
+exists $WORK/data/org/repo/hop.json
+! exists $WORK/data/github.com/org/repo
+
+# --- --fix renames; the emptied parent stays ---
+exec git-hop doctor --fix
+stdout 'Moved .*/data/org/repo -> .*/data/github.com/org/repo'
+exists $WORK/data/github.com/org/repo/hop.json
+exists $WORK/data/github.com/org/other/hop.json
+! exists $WORK/data/org/repo
+! exists $WORK/data/org/other
+exists $WORK/data/org
+exec git-hop add feat/x
+decode json $WORK/data/github.com/org/repo/hop.json branches.feat/x.exists true
+exec git-hop doctor
+! stderr 'is not where hop.dataLayout puts it'
+
+# --- and back again ---
+exec git config --global --unset hop.dataLayout
+exec git-hop doctor --fix
+exists $WORK/data/org/repo/hop.json
+! exists $WORK/data/github.com/org/repo
+exists $WORK/data/github.com/org
+
+# --- hooks alone at the pre-layout <data>/github.com/<org>/<repo>/hooks
+# are the hooks-dir check's: moved into the hopspace, not reported as a
+# second hopspace ---
+mkdir $WORK/data/github.com/org/repo/hooks
+cp $WORK/stray-hook $WORK/data/github.com/org/repo/hooks/post-worktree-add
+exec git-hop doctor --fix
+! stderr 'hopspace data at'
+exists $WORK/data/org/repo/hooks/post-worktree-add
+! exists $WORK/data/github.com/org/repo/hooks
+rm $WORK/data/org/repo/hooks
+
+# --- data at both paths: reported, nothing moved, even with --fix ---
+# Its hooks dir, where releases before hop.dataLayout mirrored hooks, is
+# part of that hopspace data and stays with it.
+mkdir $WORK/data/github.com/org/repo/hooks
+cp $WORK/stray-ports.json $WORK/data/github.com/org/repo/ports.json
+cp $WORK/stray-hook $WORK/data/github.com/org/repo/hooks/post-worktree-add
+exec git-hop doctor --fix
+stderr 'hopspace data at .*/data/github.com/org/repo and at .*/data/org/repo'
+stderr 'nothing moved'
+! stderr 'hooks at old location'
+exists $WORK/data/github.com/org/repo/ports.json
+exists $WORK/data/github.com/org/repo/hooks/post-worktree-add
+! exists $WORK/data/org/repo/hooks/post-worktree-add
+exists $WORK/data/org/repo/hop.json
+rm $WORK/data/github.com/org/repo
+
+# --- a hub's own hop.dataLayout: only that repository moves ---
+exec git -C $WORK/hub config hop.dataLayout '{host}/{org}/{repo}'
+exec git-hop doctor --fix
+exists $WORK/data/github.com/org/repo/hop.json
+! exists $WORK/data/org/repo
+exists $WORK/data/org/other/hop.json
+
+-- stray-ports.json --
+{}
+-- stray-hook --
+#!/bin/sh

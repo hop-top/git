@@ -1,0 +1,52 @@
+# doctor --fix does not move a hopspace left at another hop.dataLayout's
+# path when the rename would break a worktree: one that lies inside it
+# (the centralized worktreeLocation) would lose its git link, and a
+# worktree symlink into it (a deps store link) would dangle. Both are
+# reported and left alone, exit 0, and no empty hopspace is created at
+# the new path in their place.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git init --bare $WORK/org/linked.git
+exec git push $WORK/org/linked.git main
+cd $WORK
+
+# --- a worktree inside the hopspace ---
+exec git-hop --global $WORK/org/repo.git hub
+cd $WORK/hub
+exec git config --global hop.worktreeLocation ''
+exec git-hop add feat/x
+exists $WORK/data/org/repo/hops/feat/x
+exec git config --global --unset hop.worktreeLocation
+cd $WORK
+
+# --- a worktree linking into the hopspace ---
+exec git-hop --global $WORK/org/linked.git linkedhub
+mkdir $WORK/data/org/linked/deps/node_modules.abc
+symlink $WORK/linkedhub/hops/main/node_modules -> $WORK/data/org/linked/deps/node_modules.abc
+
+exec git config --global hop.dataLayout '{host}/{org}/{repo}'
+cd $WORK/hub
+exec git-hop doctor --fix
+stderr 'hopspace at .*/data/org/repo belongs at .*/data/github.com/org/repo \(hop.dataLayout\), but worktree .*/data/org/repo/hops/feat/x lies inside it; nothing moved'
+stderr 'hopspace at .*/data/org/linked belongs at .*/data/github.com/org/linked \(hop.dataLayout\), but 1 worktree link\(s\) point into it'
+! stdout 'Moved'
+exists $WORK/data/org/repo/hop.json
+exists $WORK/data/org/repo/hops/feat/x
+exists $WORK/data/org/linked/hop.json
+! exists $WORK/data/github.com/org/repo
+! exists $WORK/data/github.com/org/linked
+
+# --- hubs of one repository that resolve hop.dataLayout differently ---
+cd $WORK
+exec git config --global --unset hop.dataLayout
+exec git-hop --global $WORK/org/linked.git linkedhub2
+exec git -C $WORK/linkedhub2 config hop.dataLayout '{host}/{org}/{repo}'
+cd $WORK/linkedhub
+exec git-hop doctor --fix
+stderr 'hubs of org/linked resolve hop.dataLayout to different hopspaces .*; nothing moved'
+exists $WORK/data/org/linked/hop.json
+! exists $WORK/data/github.com/org/linked
