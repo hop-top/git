@@ -1,13 +1,26 @@
 git-hop is a context-aware porcelain tool for managing
 Git worktrees, Docker environments, and structured workspaces.
 
-Clone Mode:
-  git-hop <uri> [path]
-  Clones a repository into a bare hub + worktree structure
+Given an argument instead of a command, git hop clones, switches or
+attaches a fork:
 
-Worktree Mode:
-  git-hop <branch>
-  Inside a project root: create/sync worktree for a branch
+  git hop <uri> [<path>]
+      Clone mode. Clones <uri> into a new hub at <path> (default:
+      <repo> in the current directory): a bare repository with the
+      default branch checked out at hops/<default-branch>. An org/repo
+      shorthand expands to git@<host>:org/repo.git, <host> from
+      --git-domain or hop.gitDomain (default github.com).
+
+  git hop <branch>
+      Switch mode. Inside a hub, switches to the existing worktree of
+      <branch>: points the hub's current symlink at it and runs the
+      worktree-switch hooks. Creates nothing; 'git hop add <branch>'
+      creates a worktree.
+
+  git hop <uri> --branch <branch>
+      Fork-attach mode. Inside a hub, fetches <branch> from the fork at
+      <uri> and, when it shares history with the hub, checks it out as
+      the worktree <branch>-fork-<owner>.
 
 Usage:
   git-hop [flags]

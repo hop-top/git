@@ -1,0 +1,13 @@
+# Top-level help describes what `git hop <arg>` does with an argument in
+# place of a command: clone, switch, or (with --branch) fork-attach. The
+# branch form only switches to an existing worktree; it creates nothing.
+
+exec git-hop --help
+stdout '^  git hop <uri> \[<path>\]$'
+stdout '^      Clone mode\.'
+stdout '^  git hop <branch>$'
+stdout '^      Switch mode\.'
+stdout 'Creates nothing'
+stdout '^  git hop <uri> --branch <branch>$'
+stdout '^      Fork-attach mode\.'
+! stdout 'create/sync'
