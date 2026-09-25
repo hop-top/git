@@ -81,7 +81,7 @@ func hopComposeProject(dir, branch string) string {
 	if err != nil {
 		return ""
 	}
-	return services.ComposeProjectName(hub.Config.Repo.Org, hub.Config.Repo.Repo, branch)
+	return services.EnvProjectName(fs, hubPath, dir, branch, hub.Config.Repo.Org, hub.Config.Repo.Repo)
 }
 
 // SweepStaleNetworks removes docker networks left over from a previous run of

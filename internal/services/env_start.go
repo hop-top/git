@@ -70,22 +70,33 @@ func ResolveEnv(t EnvTarget, globalConfig *config.GlobalConfig) (*EnvironmentMan
 		manager.Out = os.Stderr
 	}
 
-	return manager, resolveOverridePath(t), nil
+	entry := targetEntry(t)
+	manager.Project = entry.Project
+	return manager, resolveOverridePath(t, entry), nil
+}
+
+// targetEntry returns t's ports.json entry, empty when it has none.
+func targetEntry(t EnvTarget) config.BranchPorts {
+	if t.HopspacePath == "" || t.Branch == "" {
+		return config.BranchPorts{}
+	}
+	cfg, err := config.NewLoader(afero.NewOsFs()).LoadPortsConfig(t.HopspacePath)
+	if err != nil {
+		return config.BranchPorts{}
+	}
+	entry, _ := LookupEnvEntry(cfg, t.HopspacePath, t.HubPath, t.Root, t.Branch)
+	return entry
 }
 
 // resolveOverridePath returns the compose override t's branch uses, or ""
 // when there is none on disk.
-func resolveOverridePath(t EnvTarget) string {
+func resolveOverridePath(t EnvTarget, entry config.BranchPorts) string {
 	if t.Hub == nil || t.Hub.Repo.Org == "" || t.Hub.Repo.Repo == "" || t.Branch == "" {
 		return ""
 	}
-	dir := legacyOverrideDir(t.Hub.Repo.Org, t.Hub.Repo.Repo, t.Branch)
-	if t.HopspacePath != "" {
-		if cfg, err := config.NewLoader(afero.NewOsFs()).LoadPortsConfig(t.HopspacePath); err == nil {
-			if entry, ok := LookupEnvEntry(cfg, t.HopspacePath, t.HubPath, t.Root, t.Branch); ok && entry.OverrideDir != "" {
-				dir = entry.OverrideDir
-			}
-		}
+	dir := entry.OverrideDir
+	if dir == "" {
+		dir = legacyOverrideDir(t.Hub.Repo.Org, t.Hub.Repo.Repo, t.Branch)
 	}
 	candidate := filepath.Join(dir, overrideFileName)
 	if _, err := os.Stat(candidate); err != nil {

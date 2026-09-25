@@ -35,7 +35,7 @@ exec git config --global --unset hop.autoEnvStart
 exec git config --global hop.env.autoStart true
 exec git-hop $WORK/org/repo.git hub-auto
 grep -count=1 '^up ' $WORK/up.log
-grep '^up compose -p org-repo-main up -d in .*/hub-auto/hops/main on main$' $WORK/up.log
+grep '^up compose -p org-repo-hub-auto-[0-9a-f]{8}-main up -d in .*/hub-auto/hops/main on main$' $WORK/up.log
 ! stderr 'warning:'
 
 # --- the start is progress, not clone's result: all of it goes to stderr ---

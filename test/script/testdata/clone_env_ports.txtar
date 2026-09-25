@@ -39,13 +39,13 @@ stdout 'HOP_PORT_WEB'
 cd $WORK/hub/hops/main
 exec git-hop env start
 grep -count=1 '^up ' $WORK/up.log
-grep '^up compose -p org-repo-main -f docker-compose.yml -f .*/org/repo/hub-[0-9a-f]{8}/main/docker-compose.override.yml --env-file .env up -d in .*/hub/hops/main$' $WORK/up.log
+grep '^up compose -p org-repo-hub-[0-9a-f]{8}-main -f docker-compose.yml -f .*/org/repo/hub-[0-9a-f]{8}/main/docker-compose.override.yml --env-file .env up -d in .*/hub/hops/main$' $WORK/up.log
 cd $WORK
 
 # --- the automatic start after clone does too ---
 exec git-hop $WORK/org/repo.git hub-auto --env-start
 grep -count=2 '^up ' $WORK/up.log
-grep '^up compose -p org-repo-main -f docker-compose.yml -f .*/org/repo/hub-auto-[0-9a-f]{8}/main/docker-compose.override.yml --env-file .env up -d in .*/hub-auto/hops/main$' $WORK/up.log
+grep '^up compose -p org-repo-hub-auto-[0-9a-f]{8}-main -f docker-compose.yml -f .*/org/repo/hub-auto-[0-9a-f]{8}/main/docker-compose.override.yml --env-file .env up -d in .*/hub-auto/hops/main$' $WORK/up.log
 grep '^HOP_PORT_WEB=[0-9]+$' $WORK/hub-auto/hops/main/.env
 
 -- compose.yml --

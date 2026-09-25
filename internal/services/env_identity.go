@@ -5,6 +5,8 @@ import (
 	"encoding/hex"
 	"path/filepath"
 
+	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/state"
 )
@@ -39,4 +41,30 @@ func HubOverrideDir(org, repo, hubPath, branch string) string {
 // branch, one directory for every hub of the repository.
 func legacyOverrideDir(org, repo, branch string) string {
 	return filepath.Dir(hop.GetComposeOverrideCachePath(org, repo, branch))
+}
+
+// HubComposeProjectName is the compose project a worktree of branch in
+// the hub at hubPath runs as: ComposeProjectName with the hub key after
+// the repository, so hubs of one repository never share containers.
+func HubComposeProjectName(org, repo, hubPath, branch string) string {
+	return ComposeProjectName(org, repo+"-"+HubKey(hubPath), branch)
+}
+
+// EnvProjectName returns the compose project the worktree at
+// worktreePath on branch, in the hub at hubPath, runs as: the one its
+// ports.json entry records, else <org>-<repo>-<branch>, as earlier
+// releases ran every environment.
+func EnvProjectName(fs afero.Fs, hubPath, worktreePath, branch, org, repo string) string {
+	hopspace := hubPath
+	if hub, err := hop.LoadHub(fs, hubPath); err == nil {
+		hopspace = hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
+	}
+	if hopspace != "" {
+		if cfg, err := config.NewLoader(fs).LoadPortsConfig(hopspace); err == nil {
+			if e, ok := LookupEnvEntry(cfg, hopspace, hubPath, worktreePath, branch); ok && e.Project != "" {
+				return e.Project
+			}
+		}
+	}
+	return ComposeProjectName(org, repo, branch)
 }
