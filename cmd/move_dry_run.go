@@ -40,6 +40,10 @@ func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) moveResult {
 	}
 	output.Info("[dry-run] Would move worktree %s -> %s", p.oldPath, p.newPath)
 	output.Info("[dry-run] Would rekey '%s' to '%s' in hop.json, hopspace, state, ports and volumes", p.oldBranch, p.newBranch)
+	if gitflowEnabled(p.hubPath) && hasGitflowBranchConfig(g, p.hubPath, p.oldBranch) {
+		output.Info("[dry-run] Would move git config %s.* to %s.*",
+			gitflowBranchSection(p.oldBranch), gitflowBranchSection(p.newBranch))
+	}
 
 	res := moveResult{
 		OldBranch: p.oldBranch,

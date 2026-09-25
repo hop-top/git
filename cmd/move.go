@@ -140,6 +140,14 @@ var moveCmd = &cobra.Command{
 			output.Fatal("Failed to move worktree: %v", err)
 		}
 
+		// git branch -m rekeyed branch.<old>.*; git-flow's own per-branch
+		// config needs the same, or finish loses the recorded base.
+		if gitflowEnabled(hubPath) {
+			if _, err := rekeyGitflowBranchConfig(g, hubPath, oldBranch, newBranch); err != nil {
+				output.Warn("Failed to move git-flow config: %v", err)
+			}
+		}
+
 		res := moveResult{
 			OldBranch: oldBranch,
 			NewBranch: newBranch,
