@@ -83,8 +83,11 @@ git hop add &lt;branch&gt; [flags]
 | `--no-copy-ignored` | Skip that copy for this worktree |
 | `--env-start` | Start the new worktree's environment once it exists, through the same code as `git hop env start` |
 | `--no-env-start` | Do not start it, whatever `hop.env.autoStart` says |
+| `--fetch` | Run `git fetch origin` before resolving the start-point; a failed fetch is fatal |
+| `--no-fetch` | Do not fetch. Without either, `hop.add.fetch` decides; unset, add fetches (warning on failure) only when the start-point is an origin ref |
+| `--task <id>` | Record a task id for the worktree (metadata only); without `<branch>`, derive the branch from the task via `tlc` |
 
-Without either flag, `$GIT_HOP_AUTO_ENV_START` and then
+Without either env-start flag, `$GIT_HOP_AUTO_ENV_START` and then
 `git config hop.env.autoStart` (default `false`) decide. The start is
 skipped silently when the worktree has no environment; a failed start
 prints `warning:` and a `hint:` to run `git hop env start`, and add still
@@ -97,32 +100,33 @@ entries from the copy.
 
 ### git hop `&lt;branch&gt;`
 
-Create a worktree for a branch.
+Switch to an existing worktree: run `pre-worktree-switch`, point the hub's
+`current` symlink at the worktree, run `post-worktree-switch`. Creates
+nothing; [`git hop add`](#git-hop-add) does. The shell integration `cd`s
+into `current` afterwards.
 
 **Synopsis:**
 ```bash
-git hop &lt;branch&gt; [flags]
+git hop [-n] &lt;branch&gt;
 ```
 
-**Flags:**
-| Flag | Description |
-|------|-------------|
-| `--create` | Create branch if it doesn't exist |
-| `--force` | Force create even if conflicts exist |
+`&lt;branch&gt;` must be registered in the hub's `hop.json`. No flags of its
+own; `-n, --dry-run` names the hooks and the `current` target without
+running or writing anything.
 
 **Exit Codes:**
 | Code | Description |
 |------|-------------|
-| 0 | Success |
-| 1 | General error |
-| 2 | Not in a hub |
-| 3 | Branch not found |
+| 0 | Switched |
+| 1 | Branch not registered in the hub, not in a hub, or `pre-worktree-switch` aborted |
+| 93 | Switched; `post-worktree-switch` navigated itself (see [Exit Codes](#exit-codes)) |
+| 129 | Usage error: unknown flag |
 
 ### git hop
 
-Switch to (or list) worktrees. For machine-readable output use
-[`git hop list`](#structured-output) with `--json`, `--format` or
-`--porcelain`; bare `git hop` has no structured result.
+With no arguments, print help (as `git hop --help`) and exit 0. To see the
+worktrees, use `git hop list`; for machine-readable output, add `--json`,
+`--format` or `--porcelain` (see [Structured Output](#list)).
 
 **Synopsis:**
 ```bash
@@ -131,12 +135,18 @@ git hop [flags]
 
 ### git hop status
 
-Show detailed status of current worktree.
+Show the status of the current worktree or hub, or of `&lt;target&gt;`.
+Aliases: `st`, `info`.
 
 **Synopsis:**
 ```bash
-git hop status [flags]
+git hop status [&lt;target&gt;] [flags]
 ```
+
+**Flags:**
+| Flag | Description |
+|------|-------------|
+| `--all` | Show every tracked repository, its worktrees, configuration and resource use; works outside a hub |
 
 **Exit Codes:**
 | Code | Description |
@@ -146,18 +156,14 @@ git hop status [flags]
 
 ### git hop env start
 
-Start environment services.
+Start the current worktree's environment services. Alias: `up`.
 
 **Synopsis:**
 ```bash
-git hop env start [flags]
+git hop env start
 ```
 
-**Flags:**
-| Flag | Description |
-|------|-------------|
-| `--detach, -d` | Run services in detached mode |
-| `--build` | Rebuild images before starting |
+No flags of its own; `--dry-run` is refused.
 
 **Exit Codes:**
 | Code | Description |
@@ -168,17 +174,14 @@ git hop env start [flags]
 
 ### git hop env stop
 
-Stop environment services.
+Stop the current worktree's environment services. Alias: `down`.
 
 **Synopsis:**
 ```bash
-git hop env stop [flags]
+git hop env stop
 ```
 
-**Flags:**
-| Flag | Description |
-|------|-------------|
-| `--remove, -r` | Also remove containers |
+No flags of its own; `--dry-run` is refused.
 
 **Exit Codes:**
 | Code | Description |
@@ -186,31 +189,38 @@ git hop env stop [flags]
 | 0 | Success |
 | 1 | Service stop failed |
 
-### git hop env restart
+### git hop env generate
 
-Restart environment services.
+Write the current worktree's environment files (`.env`, compose override)
+without starting anything.
 
 **Synopsis:**
 ```bash
-git hop env restart [flags]
+git hop env generate
 ```
 
-Combines stop and start with same flags.
+No flags of its own; `--dry-run` is refused.
 
 ### git hop remove
 
 Remove a hub, hopspace, or branch.
 
+Aliases: `rm`, `delete`, `del`.
+
 **Synopsis:**
 ```bash
-git hop remove &lt;target&gt; [flags]
+git hop remove [&lt;target&gt;] [flags]
+git hop remove --merged [flags]
 ```
 
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--force` | Force removal without confirmation |
-| `--all` | Remove all hopspaces in hub |
+| `--force` | Global flag; allows removing a branch not merged into the default branch. Never covers a dirty worktree |
+| `--no-verify` | Allow removal despite uncommitted or untracked files or unpushed commits. Never covers an unmerged branch |
+| `--no-prompt` | Skip the confirmation prompt only; never bypasses the safety gate |
+| `--merged` | Remove every worktree whose branch is merged into the default branch (skips the default branch and the active worktree) |
+| `--delete-remote` | Also delete the branch on `origin`; without it removal stays local |
 
 **Exit Codes:**
 | Code | Description |

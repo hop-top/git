@@ -85,6 +85,7 @@ git hop add [&lt;branch&gt;] --task &lt;id&gt; [flags]
 | `--copy-ignored` / `--no-copy-ignored` | Copy the git-ignored local files from the fork-source worktree into the new one. Default follows `hop.add.copyIgnored` (`true`). |
 | `--task <id>` | Record a task id for the worktree as `branches.<branch>.task` in `hop.json`, export it to the add hooks as `GIT_HOP_TASK`, and include it as `task` in the `--format json` result. Metadata only: the id is never part of the branch name. Without `<branch>`, the branch is derived as `<type>/<slug>` from the task (see [Branch from a task](#branch-from-a-task)). |
 | `--env-start` / `--no-env-start` | Start the new worktree's environment once it exists, through the same code as `git hop env start`. Default follows `GIT_HOP_AUTO_ENV_START`, then `hop.env.autoStart` (`false`). Skipped silently when the worktree has no environment; a failed start prints a warning and a hint, and add still exits 0. The start's output goes to stderr, as `git hop env start`'s does. |
+| `--fetch` / `--no-fetch` | Run `git fetch origin` before resolving the start-point, or skip it. Default follows `hop.add.fetch`; unset, add fetches only when the start-point is an origin ref (the default branch or an explicit `origin/<branch>`). A requested fetch that fails is fatal; the automatic one only warns. |
 | `--dry-run` | Preview the branch, start-point, worktree path, task, hooks and environment start without writing anything or running any hook. |
 
 ### Examples
@@ -176,13 +177,18 @@ Worktree: ./hops/feature-x
 
 ## git hop `&lt;branch&gt;`
 
-Inside a hub: create a worktree for a branch.
+Inside a hub: switch to an existing worktree. Creates nothing; use
+[`git hop add`](#git-hop-add) for a new one.
 
 ### Usage
 
 ```bash
-git hop &lt;branch&gt; [flags]
+git hop [-n] &lt;branch&gt;
 ```
+
+`&lt;branch&gt;` must be a branch registered in the hub's `hop.json` (a row
+of `git hop list`). A registered name always wins, even one shaped like an
+`org/repo` clone shorthand (`feature/login`).
 
 ### Examples
 
@@ -190,34 +196,49 @@ git hop &lt;branch&gt; [flags]
 git hop feature-x
 ```
 
-```bash tab="From Remote"
-git hop origin/pr-123
-```
-
-```bash tab="Local Branch"
-git hop my-local-branch
+```bash tab="Preview"
+git hop -n feature-x
 ```
 
 ### What Happens
 
-1. Validates current directory is a hub
-2. Creates hopspace (if missing) under `$GIT_HOP_DATA_HOME/org/repo`
-3. Creates worktree for specified branch
-4. Generates deterministic ports and volumes
-5. Leaves the environment alone; start it with `git hop env start`
+1. Finds the hub above the current directory
+2. Runs the `pre-worktree-switch` hook; a non-zero exit aborts the switch
+3. Points the hub's [`current` symlink](./current-symlink) at the worktree
+4. Runs the `post-worktree-switch` hook; a failure only warns
+5. Prints the worktree path
+
+The binary cannot change its parent shell's directory. The
+[shell integration](./shell-integration) wrapper does: after a
+successful switch it `cd`s into the worktree `current` points at.
+Without it, `cd` there yourself.
+
+Ports, volumes and the environment are left as they are; start it with
+`git hop env start`.
+
+`-n`, `--dry-run` names the hooks that would run and the `current` target,
+then stops: no hook runs and `current` is not written.
 
 ### Output
 
 ```
-Created hopspace for 'feature-x'
-Worktree: ./feature-x
-Ports: 11500-11505
-Services: api, db, cache
+Switched to worktree 'feature-x'
+Path: /path/to/hub/hops/feature-x
 ```
+
+### Exit status
+
+| Code | Meaning |
+|------|---------|
+| 0 | Switched |
+| 1 | Branch not registered in the hub (`fatal: Worktree '<branch>' does not exist. Use 'git hop add <branch>' to create it.`), not in a hub, or `pre-worktree-switch` aborted |
+| 93 | Switched, and `post-worktree-switch` reported that it navigated itself; the shell wrapper treats it as 0 and skips its `cd`. See [the navigation-handled directive](./hooks#the-navigation-handled-directive-exit-93) |
+| 129 | Usage error (unknown flag) |
 
 ## git hop
 
-List all hopspaces in the current hub.
+With no arguments, prints help, as `git hop --help` does, and exits 0.
+To see the worktrees, use [`git hop list`](#git-hop-list).
 
 ### Usage
 
@@ -225,23 +246,21 @@ List all hopspaces in the current hub.
 git hop [flags]
 ```
 
-### Examples
+## git hop list
+
+List the worktrees git-hop tracks: the current repository's inside a hub,
+every tracked repository's outside one. Aliases: `ls`, `all`.
+
+### Usage
 
 ```bash
-git hop
+git hop list [flags]
 ```
 
-For machine-readable output use `git hop list --json` (or `--format`,
-`--porcelain`); see [Structured Output](./09-reference#structured-output).
-
-### Output
-
-```
-Branch        Path                Status    Ports        Services
-────────────────────────────────────────────────────────────────
-main          ./main              active    10100-10102  api, db
-feature-x     ./feature-x         active    11500-11503  api, db, cache
-```
+Each row carries the branch, its base, the worktree type, path, state
+(`active` or `missing`) and the sync status `git hop status` reports.
+For machine-readable output use `--json`, `--format` or `--porcelain`;
+see [Structured Output](./09-reference#list).
 
 ## git hop status
 
@@ -254,7 +273,9 @@ git hop status [target] [flags]
 ```
 
 With a `target`, shows that worktree's state instead of the current one
-(inside a hub only).
+(inside a hub only). `--all` shows every tracked repository, its
+worktrees, configuration and resource use, and works outside a hub.
+Aliases: `st`, `info`.
 
 ### Examples
 
@@ -392,12 +413,14 @@ Environment Manager: docker-compose
   Environment stopped successfully
 ```
 
-#### restart
+#### generate
 
-Restart services for current worktree.
+Write the current worktree's environment files (`.env` and, for a
+compose file with hardcoded host ports, the compose override) without
+starting anything. A worktree with no Docker environment is skipped.
 
 ```bash
-git hop env restart
+git hop env generate
 ```
 
 #### gc
@@ -983,12 +1006,6 @@ remains, doctor prompts for one of: provide a new path, delete the
 entry, or skip. Deleting or relocating the entry at the prompt also
 releases the row.
 
-### Flags
-
-| Flag | Description |
-|------|-------------|
-| `--fix` | Automatically fix issues |
-
 ## git hop repair
 
 Safely repair stale worktree metadata (gitdir pointers, hop.json, git
@@ -1035,9 +1052,10 @@ git hop repair -n --porcelain
 | `--porcelain` | Stable tab-separated output for scripts (also `--json` and `--format`: `json`, `yaml`, `csv`, `text`) |
 | `--undo[=<id>]` | Restore from backup (most recent if no id). Refused with exit 129 under `--json`/`--format`/`--porcelain` |
 | `--list-backups` | List available backups, one per line (id, timestamp, action count; tab-separated). Refused with exit 129 under `--json`/`--format`/`--porcelain` |
-| `--no-backup` | Skip the safety backup (requires `-f`) |
+| `--no-backup` | Skip the safety backup (requires `--force`) |
 | `--force-dirty` | Allow repair when worktrees have uncommitted changes |
-| `-f`, `--force` | Bypass safety checks (combined with `--no-backup`) |
+| `--force` | Bypass safety checks (combined with `--no-backup`) |
+| `--base` | Infer and record the base branch of `hop.json` entries that lack one (best-effort heuristic; preview with `-n`) |
 | `--[no-]progress` | Progress on stderr while checking the worktrees to repair and applying the fixes, in git's `<step>: NN% (x/y)` form. By default shown only when stderr is a terminal, and never under `-q` or a structured format. `--progress` forces it on (even with `-q`), `--no-progress` off; the last one given wins |
 | `--color[=<when>]` | Colour of the human output: `always` (also bare `--color`), `auto` (default: only on a terminal, off under `NO_COLOR`) or `never`. Any other value is refused with exit 129. The global `--no-color` wins over it |
 
@@ -1135,7 +1153,23 @@ Convert an existing repository to the hub + worktrees layout.
 
 ```bash
 git hop init [--no-prompt] [--regular] [-n|--dry-run] [--force] [--keep-backup]
+git hop init --restore &lt;backup-path&gt; [--force]
 ```
+
+Aliases: `setup`, `install`.
+
+| Flag | Description |
+|------|-------------|
+| `--no-prompt` | Skip the menu and convert non-interactively (bare unless `--regular`). Without it, a run with nothing readable on stdin fails rather than waiting |
+| `--regular` | Convert to a regular repo + worktrees instead of bare (with `--no-prompt`) |
+| `-n`, `--dry-run` | Show the conversion steps without executing them |
+| `--force` | Convert despite uncommitted changes (a backup is still taken); with `--restore`, move what occupies the original location aside (never deleted) |
+| `--keep-backup` | Keep the conversion backup after success (default: `hop.backup.keepBackup`) |
+| `--restore <path>` | Restore the conversion backup at `<path>` to the location it was taken from (manual rollback) |
+| `--hooks <mode>` | Mirror committed `.git-hop/hooks/` into the hopspace: `symlink`, `copy`, `prompt` or `none` (overrides `--no-hooks`) |
+| `--hooks-overwrite` | Overwrite a hopspace hook whose content differs (`symlink` and `copy` modes) |
+| `--no-hooks` | Skip hooks: no `.git-hop/hooks/` directory, no lifecycle hook runs |
+| `--enable-chdir` | Install the shell integration for automatic directory switching after hop commands |
 
 Run in a hub (a bare repository, a regular repository with `hop.json`,
 or one of their worktrees), `init` reports it as already initialized.
@@ -1322,18 +1356,53 @@ reports the same refusal. When a paused operation detached HEAD (a
 rebase, most often), the hint says how to finish or abort that
 operation instead.
 
+## git hop move
+
+Rename a worktree and its branch. Aliases: `rename`, `mv`.
+
+### Usage
+
+```bash
+git hop move [&lt;old-branch&gt;] &lt;new-branch&gt;
+```
+
+With one argument, renames the current worktree's branch. Runs the
+`pre-worktree-move` and `post-worktree-move` hooks.
+
+## git hop merge
+
+Merge a worktree's branch into a receiving branch, then remove the source
+worktree and its local branch and point `current` at the receiving
+branch's worktree.
+
+### Usage
+
+```bash
+git hop merge [&lt;source-branch&gt;] &lt;into-branch&gt; [flags]
+```
+
+With one argument, the current branch is the source.
+
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--no-ff` | Create a merge commit even when a fast-forward is possible |
+| `--delete-remote` | Also delete the source branch on `origin`. Without it merge stays local and never contacts the network. Default follows `hop.merge.deleteRemote` |
+
 ## Command Aliases
 
 Many commands have shorter aliases for convenience:
 
 | Command | Aliases | Description |
 |---------|---------|-------------|
-| `list` | `ls`, `all` | List hubs, hopspaces, and branches |
+| `list` | `ls`, `all` | List all managed worktrees |
 | `add` | `create`, `new` | Add a new worktree and environment |
 | `remove` | `rm`, `delete`, `del` | Remove a hub, hopspace, or branch |
 | `status` | `st`, `info` | Show the working tree status |
 | `prune` | `cleanup`, `clean` | Remove orphaned data |
 | `doctor` | `check` | Check and report environment issues |
+| `move` | `rename`, `mv` | Rename a worktree and its branch |
 | `repair` | — | Safely repair stale worktree metadata with backup + undo |
 | `init` | `setup`, `install` | Initialize git-hop repository structure |
 | `env start` | `env up` | Start environment services |
