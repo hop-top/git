@@ -38,11 +38,11 @@ git hop file:///path/to/local/repo
 3. Creates hopspace under `$GIT_HOP_DATA_HOME/org/repo`
 4. Clones repo into hopspace (default branch only)
 5. Symlinks worktree back into hub
-6. Generates the worktree's deterministic ports and volumes, as add does:
+6. Sets up the worktree as add does: deterministic ports and volumes,
    `.env` and, for a compose file with hardcoded host ports, the compose
-   override. This happens before the `post-worktree-add` and `post-clone`
-   hooks, so both see them. A generation failure is reported; the clone
-   still succeeds
+   override, then shared dependencies. This happens before the
+   `post-worktree-add` and `post-clone` hooks, so both see them. A set-up
+   failure is reported; the clone still succeeds
 7. After `post-clone`, starts the new worktree's environment only when
    asked: `--env-start`, `GIT_HOP_AUTO_ENV_START=true`, or
    `hop.env.autoStart` (default `false`). `--no-env-start` skips it for one

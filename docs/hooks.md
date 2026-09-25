@@ -21,7 +21,7 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | `pre-worktree-switch` | `git hop <branch>`, before the `current` symlink is rewritten. Non-zero exit aborts the switch. **Never fires for a plain `cd`** — see [Switch hooks](#switch-hooks). | repo, hopspace, global |
 | `post-worktree-switch` | `git hop <branch>` after the symlink is written, and on a plain `cd` into a registered worktree. Failure warns. The only hook that may exit [93](#the-navigation-handled-directive-exit-93). | repo, hopspace, global |
 | `pre-clone` | `git hop clone`, before any filesystem work. Non-zero exit aborts the clone. | hopspace, global **only** — no repo level and no parent walk; see [`pre-clone` has no repo level](#pre-clone-has-no-repo-level) |
-| `post-clone` | `git hop clone`, after state, symlink, mirror, the initial worktree's environment generation, and `post-worktree-add`: its `.env` and compose override exist when the hook runs. The optional environment start (`--env-start`, `hop.env.autoStart`) comes after it. Failure warns. | repo, hopspace, global |
+| `post-clone` | `git hop clone`, after state, symlink, mirror, the initial worktree's environment set-up, and `post-worktree-add`: its `.env`, compose override and linked shared deps exist when the hook runs. The optional environment start (`--env-start`, `hop.env.autoStart`) comes after it. Failure warns. | repo, hopspace, global |
 | `pre-repair` | `git hop repair`, before the backup and any mutation; only when the plan has mutations and `--dry-run` was not passed. Non-zero exit aborts. See [Repair hooks](#repair-hooks). | repo (anchored on the hub: `<hub>/.git-hop/hooks/`, plus parent walk), hopspace, global |
 | `post-repair` | `git hop repair`, after mutations and post-verification. Exit status ignored entirely. | repo (anchored on the hub), hopspace, global |
 | `pre-env-start` | **Never dispatched.** Accepted by `ValidateHookName` and mirrored by the installer, but no code fires it. | — |
@@ -267,7 +267,7 @@ The `.env` and override exist only for a worktree with a Docker environment (a c
 pre-clone
   ↓  (clone; hopspace init; state; current symlink)
 committed-hook mirror
-  ↓  (environment generation: ports, volumes, .env, compose override)
+  ↓  (environment set-up: ports, volumes, .env, compose override, shared deps)
 post-worktree-add
   ↓
 post-clone
@@ -276,7 +276,7 @@ post-clone
 
 Dispatched from `internal/hop/clone_worktree.go`. Because `internal/hooks` already imports `internal/hop` (for `LooksLikeGitCheckout`), `internal/hop` cannot import `internal/hooks` back without an import cycle — so the dispatch is injected as callbacks (`HookDispatchOptions`), built by `BuildHookDispatch` in `internal/cli/root.go`. `git hop init` reuses the same builder — see [Init hooks](#init-hooks).
 
-The environment is generated before `post-worktree-add`, as `git hop add` sets up before its own `post-worktree-add`, so both `post-worktree-add` and `post-clone` can read the allocated ports from the worktree's `.env`. A generation failure is reported and the clone continues; both hooks still fire. The generation is injected like the hooks (`HookDispatchOptions.SetUpEnv`) and is not itself a hook. The [behaviour change](#add-hooks) noted for add applies here too.
+The environment is set up before `post-worktree-add` through the same function as `git hop add` (`services.SetUpWorktree`), so both `post-worktree-add` and `post-clone` can read the allocated ports from the worktree's `.env` and find its shared deps linked. A set-up failure is reported and the clone continues; both hooks still fire. The set-up is injected like the hooks (`HookDispatchOptions.SetUpEnv`) and is not itself a hook. The [behaviour change](#add-hooks) noted for add applies here too.
 
 ### Why mirror-then-fire
 
@@ -966,7 +966,7 @@ to a JSONL file.
 | `git.runtime.worktree.switched` | `git hop <branch>` | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.env.started` / `git.runtime.env.stopped` | `git hop env start` / `stop` | `action`, `root`, `branch` |
 | `git.runtime.hopspace.initialized` | `git hop init` | `path`, `org`, `repo` |
-| `git.runtime.deps.installed` | `git hop add`, after dependency install | `worktree_path`, `branch` |
+| `git.runtime.deps.installed` | `git hop add` (after `worktree.created`) and `git hop clone`, after dependency install | `worktree_path`, `branch` |
 
 `hopspace_path` is the same for every worktree event of a hub: the hub
 itself for a default clone (so it equals `repo_path`), or

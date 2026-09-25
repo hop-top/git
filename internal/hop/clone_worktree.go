@@ -59,8 +59,8 @@ type HookDispatchOptions struct {
 	// worktree.
 	PostClone func(path, repoID, branch string) error
 	// SetUpEnv is not a hook: it prepares the initial worktree's
-	// environment (ports, volumes, .env, compose override) for the hub at
-	// hubPath. It runs before PostWorktreeAdd, as add sets up before its
+	// environment (ports, volumes, .env, compose override, shared deps)
+	// for the hub at hubPath. It runs before PostWorktreeAdd, as add sets up before its
 	// own post-worktree-add, so every hook of the initial worktree sees
 	// the environment. It reports its own failures and never fails the
 	// clone.
