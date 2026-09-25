@@ -453,9 +453,9 @@ git-hop automatically injects `${API_PORT}` and `${DB_PORT}` based on branch all
 
 ```bash
 make build          # Build the binary
-make install        # Install to /usr/local/bin
-make test           # Run tests
-make lint           # Run linter
+make install        # Install to $GOBIN (default: $(go env GOPATH)/bin)
+make test           # Run internal/ package tests
+make lint           # Run go vet + staticcheck
 make fmt            # Format code
 make clean          # Clean build artifacts
 ```
@@ -480,19 +480,16 @@ git-hop/
 
 ### Contributing
 
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature-name`
-3. Make changes and add tests
-4. Run tests: `make test`
-5. Commit with clear messages
-6. Push and open a pull request
+See [CONTRIBUTING.md](CONTRIBUTING.md) for toolchain, the CI steps to run locally,
+commit conventions, and the release flow.
 
 ### Running Tests
 
 ```bash
-make test              # Run all tests
-go test ./cmd -v      # Test specific package
-go test -run TestName  # Run specific test
+go test ./...          # Full suite (what CI runs)
+make test              # internal/ packages only
+go test ./cmd -v       # Test specific package
+go test -run TestName ./...  # Run specific test
 ```
 
 The default `go test ./...` covers tier-1 (unit) and tier-2 (local-git
@@ -555,8 +552,8 @@ State and config files remain for recovery if needed.
 
 ## Support
 
-- **Issues**: Report bugs at [GitHub Issues](https://github.com/jadb/git-hop/issues)
-- **Discussions**: Ask questions at [GitHub Discussions](https://github.com/jadb/git-hop/discussions)
+- **Issues**: Report bugs at [GitHub Issues](https://github.com/hop-top/git/issues)
+- **Security**: Report privately per the [security policy](https://github.com/hop-top/.github/blob/main/SECURITY.md)
 - **Documentation**: See [docs/](docs/) directory for guides and troubleshooting
 
 ## License
