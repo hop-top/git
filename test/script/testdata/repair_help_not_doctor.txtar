@@ -1,0 +1,46 @@
+# `git hop repair` is its own command, not an alias for `git hop doctor`.
+#
+# Ported from TestRepair_DoctorAliasGone in the Go e2e suite.
+#
+# The two commands were once the same thing, and the failure mode this
+# guards is a regression back to that: repair silently re-acquiring doctor's
+# help text, its flags, or its behaviour. Help text is the cheapest place to
+# catch it, because an alias inherits the parent's Short/Long verbatim.
+#
+# Asserting only "repair --help mentions stale worktrees" would not catch
+# it -- an alias could grow that sentence too. The assertion that matters is
+# the pair: repair describes ITSELF and does NOT describe doctor, while
+# doctor still describes doctor. If repair were an alias, both would print
+# the same text and the negative assertion would fail.
+#
+# No repository is needed: --help is answered by the command tree before any
+# hub lookup happens.
+
+exec git-hop repair --help
+stdout 'Repair stale worktree metadata'
+stdout 'gitdir pointers, hop\.json, git registry'
+
+# repair's own flags, which doctor does not have.
+stdout '--list-backups'
+stdout '--undo'
+stdout '-n, --dry-run'
+
+# doctor's Short must not appear here.
+! stdout 'Check and repair the environment'
+
+# --- doctor is still its own command, and still says its own thing ---
+# This half is what turns the negative assertion above into evidence: the
+# doctor string exists in the binary, it is simply attached to the other
+# command. Without it, deleting doctor entirely would also satisfy the
+# negative assertion.
+#
+# Each command's Short surfaces in the root command list, so the two rows
+# there are the cleanest side-by-side proof that these are two commands
+# with two descriptions rather than one command under two names.
+exec git-hop --help
+stdout 'doctor\s+Check and repair the environment'
+stdout 'repair\s+Safely repair stale worktree metadata'
+
+exec git-hop doctor --help
+stdout 'Run diagnostics on git-hop installation and project setup'
+! stdout 'Repair stale worktree metadata'

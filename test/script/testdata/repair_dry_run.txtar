@@ -1,0 +1,101 @@
+# `git hop repair -n` previews without touching anything.
+#
+# Ported from TestRepair_Healthy_NoOp, TestRepair_DryRun_NoMutation,
+# TestRepair_ListBackups_Empty and TestRepair_Porcelain_StableFormat in the
+# Go e2e suite. Those cover the *preview* contract, which is disjoint from
+# what repair_base_inference.txtar covers (--base back-fill) and from
+# repair_legacy_refspec.txtar (fetch refspec recovery).
+#
+# The contract has three halves and the script pins all three:
+#   - a healthy hub plans nothing but noops
+#   - a broken hub is DETECTED but not FIXED, and leaves no backup behind
+#     (a dry run that took a backup would already have mutated the tree)
+#   - --porcelain emits stable tab-separated rows, not prose
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/base.txt base.txt
+exec git add base.txt
+exec git commit -m 'initial'
+exec git push origin main
+exec git checkout -b feature
+cp $WORK/feature.txt feature.txt
+exec git add feature.txt
+exec git commit -m 'feature work'
+exec git push origin feature
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature
+
+# --- healthy hub: nothing to do ---
+# Asserting the absence of every mutating verb is the point. "Contains
+# noop" alone would still pass if repair ALSO planned a rewrite.
+exec git-hop repair -n
+stdout 'noop\s+.*/hub/hops/feature: ok$'
+stdout 'noop\s+.*/hub/hops/main: ok$'
+! stdout 'rewrite-gitdir'
+! stdout 'register'
+! stdout 'unregister'
+
+# --- no backups have been taken yet ---
+exec git-hop repair --list-backups
+stdout '\(no backups\)'
+
+# --- break the worktree's gitdir pointer ---
+# A worktree's .git is a file holding `gitdir: <path>`. Pointing it at a
+# path that does not exist is exactly the stale-metadata shape repair is
+# built to recover, and it is reversible by rewriting one file.
+cp $WORK/stale-gitdir $WORK/hub/hops/feature/.git
+grep '^gitdir: /nope/missing$' $WORK/hub/hops/feature/.git
+
+# --- detection: the dry run names the fix it would apply ---
+exec git-hop repair -n
+stdout 'rewrite-gitdir\s+.*/hub/hops/feature: stale \.git pointer'
+
+# --- and does not apply it ---
+# The pointer is still the broken one written above. If repair had "helpfully"
+# fixed it, this grep fails.
+grep '^gitdir: /nope/missing$' $WORK/hub/hops/feature/.git
+
+# A dry run must not take a backup either: backups are a side effect of
+# mutating, so their presence would mean the tree was written to. Repair
+# keeps its lock and backups under the state dir, never in the hub, so
+# neither place may have gained anything.
+! exists $WORK/hub/.hop
+exec find $WORK/.local/state/git-hop/repair
+! stdout 'manifest\.json'
+! stdout 'repair\.lock'
+! stdout '/backups'
+exec git-hop repair --list-backups
+stdout '\(no backups\)'
+
+# --- porcelain: stable tab-separated rows on stdout ---
+# The Go test asserted every non-empty line carried at least two tabs. The
+# same guarantee stated positively: each row is
+#   <status> \t <worktree path> \t <action> \t <old value> \t <new value>
+# Matching the columns in order pins their ORDER and their CONTENT, neither
+# of which a tab count can.
+#
+# The status column reads `repaired` for any planned non-noop action even
+# under -n: the plan printer is shared between preview and apply, so the
+# column describes the action's kind, not whether it ran. The three
+# assertions above -- unchanged pointer, no backups dir, still "(no
+# backups)" -- are what establish the dry run really did not mutate.
+exec git-hop repair -n --porcelain
+stdout '^repaired\t.*/hub/hops/feature\trewrite-gitdir\t/nope/missing\t'
+stdout '^ok\t.*/hub/hops/main\tnoop\t'
+# And no row of any other shape: every line carries at least two tabs.
+! stdout '^[^\t\n]+(\t[^\t\n]*)?$'
+# Prose belongs to the human view only; porcelain must not carry it.
+! stdout 'Repair plan for'
+! stdout ': ok$'
+
+-- base.txt --
+base line
+-- feature.txt --
+feature line
+-- stale-gitdir --
+gitdir: /nope/missing
