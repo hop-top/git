@@ -58,9 +58,19 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	self, found := recs.Self(hopspacePath, hubPath, worktreePath, branch)
 	keep := keptPorts(recs, self, found)
 
+	key := EnvRecordKey(hopspacePath, hubPath, worktreePath, branch)
+	if volsCfg.BasePath == "" {
+		volsCfg.BasePath = filepath.Join(hopspacePath, "volumes")
+	}
+
 	manager := NewEnvManager(fs, portsCfg, volsCfg, d)
 	manager.Ports.Keep = keep
 	manager.Ports.Reserved = recs.Reserved(self)
+	manager.Volumes.Keep = keptVolumes(recs, volsCfg, self, found, key)
+	if hubPath != "" && !state.SamePath(hopspacePath, hubPath) {
+		// Hubs sharing a --global hopspace share its volumes directory.
+		manager.Volumes.Dir = filepath.Join(volsCfg.BasePath, HubKey(hubPath))
+	}
 	if hubPath != "" {
 		manager.OverrideDir = HubOverrideDir(org, repo, hubPath, branch)
 		manager.Ports.Seed = org + "/" + repo + "/" + HubKey(hubPath) + "/" + branch
@@ -83,7 +93,6 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	if volsCfg.Branches == nil {
 		volsCfg.Branches = make(map[string]config.BranchVolumes)
 	}
-	key := EnvRecordKey(hopspacePath, hubPath, worktreePath, branch)
 	if found && self.Key != key {
 		// The branch-keyed entry an earlier release wrote in a shared
 		// hopspace moves under this worktree's key.
@@ -138,4 +147,34 @@ func projectFor(self EnvClaim, kept bool, org, repo, hubPath, branch string) str
 		return ComposeProjectName(org, repo, branch)
 	}
 	return HubComposeProjectName(org, repo, hubPath, branch)
+}
+
+// keptVolumes returns the volume directories the worktree keeps: those
+// its entry records (under its key, else the key its ports.json entry was
+// found under), whatever happens to its ports, except one a hub set up
+// earlier records too. Earlier releases gave every worktree of a branch
+// one fallback directory (<data>/volumes/<branch>/<name>), and every
+// --global hub of a repository one hopspace volumes directory; the hub
+// set up first keeps such a directory and its data, the other gets a new
+// one, with a warning. No directory is ever moved or deleted.
+func keptVolumes(recs *EnvRecords, cfg *config.VolumesConfig, self EnvClaim, found bool, key string) map[string]string {
+	var recorded map[string]string
+	if e, ok := cfg.Branches[key]; ok {
+		recorded = e.Volumes
+	} else if found {
+		recorded = cfg.Branches[self.Key].Volumes
+	}
+	if len(recorded) == 0 {
+		return nil
+	}
+	keep := make(map[string]string, len(recorded))
+	for name, dir := range recorded {
+		keep[name] = dir
+	}
+	for _, c := range recs.VolumeConflicts(self, recorded) {
+		output.Warn("volume %s (%s) is also used by %s of %s, set up first; using a new directory",
+			c.Name, c.Path, c.Other.Branch, c.Other.Hub)
+		delete(keep, c.Name)
+	}
+	return keep
 }

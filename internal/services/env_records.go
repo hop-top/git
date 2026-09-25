@@ -38,6 +38,9 @@ type EnvClaim struct {
 	WorktreePath string
 	Org, Repo    string
 	Entry        config.BranchPorts
+	// Volumes are the volume directories volumes.json records under the
+	// same key, by volume name.
+	Volumes map[string]string
 }
 
 // before orders claims to one port: the claim of the hub created first
@@ -137,13 +140,18 @@ func LoadEnvRecords(fs afero.Fs, currentHub string) (*EnvRecords, error) {
 		if lerr != nil {
 			continue
 		}
+		vols, _ := loader.LoadVolumesConfig(h.Hopspace)
 		keys := make([]string, 0, len(cfg.Branches))
 		for k := range cfg.Branches {
 			keys = append(keys, k)
 		}
 		sort.Strings(keys)
 		for _, k := range keys {
-			r.Claims = append(r.Claims, r.claim(h.Hopspace, k, cfg.Branches[k]))
+			c := r.claim(h.Hopspace, k, cfg.Branches[k])
+			if vols != nil {
+				c.Volumes = vols.Branches[k].Volumes
+			}
+			r.Claims = append(r.Claims, c)
 		}
 	}
 	return r, err
@@ -409,4 +417,49 @@ func dropEnvEntries(fs afero.Fs, hopspacePath string, drop func(string, config.B
 		delete(vols.Branches, k)
 	}
 	return writer.WriteVolumesConfig(hopspacePath, vols)
+}
+
+// VolumeConflict is a volume directory a worktree records that an
+// earlier claim records too.
+type VolumeConflict struct {
+	Name, Path string
+	Other      EnvClaim
+}
+
+// VolumeConflicts returns the directories of volumes, by name, that a
+// claim ordered before self (EnvClaim.before) records too: earlier
+// releases gave every worktree of a branch the same fallback directory.
+func (r *EnvRecords) VolumeConflicts(self EnvClaim, volumes map[string]string) []VolumeConflict {
+	var out []VolumeConflict
+	for _, name := range sortedKeys(volumes) {
+		path := volumes[name]
+		for _, c := range r.Claims {
+			if c.same(self) || !c.before(self) {
+				continue
+			}
+			if holdsDir(c.Volumes, path) {
+				out = append(out, VolumeConflict{Name: name, Path: path, Other: c})
+				break
+			}
+		}
+	}
+	return out
+}
+
+func holdsDir(dirs map[string]string, dir string) bool {
+	for _, d := range dirs {
+		if state.SamePath(d, dir) {
+			return true
+		}
+	}
+	return false
+}
+
+func sortedKeys(m map[string]string) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
