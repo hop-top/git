@@ -19,6 +19,9 @@ Checks:
   not record, or records without some of its worktrees, is invisible to
   list, status --all and prune --all (--fix records it, merging with
   state and never overwriting an entry)
+- A managers.json that cannot be read or parsed: every command skips it
+  with a warning, so its managers do not apply; an issue --fix cannot
+  repair
 - --global hop.* keys the old global.json migration wrote but the user
   never set (--fix unsets them)
 - Retired hop.* settings (hop.autoEnvStart, hop.bareRepo and the other
