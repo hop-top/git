@@ -238,7 +238,7 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 			}
 			install := allYes
 			if !install {
-				answer, err := promptInstall(fs, reader, promptOut, name, srcPath, dstPath, dstExists)
+				answer, err := promptInstall(fs, opts.Stdin, reader, promptOut, name, srcPath, dstPath, dstExists)
 				if err != nil {
 					return res, fmt.Errorf("prompt: %w", err)
 				}
@@ -354,9 +354,13 @@ func filesIdentical(fs afero.Fs, a, b string) (bool, error) {
 	return bytes.Equal(dataA, dataB), nil
 }
 
-// promptInstall asks the user whether to install a hook. Returns one of
-// "y", "n", "a", "s" (or "d" for diff which loops).
-func promptInstall(fs afero.Fs, reader *bufio.Reader, stdout io.Writer, name, srcPath, dstPath string, dstExists bool) (string, error) {
+// promptInstall asks the user whether to install a hook, reading the
+// answer through reader, the buffered view of in. Returns one of "y",
+// "n", "a", "s" (a "d" for diff shows it and asks again). The prompt's
+// line is ended the way output's prompts end theirs
+// (output.EndPromptLine), so what follows a piped answer or an EOF starts
+// on its own line.
+func promptInstall(fs afero.Fs, in io.Reader, reader *bufio.Reader, stdout io.Writer, name, srcPath, dstPath string, dstExists bool) (string, error) {
 	for {
 		if dstExists {
 			fmt.Fprintf(stdout, "Hook %s already exists in hopspace with different content.\n", name)
@@ -366,6 +370,7 @@ func promptInstall(fs afero.Fs, reader *bufio.Reader, stdout io.Writer, name, sr
 			fmt.Fprintf(stdout, "Install hook %s? [y/N/a/s] (y=yes, n=no, a=all-yes, s=skip-all): ", name)
 		}
 		line, err := reader.ReadString('\n')
+		output.EndPromptLine(stdout, in, line)
 		if err != nil && line == "" {
 			return "", err
 		}

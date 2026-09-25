@@ -2,6 +2,7 @@ package output
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 )
@@ -20,9 +21,9 @@ func withPromptOut(t *testing.T) *bytes.Buffer {
 // echoes the answer and its Enter.
 func withTerminalStdin(t *testing.T) {
 	t.Helper()
-	prev := promptInIsTerminal
-	promptInIsTerminal = func() bool { return true }
-	t.Cleanup(func() { promptInIsTerminal = prev })
+	prev := isTerminal
+	isTerminal = func(io.Reader) bool { return true }
+	t.Cleanup(func() { isTerminal = prev })
 }
 
 // promptCases runs each prompt type; tail is what its output must end
@@ -104,5 +105,32 @@ func TestChoiceAnswer_PipedRetryOnItsOwnLine(t *testing.T) {
 	want := "Choose [1/2]: \nInvalid choice. Please try again.\nChoose [1/2]: \n"
 	if out.String() != want {
 		t.Errorf("output %q, want %q", out, want)
+	}
+}
+
+// EndPromptLine applies the rule to a reader of the caller's own, as
+// prompts outside this package read their answers from one.
+func TestEndPromptLine(t *testing.T) {
+	tests := []struct {
+		answer   string
+		terminal bool
+		want     string
+	}{
+		{"y\n", false, "\n"},
+		{"y", false, "\n"},
+		{"", false, "\n"},
+		{"y\n", true, ""},
+		{"y", true, "\n"},
+		{"", true, "\n"},
+	}
+	for _, tt := range tests {
+		if tt.terminal {
+			withTerminalStdin(t)
+		}
+		var out bytes.Buffer
+		EndPromptLine(&out, strings.NewReader(tt.answer), tt.answer)
+		if out.String() != tt.want {
+			t.Errorf("answer %q, terminal=%v: wrote %q, want %q", tt.answer, tt.terminal, out.String(), tt.want)
+		}
 	}
 }
