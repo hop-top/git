@@ -150,9 +150,6 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord
 	if stErr == nil && st.Repositories[repoID] != nil {
 		output.Info("[dry-run] Would remove %s", stateRemoval(repoID, hubPath, otherHubsInState(st, repoID, hubPath)))
 	}
-	for _, key := range hop.LoadRegistry(fs).HubKeys(hubPath, hubWorktreePaths(hub, hubPath)) {
-		output.Info("[dry-run] Would remove '%s' from the hops registry", key)
-	}
 	d := dataHomeHopspaceFor(fs, st, stErr, hub, hubPath)
 	switch {
 	case !d.exists:

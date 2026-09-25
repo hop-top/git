@@ -227,6 +227,14 @@ nothing; `git hop doctor` warns while it exists, and never deletes it,
 `--fix` included. To keep a value it held, set the matching `hop.*` key,
 then delete the file by hand.
 
+### `hops.json` is retired
+
+Earlier releases kept a hub registry in `$XDG_CONFIG_HOME/git-hop/hops.json`,
+written on clone and init. git-hop no longer writes or reads it: state
+(`$XDG_STATE_HOME/git-hop/state.json`) records every hub and worktree. A
+`hops.json` left there changes nothing; `git hop doctor` warns while it
+exists and never deletes it, `--fix` included. Delete it by hand.
+
 git-hop's own `-c`/`--config` flag is ignored too. It is still accepted, so
 scripts that pass it keep running with their usual exit status, but each run
 that passes it prints a `warning:` on stderr, even with `-q`. For a one-off

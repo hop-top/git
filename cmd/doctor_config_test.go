@@ -271,3 +271,34 @@ func TestDoctorConfig_UnusedConfigJSON(t *testing.T) {
 		assert.Equal(t, body, string(got), "opts %+v changed config.json", opts)
 	}
 }
+
+// git-hop no longer keeps a hub registry in hops.json; state records every
+// hub and worktree. A hops.json an earlier release left in the config
+// directory is reported as a warning in every mode, and never deleted.
+func TestDoctorConfig_UnusedHopsJSON(t *testing.T) {
+	e := newRetiredConfigEnv(t)
+	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "git-hop", "hops.json")
+	assert.Empty(t, configRecords(e.doctor(doctorOpts{}), doctorKindWarning)[path], "no hops.json")
+
+	const body = `{"hops": {"acme/widget:main": {"repo": "acme/widget", "branch": "main", "path": "/hub/hops/main"}}}`
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+	for _, opts := range []doctorOpts{{}, {fix: true, dryRun: true}, {fix: true}} {
+		r := e.doctor(opts)
+		warnings := configRecords(r, doctorKindWarning)
+		require.Len(t, warnings[path], 1, "opts %+v, records: %+v", opts, r.records)
+		msg := warnings[path][0].Message
+		assert.Contains(t, msg, "not used")
+		assert.Contains(t, msg, "state")
+		assert.Contains(t, msg, "delete")
+		for _, kind := range []string{doctorKindIssue, doctorKindFixed, doctorKindWouldFix, doctorKindFailed} {
+			assert.Empty(t, configRecords(r, kind)[path], "opts %+v: %s record for hops.json", opts, kind)
+		}
+		assert.Equal(t, 0, cli.ExitCode(doctorResult(r)), "opts %+v", opts)
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err, "opts %+v removed hops.json", opts)
+		assert.Equal(t, body, string(got), "opts %+v changed hops.json", opts)
+	}
+}

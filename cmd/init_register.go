@@ -11,7 +11,7 @@ import (
 )
 
 // registerConvertedHub records a just-converted repository in git-hop's
-// registry and state, as clone does for a new hub, so list, status --all
+// state, as clone does for a new hub, so list, status --all
 // and prune see it without a `git hop add` first. The initial worktree is
 // hops/<branch> for a bare conversion and the repository root for a
 // regular one. The linked worktrees a bare conversion carried are

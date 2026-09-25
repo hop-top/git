@@ -82,7 +82,7 @@ func TestDoctorFix_UnregisteredHub_Registered(t *testing.T) {
 }
 
 func TestDoctorDryRun_UnregisteredHub_WritesNothing(t *testing.T) {
-	p := isolateDoctorPaths(t)
+	isolateDoctorPaths(t)
 	fs := afero.NewMemMapFs()
 	hubPath := "/hubs/repo"
 	doctorHub(t, fs, hubPath, []string{"main", "feat"}, []string{"main", "feat"})
@@ -93,8 +93,6 @@ func TestDoctorDryRun_UnregisteredHub_WritesNothing(t *testing.T) {
 	assert.Contains(t, wouldFix, "register hub")
 	assert.NoError(t, doctorResult(r), "the issue would be fixed: %+v", r.records)
 	assert.False(t, stateFileExists(t, fs), "a preview writes no state")
-	exists, _ := afero.Exists(fs, filepath.Join(p.configHome, "git-hop", "hops.json"))
-	assert.False(t, exists, "a preview writes no registry")
 }
 
 // A hub state partly knows is completed, and what state holds is kept:

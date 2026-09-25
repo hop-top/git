@@ -376,29 +376,6 @@ func createMergedConfig(fs afero.Fs, projectRoot, uri, org, repo, defaultBranch,
 	return nil
 }
 
-func registerProject(fs afero.Fs, org, repo, branch, worktreePath string) error {
-	registry := LoadRegistry(fs)
-	repoKey := org + "/" + repo
-	if _, ok := registry.Config.Hops[repoKey+":"+branch]; ok {
-		// Recorded already, by this hub or another one of the repository:
-		// kept as it is, like the state entries RegisterNewHub merges with.
-		return nil
-	}
-
-	absPath, err := filepath.Abs(worktreePath)
-	if err != nil {
-		return err
-	}
-
-	if err := registry.AddHop(repoKey, branch, absPath); err != nil {
-		return err
-	}
-
-	output.Note("Registered in global registry: %s:%s", repoKey, branch)
-
-	return nil
-}
-
 // initializeHopspace creates the hopspace directory structure and config
 func initializeHopspace(fs afero.Fs, hopspacePath, uri, org, repo, defaultBranch, worktreePath string, isGlobal bool) error {
 	// Use InitHopspace function which creates the directory and config

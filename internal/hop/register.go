@@ -39,9 +39,8 @@ type NewHub struct {
 }
 
 // RegisterNewHub records a hub everywhere git-hop looks for one: the
-// data home exists, the hops registry lists the default branch, and state
-// holds the repository, the hub and its worktrees, which is what list,
-// status --all and prune read. Failures warn; the hub itself is already
+// data home exists, and state holds the repository, the hub and its
+// worktrees, which is what list, status --all and prune read. Failures warn; the hub itself is already
 // on disk and usable.
 //
 // It merges with what is recorded and never overwrites it
@@ -57,12 +56,6 @@ func RegisterNewHub(fs afero.Fs, h NewHub) (HubRegistration, error) {
 	// when this hub keeps its hopspace locally and writes nothing there.
 	if err := fs.MkdirAll(GetGitHopDataHome(), 0o755); err != nil {
 		output.Warn("failed to create data directory: %v", err)
-	}
-
-	if h.WorktreePath != "" {
-		if err := registerProject(fs, h.Org, h.Repo, h.DefaultBranch, h.WorktreePath); err != nil {
-			output.Warn("failed to register in global registry: %v", err)
-		}
 	}
 
 	st, err := state.LoadState(fs)

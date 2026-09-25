@@ -68,10 +68,6 @@ func stateDir() string {
 	return dir
 }
 
-func GetHopsRegistryPath() string {
-	return filepath.Join(configDir(), "hops.json")
-}
-
 func GetGlobalConfigPath() string {
 	return filepath.Join(configDir(), "global.json")
 }

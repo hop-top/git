@@ -9,7 +9,8 @@ import (
 )
 
 // checkConfig reports a broken managers.json (checkManagersFile), a
-// leftover config.json nothing reads (checkRetiredConfigFile), --global
+// leftover config.json nothing reads (checkRetiredConfigFile), a leftover
+// hops.json nothing uses (checkRetiredHopsRegistry), --global
 // hop.* keys the zero-value global.json migration wrote and the user never
 // set (see config.GlobalLoader.MigrationDebris), and keys of retired settings in
 // --global and in the current hub's --local config (see
@@ -22,6 +23,7 @@ func checkConfig(l *config.GlobalLoader, hubPath string, opts doctorOpts, r *doc
 	output.Info("\n=== Checking Config ===")
 	checkManagersFile(l, r)
 	checkRetiredConfigFile(r)
+	checkRetiredHopsRegistry(r)
 	checkMigrationDebris(l, opts, r)
 
 	scopes := []config.ConfigScope{l.GlobalScope()}
@@ -66,6 +68,22 @@ func checkRetiredConfigFile(r *doctorReport) {
 	output.Warn("%s is not read; git-hop settings live in git config hop.*", path)
 	output.Hint("you can delete it by hand; keep a setting it held with\n'git config --global hop.<key> <value>'")
 	r.record(doctorKindWarning, doctorCheckConfig, path, "not read; git-hop settings live in git config hop.*; you can delete the file")
+}
+
+// checkRetiredHopsRegistry warns about a hops.json left in the config
+// directory: the hub registry earlier releases wrote on clone and init.
+// git-hop neither writes nor reads it (state records every hub and
+// worktree), so it only misleads whoever reads it; a warning, since
+// nothing breaks. doctor never deletes it, --fix included.
+func checkRetiredHopsRegistry(r *doctorReport) {
+	path := config.RetiredHopsRegistryPath()
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return
+	}
+	output.Warn("%s is not used; git-hop records hubs and worktrees in state", path)
+	output.Hint("you can delete it by hand")
+	r.record(doctorKindWarning, doctorCheckConfig, path, "not used; git-hop records hubs and worktrees in state; you can delete the file")
 }
 
 // checkMigrationDebris reports and, under --fix, unsets the migration

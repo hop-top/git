@@ -5,10 +5,8 @@ import (
 	"errors"
 	"io"
 	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/spf13/afero"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
@@ -46,32 +44,6 @@ func withHumanMode(t *testing.T) {
 	prev := output.CurrentMode
 	output.CurrentMode = output.ModeHuman
 	t.Cleanup(func() { output.CurrentMode = prev })
-}
-
-// A corrupt hops registry is only a warning, and a warning belongs on
-// stderr with git's lowercase prefix: stdout carries results scripts
-// parse.
-func TestLoadRegistry_ParseWarningGoesToStderr(t *testing.T) {
-	withHumanMode(t)
-	cfg := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", cfg)
-	path := hop.GetHopsRegistryPath()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	stdout, stderr := captureStreams(t, func() { hop.LoadRegistry(afero.NewOsFs()) })
-
-	if stdout != "" {
-		t.Errorf("stdout = %q, want empty", stdout)
-	}
-	const want = "warning: failed to parse hops registry: "
-	if len(stderr) < len(want) || stderr[:len(want)] != want {
-		t.Errorf("stderr = %q, want prefix %q", stderr, want)
-	}
 }
 
 // A rollback step that fails is reported as an error on stderr.

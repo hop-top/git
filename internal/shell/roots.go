@@ -25,8 +25,8 @@ func RootsCachePath() string {
 //
 // The format is deliberately the dumbest thing that works. The chdir
 // handler runs on every shell prompt, so whatever it reads has to be
-// consumable by shell builtins alone -- a JSON document (hop.json, the
-// global registry) would force a `jq`/`git hop` fork per prompt, which is
+// consumable by shell builtins alone -- a JSON document (hop.json, state)
+// would force a `jq`/`git hop` fork per prompt, which is
 // exactly the cost this whole design exists to avoid. Newline-delimited
 // plain paths can be slurped into an array once per shell session and then
 // prefix-tested with pure parameter expansion.
@@ -91,9 +91,7 @@ func ReadRootsCache(fs afero.Fs) []string {
 
 // HubWorktreeRoots lists a hub's registered worktrees as absolute paths.
 //
-// The hub's hop.json is the authority on which worktrees exist -- the
-// global hops.json registry is written only by some code paths and drifts,
-// so trusting it would leave real worktrees undetected. Relative recorded
+// The hub's hop.json is the authority on which worktrees exist. Relative recorded
 // paths are anchored on the hub, matching how the switch path resolves
 // them, so a worktree recorded as "hops/main" and one recorded absolutely
 // both land on the same string the shell will see in $PWD.

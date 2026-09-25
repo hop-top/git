@@ -34,6 +34,10 @@ Checks:
 - A config.json in the config directory: git-hop does not read it
   (settings live in git config hop.*); a warning, and --fix leaves the
   file for you to delete
+- A hops.json in the config directory: the hub registry of earlier
+  releases, which git-hop no longer writes or reads (state records every
+  hub and worktree); a warning, and --fix leaves the file for you to
+  delete
 - --global hop.* keys the old global.json migration wrote but the user
   never set (--fix unsets them)
 - Retired hop.* settings (hop.autoEnvStart, hop.bareRepo and the other
