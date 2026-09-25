@@ -62,6 +62,10 @@ func StaleHopJSONTemps(fs afero.Fs, dir string) ([]string, error) {
 // meanwhile. When another process holds the lock it removes nothing and
 // returns ErrHopJSONLocked (wrapped). Under dryRun it removes nothing and
 // returns what it would remove. See filelock.Guard.SweepStale.
+//
+// A save of ports.json or volumes.json holds their own lock
+// (ports.json.lock), not this one; its temp file is safe from the sweep
+// by age alone, being renamed within moments of its creation.
 func SweepHopJSONTemps(fs afero.Fs, dir string, dryRun bool) ([]string, error) {
 	return hopJSONGuard(dir).SweepStale(fs, dir, config.IsTempName, staleTempCutoff(), dryRun)
 }

@@ -296,7 +296,22 @@ func sortedServices(ports map[string]int) []string {
 // RekeyEnvEntry moves the ports.json and volumes.json entries of the
 // worktree at oldPath on oldBranch, in the hub at hubPath, to newPath on
 // newBranch, for a worktree move. A missing file or entry is left alone.
+// It holds the lock on both files (see env_lock.go) and loads them
+// afresh under it.
 func RekeyEnvEntry(fs afero.Fs, hopspacePath, hubPath, oldPath, newPath, oldBranch, newBranch string) error {
+	if !hasPortsFile(fs, hopspacePath) {
+		if ok, _ := afero.Exists(fs, filepath.Join(hopspacePath, "volumes.json")); !ok {
+			return nil
+		}
+	}
+	return withEnvLock(fs, hopspacePath, func() error {
+		return rekeyEnvEntryLocked(fs, hopspacePath, hubPath, oldPath, newPath, oldBranch, newBranch)
+	})
+}
+
+// rekeyEnvEntryLocked is RekeyEnvEntry for a caller holding the lock on
+// ports.json and volumes.json.
+func rekeyEnvEntryLocked(fs afero.Fs, hopspacePath, hubPath, oldPath, newPath, oldBranch, newBranch string) error {
 	oldKey := hop.HopspaceKey(hopspacePath, hubPath, oldPath, oldBranch)
 	newKey := hop.HopspaceKey(hopspacePath, hubPath, newPath, newBranch)
 	loader, writer := config.NewLoader(fs), config.NewWriter(fs)
@@ -356,15 +371,21 @@ func (c EnvClaim) Worktree() string {
 // worktree at worktreePath on branch, in the hub at hubPath, so its ports
 // are free for others. An entry an earlier release wrote in a shared
 // hopspace goes only if it is this hub's (EnvRecords.Self). A missing
-// file or entry is left alone.
+// file or entry is left alone. The entry is found, and dropped, under
+// the lock on both files (see env_lock.go).
 func DropEnvEntry(fs afero.Fs, hopspacePath, hubPath, worktreePath, branch string) error {
-	recs, _ := LoadEnvRecords(fs, hubPath)
-	self, found := recs.Self(hopspacePath, hubPath, worktreePath, branch)
-	if !found {
+	if !hasPortsFile(fs, hopspacePath) {
 		return nil
 	}
-	_, err := dropEnvEntries(fs, hopspacePath, func(key string, _ config.BranchPorts) bool { return key == self.Key })
-	return err
+	return withEnvLock(fs, hopspacePath, func() error {
+		recs, _ := LoadEnvRecords(fs, hubPath)
+		self, found := recs.Self(hopspacePath, hubPath, worktreePath, branch)
+		if !found {
+			return nil
+		}
+		_, err := dropEnvEntriesLocked(fs, hopspacePath, func(key string, _ config.BranchPorts) bool { return key == self.Key })
+		return err
+	})
 }
 
 // VolumeConflict is a volume directory a worktree records that an

@@ -29,12 +29,44 @@ type WorktreeEnv struct {
 // allocation in the hopspace's ports.json and volumes.json. It is the one path add, clone
 // and `env generate` share. A worktree without a Docker environment gets
 // nothing: (nil, nil). A failure to record the allocation is reported
-// and does not fail the call.
+// and does not fail the call; a lock another run holds past its timeout
+// does.
+//
+// The compose file is read, with docker compose, first; then reading
+// every hub's records, allocating and recording run under the port
+// allocation lock and the hopspace's ports.json lock (see env_lock.go),
+// so two runs at once never pick the same ports or undo each other.
 func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, worktreePath, branch, org, repo string) (*WorktreeEnv, error) {
 	if !d.HasDockerEnv(worktreePath) {
 		return nil, nil
 	}
 
+	probe := NewEnvManager(fs, &config.PortsConfig{}, &config.VolumesConfig{}, d)
+	if hubPath != "" {
+		probe.OverrideDir = HubOverrideDir(org, repo, hubPath, branch)
+	}
+	needs, err := probe.Discover(branch, worktreePath, org, repo)
+	if err != nil {
+		return nil, err
+	}
+
+	var env *WorktreeEnv
+	err = withAllocationLock(fs, hopspacePath, func() error {
+		var aerr error
+		env, aerr = allocateWorktreeEnv(fs, d, needs, hopspacePath, hubPath, worktreePath, branch, org, repo)
+		return aerr
+	})
+	if err != nil {
+		return nil, err
+	}
+	return env, nil
+}
+
+// allocateWorktreeEnv is the part of GenerateWorktreeEnv that runs under
+// its locks: it loads the hopspace's ports.json and volumes.json and
+// every hub's records afresh, allocates what needs asks for and records
+// it.
+func allocateWorktreeEnv(fs afero.Fs, d *docker.Docker, needs ComposeNeeds, hopspacePath, hubPath, worktreePath, branch, org, repo string) (*WorktreeEnv, error) {
 	loader := config.NewLoader(fs)
 	portsCfg, err := loader.LoadPortsConfig(hopspacePath)
 	if err != nil {
@@ -73,15 +105,14 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 		manager.Volumes.Dir = filepath.Join(volsCfg.BasePath, HubKey(hubPath))
 	}
 	if hubPath != "" {
-		manager.OverrideDir = HubOverrideDir(org, repo, hubPath, branch)
 		manager.Ports.Seed = org + "/" + repo + "/" + HubKey(hubPath) + "/" + branch
 	}
-	ports, vols, overridePath, err := manager.Generate(branch, worktreePath, org, repo)
+	ports, vols, err := manager.Apply(branch, worktreePath, needs)
 	if err != nil {
 		return nil, err
 	}
-	if overridePath != "" {
-		ports.OverrideDir = filepath.Dir(overridePath)
+	if needs.OverridePath != "" {
+		ports.OverrideDir = filepath.Dir(needs.OverridePath)
 	}
 	ports.Project = projectFor(self, found && keep != nil, org, repo, hubPath, branch)
 	ports.Branch = branch
@@ -110,7 +141,7 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 		output.Error("Failed to save volumes config: %v", err)
 	}
 
-	return &WorktreeEnv{Ports: ports, Volumes: vols, OverridePath: overridePath}, nil
+	return &WorktreeEnv{Ports: ports, Volumes: vols, OverridePath: needs.OverridePath}, nil
 }
 
 // keptPorts returns the ports the worktree keeps: all it has, unless a
