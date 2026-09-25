@@ -254,7 +254,7 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 	// configure this implicitly; local file paths (and some hosts) do not,
 	// so do it unconditionally.
 	if _, err := g.Run("git", "-C", projectRoot, "config",
-		"remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"); err != nil {
+		"remote.origin.fetch", OriginFetchRefspec); err != nil {
 		return fmt.Errorf("failed to set origin fetch refspec: %w", err)
 	}
 	if _, err := g.RunInDir(projectRoot, "git", git.FetchArgs("origin")...); err != nil {

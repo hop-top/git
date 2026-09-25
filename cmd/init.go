@@ -536,6 +536,7 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 		} else if created {
 			fmt.Printf("Created missing hop.json at %s.\n", hubPath)
 			registerAdoptedHub(fs, hubPath)
+			restoreAdoptedFetchRefspec(g, hubPath)
 		}
 	}
 

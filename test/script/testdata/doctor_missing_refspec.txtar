@@ -1,0 +1,47 @@
+# doctor reports a hub whose origin has no fetch refspec and points at
+# `git hop repair`, which restores it.
+#
+# Hubs cloned before clone restored the refspec, or adopted from a plain
+# `git clone --bare`, have remote.origin.url but no remote.origin.fetch:
+# `git fetch origin` then updates FETCH_HEAD only and origin/* freezes.
+# doctor said nothing about it, so nothing led the user to the repair.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop doctor
+! stderr 'refspec'
+
+# --- degrade the hub to the legacy shape ---
+exec git config --unset-all remote.origin.fetch
+
+! exec git-hop doctor
+stderr 'error: .*remote\.origin\.fetch'
+stderr 'git hop repair'
+! exec git-hop doctor --json
+decode json stdout 0.kind issue
+decode json stdout 0.check hub
+decode json stdout 0.message '~git hop repair'
+
+# Found from inside a worktree too.
+cd $WORK/hub/hops/main
+! exec git-hop doctor
+stderr 'remote\.origin\.fetch'
+cd $WORK/hub
+
+# --- the repair doctor names clears it ---
+exec git-hop repair
+exec git-hop doctor
+! stderr 'refspec'
+stdout 'No issues found'
+
+# --- a hub without origin has nothing to fetch: not reported ---
+exec git remote remove origin
+exec git-hop doctor
+! stderr 'refspec'

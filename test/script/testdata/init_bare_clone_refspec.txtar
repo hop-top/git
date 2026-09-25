@@ -1,0 +1,58 @@
+# `git hop init` in a bare clone made with plain git restores the origin
+# fetch refspec that `git clone --bare` leaves out, as `git hop <uri>`
+# does for the hubs it clones.
+#
+# The regression this pins: adopting a bare clone wrote hop.json and left
+# remote.origin.fetch unset, so `git fetch origin` only updated FETCH_HEAD
+# and refs/remotes/origin/* never moved, and ahead/behind and push
+# checks read a stale origin.
+
+exec git init --bare $WORK/remotes/acme/widget.git
+exec git clone $WORK/remotes/acme/widget.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git clone --bare $WORK/remotes/acme/widget.git $WORK/acme/widget.git
+cd $WORK/acme/widget.git
+! exec git config --get remote.origin.fetch
+
+exec git-hop init --no-prompt --no-hooks
+stdout 'already initialized'
+exec git config --get-all remote.origin.fetch
+stdout '^\+refs/heads/\*:refs/remotes/origin/\*$'
+
+# A fetch now moves refs/remotes/origin/*, not only FETCH_HEAD.
+cd $WORK/seed
+exec git commit --allow-empty -m 'second'
+exec git push origin main
+exec git checkout -b later
+exec git push origin later
+exec git rev-parse main
+cp stdout $WORK/want-main
+cd $WORK/acme/widget.git
+exec git fetch origin
+exec git rev-parse refs/remotes/origin/main
+cmp stdout $WORK/want-main
+exec git rev-parse --verify refs/remotes/origin/later
+
+exec git-hop doctor
+stdout 'No issues found'
+
+# --- a repository without origin stays without a refspec ---
+cd $WORK
+exec git init --bare $WORK/local.git
+cd $WORK/local.git
+exec git-hop init --no-prompt --no-hooks
+! exec git config --get remote.origin.fetch
+! exec git config --get remote.origin.url
+
+# --- a mirror keeps its own refspec ---
+cd $WORK
+exec git clone --mirror $WORK/remotes/acme/widget.git $WORK/acme/mirror.git
+cd $WORK/acme/mirror.git
+exec git-hop init --no-prompt --no-hooks
+exec git config --get-all remote.origin.fetch
+stdout -count=1 '^\+'
+stdout '^\+refs/\*:refs/\*$'

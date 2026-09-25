@@ -35,6 +35,7 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 	output.Info("Hopspace: %s", hopspacePath)
 	warnStaleHopspaceCopy(fs, hub, r)
+	checkOriginFetchRefspec(g, hubPath, r)
 
 	// Only a hub marked global can lack its hopspace: an unmarked hub's
 	// hopspace is its own hop.json, loaded above.
@@ -46,6 +47,20 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 	}
 
 	return hubPath, checkBranchWorktrees(fs, g, hub, hopspacePath, opts, r)
+}
+
+// checkOriginFetchRefspec reports a hub whose origin has no fetch
+// refspec, which leaves refs/remotes/origin/* frozen on every fetch.
+// 'git hop repair' restores it; --fix leaves that to repair, which
+// fetches and verifies afterwards, so the issue stays until it runs.
+func checkOriginFetchRefspec(g git.GitInterface, hubPath string, r *doctorReport) {
+	if !hop.MissingOriginFetchRefspec(g, hubPath) {
+		return
+	}
+	const msg = "origin has no remote.origin.fetch refspec; fetches leave refs/remotes/origin/* stale"
+	output.Error("%s", msg)
+	output.Hint("run 'git hop repair' to restore %s", hop.OriginFetchRefspec)
+	r.issue(doctorCheckHub, hubPath, "%s; run 'git hop repair' to restore it", msg)
 }
 
 // warnStaleHopspaceCopy reports a data-home hop.json left beside an
