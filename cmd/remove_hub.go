@@ -185,7 +185,7 @@ func (d dataHomeHopspace) record(removed bool) removeRecord {
 // hub's repository when the hub at hubPath is removed. st is the state
 // (stErr the error reading it); hubPath's own entry is ignored.
 func dataHomeHopspaceFor(fs afero.Fs, st *state.State, stErr error, hub *hop.Hub, hubPath string) dataHomeHopspace {
-	path := hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.RepoRefFor(hub.Config.Repo))
+	path := hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.RepoRefFor(hubPath, hub.Config.Repo))
 	d := dataHomeHopspace{path: path, stateErr: stErr}
 	d.exists, _ = afero.DirExists(fs, path)
 	if !d.exists || stErr != nil {
@@ -218,5 +218,5 @@ func hubUsesHopspace(fs afero.Fs, repo *state.RepositoryState, h *state.HubState
 		return state.SamePath(hop.ResolveHopspacePath(h.Path, other.Config.Repo), path)
 	}
 	return h.Mode == state.HubModeGlobal &&
-		state.SamePath(hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.NewRepoRef(repo.URI, repo.Org, repo.Repo)), path)
+		state.SamePath(hop.GetHopspacePath(hop.GetGitHopDataHome(), hop.NewRepoRef(repo.URI, repo.Org, repo.Repo).In(h.Path)), path)
 }

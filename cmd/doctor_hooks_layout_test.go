@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"hop.top/git/internal/hop"
 	"hop.top/git/test/mocks"
 )
 
@@ -148,4 +149,42 @@ func TestDoctor_WarnsAboutInvalidDataLayout(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "want a config warning for the invalid hop.dataLayout; got %+v", r.records)
+}
+
+// gitRepoDir creates a real bare repository whose local config holds kv:
+// hop.dataLayout is read with git, from disk, whatever fs the test uses.
+func gitRepoDir(t *testing.T, kv map[string]string) string {
+	t.Helper()
+	dir := t.TempDir()
+	out, err := exec.Command("git", "init", "-q", "--bare", dir).CombinedOutput()
+	require.NoError(t, err, string(out))
+	for k, v := range kv {
+		out, err := exec.Command("git", "-C", dir, "config", k, v).CombinedOutput()
+		require.NoError(t, err, string(out))
+	}
+	return dir
+}
+
+// A repository-level hop.dataLayout git-hop cannot use is reported with
+// its scope and the layout used instead (the --global one).
+func TestDoctor_WarnsAboutInvalidRepoDataLayout(t *testing.T) {
+	e := newLegacyHooksEnv(t)
+	out, err := exec.Command("git", "config", "--global", "hop.dataLayout", "{host}/{org}/{repo}").CombinedOutput()
+	require.NoError(t, err, string(out))
+	hubPath := gitRepoDir(t, map[string]string{"hop.dataLayout": "{repo}"})
+	_, err = hop.CreateHub(e.fs, hubPath, "git@github.com:acme/widgets.git", "acme", "widgets", "main")
+	require.NoError(t, err)
+
+	r := runDoctor(e.fs, mocks.NewMockGit(), hubPath, doctorOpts{})
+
+	var msgs []string
+	for _, rec := range r.records {
+		if rec.Check == doctorCheckConfig && rec.Subject == "hop.dataLayout" {
+			assert.Equal(t, doctorKindWarning, rec.Kind)
+			msgs = append(msgs, rec.Message)
+		}
+	}
+	require.Len(t, msgs, 1, "want one warning, for the repository value; got %+v", r.records)
+	assert.Contains(t, msgs[0], "local config")
+	assert.Contains(t, msgs[0], "using {host}/{org}/{repo}")
 }

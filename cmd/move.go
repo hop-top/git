@@ -124,7 +124,7 @@ var moveCmd = &cobra.Command{
 		}
 
 		// Pre-worktree-move hook
-		hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
+		hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI, hubPath)
 		if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-move", oldPath, repoID, oldBranch, detectorEnv); err != nil {
 			output.Fatal("Hook pre-worktree-move failed: %v", err)
 		}

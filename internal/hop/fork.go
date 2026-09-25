@@ -34,7 +34,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	}
 
 	dataHome := GetGitHopDataHome()
-	forkHopspacePath := GetHopspacePath(dataHome, NewRepoRef(uri, org, repo))
+	forkHopspacePath := GetHopspacePath(dataHome, NewRepoRef(uri, org, repo).In(hubPath))
 
 	output.Info("Attaching fork branch %s from %s...", branch, uri)
 	output.Info("Fork Hopspace: %s", forkHopspacePath)

@@ -36,19 +36,20 @@ func LoadHopspace(fs afero.Fs, path string) (*Hopspace, error) {
 // unmarked hub is a stale copy (see StaleHopspaceCopy).
 func ResolveHopspacePath(hubPath string, repo config.RepoConfig) string {
 	if repo.Mode == config.RepoModeGlobal {
-		return GetHopspacePath(GetGitHopDataHome(), RepoRefFor(repo))
+		return GetHopspacePath(GetGitHopDataHome(), RepoRefFor(hubPath, repo))
 	}
 	return hubPath
 }
 
-// StaleHopspaceCopy returns the data-home hop.json path left beside an
-// unmarked hub, or "" when there is none or the hub is marked global.
-// Such a copy is never read; it is reported so it can be cleaned up.
-func StaleHopspaceCopy(fs afero.Fs, repo config.RepoConfig) string {
+// StaleHopspaceCopy returns the data-home hop.json path left beside the
+// unmarked hub at hubPath, or "" when there is none or the hub is marked
+// global. Such a copy is never read; it is reported so it can be cleaned
+// up.
+func StaleHopspaceCopy(fs afero.Fs, hubPath string, repo config.RepoConfig) string {
 	if repo.Mode == config.RepoModeGlobal {
 		return ""
 	}
-	path := GetHopspacePath(GetGitHopDataHome(), RepoRefFor(repo))
+	path := GetHopspacePath(GetGitHopDataHome(), RepoRefFor(hubPath, repo))
 	if exists, _ := afero.Exists(fs, filepath.Join(path, "hop.json")); exists {
 		return path
 	}

@@ -143,7 +143,9 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	if !ok {
 		return res, fmt.Errorf("invalid repoID %q: expected host/org/repo", opts.RepoID)
 	}
-	hopspaceHooksDir := hop.HopspaceHooksDir(ref)
+	// The worktree belongs to the repository, so its git config decides
+	// hop.dataLayout.
+	hopspaceHooksDir := hop.HopspaceHooksDir(ref.In(opts.WorktreePath))
 	if !opts.DryRun {
 		if err := fs.MkdirAll(hopspaceHooksDir, 0755); err != nil {
 			return res, fmt.Errorf("create hopspace hooks dir: %w", err)

@@ -67,7 +67,7 @@ func checkOriginFetchRefspec(g git.GitInterface, hubPath string, r *doctorReport
 // unmarked hub. It is never read, so it is a warning, not an issue, and
 // --fix leaves it alone; the record's check lets a cleanup find it.
 func warnStaleHopspaceCopy(fs afero.Fs, hub *hop.Hub, r *doctorReport) {
-	stale := hop.StaleHopspaceCopy(fs, hub.Config.Repo)
+	stale := hop.StaleHopspaceCopy(fs, hub.Path, hub.Config.Repo)
 	if stale == "" {
 		return
 	}

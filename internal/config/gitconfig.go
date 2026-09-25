@@ -155,6 +155,36 @@ func (gc *GitConfig) get(key string, opts ...string) (string, error) {
 	return out, nil
 }
 
+// ScopedValue is one value of a multi-scope git config key and the scope
+// git read it from: "system", "global", "local", "worktree" or "command"
+// (a `git -c` value).
+type ScopedValue struct {
+	Scope string
+	Value string
+}
+
+// GetAllScoped returns every value of key with its scope, lowest
+// precedence first (`git config --show-scope --get-all`), so the last one
+// is the value in effect. A key set nowhere yields (nil, nil).
+func (gc *GitConfig) GetAllScoped(key string) ([]ScopedValue, error) {
+	out, err := gc.RunCmd("config", "--show-scope", "--get-all", key)
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("git config --get-all %s: %w", key, err)
+	}
+	var vals []ScopedValue
+	for _, line := range strings.Split(out, "\n") {
+		if line == "" {
+			continue
+		}
+		scope, value, _ := strings.Cut(line, "\t")
+		vals = append(vals, ScopedValue{Scope: scope, Value: value})
+	}
+	return vals, nil
+}
+
 // execGitConfig runs `git <args>` and returns trimmed stdout.
 func execGitConfig(args ...string) (string, error) {
 	cmd := exec.Command("git", args...)

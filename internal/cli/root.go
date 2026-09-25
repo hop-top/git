@@ -306,7 +306,7 @@ Worktree Mode:
 				Overwrite: hooksOverwrite,
 				Run:       buildHookMirrorRun(fs, hooksMode, hooksOverwrite, expandedArg),
 			}
-			dispatch := BuildHookDispatch(fs, expandedArg)
+			dispatch := BuildHookDispatch(fs, expandedArg, "")
 			dispatch.SetUpEnv = func(hubPath string) { setUpClonedWorktree(fs, hubPath, globalCfg) }
 			if err := hop.CloneWorktree(fs, g, expandedArg, projectPath, globalConfig, hookOpts, dispatch); err != nil {
 				output.Fatal("Clone failed: %v", err)
@@ -342,7 +342,7 @@ Worktree Mode:
 			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
 
 			if dryRun {
-				previewSwitch(fs, hub.Config.Repo.URI, repoID, arg, worktreePath)
+				previewSwitch(fs, hub.Config.Repo.URI, hubPath, repoID, arg, worktreePath)
 				return
 			}
 
@@ -362,7 +362,7 @@ Worktree Mode:
 			// The symlink is the load-bearing step: os.Chdir below only moves
 			// this process, while the shell wrapper navigates by resolving
 			// `current` after the binary exits.
-			hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI)
+			hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI, hubPath)
 			if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-switch", worktreePath, repoID, arg, hookEnv); err != nil {
 				output.Fatal("Hook pre-worktree-switch failed: %v", err)
 			}
@@ -641,9 +641,10 @@ func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool, uri string
 // Lives here for the same reason as buildHookMirrorRun: internal/hooks
 // already imports internal/hop, so internal/hop cannot call the hook
 // runner directly without creating an import cycle. The caller injects.
-// uri is the repository's origin URL (see hooks.Runner.ForRepo).
-func BuildHookDispatch(fs afero.Fs, uri string) hop.HookDispatchOptions {
-	runner := hooks.NewRunner(fs).ForRepo(uri)
+// uri is the repository's origin URL and dir its repository, "" before
+// the clone has made one (see hooks.Runner.ForRepo).
+func BuildHookDispatch(fs afero.Fs, uri, dir string) hop.HookDispatchOptions {
+	runner := hooks.NewRunner(fs).ForRepo(uri, dir)
 	dispatchTo := func(hookName string) func(string, string, string) error {
 		return func(path, repoID, branch string) error {
 			_, err := runner.ExecuteHook(hookName, path, repoID, branch)

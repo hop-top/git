@@ -70,6 +70,90 @@ func TestDataLayout_InvalidValueFallsBackToDefault(t *testing.T) {
 	}
 }
 
+// initRepo creates a git repository whose local config holds kv.
+func initRepo(t *testing.T, kv map[string]string) string {
+	t.Helper()
+	repo := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", "--bare", repo).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v\n%s", err, out)
+	}
+	for k, v := range kv {
+		if out, err := exec.Command("git", "-C", repo, "config", k, v).CombinedOutput(); err != nil {
+			t.Fatalf("git config %s %s: %v\n%s", k, v, err, out)
+		}
+	}
+	return repo
+}
+
+const hostLayout = "{host}/{org}/{repo}"
+
+func TestResolveDataLayout_RepoValueOverridesGlobal(t *testing.T) {
+	setGlobalGitConfig(t, map[string]string{config.KeyDataLayout: "{org}/{repo}"})
+	repo := initRepo(t, map[string]string{config.KeyDataLayout: hostLayout})
+
+	got := hop.ResolveDataLayout(repo)
+	if got.Layout != hostLayout || got.Scope != "local" || got.Err != nil {
+		t.Fatalf("ResolveDataLayout(repo) = %+v, want the local %s", got, hostLayout)
+	}
+	path := hop.GetHopspacePath("/data", gitlabRef.In(repo))
+	if want := filepath.Join("/data", "gitlab.example.com", "acme", "widgets"); path != want {
+		t.Fatalf("GetHopspacePath(ref in repo) = %s, want %s", path, want)
+	}
+	if other := hop.GetHopspacePath("/data", gitlabRef); other != filepath.Join("/data", "acme", "widgets") {
+		t.Fatalf("GetHopspacePath(no repo) = %s, want the --global layout", other)
+	}
+}
+
+func TestResolveDataLayout_GlobalAppliesWhenRepoUnset(t *testing.T) {
+	setGlobalGitConfig(t, map[string]string{config.KeyDataLayout: hostLayout})
+	repo := initRepo(t, nil)
+
+	got := hop.ResolveDataLayout(repo)
+	if got.Layout != hostLayout || got.Scope != "global" {
+		t.Fatalf("ResolveDataLayout(repo) = %+v, want the --global %s", got, hostLayout)
+	}
+}
+
+func TestResolveDataLayout_InvalidRepoValueFallsBackToGlobal(t *testing.T) {
+	setGlobalGitConfig(t, map[string]string{config.KeyDataLayout: hostLayout})
+	repo := initRepo(t, map[string]string{config.KeyDataLayout: "{repo}"})
+
+	got := hop.ResolveDataLayout(repo)
+	if got.Layout != hostLayout || got.Err == nil || got.Scope != "local" || got.Raw != "{repo}" {
+		t.Fatalf("ResolveDataLayout(repo) = %+v, want the --global %s with the local value reported invalid", got, hostLayout)
+	}
+}
+
+func TestResolveDataLayout_InvalidRepoAndGlobalFallBackToDefault(t *testing.T) {
+	setGlobalGitConfig(t, map[string]string{config.KeyDataLayout: "/abs/{org}/{repo}"})
+	repo := initRepo(t, map[string]string{config.KeyDataLayout: "{repo}"})
+
+	if got := hop.ResolveDataLayout(repo); got.Layout != "{org}/{repo}" || got.Err == nil {
+		t.Fatalf("ResolveDataLayout(repo) = %+v, want the default", got)
+	}
+}
+
+// `git -c hop.dataLayout=...` reaches git-hop as GIT_CONFIG_PARAMETERS
+// (or GIT_CONFIG_COUNT) and overrides the repository and --global.
+func TestResolveDataLayout_CommandLineValueWins(t *testing.T) {
+	setGlobalGitConfig(t, map[string]string{config.KeyDataLayout: "{org}/{repo}"})
+	repo := initRepo(t, map[string]string{config.KeyDataLayout: "{org}/{repo}"})
+	t.Setenv("GIT_CONFIG_PARAMETERS", "'"+config.KeyDataLayout+"'='"+hostLayout+"'")
+
+	for _, dir := range []string{repo, ""} {
+		if got := hop.ResolveDataLayout(dir); got.Layout != hostLayout || got.Scope != "command" {
+			t.Fatalf("ResolveDataLayout(%q) = %+v, want the command-line %s", dir, got, hostLayout)
+		}
+	}
+}
+
+func TestResolveDataLayout_MissingRepoDirUsesGlobal(t *testing.T) {
+	setGlobalGitConfig(t, map[string]string{config.KeyDataLayout: hostLayout})
+	if got := hop.ResolveDataLayout(filepath.Join(t.TempDir(), "gone")); got.Layout != hostLayout {
+		t.Fatalf("ResolveDataLayout(missing dir) = %+v, want the --global %s", got, hostLayout)
+	}
+}
+
 func TestDataLayout_IgnoresRepositoryConfig(t *testing.T) {
 	setGlobalGitConfig(t, nil)
 	repo := t.TempDir()
@@ -82,6 +166,9 @@ func TestDataLayout_IgnoresRepositoryConfig(t *testing.T) {
 	t.Chdir(repo)
 	if got := hop.DataLayout(); got != "{org}/{repo}" {
 		t.Fatalf("DataLayout() = %q inside a repo with a local value, want the --global default", got)
+	}
+	if got := hop.ResolveDataLayout("").Layout; got != "{org}/{repo}" {
+		t.Fatalf("ResolveDataLayout(\"\") = %q inside a repo with a local value, want the --global default", got)
 	}
 }
 

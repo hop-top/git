@@ -62,7 +62,7 @@ func depsLinkScope(fs afero.Fs, hubPath string) (hopspaces, worktrees []string, 
 			worktrees = append(worktrees, wt.Path)
 		}
 		for _, h := range repo.Hubs {
-			addHub(h.Path, h.Mode, hop.NewRepoRef(repo.URI, repo.Org, repo.Repo))
+			addHub(h.Path, h.Mode, hop.NewRepoRef(repo.URI, repo.Org, repo.Repo).In(h.Path))
 		}
 	}
 	if hubPath != "" {
