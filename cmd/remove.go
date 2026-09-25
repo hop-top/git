@@ -311,28 +311,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 		return rec, fmt.Errorf("hook pre-worktree-remove failed: %v", err)
 	}
 
-	// Resolve a live base path for git commands (worktree remove, branch -D).
-	// Prefer the default branch worktree; fall back to any other live worktree;
-	// finally use hubPath itself (bare repo) so git commands always have a
-	// valid working directory even when all tracked worktrees are missing.
-	resolveBasePath := func() string {
-		candidates := []string{}
-		if mainBranch, exists := hub.Config.Branches[hub.Config.Repo.DefaultBranch]; exists {
-			candidates = append(candidates, config.ResolveWorktreePath(mainBranch.Path, hubPath))
-		}
-		for bn, bc := range hub.Config.Branches {
-			if bn != branch && bc.Path != "" {
-				candidates = append(candidates, config.ResolveWorktreePath(bc.Path, hubPath))
-			}
-		}
-		for _, p := range candidates {
-			if info, err := fs.Stat(p); err == nil && info.IsDir() {
-				return p
-			}
-		}
-		return hubPath
-	}
-	absBasePath := resolveBasePath()
+	absBasePath := removalBasePath(fs, hub, hubPath, branch)
 
 	// Only `git worktree remove` deletes a worktree's files. When it
 	// cannot, or the directory is not a worktree git has registered and
@@ -435,6 +414,29 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 
 	output.Info("Successfully removed %s", branch)
 	return rec, nil
+}
+
+// removalBasePath is a live directory to run removing branch's git
+// commands (worktree remove, branch -D) in: the default branch's
+// worktree, else any other worktree of the hub that is on disk, else
+// hubPath itself (the bare repository), so git always has a working
+// directory even when every recorded worktree is missing.
+func removalBasePath(fs afero.Fs, hub *hop.Hub, hubPath, branch string) string {
+	candidates := []string{}
+	if mainBranch, exists := hub.Config.Branches[hub.Config.Repo.DefaultBranch]; exists {
+		candidates = append(candidates, config.ResolveWorktreePath(mainBranch.Path, hubPath))
+	}
+	for bn, bc := range hub.Config.Branches {
+		if bn != branch && bc.Path != "" {
+			candidates = append(candidates, config.ResolveWorktreePath(bc.Path, hubPath))
+		}
+	}
+	for _, p := range candidates {
+		if info, err := fs.Stat(p); err == nil && info.IsDir() {
+			return p
+		}
+	}
+	return hubPath
 }
 
 // isWorktreeRegistered reports whether git's worktree registry contains

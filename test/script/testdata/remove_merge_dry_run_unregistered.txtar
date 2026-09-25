@@ -1,0 +1,102 @@
+# `git hop remove -n` and `git hop merge -n` refuse a recorded worktree
+# directory git has not registered that holds anything, as the real run
+# does: only `git worktree remove` deletes a worktree's files, and
+# nothing vouches for what is in such a directory. The preview fails
+# with the real run's exit status (1), worded `[dry-run] would refuse to
+# remove|merge ...`; under --json stdout stays empty and the error
+# record goes to stderr. `remove --merged -n` skips it and says why. An
+# empty one is removed, previewed or not. Each case also runs for real.
+#
+# The regression this pins: the previews said "Would remove worktree"
+# and exited 0 while the real run refused.
+
+# --- upstream repo and hub; feat/moved's worktree moved out by git, a
+# --- directory with a file left at the path hop.json records ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/moved
+exec git-hop main
+exec git worktree move hops/feat/moved $WORK/elsewhere
+mkdir hops/feat/moved
+cp $WORK/keep.txt hops/feat/moved/keep.txt
+
+# --- snapshot what a refused removal must leave alone ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cp stdout $WORK/refs.before
+
+# --- remove -n ---
+exec sh -c 'git-hop remove feat/moved -n --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to remove ''feat/moved'': ''.*/hub/hops/feat/moved'' is not a worktree git has registered and is not empty, so it stays$' err
+grep '^hint: move out what you want to keep, delete it, then try again$' err
+! grep 'Would remove worktree' out
+exec sh -c 'git-hop remove feat/moved -n --no-prompt --no-verify --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to remove ''feat/moved'': ''.*/hub/hops/feat/moved'' is not a worktree git has registered and is not empty, so it stays' err
+
+# --- remove --merged -n: skipped, with the reason ---
+exec sh -c 'git-hop remove --merged -n --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^\[dry-run\] Would skip feat/moved: ''.*/hub/hops/feat/moved'' is not a worktree git has registered and is not empty, so it stays$' out
+! grep 'Would remove worktree' out
+grep '^fatal: \[dry-run\] would fail: 1 merged worktree\(s\) could not be removed$' err
+exec sh -c 'git-hop remove --merged -n --no-prompt --no-verify --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+decode json out '#' 1
+decode json out 0.branch feat/moved
+decode json out 0.removed false
+decode json out 0.reason '~is not a worktree git has registered and is not empty'
+grep '"msg":"\[dry-run\] would fail: 1 merged worktree\(s\) could not be removed"' err
+
+# --- merge -n ---
+exec sh -c 'git-hop merge feat/moved main -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to merge ''feat/moved'' into ''main'': the merge would stand, but its worktree would not be removed: ''.*/hub/hops/feat/moved'' is not a worktree git has registered and is not empty, so it stays$' err
+! grep 'Would remove worktree' out
+exec sh -c 'git-hop merge feat/moved main -n --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to merge ''feat/moved'' into ''main'': the merge would stand, but its worktree would not be removed: ''.*/hub/hops/feat/moved'' is not a worktree git has registered' err
+
+# --- the previews changed nothing ---
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cmp stdout $WORK/refs.before
+
+# --- the real runs refuse it the same way ---
+exec sh -c 'git-hop remove feat/moved --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: ''.*/hub/hops/feat/moved'' is not a worktree git has registered and is not empty, so it stays$' err
+exec sh -c 'git-hop remove --merged --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep 'Failed to remove feat/moved: ''.*/hub/hops/feat/moved'' is not a worktree git has registered and is not empty' err
+exec sh -c 'git-hop merge feat/moved main >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Merged ''feat/moved'' into ''main'', but did not remove its worktree: ''.*/hub/hops/feat/moved'' is not a worktree git has registered and is not empty, so it stays$' err
+cmp hops/feat/moved/keep.txt $WORK/keep.txt
+exists $WORK/elsewhere/.git
+cmp hop.json $WORK/hop.json.before
+exec git branch --list feat/moved
+stdout 'feat/moved'
+
+# --- emptied, the directory goes: previewed, then for real ---
+rm hops/feat/moved/keep.txt
+exec git-hop remove feat/moved -n --no-prompt --no-verify
+stdout '\[dry-run\] Would remove worktree at .*/hub/hops/feat/moved$'
+exists hops/feat/moved
+exec git-hop remove feat/moved --no-prompt --no-verify
+stdout 'Successfully removed feat/moved'
+! exists hops/feat/moved
+
+-- keep.txt --
+keep me

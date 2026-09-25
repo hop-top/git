@@ -24,8 +24,9 @@ type mergePlan struct {
 // previewMerge reports what `git hop merge` would do for p without doing
 // any of it: the receiving branch does not move, and the source worktree,
 // branch, hop.json, hopspace, state and symlink are left alone. A merge
-// that would stop on conflicts fails here too. It returns the result the
-// merge would produce.
+// that would stop on conflicts fails here too, and so does one whose
+// source worktree the real run would not remove (the merge would stand,
+// but merge exits 1). It returns the result the merge would produce.
 func previewMerge(g git.GitInterface, p mergePlan) mergeResult {
 	mode, err := mergeMode(g, p)
 	if err != nil {
@@ -33,6 +34,10 @@ func previewMerge(g git.GitInterface, p mergePlan) mergeResult {
 	}
 
 	output.Info("[dry-run] Would merge '%s' into '%s' (%s)", p.source, p.into, mergeModeText[mode])
+	if err := checkWorktreeRemoval(p.fs, g, p.intoPath, p.sourcePath); err != nil {
+		refuseDryRun(fmt.Sprintf("merge '%s' into '%s'", p.source, p.into),
+			fmt.Errorf("the merge would stand, but its worktree would not be removed: %v", err))
+	}
 	output.Info("[dry-run] Would remove worktree at %s", p.sourcePath)
 	previewBranchDeletion(p.source, true, p.deleteRemote)
 	output.Info("[dry-run] Would remove '%s' from hop.json, hopspace and state", p.source)

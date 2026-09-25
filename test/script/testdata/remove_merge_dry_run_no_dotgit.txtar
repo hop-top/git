@@ -1,0 +1,88 @@
+# `git hop remove -n` and `git hop merge -n` refuse a registered
+# worktree whose directory is there without its .git file, as the real
+# run does: `git worktree remove` validates the worktree first and stops
+# on a missing .git. The preview fails with the real run's exit status
+# (1), worded `[dry-run] would refuse to remove|merge ...`; under --json
+# stdout stays empty and the error record goes to stderr. `remove
+# --merged -n` skips it and says why. Each case also runs for real.
+#
+# The regression this pins: the previews said "Would remove worktree"
+# and exited 0 while the real run refused.
+
+# --- upstream repo and hub; feat/nogit lost its .git file ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/nogit
+exec git-hop main
+rm hops/feat/nogit/.git
+
+# --- snapshot what a refused removal must leave alone ---
+cp hop.json $WORK/hop.json.before
+cp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cp stdout $WORK/worktrees.before
+
+# --- remove -n ---
+exec sh -c 'git-hop remove feat/nogit -n --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to remove ''feat/nogit'': git could not remove the worktree at ''.*/hub/hops/feat/nogit'', so its files stay: ''.*/hub/hops/feat/nogit/.git'' does not exist$' err
+! grep 'Would remove worktree' out
+exec sh -c 'git-hop remove feat/nogit -n --no-prompt --no-verify --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to remove ''feat/nogit'': git could not remove the worktree at ''.*/hub/hops/feat/nogit'', so its files stay: ''.*/hub/hops/feat/nogit/.git'' does not exist"' err
+
+# --- remove --merged -n: skipped, with the reason ---
+exec sh -c 'git-hop remove --merged -n --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^\[dry-run\] Would skip feat/nogit: git could not remove the worktree at ''.*/hub/hops/feat/nogit'', so its files stay: ''.*/.git'' does not exist$' out
+! grep 'Would remove worktree' out
+grep '^fatal: \[dry-run\] would fail: 1 merged worktree\(s\) could not be removed$' err
+exec sh -c 'git-hop remove --merged -n --no-prompt --no-verify --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+decode json out '#' 1
+decode json out 0.branch feat/nogit
+decode json out 0.removed false
+decode json out 0.reason '~\.git'' does not exist$'
+grep '"msg":"\[dry-run\] would fail: 1 merged worktree\(s\) could not be removed"' err
+
+# --- merge -n ---
+exec sh -c 'git-hop merge feat/nogit main -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to merge ''feat/nogit'' into ''main'': the merge would stand, but its worktree would not be removed: git could not remove the worktree at ''.*/hub/hops/feat/nogit'', so its files stay: ''.*/.git'' does not exist$' err
+! grep 'Would remove worktree' out
+exec sh -c 'git-hop merge feat/nogit main -n --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to merge ''feat/nogit'' into ''main'': the merge would stand, but its worktree would not be removed: git could not remove the worktree at ''.*/hub/hops/feat/nogit''' err
+
+# --- the previews changed nothing ---
+cmp hop.json $WORK/hop.json.before
+cmp $WORK/.local/state/git-hop/state.json $WORK/state.json.before
+exec git for-each-ref --format='%(refname) %(objectname)'
+cmp stdout $WORK/refs.before
+exec git worktree list --porcelain
+cmp stdout $WORK/worktrees.before
+
+# --- the real runs refuse it too: git's validation stops them ---
+exec sh -c 'git-hop remove feat/nogit --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: git could not remove the worktree at ''.*/hub/hops/feat/nogit'', so its files stay: .*validation failed' err
+exec sh -c 'git-hop remove --merged --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep 'Failed to remove feat/nogit: git could not remove the worktree' err
+exec sh -c 'git-hop merge feat/nogit main >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Merged ''feat/nogit'' into ''main'', but did not remove its worktree: git could not remove the worktree at ''.*/hub/hops/feat/nogit''' err
+exists hops/feat/nogit
+cmp hop.json $WORK/hop.json.before
+exec git branch --list feat/nogit
+stdout 'feat/nogit'

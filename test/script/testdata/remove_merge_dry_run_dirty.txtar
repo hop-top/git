@@ -1,0 +1,66 @@
+# A dirty worktree is not one git refuses to remove: remove and merge
+# pass --force to `git worktree remove`, which deletes uncommitted and
+# untracked files. What stops them is git-hop's own check, and the
+# previews apply it as the real runs do: remove's safety gate asks for
+# --no-verify (and with it the removal goes through, previewed or not),
+# and merge refuses a source worktree that is not clean before it
+# merges. Human and --json, preview and real run.
+
+# --- upstream repo and hub; feat/dirty is merged but has an untracked file ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/dirty
+exec git-hop main
+cp $WORK/wip.txt hops/feat/dirty/wip.txt
+
+cp hop.json $WORK/hop.json.before
+
+# --- remove -n without --no-verify: the gate refuses ---
+exec sh -c 'git-hop remove feat/dirty -n --no-prompt >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: \[dry-run\] would refuse to remove ''feat/dirty'': .*uncommitted' err
+exec sh -c 'git-hop remove feat/dirty -n --no-prompt --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"\[dry-run\] would refuse to remove ''feat/dirty'': .*uncommitted' err
+
+# --- merge -n: the source must be clean ---
+exec sh -c 'git-hop merge feat/dirty main -n >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Source worktree ''feat/dirty'' has uncommitted changes' err
+exec sh -c 'git-hop merge feat/dirty main -n --json >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+! grep . out
+grep '"msg":"Source worktree ''feat/dirty'' has uncommitted changes' err
+exec sh -c 'git-hop merge feat/dirty main >out 2>err; echo "exit=$?"'
+stdout '^exit=1$'
+grep '^fatal: Source worktree ''feat/dirty'' has uncommitted changes' err
+
+# --- remove -n --no-verify: git would remove it, so the preview does too ---
+exec sh -c 'git-hop remove feat/dirty -n --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=0$'
+grep '^\[dry-run\] Would remove worktree at .*/hub/hops/feat/dirty$' out
+exec sh -c 'git-hop remove feat/dirty -n --no-prompt --no-verify --json >out 2>err; echo "exit=$?"'
+stdout '^exit=0$'
+decode json out 0.branch feat/dirty
+decode json out 0.removed true
+decode json out 0.dry_run true
+exec sh -c 'git-hop remove --merged -n --no-prompt --no-verify >out 2>err; echo "exit=$?"'
+stdout '^exit=0$'
+grep '^\[dry-run\] Would remove worktree at .*/hub/hops/feat/dirty$' out
+exists hops/feat/dirty/wip.txt
+cmp hop.json $WORK/hop.json.before
+
+# --- and the real run removes it ---
+exec git-hop remove feat/dirty --no-prompt --no-verify
+stdout 'Successfully removed feat/dirty'
+! exists hops/feat/dirty
+
+-- wip.txt --
+work in progress

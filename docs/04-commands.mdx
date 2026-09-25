@@ -724,7 +724,16 @@ git hop remove feature-x --dry-run
 The preview runs the safety gate exactly as a real removal would and
 prints its verdict. A removal the gate would refuse fails the same way,
 with exit status 1, so a script can use `--dry-run` to ask "would this
-go through?". Otherwise it lists the hooks that would run, the worktree
+go through?". So does one whose worktree the real run would not remove,
+as far as that is known before git runs: a directory that is not a
+worktree git has registered and is not empty, a worktree git has locked
+(`git worktree unlock` it first), or one whose `.git` file is missing.
+A permission or I/O error git would hit deleting the files cannot be
+known in advance. Uncommitted or untracked files are the safety gate's
+business, not git's: `--no-verify` lets the removal delete them.
+With `--merged`, each such candidate is skipped, with the reason, and
+the preview exits 1 as the real run does.
+Otherwise it lists the hooks that would run, the worktree
 and branch that would be deleted, and the hop.json, hopspace and state
 entries that would be dropped. No hook runs, the remote is never
 contacted (even with `--delete-remote`), and no prompt is shown.
@@ -1612,7 +1621,10 @@ With one argument, the current branch is the source.
 The source worktree is removed as [`git hop remove`](#git-hop-remove)
 removes one: only through `git worktree remove`. When that cannot
 happen, the merge stands, but merge fails with exit status 1 and the
-worktree, its `hop.json` entry and its branch stay.
+worktree, its `hop.json` entry and its branch stay. `--dry-run` fails
+the same way, with exit status 1, for a source worktree that
+`git hop remove --dry-run` would refuse to remove (see
+[`--dry-run`](#--dry-run) under `git hop remove`).
 
 ### Flags
 
