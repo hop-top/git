@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"syscall"
 	"testing"
+	"time"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
@@ -175,4 +176,61 @@ func TestTrashRestore_CopyKeepsSymlinks(t *testing.T) {
 	_, err = os.Lstat(dest)
 	assert.True(t, os.IsNotExist(err), "the backup must be gone")
 	assertStoreIntact(t, storeFiles)
+}
+
+// Two moves of the same name in the same second go to different trash
+// folders: the second neither merges into the first nor fails, and both
+// are listed under that second and cleaned with it. Once on the OS
+// filesystem (rename), once through the copy.
+func TestTrashMove_SameNameSameSecond(t *testing.T) {
+	for name, newTrash := range map[string]func(t *testing.T) *Trash{
+		"rename": func(t *testing.T) *Trash {
+			t.Setenv("GIT_HOP_DATA_HOME", t.TempDir())
+			return NewTrash(afero.NewOsFs())
+		},
+		"copy": func(t *testing.T) *Trash {
+			tr, _ := crossDeviceTrash(t)
+			return tr
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tr := newTrash(t)
+			at := time.Date(2026, 9, 25, 10, 30, 15, 0, time.Local)
+			tr.now = func() time.Time { return at }
+
+			root := t.TempDir()
+			var dests []string
+			for _, wt := range []string{"a", "b"} {
+				src := filepath.Join(root, wt, "node_modules")
+				require.NoError(t, os.MkdirAll(src, 0o755))
+				require.NoError(t, os.WriteFile(filepath.Join(src, "from"), []byte(wt), 0o644))
+				dest, err := tr.Move(src)
+				require.NoError(t, err, "move of %s", src)
+				dests = append(dests, dest)
+			}
+
+			require.NotEqual(t, dests[0], dests[1])
+			for i, wt := range []string{"a", "b"} {
+				assert.Equal(t, "node_modules", filepath.Base(dests[i]))
+				entries, err := os.ReadDir(dests[i])
+				require.NoError(t, err)
+				require.Len(t, entries, 1, "%s holds only what was trashed from %s", dests[i], wt)
+				data, err := os.ReadFile(filepath.Join(dests[i], "from"))
+				require.NoError(t, err)
+				assert.Equal(t, wt, string(data))
+			}
+
+			backups, err := tr.List()
+			require.NoError(t, err)
+			require.Len(t, backups, 2)
+			for _, b := range backups {
+				assert.Equal(t, "node_modules", b.Name)
+				assert.True(t, b.Timestamp.Equal(at), "timestamp %v, want %v", b.Timestamp, at)
+			}
+
+			n, _, err := tr.Clean(time.Since(at) - time.Minute)
+			require.NoError(t, err)
+			assert.Equal(t, 2, n)
+		})
+	}
 }
