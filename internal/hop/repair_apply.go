@@ -98,7 +98,7 @@ func (a *Applier) restoreFetchRefspec(action *Action) (bool, error) {
 		"--replace-all", "remote.origin.fetch", refspec); err != nil {
 		return false, fmt.Errorf("git config: %w", err)
 	}
-	if _, err := a.git.RunInDir(hubPath, "git", "fetch", "origin"); err != nil {
+	if _, err := a.git.RunInDir(hubPath, "git", git.FetchArgs("origin")...); err != nil {
 		return true, fmt.Errorf("post-action fetch: %w", err)
 	}
 	got, err := a.git.GetConfig(hubPath, "remote.origin.fetch")

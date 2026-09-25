@@ -2,12 +2,14 @@ package hop_test
 
 import (
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/test/mocks"
 )
@@ -33,7 +35,7 @@ func TestForkAttach_FindsMainRepoFromHubRelativePath(t *testing.T) {
 		assert.NotContains(t, err.Error(), "could not find main repository")
 	}
 
-	assert.True(t, g.Runner.CalledWith(filepath.Join(hubPath, "hops", "main")+":git fetch "+uri+" feat"),
+	assert.True(t, g.Runner.CalledWith(filepath.Join(hubPath, "hops", "main")+forkFetch(uri, "feat")),
 		"fetch must run in the hub-relative main worktree; calls: %v", g.Runner.Calls)
 }
 
@@ -59,7 +61,7 @@ func TestForkAttach_SkipsFileAtWorktreePath(t *testing.T) {
 	uri := "https://github.com/forker/repo.git"
 	_ = hop.ForkAttach(fs, g, uri, "feat", hubPath)
 
-	fetch := ":git fetch " + uri + " feat"
+	fetch := forkFetch(uri, "feat")
 	assert.False(t, g.Runner.CalledWith(occupied+fetch),
 		"nothing may run in the file at %s; calls: %v", occupied, g.Runner.Calls)
 	assert.True(t, g.Runner.CalledWith(mainPath+fetch),
@@ -84,4 +86,9 @@ func TestForkAttach_FileAtOnlyWorktreePath_NoMainRepo(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "could not find main repository")
 	assert.Empty(t, g.Runner.Calls, "no git command may run")
+}
+
+// forkFetch is the mock-runner key suffix of fork-attach's fetch.
+func forkFetch(uri, branch string) string {
+	return ":git " + strings.Join(git.FetchArgs(uri, branch), " ")
 }

@@ -257,13 +257,7 @@ func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBra
 		"remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*"); err != nil {
 		return fmt.Errorf("failed to set origin fetch refspec: %w", err)
 	}
-	// Auto-maintenance stays off for this fetch: git detaches it and, since
-	// 2.54, it runs worktree-prune, which deletes the hops/<branch> entry if
-	// it lands between `git worktree add` creating it and locking it. A
-	// fresh clone has nothing to maintain. The config key, not
-	// --no-auto-maintenance, keeps pre-2.29 git working.
-	if _, err := g.Run("git", "-C", projectRoot, "-c", "maintenance.auto=false",
-		"fetch", "origin"); err != nil {
+	if _, err := g.RunInDir(projectRoot, "git", git.FetchArgs("origin")...); err != nil {
 		return fmt.Errorf("failed to fetch origin: %w", err)
 	}
 
