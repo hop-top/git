@@ -12,7 +12,7 @@ make test           # go test -v ./internal/... (excludes cmd/, test/e2e/, test/
 make lint           # go vet + staticcheck (install: go install honnef.co/go/tools/cmd/staticcheck@latest)
 make fmt            # go fmt ./...
 make install        # copy binary to $GOBIN
-make lint-links     # lychee link-check on docs/**/*.md (requires `brew install lychee`)
+make lint-links     # lychee link-check on docs/**/*.md and *.mdx (requires `brew install lychee`)
 ```
 
 CI (`.github/workflows/ci.yml`) runs `go build ./...`, `go vet ./...`, `staticcheck ./...`, and `go test -coverprofile=coverage.out ./...` (note: full tree, not just `./internal/...`). Replicate locally before pushing:
