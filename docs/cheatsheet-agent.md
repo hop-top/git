@@ -167,7 +167,7 @@ exits 0 without prompting.
 ## Diagnostics + Repair
 
 ```bash
-/usr/bin/git hop doctor --json        # [{kind, check, subject, message}]; [] = healthy
+/usr/bin/git hop doctor --json        # [{kind, check, subject, message, fixable?}]; [] = healthy; fixable on issues only
                                       #   exit 1 on any issue; warnings alone exit 0
 /usr/bin/git hop doctor --fix         # auto-repair (symlinks, state, current hub's hop.json; records an unlisted hub)
                                       #   exit 0 only if every issue was fixed

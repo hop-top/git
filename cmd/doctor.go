@@ -13,7 +13,6 @@ import (
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
-	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 )
 
@@ -238,10 +237,48 @@ func (r *doctorReport) record(kind, check, subject, format string, args ...any) 
 	})
 }
 
-// issue records a problem that makes the installation unhealthy.
-func (r *doctorReport) issue(check, subject, format string, args ...any) {
+// fixableIssue records a problem that makes the installation unhealthy
+// and that --fix has a repair for. The repair can still fail when it
+// runs; that is a failed record, not an unfixable issue.
+func (r *doctorReport) fixableIssue(check, subject, format string, args ...any) {
+	r.issue(true, check, subject, format, args...)
+}
+
+// unfixableIssue records a problem that makes the installation unhealthy
+// and that --fix has no repair for: the error or hint printed with it
+// says what to do instead. doctor never suggests --fix for it.
+func (r *doctorReport) unfixableIssue(check, subject, format string, args ...any) {
+	r.issue(false, check, subject, format, args...)
+}
+
+// issue records a problem, marked with whether --fix can repair it. Every
+// check goes through fixableIssue or unfixableIssue, so none can report
+// an issue without saying which it is.
+func (r *doctorReport) issue(fixable bool, check, subject, format string, args ...any) {
 	r.issuesFound = true
-	r.record(doctorKindIssue, check, subject, format, args...)
+	r.records = append(r.records, doctorRecord{
+		Kind:    doctorKindIssue,
+		Check:   check,
+		Subject: subject,
+		Message: fmt.Sprintf(format, args...),
+		Fixable: &fixable,
+	})
+}
+
+// issueCounts returns how many of the issues reported are fixable and
+// how many are not.
+func (r doctorReport) issueCounts() (fixable, unfixable int) {
+	for _, rec := range r.records {
+		if rec.Kind != doctorKindIssue {
+			continue
+		}
+		if rec.Fixable != nil && *rec.Fixable {
+			fixable++
+		} else {
+			unfixable++
+		}
+	}
+	return fixable, unfixable
 }
 
 // repaired records and counts a repair that landed, or under --dry-run
@@ -326,7 +363,7 @@ func checkPaths(fs afero.Fs, opts doctorOpts, r *doctorReport) {
 	if exists, _ := afero.DirExists(fs, dataHome); exists {
 		return
 	}
-	r.issue(doctorCheckPaths, dataHome, "data directory does not exist")
+	r.fixableIssue(doctorCheckPaths, dataHome, "data directory does not exist")
 
 	switch {
 	case !opts.fix:
@@ -368,7 +405,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err != nil {
 		output.Error("Failed to load hopspace: %v", err)
-		r.issue(doctorCheckWorktrees, hopspacePath, "failed to load hopspace: %v", err)
+		r.unfixableIssue(doctorCheckWorktrees, hopspacePath, "failed to load hopspace: %v", err)
 		return
 	}
 
@@ -378,7 +415,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 	orphanedDirs, err := validator.DetectOrphanedDirectories(hopspace)
 	if err != nil {
 		output.Error("Failed to detect orphaned directories: %v", err)
-		r.record(doctorKindIssue, doctorCheckWorktrees, hopspacePath, "failed to detect orphaned directories: %v", err)
+		r.unfixableIssue(doctorCheckWorktrees, hopspacePath, "failed to detect orphaned directories: %v", err)
 		return
 	}
 	if len(orphanedDirs) == 0 {
@@ -390,7 +427,7 @@ func checkWorktreeState(fs afero.Fs, g git.GitInterface, hubPath string, opts do
 	for _, dir := range orphanedDirs {
 		output.Error("  - %s", dir)
 		fullPath := filepath.Join(hopspacePath, "hops", dir)
-		r.issue(doctorCheckWorktrees, fullPath, "orphaned directory")
+		r.fixableIssue(doctorCheckWorktrees, fullPath, "orphaned directory")
 		if !opts.fix {
 			continue
 		}
@@ -472,7 +509,7 @@ func inspectState(fs afero.Fs, g git.GitInterface, r *doctorReport) (*state.Stat
 	output.Info("Found %d state consistency issue(s):", len(stateIssues))
 	for _, issue := range stateIssues {
 		output.Error("  %s", issue)
-		r.issue(doctorCheckState, stateWorktreeSubject(issue.repoID, issue.branch, issue.path), "worktree missing: %s (%s:%s)", issue.path, issue.repoID, issue.branch)
+		r.fixableIssue(doctorCheckState, stateWorktreeSubject(issue.repoID, issue.branch, issue.path), "worktree missing: %s (%s:%s)", issue.path, issue.repoID, issue.branch)
 	}
 	return st, stateIssues
 }
@@ -502,21 +539,18 @@ func summarizeDoctor(opts doctorOpts, r doctorReport) {
 			output.Info("Some issues could not be automatically fixed. Please review the errors above.")
 		}
 	default:
-		output.Info("Issues found. Run 'git hop doctor --fix' to automatically repair them.")
-	}
-}
-
-// hasErrorSeverity reports whether any issue is severe enough to make the
-// installation unhealthy. Warning-severity issues (stale symlinks) are
-// still printed but do not flip doctor's verdict, because they describe a
-// benign, self-healing state rather than something needing repair.
-func hasErrorSeverity(issues []services.Issue) bool {
-	for _, issue := range issues {
-		if issue.Type.Severity() == services.SeverityError {
-			return true
+		// Suggest --fix only for what it can repair: an issue it has no
+		// repair for would still be there after it, and exit 1 again.
+		fixable, unfixable := r.issueCounts()
+		switch {
+		case unfixable == 0:
+			output.Info("Issues found. Run 'git hop doctor --fix' to automatically repair them.")
+		case fixable == 0:
+			output.Info("Issues found that 'git hop doctor --fix' cannot repair. Please review the errors and hints above.")
+		default:
+			output.Info("Issues found. Run 'git hop doctor --fix' to repair %d of them; for the other %d, review the errors and hints above.", fixable, unfixable)
 		}
 	}
-	return false
 }
 
 // getDirSize calculates the total size of a directory

@@ -1,0 +1,70 @@
+# doctor suggests --fix only when --fix can repair an issue it found.
+#
+# Every issue record says whether --fix has a repair for it (fixable,
+# json/yaml only). Without --fix the summary suggests --fix when every
+# issue is fixable, names how many it can repair when only some are, and
+# points at the errors and hints when none is. With --fix it says some
+# issues could not be fixed exactly when one is left.
+#
+# The regression this pins: doctor suggested --fix for any issue, so a
+# broken managers.json (which --fix cannot repair) sent the user to a
+# --fix that changed nothing and exited 1 again.
+
+# --- fixable only: the data home is missing ---
+! exists $WORK/data
+! exec git-hop doctor
+stdout '^Issues found\. Run .git hop doctor --fix. to automatically repair them\.$'
+! exec git-hop doctor --json
+decode json stdout '#' 1
+decode json stdout 0.kind issue
+decode json stdout 0.check paths
+decode json stdout 0.fixable true
+
+exec git-hop doctor --fix
+stdout '^Fixed 1 issue\(s\)\.$'
+! stdout 'could not be automatically fixed'
+exists $WORK/data
+
+# --- unfixable only: managers.json does not parse ---
+mkdir $WORK/.config/git-hop
+cp $WORK/bad.json $WORK/.config/git-hop/managers.json
+! exec git-hop doctor
+stdout '^Issues found that .git hop doctor --fix. cannot repair\. Please review the errors and hints above\.$'
+! stdout 'to automatically repair them'
+! exec git-hop doctor --json
+decode json stdout '#' 1
+decode json stdout 0.check config
+decode json stdout 0.fixable false
+
+! exec git-hop doctor --fix
+stdout '^Some issues could not be automatically fixed\. Please review the errors above\.$'
+! stdout 'Fixed'
+! exec git-hop doctor --fix --json
+decode json stdout '#' 1
+decode json stdout 0.fixable false
+
+# --- mixed: both ---
+rm $WORK/data
+! exec git-hop doctor
+stdout '^Issues found\. Run .git hop doctor --fix. to repair 1 of them; for the other 1, review the errors and hints above\.$'
+! exec git-hop doctor --json
+decode json stdout '#' 2
+decode json stdout 0.check paths
+decode json stdout 0.fixable true
+decode json stdout 1.check config
+decode json stdout 1.fixable false
+
+! exec git-hop doctor --fix --json
+decode json stdout 0.fixable true
+decode json stdout 1.kind fixed
+! decode json stdout 1.fixable
+decode json stdout 2.fixable false
+
+rm $WORK/data
+! exec git-hop doctor --fix
+stdout '^Fixed 1 issue\(s\)\.$'
+stdout '^Some issues could not be automatically fixed\. Please review the errors above\.$'
+! stdout 'Run .git hop doctor --fix.'
+
+-- bad.json --
+{ not json

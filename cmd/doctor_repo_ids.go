@@ -28,7 +28,7 @@ func checkRepoIDCollisions(fs afero.Fs, st *state.State, r *doctorReport) {
 		output.Error("state records %s under %s, but its origin gives %s, which state already holds; both entries kept", hubs, c.From, c.To)
 		output.Hint("merge by hand: copy %s, then in it move those hubs and their worktrees from %q into %q and delete %q",
 			stateFile, c.From, c.To, c.From)
-		r.issue(doctorCheckState, c.From,
+		r.unfixableIssue(doctorCheckState, c.From,
 			"%s recorded under %s, but its origin gives %s, which state already holds; both entries kept; merge by hand: move those hubs and their worktrees into %s in %s and delete %s",
 			hubs, c.From, c.To, c.To, stateFile, c.From)
 	}

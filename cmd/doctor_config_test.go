@@ -236,6 +236,8 @@ func TestDoctorConfig_BrokenManagersJSON(t *testing.T) {
 	issues := configRecords(r, doctorKindIssue)
 	require.Len(t, issues[path], 1, "records: %+v", r.records)
 	assert.Contains(t, issues[path][0].Message, "ignored")
+	require.NotNil(t, issues[path][0].Fixable)
+	assert.False(t, *issues[path][0].Fixable, "--fix cannot guess what the file should hold")
 	assert.NotEqual(t, 0, cli.ExitCode(doctorResult(r)))
 }
 

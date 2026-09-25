@@ -67,10 +67,16 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 
 		if presence == hop.WorktreeOccupied {
 			output.Error("Worktree path for branch %s is occupied by a non-directory: %s", name, linkPath)
-			r.issue(doctorCheckHub, name, "worktree path occupied by a non-directory: %s", linkPath)
+			// --fix cannot check a worktree out over what is there
+			// (recreateBlocker); it can only drop a merged branch's row.
+			if _, merged := mergedMissingBranch(g, hub, b.HopspaceBranch); merged {
+				r.fixableIssue(doctorCheckHub, name, "worktree path occupied by a non-directory: %s", linkPath)
+			} else {
+				r.unfixableIssue(doctorCheckHub, name, "worktree path occupied by a non-directory: %s", linkPath)
+			}
 		} else {
 			output.Error("Broken link for branch %s: %s", name, linkPath)
-			r.issue(doctorCheckHub, name, "worktree directory missing: %s", linkPath)
+			r.fixableIssue(doctorCheckHub, name, "worktree directory missing: %s", linkPath)
 		}
 		if !opts.fix {
 			continue

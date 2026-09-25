@@ -48,7 +48,7 @@ func checkHubRegistration(fs afero.Fs, hubPath string, opts doctorOpts, r *docto
 	if !plan.Hub {
 		repair = fmt.Sprintf("register %d worktree(s) in state", len(plan.Worktrees))
 	}
-	r.issue(doctorCheckState, hubPath, "%s", missing)
+	r.fixableIssue(doctorCheckState, hubPath, "%s", missing)
 
 	switch {
 	case !opts.fix:

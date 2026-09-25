@@ -28,7 +28,7 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
 		output.Error("Failed to load hub config: %v", err)
-		r.issue(doctorCheckHub, hubPath, "failed to load hub config: %v", err)
+		r.unfixableIssue(doctorCheckHub, hubPath, "failed to load hub config: %v", err)
 		return hubPath, nil
 	}
 
@@ -46,7 +46,7 @@ func checkHub(fs afero.Fs, g git.GitInterface, cwd string, opts doctorOpts, r *d
 		// hopspace here would strand the real one.
 		output.Info("Hopspace not at %s: see the hop.dataLayout warning above.", hopspacePath)
 	case !exists:
-		r.issue(doctorCheckHub, hopspacePath, "hopspace does not exist")
+		r.fixableIssue(doctorCheckHub, hopspacePath, "hopspace does not exist")
 		createMissingHopspace(fs, hub, hubPath, hopspacePath, opts, r)
 	default:
 		reconcileHopspaceBranches(fs, hub, hubPath, hopspacePath, opts, r)
@@ -66,7 +66,7 @@ func checkOriginFetchRefspec(g git.GitInterface, hubPath string, r *doctorReport
 	const msg = "origin has no remote.origin.fetch refspec; fetches leave refs/remotes/origin/* stale"
 	output.Error("%s", msg)
 	output.Hint("run 'git hop repair' to restore %s", hop.OriginFetchRefspec)
-	r.issue(doctorCheckHub, hubPath, "%s; run 'git hop repair' to restore it", msg)
+	r.unfixableIssue(doctorCheckHub, hubPath, "%s; run 'git hop repair' to restore it", msg)
 }
 
 // warnStaleHopspaceCopy reports a data-home hop.json left beside an
@@ -127,7 +127,7 @@ func reconcileHopspaceBranches(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath 
 	hopspace, err := hop.LoadHopspace(fs, hopspacePath)
 	if err != nil {
 		output.Error("Failed to load hopspace: %v", err)
-		r.issue(doctorCheckHub, hopspacePath, "failed to load hopspace: %v", err)
+		r.unfixableIssue(doctorCheckHub, hopspacePath, "failed to load hopspace: %v", err)
 		return
 	}
 
@@ -135,7 +135,7 @@ func reconcileHopspaceBranches(fs afero.Fs, hub *hop.Hub, hubPath, hopspacePath 
 		if _, ok := hopspace.Config.Branches[branchName]; ok {
 			continue
 		}
-		r.issue(doctorCheckHub, branchName, "branch in hub but not in hopspace")
+		r.fixableIssue(doctorCheckHub, branchName, "branch in hub but not in hopspace")
 
 		if !opts.fix {
 			output.Error("Branch %s in hub but not in hopspace", branchName)
@@ -180,14 +180,14 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 	depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
 	if err != nil {
 		output.Error("Failed to initialize dependency manager: %v", err)
-		r.issue(doctorCheckDependencies, hopspacePath, "failed to initialize dependency manager: %v", err)
+		r.unfixableIssue(doctorCheckDependencies, hopspacePath, "failed to initialize dependency manager: %v", err)
 		return
 	}
 
 	issues, err := depsManager.Audit(auditableWorktrees(fs, hub))
 	if err != nil {
 		output.Error("Failed to audit dependencies: %v", err)
-		r.issue(doctorCheckDependencies, hopspacePath, "failed to audit dependencies: %v", err)
+		r.unfixableIssue(doctorCheckDependencies, hopspacePath, "failed to audit dependencies: %v", err)
 		return
 	}
 
@@ -197,13 +197,6 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		return
 	}
 
-	// Only error-severity issues make the installation unhealthy. Stale
-	// and old-layout symlinks are warnings: the next install refreshes
-	// them, so they must not on their own drive the "issues
-	// found" verdict — while staying visible in the report.
-	if hasErrorSeverity(issues) {
-		r.issuesFound = true
-	}
 	output.Info("\nDependency Issues:")
 
 	var totalReclaimableSize int64
@@ -228,11 +221,16 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 			output.Error("  %s: missing %s", issue.Branch, issue.PM.DepsDir)
 			msg = fmt.Sprintf("missing %s", issue.PM.DepsDir)
 		}
-		kind := doctorKindIssue
-		if issue.Type.Severity() != services.SeverityError {
-			kind = doctorKindWarning
+		// Only error-severity issues make the installation unhealthy, and
+		// --fix repairs every one (fixDependencies). Stale and old-layout
+		// symlinks are warnings: the next install refreshes them, so they
+		// must not on their own drive the "issues found" verdict, while
+		// staying visible in the report.
+		if issue.Type.Severity() == services.SeverityError {
+			r.fixableIssue(doctorCheckDependencies, issue.Branch, "%s", msg)
+		} else {
+			r.record(doctorKindWarning, doctorCheckDependencies, issue.Branch, "%s", msg)
 		}
-		r.record(kind, doctorCheckDependencies, issue.Branch, "%s", msg)
 	}
 
 	if totalReclaimableSize > 0 {

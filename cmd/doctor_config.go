@@ -52,7 +52,7 @@ func checkManagersFile(l *config.GlobalLoader, r *doctorReport) {
 		return
 	}
 	output.Error("%v; its package and environment managers are ignored", err)
-	r.issue(doctorCheckConfig, config.ManagersPath(), "%v; its package and environment managers are ignored until it is fixed", err)
+	r.unfixableIssue(doctorCheckConfig, config.ManagersPath(), "%v; its package and environment managers are ignored until it is fixed", err)
 }
 
 // checkRetiredConfigFile warns about a config.json left in the config
@@ -102,7 +102,7 @@ func checkMigrationDebris(l *config.GlobalLoader, opts doctorOpts, r *doctorRepo
 
 	for _, e := range debris {
 		output.Error("%s = %q was written by the global.json migration and shadows the default", e.Key, e.Value)
-		r.issue(doctorCheckConfig, e.Key, "%q was written by the global.json migration and shadows the default; run 'git hop doctor --fix' to unset it", e.Value)
+		r.fixableIssue(doctorCheckConfig, e.Key, "%q was written by the global.json migration and shadows the default; run 'git hop doctor --fix' to unset it", e.Value)
 		if !opts.fix {
 			continue
 		}
