@@ -372,8 +372,9 @@ Start services for current worktree.
 git hop env start
 ```
 
-Output (all of it on stderr: start has no result, only progress, so
-stdout stays empty in every output mode):
+Output (all of it on stderr: it is progress, so stdout stays empty in
+the human view; `--json`, `--format` and `--porcelain` put start's
+[result](./09-reference#env-start-env-stop) there and nothing else):
 
 ```
 Environment Manager: docker-compose

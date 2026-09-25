@@ -131,6 +131,9 @@ exits 0 without prompting.
 /usr/bin/git hop env generate         # write .env + override for current worktree
 /usr/bin/git hop env start            # start Docker / services (aliases: up)
 /usr/bin/git hop env stop             # stop services (aliases: down)
+/usr/bin/git hop env start --json     # {branch, path, manager, env_started, ports, services}
+/usr/bin/git hop env stop --json      # same, env_stopped; manager "" = no environment (exit 0)
+/usr/bin/git hop env generate --json  # {branch, path, generated, env_file, override, ports}
 /usr/bin/git hop env gc --dry-run     # list orphaned deps + disk to reclaim
 /usr/bin/git hop env gc --no-prompt   # delete orphaned deps, no prompt (--force equivalent)
 /usr/bin/git hop env gc --dry-run --json  # [{action, key, size, last_used, path}]
@@ -174,9 +177,11 @@ exits 0 without prompting.
 
 Structured output rules:
 
-- Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env gc`, `repair`
-  have a result; other commands ignore the format for stdout.
-- Every result is a list (`add`, `init`: one object). Empty = `[]`, never empty stdout.
+- Only `add`, `init`, `status`, `list`, `doctor`, `prune`, `env start`,
+  `env stop`, `env generate`, `env gc`, `repair` have a result; other
+  commands ignore the format for stdout.
+- Every result is a list (`add`, `init`, `env start|stop|generate`: one
+  object). Empty = `[]`, never empty stdout.
 - Structured `init` on a standard repo needs `--no-prompt` (else exit 129, nothing converted).
 - `--json` + `--porcelain`, `--json` + another `--format`, an unknown format
   or column: exit 129 before anything changes.

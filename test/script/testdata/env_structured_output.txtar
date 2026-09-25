@@ -1,0 +1,148 @@
+# `git hop env start`, `env stop` and `env generate` honour the structured
+# output modes: each renders one object on stdout, and nothing else goes
+# there. The manager's steps, hook output and compose's own output stay on
+# stderr, as they do in the human view.
+#
+# The regression this pins: the three printed nothing on stdout under
+# --json, --format and --porcelain -- no result at all.
+#
+# A stub docker on PATH stands in for compose: `compose config` fails (so
+# the raw compose file is parsed), `ps` reports one web container in
+# $STUB_STATE, `up` is logged, and every call echoes on both streams.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/repo.git
+exec git clone -q $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -q -m 'compose'
+exec git push -q origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git hub
+cd $WORK/hub/hops/main
+
+# --- env start --json ---
+env STUB_STATE=running
+exec git-hop env start --json
+decode json stdout branch main
+decode json stdout path '~/hub/hops/main$'
+decode json stdout manager docker-compose
+decode json stdout env_started true
+decode json stdout ports.WEB '~^[0-9]+$'
+decode json stdout 'services.#' 1
+decode json stdout services.0.service web
+decode json stdout services.0.name org-repo-main-web-1
+decode json stdout services.0.state running
+! decode json stdout env_stopped
+! stdout 'stub-compose'
+stderr 'stub-compose-stdout compose .* up -d'
+grep -count=1 '^up ' $WORK/up.log
+
+# --- env start --porcelain: branch path manager env_started ---
+exec git-hop env start --porcelain
+stdout -count=1 '\n'
+stdout '^main\t\S+/hub/hops/main\tdocker-compose\ttrue$'
+
+# --- env stop --format yaml ---
+env STUB_STATE=exited
+exec git-hop env stop --format yaml
+decode yaml stdout branch main
+decode yaml stdout manager docker-compose
+decode yaml stdout env_stopped true
+decode yaml stdout services.0.state exited
+! decode yaml stdout env_started
+! stdout 'stub-compose'
+stderr 'stub-compose-stdout compose .* stop'
+
+exec git-hop env stop --porcelain
+stdout '^main\t\S+/hub/hops/main\tdocker-compose\ttrue$'
+
+# --- env generate --json: the files it wrote ---
+exec git-hop env generate --json
+decode json stdout branch main
+decode json stdout path '~/hub/hops/main$'
+decode json stdout generated true
+decode json stdout env_file '~/hub/hops/main/\.env$'
+decode json stdout override '~/org/repo/main/docker-compose\.override\.yml$'
+decode json stdout ports.WEB '~^[0-9]+$'
+! stdout 'Environment generated'
+exists $WORK/hub/hops/main/.env
+
+exec git-hop env generate --porcelain
+stdout -count=1 '\n'
+stdout '^main\t\S+/hub/hops/main\ttrue\t\S+/\.env\t\S+/docker-compose\.override\.yml$'
+
+# --- a failed start: exit 1, nothing on stdout ---
+env STUB_FAIL=1
+! exec git-hop env start --json
+! stdout .
+stderr 'start command failed'
+env STUB_FAIL=
+
+# --- refusals: before anything runs ---
+! exec git-hop env start --json --porcelain
+stderr 'mutually exclusive'
+! exec git-hop env start --format xml
+stderr 'unknown output format'
+! exec git-hop env start --porcelain --cols nope
+stderr 'unknown column'
+! exec git-hop env start -n --json
+stderr 'dry-run'
+grep -count=2 '^up ' $WORK/up.log
+
+# --- no environment: an empty result, not an error ---
+cd $WORK/hub
+exec git-hop add plain
+cd $WORK/hub/hops/plain
+exec git rm -q docker-compose.yml
+exec git commit -q -m 'no compose'
+exec git-hop env start --json
+decode json stdout branch plain
+decode json stdout manager ''
+decode json stdout env_started false
+! decode json stdout services
+! stdout 'No environment manager'
+exec git-hop env stop --json
+decode json stdout manager ''
+decode json stdout env_stopped false
+exec git-hop env generate --json
+decode json stdout generated false
+decode json stdout env_file ''
+decode json stdout override ''
+! stdout 'No Docker environment'
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+*" ps "*)
+	echo "{\"Service\":\"web\",\"Name\":\"org-repo-main-web-1\",\"State\":\"$STUB_STATE\"}"
+	exit 0
+	;;
+esac
+if [ -n "$STUB_FAIL" ]; then
+	echo "stub-fail-stdout"
+	echo "stub: failed" >&2
+	exit 1
+fi
+case " $* " in
+*" up "*)
+	echo "up $*" >> "$WORK/up.log"
+	;;
+esac
+echo "stub-compose-stdout $*"
+echo "stub-compose-stderr" >&2
+exit 0

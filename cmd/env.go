@@ -29,7 +29,7 @@ var envStartCmd = &cobra.Command{
 	Aliases: []string{"up"},
 	Short:   "Start the environment services",
 	Run: func(cmd *cobra.Command, args []string) {
-		runEnvCommand("start")
+		runEnvCommand(cmd, "start")
 	},
 }
 
@@ -39,11 +39,11 @@ var envStopCmd = &cobra.Command{
 	Aliases: []string{"down"},
 	Short:   "Stop the environment services",
 	Run: func(cmd *cobra.Command, args []string) {
-		runEnvCommand("stop")
+		runEnvCommand(cmd, "stop")
 	},
 }
 
-func runEnvCommand(action string) {
+func runEnvCommand(cmd *cobra.Command, action string) {
 	fs := afero.NewOsFs()
 	g := git.New()
 
@@ -67,8 +67,8 @@ func runEnvCommand(action string) {
 
 	// Hub context is optional: outside a hub the worktree's own files
 	// still select a manager.
-	// start and stop have no result: all they say is progress, and
-	// progress goes to stderr.
+	// All start and stop say is progress, and progress goes to stderr;
+	// their result, in a structured mode, is stdout's alone.
 	target := services.EnvTarget{Root: root, Progress: os.Stderr}
 	if hubPath, err := hop.FindHub(fs, cwd); err == nil {
 		if hub, err := hop.LoadHub(fs, hubPath); err == nil {
@@ -79,15 +79,42 @@ func runEnvCommand(action string) {
 		}
 	}
 
+	// emit renders the result of a run by manager ("" when the worktree
+	// has none), in a structured mode.
+	emit := func(manager string, done bool) {
+		if !output.IsStructured() {
+			return
+		}
+		branch := target.Branch
+		if branch == "" {
+			branch, _ = g.GetCurrentBranch(root)
+		}
+		res := newEnvResult(fs, docker.New(), target, branch, manager, done)
+		if action == "stop" {
+			emitResult(cmd, envStopResult(res))
+			return
+		}
+		emitResult(cmd, res)
+	}
+
 	switch action {
 	case "start":
 		err := services.StartEnv(fs, target, globalConfig, cli.EventBus)
 		if errors.Is(err, services.ErrNoEnvironment) {
 			output.Note("No environment manager detected, skipping")
+			emit("", false)
 			return
 		}
 		if err != nil {
 			output.Fatal("Failed to start environment: %v", err)
+		}
+		if output.IsStructured() {
+			// StartEnv resolved the manager it ran; the result names it.
+			name := ""
+			if manager, _, _ := services.ResolveEnv(target, globalConfig); manager != nil {
+				name = manager.Name
+			}
+			emit(name, true)
 		}
 	case "stop":
 		manager, overridePath, err := services.ResolveEnv(target, globalConfig)
@@ -96,6 +123,7 @@ func runEnvCommand(action string) {
 		}
 		if manager == nil {
 			output.Note("No environment manager detected, skipping")
+			emit("", false)
 			return
 		}
 		output.Note("Environment Manager: %s", manager.Name)
@@ -106,6 +134,7 @@ func runEnvCommand(action string) {
 			events.EnvStopped, events.Source,
 			events.EnvEvent{Action: "stop", Root: root, Branch: target.Branch},
 		))
+		emit(manager.Name, true)
 	}
 }
 
@@ -157,6 +186,10 @@ var envGenerateCmd = &cobra.Command{
 		if err != nil {
 			output.Fatal("Failed to generate environment: %v", err)
 		}
+		if output.IsStructured() {
+			emitResult(cmd, newEnvGenerateResult(root, branch, env))
+			return
+		}
 		if env == nil {
 			output.Info("No Docker environment detected, skipping")
 			return
@@ -170,6 +203,9 @@ var envGenerateCmd = &cobra.Command{
 }
 
 func init() {
+	declareOutputSchema(envStartCmd, &envStartResult{})
+	declareOutputSchema(envStopCmd, &envStopResult{})
+	declareOutputSchema(envGenerateCmd, &envGenerateResult{})
 	envCmd.AddCommand(envStartCmd)
 	envCmd.AddCommand(envStopCmd)
 	envCmd.AddCommand(envGenerateCmd)

@@ -311,8 +311,8 @@ Rules:
 - `--json` with `--porcelain`, or `--json`/`--porcelain` with a different
   `--format`, is refused with exit 129 before the command does anything.
   So is an unknown format or an unknown `--cols` column.
-- Every result is a list of records, except `add` and `init`, which
-  return one object. An empty result is `[]` (and no lines under
+- Every result is a list of records, except `add`, `init`, `env start`,
+  `env stop` and `env generate`, which return one object. An empty result is `[]` (and no lines under
   `--porcelain`), never empty stdout.
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
@@ -491,6 +491,41 @@ target without `--force`, dirty tree) fails the same way as the real run.
 | `moved_aside` | string | *json/yaml only*; `restored` with `--force`: where what occupied the original location was moved (would be, under `--dry-run`) |
 
 Columns: `action hub layout default_branch backup`.
+
+### env start, env stop
+
+One object: the worktree's environment once the start or stop has run.
+The manager's steps, hook output and the lifecycle command's own output
+stay on stderr. A worktree with no environment is not an error: `manager`
+is empty and `env_started` (`env_stopped`) is `false`. `env start` and
+`env stop` have no preview; `--dry-run` exits 129.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `branch` | string | Branch checked out in the worktree |
+| `path` | string | Absolute path of the worktree |
+| `manager` | string | Environment manager that ran (for example `docker-compose`); empty when the worktree has none |
+| `env_started` | bool | `env start` only: `true` when the environment was started |
+| `env_stopped` | bool | `env stop` only: `true` when the environment was stopped |
+| `ports` | map service → port | *json/yaml only*; ports allocated to the worktree's services; absent when none |
+| `services` | list of `{service, name, state}` | *json/yaml only*; `docker-compose` only: the worktree's containers after the run, as `docker compose ps` reports them (as in `status <branch>`); absent when it reports none |
+
+Columns: `branch path manager env_started` (`env_stopped` for `env stop`).
+
+### env generate
+
+One object: the environment files written for the current worktree.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `branch` | string | Branch checked out in the worktree |
+| `path` | string | Absolute path of the worktree |
+| `generated` | bool | `true` when the files were written; `false` when the worktree has no Docker environment |
+| `env_file` | string | Absolute path of the worktree's `.env`; empty when not generated |
+| `override` | string | Absolute path of the branch's compose override, which replaces the compose file's hardcoded host ports; empty when the compose file needs none |
+| `ports` | map service → port | *json/yaml only*; ports allocated to the worktree's services; absent when none |
+
+Columns: `branch path generated env_file override`.
 
 ## Configuration Reference
 
