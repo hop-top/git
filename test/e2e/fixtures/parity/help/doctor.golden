@@ -4,6 +4,9 @@ Checks:
 - Path configuration (data home; the config and cache homes are
   optional until something is written there)
 - Hub configuration and symlinks
+- The current hub's origin fetch refspec: an origin with no
+  remote.origin.fetch (a plain 'git clone --bare') never updates
+  refs/remotes/origin/* on fetch ('git hop repair' restores it)
 - Hopspace existence and consistency
 - Hopspace hooks left at the pre-hop.dataLayout location
   ($GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks): they still fire,
