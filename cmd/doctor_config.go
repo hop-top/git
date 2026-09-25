@@ -2,12 +2,14 @@ package cmd
 
 import (
 	"fmt"
+	"os"
 
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/output"
 )
 
-// checkConfig reports a broken managers.json (checkManagersFile), --global
+// checkConfig reports a broken managers.json (checkManagersFile), a
+// leftover config.json nothing reads (checkRetiredConfigFile), --global
 // hop.* keys the zero-value global.json migration wrote and the user never
 // set (see config.GlobalLoader.MigrationDebris), and keys of retired settings in
 // --global and in the current hub's --local config (see
@@ -19,6 +21,7 @@ import (
 func checkConfig(l *config.GlobalLoader, hubPath string, opts doctorOpts, r *doctorReport) {
 	output.Info("\n=== Checking Config ===")
 	checkManagersFile(l, r)
+	checkRetiredConfigFile(r)
 	checkMigrationDebris(l, opts, r)
 
 	scopes := []config.ConfigScope{l.GlobalScope()}
@@ -48,6 +51,21 @@ func checkManagersFile(l *config.GlobalLoader, r *doctorReport) {
 	}
 	output.Error("%v; its package and environment managers are ignored", err)
 	r.issue(doctorCheckConfig, config.ManagersPath(), "%v; its package and environment managers are ignored until it is fixed", err)
+}
+
+// checkRetiredConfigFile warns about a config.json left in the config
+// directory. git-hop does not read it (settings live in git config hop.*),
+// so it only misleads whoever edits it; a warning, since nothing breaks.
+// doctor never deletes it, --fix included: its content is the user's.
+func checkRetiredConfigFile(r *doctorReport) {
+	path := config.RetiredConfigPath()
+	info, err := os.Stat(path)
+	if err != nil || info.IsDir() {
+		return
+	}
+	output.Warn("%s is not read; git-hop settings live in git config hop.*", path)
+	output.Hint("you can delete it by hand; keep a setting it held with\n'git config --global hop.<key> <value>'")
+	r.record(doctorKindWarning, doctorCheckConfig, path, "not read; git-hop settings live in git config hop.*; you can delete the file")
 }
 
 // checkMigrationDebris reports and, under --fix, unsets the migration

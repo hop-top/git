@@ -1,8 +1,8 @@
 # doctor does not require git-hop's config directory
 # ($XDG_CONFIG_HOME/git-hop). Nothing needs it until the user configures
-# something, and every writer (config.json, managers.json, hops.json,
-# hooks) creates it on demand, so a missing one is healthy: no issue, no
-# warning, and --fix does not create it.
+# something, and every writer (managers.json, hops.json, hooks) creates
+# it on demand, so a missing one is healthy: no issue, no warning, and
+# --fix does not create it.
 #
 # The regression this pins: doctor reported "config directory does not
 # exist" and exited 1 whenever nothing had written a config file yet.

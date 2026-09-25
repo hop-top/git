@@ -238,3 +238,36 @@ func TestDoctorConfig_BrokenManagersJSON(t *testing.T) {
 	assert.Contains(t, issues[path][0].Message, "ignored")
 	assert.NotEqual(t, 0, cli.ExitCode(doctorResult(r)))
 }
+
+// git-hop no longer reads config.json; settings live in git config hop.*.
+// A config.json left in the config directory is reported as a warning
+// naming the file, with the exit status left at 0. doctor never deletes
+// it: --fix and --fix --dry-run leave it, its content, and the record
+// kind as they are. No file, no warning.
+func TestDoctorConfig_UnusedConfigJSON(t *testing.T) {
+	e := newRetiredConfigEnv(t)
+	path := filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "git-hop", "config.json")
+	assert.Empty(t, configRecords(e.doctor(doctorOpts{}), doctorKindWarning)[path], "no config.json")
+
+	const body = `{"format": "json", "quiet": true}`
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+	for _, opts := range []doctorOpts{{}, {fix: true, dryRun: true}, {fix: true}} {
+		r := e.doctor(opts)
+		warnings := configRecords(r, doctorKindWarning)
+		require.Len(t, warnings[path], 1, "opts %+v, records: %+v", opts, r.records)
+		msg := warnings[path][0].Message
+		assert.Contains(t, msg, "not read")
+		assert.Contains(t, msg, "git config hop.*")
+		assert.Contains(t, msg, "delete")
+		for _, kind := range []string{doctorKindIssue, doctorKindFixed, doctorKindWouldFix, doctorKindFailed} {
+			assert.Empty(t, configRecords(r, kind)[path], "opts %+v: %s record for config.json", opts, kind)
+		}
+		assert.Equal(t, 0, cli.ExitCode(doctorResult(r)), "opts %+v", opts)
+
+		got, err := os.ReadFile(path)
+		require.NoError(t, err, "opts %+v removed config.json", opts)
+		assert.Equal(t, body, string(got), "opts %+v changed config.json", opts)
+	}
+}
