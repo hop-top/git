@@ -12,7 +12,6 @@ import (
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
-	"hop.top/git/internal/hop"
 )
 
 // hopVolumeRefRe matches ${HOP_VOLUME_NAME} references in compose files.
@@ -154,23 +153,23 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 		return nil, nil, "", err
 	}
 
+	// Every HOP_VOLUME_* reference in the compose file gets a directory
+	// too, beside the named volumes, where docker volume discovery
+	// missed it (a bind mount).
+	named := make(map[string]bool, len(volNames))
+	for _, n := range volNames {
+		named[n] = true
+	}
+	for _, key := range extractHopVolumeKeys(composeContent) {
+		if lower := strings.ToLower(key); !named[lower] {
+			named[lower] = true
+			volNames = append(volNames, lower)
+		}
+	}
+
 	vols, err := m.Volumes.CreateVolumes(branch, volNames)
 	if err != nil {
 		return nil, nil, "", err
-	}
-
-	// Ensure every HOP_VOLUME_* reference in the compose file has a value.
-	// If docker volume discovery missed any bind-mount vars, add XDG defaults.
-	if len(composeContent) > 0 {
-		for _, key := range extractHopVolumeKeys(composeContent) {
-			lower := strings.ToLower(key)
-			if _, exists := vols[lower]; !exists {
-				volDir := filepath.Join(hop.GetGitHopDataHome(), "volumes", branch, lower)
-				if err := m.fs.MkdirAll(volDir, 0755); err == nil {
-					vols[lower] = volDir
-				}
-			}
-		}
 	}
 
 	envPath := filepath.Join(worktreePath, ".env")

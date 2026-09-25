@@ -1,0 +1,106 @@
+# Volume directories are per repository and per hub:
+# - a ${HOP_VOLUME_*} bind mount gets a directory in the hub's hopspace,
+#   not one under the data home every repository shared;
+# - hubs sharing a --global hopspace each get their own directory;
+# - an entry an earlier release wrote keeps the directories it records,
+#   data untouched, except one a hub set up earlier records too, which
+#   stays with that hub while the later one gets a new directory.
+#
+# A stub docker on PATH: `compose config` fails, so the raw compose file
+# is parsed.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+chmod 755 $WORK/bin/docker
+env PATH=$WORK/bin${:}$PATH
+
+exec git init --bare $WORK/org/one.git
+exec git init --bare $WORK/org/two.git
+exec git init --bare $WORK/org/solo.git
+exec git init --bare $WORK/org/pair.git
+exec git clone $WORK/org/one.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+exec git add docker-compose.yml
+exec git commit -m 'compose'
+exec git push origin main
+exec git push $WORK/org/two.git main
+exec git push $WORK/org/solo.git main
+exec git push $WORK/org/pair.git main
+cd $WORK
+
+# --- two repositories: each bind mount in its own hub ---
+exec git-hop $WORK/org/one.git $WORK/a/one
+exec git-hop $WORK/org/two.git $WORK/a/two
+grep '^HOP_VOLUME_CACHE=.*/a/one/volumes/hop_main_cache$' $WORK/a/one/hops/main/.env
+grep '^HOP_VOLUME_CACHE=.*/a/two/volumes/hop_main_cache$' $WORK/a/two/hops/main/.env
+grep '^HOP_VOLUME_DATA=.*/a/one/volumes/hop_main_data$' $WORK/a/one/hops/main/.env
+
+# --- two --global hubs: each its own directory ---
+exec git-hop $WORK/org/one.git $WORK/g1/one --global
+exec git-hop $WORK/org/one.git $WORK/g2/one --global
+grep '^HOP_VOLUME_DATA=.*/data/org/one/volumes/one-[0-9a-f]{8}/hop_main_data$' $WORK/g1/one/hops/main/.env
+exec sh -c 'grep -h "^HOP_VOLUME_" $WORK/g1/one/hops/main/.env $WORK/g2/one/hops/main/.env | sort -u | wc -l'
+stdout '^ *4$'
+
+# --- an earlier release's entry keeps its directories and data ---
+exec git-hop $WORK/org/solo.git $WORK/solo
+mkdir $WORK/data/volumes/main/cache $WORK/solo/volumes/hop_main_data
+cp $WORK/compose.yml $WORK/data/volumes/main/cache/kept
+cp $WORK/compose.yml $WORK/solo/volumes/hop_main_data/kept
+cp $WORK/legacy-ports.json $WORK/solo/ports.json
+exec sh -c 'sed "s|WORK|$WORK|g" $WORK/legacy-volumes.json > $WORK/solo/volumes.json'
+cd $WORK/solo/hops/main
+exec git-hop env generate
+! stderr 'new directory'
+grep '^HOP_VOLUME_CACHE='$WORK'/data/volumes/main/cache$' .env
+grep '^HOP_VOLUME_DATA='$WORK'/solo/volumes/hop_main_data$' .env
+exists $WORK/data/volumes/main/cache/kept
+exists $WORK/solo/volumes/hop_main_data/kept
+cd $WORK
+
+# --- a directory two hubs recorded stays with the hub set up first ---
+exec git-hop $WORK/org/pair.git $WORK/x/pair
+exec git-hop $WORK/org/pair.git $WORK/y/pair
+cp $WORK/legacy-ports.json $WORK/x/pair/ports.json
+mkdir $WORK/data/volumes/main/pcache
+cp $WORK/compose.yml $WORK/data/volumes/main/pcache/kept
+exec sh -c 'sed "s|WORK|$WORK|g; s|solo|x/pair|g; s|main/cache|main/pcache|" $WORK/legacy-volumes.json > $WORK/x/pair/volumes.json'
+cp $WORK/legacy-ports-2.json $WORK/y/pair/ports.json
+exec sh -c 'sed "s|WORK|$WORK|g; s|solo|y/pair|g; s|main/cache|main/pcache|" $WORK/legacy-volumes.json > $WORK/y/pair/volumes.json'
+cd $WORK/y/pair/hops/main
+exec git-hop env generate
+stderr 'warning: volume cache \(.*/data/volumes/main/pcache\) is also used by main of .*/x/pair, set up first; using a new directory'
+grep '^HOP_VOLUME_CACHE=.*/y/pair/volumes/hop_main_cache$' .env
+grep '^HOP_VOLUME_DATA='$WORK'/y/pair/volumes/hop_main_data$' .env
+exists $WORK/data/volumes/main/pcache/kept
+cd $WORK/x/pair/hops/main
+exec git-hop env generate
+! stderr 'new directory'
+grep '^HOP_VOLUME_CACHE='$WORK'/data/volumes/main/pcache$' .env
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+    volumes:
+      - data:/data
+      - ${HOP_VOLUME_CACHE}:/cache
+volumes:
+  data:
+-- legacy-ports.json --
+{"allocationMode":"incremental","baseRange":{"start":10000,"end":20000},"branches":{"main":{"ports":{"WEB":15000}}},"services":["WEB"]}
+-- legacy-ports-2.json --
+{"allocationMode":"incremental","baseRange":{"start":10000,"end":20000},"branches":{"main":{"ports":{"WEB":15001}}},"services":["WEB"]}
+-- legacy-volumes.json --
+{"basePath":"WORK/solo/volumes","branches":{"main":{"volumes":{"cache":"WORK/data/volumes/main/cache","data":"WORK/solo/volumes/hop_main_data"}}}}
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

@@ -878,17 +878,32 @@ project unchanged.
 
 ```json
 {
-  "basePath": "/home/user/.local/share/git-hop/github.com/org/repo/volumes",
+  "basePath": "/home/user/src/app/volumes",
   "branches": {
     "main": {
       "volumes": {
-        "postgres_data": "main_postgres_data",
-        "redis_data": "main_redis_data"
+        "postgres_data": "/home/user/src/app/volumes/hop_main_postgres_data",
+        "cache": "/home/user/src/app/volumes/hop_main_cache"
       }
     }
   }
 }
 ```
+
+Each volume of the compose file, and each `${HOP_VOLUME_<NAME>}` it
+references, gets a directory `hop_<branch>_<name>` in `basePath`
+(`<hopspace>/volumes`): the hub's own for a default clone. Hubs sharing a
+`--global` hopspace each get a subdirectory named by their hub key, so no
+two hubs share a volume directory.
+
+A worktree keeps the directories its entry records; git-hop never moves
+or deletes volume data. Earlier releases put `${HOP_VOLUME_*}` directories
+in `$GIT_HOP_DATA_HOME/volumes/<branch>/<name>`, one for every repository
+and hub, and gave every `--global` hub of a repository the same
+directories. An entry that records such a directory keeps it, unless a hub
+set up earlier records it too: that hub keeps it, with its data, and the
+other gets a new directory, with a warning, when its environment is
+generated.
 
 ## Override Settings for Specific Situations
 
