@@ -873,6 +873,10 @@ git hop doctor --fix --dry-run
   later. `--fix` leaves them: re-porting would break a running
   environment. Run `git hop env generate` in that worktree to give it new
   ports
+- A `managers.json` that cannot be read or parsed. Every command skips it
+  with a warning and keeps its `hop.*` git config settings, so its package
+  and environment managers do not apply until it is fixed; an issue
+  `--fix` cannot repair
 - Leftovers of the old `global.json` migration: `--global` `hop.*` keys it
   wrote as `false`/`0`/`""` although `global.json` never set them. They
   shadow the defaults (`hop.worktreeLocation` `""` selects the centralized
