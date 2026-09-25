@@ -20,7 +20,7 @@ require (
 	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.41.0
 	gopkg.in/yaml.v3 v3.0.1
-	hop.top/kit v0.5.0-alpha.7
+	hop.top/kit v0.5.0-alpha.14
 	hop.top/xrr v0.1.0-alpha.3
 )
 
