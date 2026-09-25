@@ -627,7 +627,6 @@ func initMirrorOpts(g git.GitInterface, worktreePath, repoPath string, flagMode 
 		RepoID:       repoID,
 		Mode:         resolved,
 		Overwrite:    overwrite,
-		Stdout:       os.Stdout,
 	}
 	if resolved == hooks.ModePrompt && isStdinTTYInit() {
 		mopts.Stdin = os.Stdin

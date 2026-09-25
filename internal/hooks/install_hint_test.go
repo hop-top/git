@@ -109,3 +109,62 @@ func TestMirror_NonExecutableAdviceIsHint(t *testing.T) {
 		t.Errorf("hint %q should say chmod +x and 'git hop init --hooks=copy'", got)
 	}
 }
+
+// The per-hook install prompt is prompt text, not a result: with no
+// writer given it goes to stderr, never stdout.
+func TestMirror_PromptDefaultsToStderr(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	withDataHome(t, "/data")
+	writeHook(t, fs, "/wt", "post-worktree-add", "#!/bin/sh\n", 0755)
+
+	var err error
+	stdout := captureOSStdout(t, func() {
+		stderr := captureOSStderr(t, func() {
+			_, err = MirrorCommittedHooks(fs, MirrorOpts{
+				WorktreePath: "/wt",
+				RepoID:       testRepoID,
+				Mode:         ModePrompt,
+				Stdin:        strings.NewReader("n\n"),
+				Interactive:  true,
+			})
+		})
+		if !strings.Contains(stderr, "Install hook post-worktree-add?") {
+			t.Errorf("stderr %q lacks the install prompt", stderr)
+		}
+	})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if stdout != "" {
+		t.Errorf("stdout = %q, want empty: the prompt belongs on stderr", stdout)
+	}
+}
+
+// captureOSStdout runs fn with os.Stdout redirected and returns what it
+// wrote.
+func captureOSStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	old := os.Stdout
+	os.Stdout = w
+	done := make(chan string)
+	go func() {
+		var b strings.Builder
+		buf := make([]byte, 4096)
+		for {
+			n, err := r.Read(buf)
+			b.Write(buf[:n])
+			if err != nil {
+				break
+			}
+		}
+		done <- b.String()
+	}()
+	fn()
+	os.Stdout = old
+	w.Close()
+	return <-done
+}

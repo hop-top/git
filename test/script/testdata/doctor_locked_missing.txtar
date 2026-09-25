@@ -44,6 +44,7 @@ cd $WORK/hub
 # --- the real run ---
 exec git-hop doctor --fix
 ! stdout 'Select option'
+! stderr 'Select option'
 ! stdout 'Attempting to fix'
 ! stdout 'Pruning orphaned worktree'
 ! stdout 'Pruning hop.json entry'

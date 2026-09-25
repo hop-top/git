@@ -32,6 +32,17 @@ func isPromptUnanswerable(err error) bool {
 // reads real stdin.
 var promptIn io.Reader = os.Stdin
 
+// promptOut is where prompt text goes: stderr, as git's prompts do, so
+// stdout carries only results. Nil means stderr; tests may substitute.
+var promptOut io.Writer
+
+func promptW() io.Writer {
+	if promptOut != nil {
+		return promptOut
+	}
+	return stderrWriter()
+}
+
 // promptReader is the buffered view of promptIn, cached so successive
 // reads continue where the previous one stopped. A fresh bufio.Reader
 // per call would read ahead into its buffer and then discard the
@@ -78,14 +89,15 @@ func ConfirmAnswer(prompt string) (bool, error) {
 		// Non-human modes have no channel to prompt on.
 		return false, ErrPromptUnanswerable
 	}
+	w := promptW()
 
-	fmt.Printf("%s (y/n): ", prompt)
+	fmt.Fprintf(w, "%s (y/n): ", prompt)
 
 	response, err := readPromptLine()
 	if err != nil {
 		// Close the dangling prompt line so the following error message
 		// starts at column zero.
-		fmt.Println()
+		fmt.Fprintln(w)
 		return false, err
 	}
 
@@ -129,15 +141,16 @@ func ChoiceAnswer(prompt string, validChoices []string) (string, error) {
 		// Non-human modes have no channel to prompt on.
 		return "", ErrPromptUnanswerable
 	}
+	w := promptW()
 
 	for attempt := 0; attempt < maxPromptRetries; attempt++ {
-		fmt.Print(prompt)
+		fmt.Fprint(w, prompt)
 
 		response, err := readPromptLine()
 		if err != nil {
 			// Close the dangling prompt line so the following error
 			// message starts at column zero.
-			fmt.Println()
+			fmt.Fprintln(w)
 			return "", err
 		}
 
@@ -148,7 +161,7 @@ func ChoiceAnswer(prompt string, validChoices []string) (string, error) {
 			}
 		}
 
-		fmt.Println("Invalid choice. Please try again.")
+		fmt.Fprintln(w, "Invalid choice. Please try again.")
 	}
 
 	// Readable but never usable: treat it as unanswerable so the caller
@@ -161,16 +174,17 @@ func ConfirmWithWarning(title string, message string) bool {
 	if CurrentMode != ModeHuman {
 		return false
 	}
+	w := promptW()
 
 	// Display warning
 	warningStyle := StyleWarning.Bold(true)
-	fmt.Println()
-	fmt.Println(Paint(warningStyle, IconWarning+": "+title))
-	fmt.Println()
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, Paint(warningStyle, IconWarning+": "+title))
+	fmt.Fprintln(w)
 
 	if message != "" {
-		fmt.Println(Paint(StyleMuted, message))
-		fmt.Println()
+		fmt.Fprintln(w, Paint(StyleMuted, message))
+		fmt.Fprintln(w)
 	}
 
 	return Confirm("Continue?")
@@ -183,6 +197,7 @@ func ConfirmDeletionAnswer(target string, details []CardField) (bool, error) {
 	if CurrentMode != ModeHuman {
 		return false, ErrPromptUnanswerable
 	}
+	w := promptW()
 
 	// Show warning card
 	card := WarningCard("Confirm Removal", append(
@@ -190,12 +205,12 @@ func ConfirmDeletionAnswer(target string, details []CardField) (bool, error) {
 		details...,
 	))
 
-	fmt.Println(card)
-	fmt.Println()
+	fmt.Fprintln(w, card)
+	fmt.Fprintln(w)
 
-	warning := Paint(StyleWarning, "Warning: This action cannot be undone!")
-	fmt.Println(warning)
-	fmt.Println()
+	warning := Paint(StyleWarning, "warning: this action cannot be undone")
+	fmt.Fprintln(w, warning)
+	fmt.Fprintln(w)
 
 	return ConfirmAnswer("Continue?")
 }
@@ -215,16 +230,17 @@ func Select(prompt string, options []string) (int, string) {
 	if CurrentMode != ModeHuman {
 		return -1, ""
 	}
+	w := promptW()
 
-	fmt.Println(prompt)
-	fmt.Println()
+	fmt.Fprintln(w, prompt)
+	fmt.Fprintln(w)
 
 	for i, opt := range options {
-		fmt.Printf("  %d) %s\n", i+1, opt)
+		fmt.Fprintf(w, "  %d) %s\n", i+1, opt)
 	}
 
-	fmt.Println()
-	fmt.Print("Select option: ")
+	fmt.Fprintln(w)
+	fmt.Fprint(w, "Select option: ")
 
 	response, err := readPromptLine()
 	if err != nil {
@@ -246,8 +262,9 @@ func Input(prompt string) string {
 	if CurrentMode != ModeHuman {
 		return ""
 	}
+	w := promptW()
 
-	fmt.Printf("%s: ", prompt)
+	fmt.Fprintf(w, "%s: ", prompt)
 
 	response, err := readPromptLine()
 	if err != nil {
@@ -262,9 +279,10 @@ func InputWithDefault(prompt string, defaultValue string) string {
 	if CurrentMode != ModeHuman {
 		return defaultValue
 	}
+	w := promptW()
 
 	defaultHint := Paint(StyleMuted, fmt.Sprintf(" [%s]", defaultValue))
-	fmt.Printf("%s%s: ", prompt, defaultHint)
+	fmt.Fprintf(w, "%s%s: ", prompt, defaultHint)
 
 	response, err := readPromptLine()
 	if err != nil {
@@ -284,15 +302,16 @@ func ConfirmWithPreview(title string, preview []string) bool {
 	if CurrentMode != ModeHuman {
 		return false
 	}
+	w := promptW()
 
-	fmt.Println()
-	fmt.Println(RenderHeader(title))
-	fmt.Println()
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, RenderHeader(title))
+	fmt.Fprintln(w)
 
 	for _, line := range preview {
-		fmt.Println("  " + line)
+		fmt.Fprintln(w, "  "+line)
 	}
 
-	fmt.Println()
+	fmt.Fprintln(w)
 	return Confirm("Proceed?")
 }

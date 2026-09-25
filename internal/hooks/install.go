@@ -40,10 +40,11 @@ type MirrorOpts struct {
 	// Stdin is read for prompt mode. If nil, ModePrompt degrades to ModeNone
 	// with an info line.
 	Stdin io.Reader
-	// Stdout carries the interactive prompt. Defaults to os.Stdout when
-	// nil. Warnings and notes go through the output package, so -q and
-	// JSON mode apply to them.
-	Stdout io.Writer
+	// PromptOut carries the interactive prompt. Defaults to os.Stderr
+	// when nil: prompt text is not a result, so it stays off stdout, as
+	// git's prompts do. Warnings and hints go through the output package,
+	// so -q and JSON mode apply to them.
+	PromptOut io.Writer
 	// Interactive forces interactive mode regardless of Stdin. Useful for
 	// tests; production callers should leave this false and rely on TTY
 	// detection by the caller.
@@ -90,9 +91,9 @@ var validHookSet = func() map[string]struct{} {
 func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	res := Result{}
 
-	stdout := opts.Stdout
-	if stdout == nil {
-		stdout = os.Stdout
+	promptOut := opts.PromptOut
+	if promptOut == nil {
+		promptOut = os.Stderr
 	}
 
 	mode := opts.Mode
@@ -233,7 +234,7 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 			}
 			install := allYes
 			if !install {
-				answer, err := promptInstall(fs, reader, stdout, name, srcPath, dstPath, dstExists)
+				answer, err := promptInstall(fs, reader, promptOut, name, srcPath, dstPath, dstExists)
 				if err != nil {
 					return res, fmt.Errorf("prompt: %w", err)
 				}

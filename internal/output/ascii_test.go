@@ -1,7 +1,6 @@
 package output
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"os"
@@ -21,28 +20,6 @@ func assertASCII(t *testing.T, what, s string) {
 			return
 		}
 	}
-}
-
-// captureStdout returns what fn wrote to os.Stdout.
-func captureStdout(t *testing.T, fn func()) string {
-	t.Helper()
-	r, w, err := os.Pipe()
-	if err != nil {
-		t.Fatal(err)
-	}
-	prev := os.Stdout
-	os.Stdout = w
-	defer func() { os.Stdout = prev }()
-
-	done := make(chan string)
-	go func() {
-		var buf bytes.Buffer
-		_, _ = io.Copy(&buf, r)
-		done <- buf.String()
-	}()
-	fn()
-	_ = w.Close()
-	return <-done
 }
 
 // TestHumanRenderers_AreASCII renders every human-mode helper of the
@@ -159,12 +136,13 @@ func TestSimpleProgress_IsGitStyle(t *testing.T) {
 func TestConfirmPrompts_AreASCII(t *testing.T) {
 	withMode(t, ModeHuman)
 
+	// Prompts write to stderr.
 	withStdin(t, "n\n")
-	out := captureStdout(t, func() { ConfirmWithWarning("Delete everything", "details") })
+	_, out := captureStreams(t, func() { ConfirmWithWarning("Delete everything", "details") })
 	assertASCII(t, "ConfirmWithWarning", out)
 
 	withStdin(t, "n\n")
-	out = captureStdout(t, func() {
+	_, out = captureStreams(t, func() {
 		_, _ = ConfirmDeletionAnswer("/tmp/x", []CardField{{Key: "Branch", Value: "feat"}})
 	})
 	assertASCII(t, "ConfirmDeletionAnswer", out)

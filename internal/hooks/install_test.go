@@ -151,7 +151,7 @@ func TestMirror_PromptYesInstalls(t *testing.T) {
 		RepoID:       testRepoID,
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("y\n"),
-		Stdout:       io.Discard,
+		PromptOut:    io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -184,7 +184,7 @@ func TestMirror_PromptYesInstalls_OsFs(t *testing.T) {
 		RepoID:       testRepoID,
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("y\n"),
-		Stdout:       io.Discard,
+		PromptOut:    io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -209,7 +209,7 @@ func TestMirror_PromptNoSkips(t *testing.T) {
 		RepoID:       testRepoID,
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("n\n"),
-		Stdout:       io.Discard,
+		PromptOut:    io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -236,7 +236,7 @@ func TestMirror_PromptAllInstallsRemaining(t *testing.T) {
 		RepoID:       testRepoID,
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("a\n"), // first answer = all-yes
-		Stdout:       io.Discard,
+		PromptOut:    io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
@@ -263,7 +263,7 @@ func TestMirror_PromptSkipAllSkipsRemaining(t *testing.T) {
 		RepoID:       testRepoID,
 		Mode:         ModePrompt,
 		Stdin:        strings.NewReader("s\n"),
-		Stdout:       io.Discard,
+		PromptOut:    io.Discard,
 	})
 	if err != nil {
 		t.Fatalf("err: %v", err)
