@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/spf13/afero"
 	"gopkg.in/yaml.v3"
 )
 
@@ -91,11 +92,12 @@ func (d *Docker) HasDockerEnv(dir string) bool {
 // ComposeFileCandidates lists all recognized compose file names in priority order
 var ComposeFileCandidates = []string{"compose.yaml", "compose.yml", "docker-compose.yml", "docker-compose.yaml"}
 
-// FindComposeFile returns the name of the first compose file found in dir, or empty string if none found
-func FindComposeFile(dir string) string {
+// FindComposeFile returns the name of the first compose file found in dir on
+// fs, or empty string if none found
+func FindComposeFile(fs afero.Fs, dir string) string {
 	for _, name := range ComposeFileCandidates {
 		p := filepath.Join(dir, name)
-		if _, err := os.Stat(p); err == nil {
+		if _, err := fs.Stat(p); err == nil {
 			return name
 		}
 	}
