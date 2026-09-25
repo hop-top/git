@@ -1,0 +1,44 @@
+# A repair a pre-repair hook aborts (exit 1) releases and removes its lock
+# like a successful run does. Otherwise every later run is refused as
+# "another repair is in progress", or a stale lock file is left behind.
+# The aborted run leaves no .hop/ in the hub either.
+#
+# Ported from TestRepair_HookAbort_ReleasesLock in the Go e2e suite.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature
+rm $WORK/hub/hops/feature
+
+mkdir $WORK/hub/.git-hop/hooks
+cp $WORK/pre-repair $WORK/hub/.git-hop/hooks/pre-repair
+chmod 755 $WORK/hub/.git-hop/hooks/pre-repair
+
+# A handled failure: exit 1, and it is the hook's -- the lock was acquired
+# and the hook ran.
+exec sh -c 'git-hop repair; echo "exit=$?"'
+stdout '^exit=1$'
+exists $WORK/hook-ran
+
+! exists $WORK/hub/.hop
+exec find $WORK/.local/state/git-hop/repair
+! stdout 'repair\.lock'
+
+# The lock is free again: a second run gets past acquisition to the hook.
+rm $WORK/hook-ran
+exec sh -c 'git-hop repair; echo "exit=$?"'
+stdout '^exit=1$'
+! stderr 'another repair is in progress'
+exists $WORK/hook-ran
+
+-- pre-repair --
+#!/bin/sh
+touch "$WORK/hook-ran"
+exit 1

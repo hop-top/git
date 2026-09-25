@@ -1,0 +1,52 @@
+# A mutating `git hop repair` keeps its lock and backups under
+# $XDG_STATE_HOME/git-hop/repair/<hub-key>/, never in the hub: a hub that
+# had no .hop/ directory still has none afterwards, the lock is gone once
+# the run completes, and the backup it took is the one the hint names and
+# the one --list-backups and --undo find.
+#
+# Ported from TestRepair_Mutating_LeavesNoDotHopOrLock in the Go e2e suite.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feature
+! exists $WORK/hub/.hop
+
+# Delete the worktree by hand so git's registry and hop.json go stale.
+rm $WORK/hub/hops/feature
+
+cd $WORK/hub/hops/main
+exec git-hop repair
+cp stderr $WORK/repair.stderr
+
+# No footprint in the hub.
+! exists $WORK/hub/.hop
+
+# Exactly one backup, under the state dir, and no lock left behind.
+exec find $WORK/.local/state/git-hop/repair
+stdout -count=1 '/backups/repair-[^/]+/manifest\.json$'
+! stdout 'repair\.lock'
+
+# The hint names that backup's real path, not a hub-relative one.
+exec sh $WORK/hint-names-backup.sh
+stdout '^hint names the backup$'
+
+# The relocated backup is the one --list-backups shows and --undo restores.
+cd $WORK/hub
+exec git-hop repair --list-backups
+stdout 'repair-'
+! stdout '\(no backups\)'
+exec git-hop repair --undo
+stdout '^Restored backup repair-'
+
+-- hint-names-backup.sh --
+manifest=$(find "$WORK/.local/state/git-hop/repair" -name manifest.json)
+dir=$(dirname "$manifest")
+grep -qF "$dir" "$WORK/repair.stderr" || { echo "hint does not name $dir" >&2; cat "$WORK/repair.stderr" >&2; exit 1; }
+echo 'hint names the backup'
