@@ -1,0 +1,106 @@
+# A bare conversion carries the repository's linked worktrees into the
+# hub. One outside the repository stays where it is; one inside its
+# working tree moves to hops/<branch> (hops/<id> when detached). Each
+# keeps its index, untracked files and lock. hop.json lists those on a
+# branch, and state records them, so list sees them. They are adopted,
+# not created: no set-up and no post-worktree-add for them, only for the
+# default worktree. --dry-run lists the carry and moves nothing.
+
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/hook $WORK/.config/git-hop/hooks/post-worktree-add
+chmod 755 $WORK/.config/git-hop/hooks/post-worktree-add
+
+exec git init -q $WORK/p
+cd $WORK/p
+cp $WORK/gitignore .gitignore
+exec git add .gitignore
+exec git commit -q -m initial
+exec git worktree add -q $WORK/ext/wt-a -b feat-a
+exec git worktree add -q $WORK/ext/locked -b feat-b
+exec git worktree lock --reason 'on usb disk' $WORK/ext/locked
+exec git worktree add -q $WORK/other/main -b feat-e
+exec git worktree add -q $WORK/p/.worktrees/d -b feat-d
+exec git worktree add -q --detach $WORK/p/.worktrees/det
+exec git worktree add -q --detach $WORK/ext/det
+# not ignored: git status lists it, yet the repository is not dirty for init
+exec git worktree add -q $WORK/p/wts/n -b feat-n
+cd $WORK/ext/wt-a
+cp $WORK/new.txt new.txt
+exec git add new.txt
+cp $WORK/new.txt untracked.txt
+cd $WORK/p
+
+# --- --dry-run lists the carry and moves nothing ---
+exec git-hop init --no-prompt -n
+stdout 'Carry linked worktree .*/ext/wt-a \(feat-a\), where it is'
+stdout 'Carry linked worktree .*/ext/locked \(feat-b\), where it is'
+stdout 'Carry linked worktree .*/p/\.worktrees/d \(feat-d\), moved to hops/feat-d'
+stdout 'Carry linked worktree .*/p/\.worktrees/det \(detached HEAD\), moved to hops/det'
+stdout 'Carry linked worktree .*/ext/det \(detached HEAD\), where it is'
+stdout 'Carry linked worktree .*/p/wts/n \(feat-n\), moved to hops/feat-n'
+stdout '^Status: clean$'
+! exists $WORK/p/hop.json
+! exists $WORK/events.log
+exec git -C $WORK/ext/wt-a rev-parse --absolute-git-dir
+stdout '/p/\.git/worktrees/wt-a$'
+
+# --- the conversion carries them; the default worktree is still main ---
+exec git status --porcelain
+stdout '^\?\? wts/$'
+exec git-hop init --no-prompt
+stdout 'Conversion successful'
+stdout '^      main/ +\(worktree for main branch\)$'
+stdout '^    current -> hops/main  \(symlink\)$'
+stdout 'Linked worktrees carried into the hub:'
+! stderr 'failed to create worktree'
+stdout '^  .*/ext/wt-a  \(feat-a\)$'
+stdout '^  .*/p/hops/feat-d  \(feat-d, moved from .*/p/\.worktrees/d\)$'
+stdout '^  .*/p/hops/det  \(detached HEAD, moved from .*/p/\.worktrees/det\)$'
+stderr 'cd .*/p/hops/main +# Work on main branch'
+exec readlink $WORK/p/current
+stdout 'hops/main$'
+
+# every carried worktree reaches the hub and kept its state
+exec git -C $WORK/ext/wt-a status --porcelain
+stdout '^A  new.txt$'
+stdout '^\?\? untracked.txt$'
+exec git -C $WORK/ext/wt-a rev-parse --absolute-git-dir
+stdout '/p/worktrees/wt-a$'
+exec git -C $WORK/other/main rev-parse --abbrev-ref HEAD
+stdout '^feat-e$'
+exec git -C $WORK/other/main rev-parse --absolute-git-dir
+stdout '/p/worktrees/main$'
+exec git -C $WORK/p/hops/feat-d rev-parse --abbrev-ref HEAD
+stdout '^feat-d$'
+exec git -C $WORK/p/hops/det status --porcelain
+! stdout .
+exec git -C $WORK/p worktree list --porcelain
+! stdout prunable
+stdout '^locked on usb disk$'
+! exists $WORK/p/hops/main/.worktrees
+! exists $WORK/p/hops/main/wts
+exec git -C $WORK/p/hops/feat-n rev-parse --abbrev-ref HEAD
+stdout '^feat-n$'
+
+# hop.json lists the ones on a branch, state records them
+grep '"feat-a": \{\s*"exists": true,\s*"path": "[^"]*/ext/wt-a"' $WORK/p/hop.json
+grep '"feat-d": \{\s*"exists": true,\s*"path": "hops/feat-d"' $WORK/p/hop.json
+! grep '/ext/det' $WORK/p/hop.json
+grep '"defaultBranch": "main"' $WORK/p/hop.json
+grep '"path": "[^"]*/ext/wt-a"' $WORK/.local/state/git-hop/state.json
+grep '"path": "[^"]*/p/hops/feat-d"' $WORK/.local/state/git-hop/state.json
+exec git-hop list
+stdout 'feat-a'
+stdout 'feat-d'
+
+# post-worktree-add fired for the default worktree only
+grep -count=1 'post-worktree-add' $WORK/events.log
+grep '^post-worktree-add main .*/p/hops/main$' $WORK/events.log
+
+-- gitignore --
+.worktrees/
+-- new.txt --
+staged
+-- hook --
+#!/bin/sh
+echo "$GIT_HOP_HOOK_NAME $GIT_HOP_BRANCH $GIT_HOP_WORKTREE_PATH" >> "$WORK/events.log"

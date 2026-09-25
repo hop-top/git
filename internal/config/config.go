@@ -262,6 +262,21 @@ type ConversionResult struct {
 	Metadata     *BackupMetadata `json:"metadata,omitempty"`
 	CreatedFiles []string        `json:"createdFiles"`
 	ModifiedDirs []string        `json:"modifiedDirs"`
+	// Carried lists the linked worktrees a bare conversion carried into
+	// the hub.
+	Carried []CarriedWorktree `json:"carried,omitempty"`
+}
+
+// CarriedWorktree is a linked worktree a bare conversion carried into the
+// hub.
+type CarriedWorktree struct {
+	// Path is where the worktree is after the conversion.
+	Path string `json:"path"`
+	// Branch is its checked-out branch; empty when HEAD is detached.
+	Branch string `json:"branch,omitempty"`
+	// MovedFrom is its path before the conversion when it moved: a
+	// worktree inside the repository's working tree moves into hops/.
+	MovedFrom string `json:"movedFrom,omitempty"`
 }
 
 type BackupSettings struct {

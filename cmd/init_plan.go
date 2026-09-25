@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/hop"
 )
 
 // initRemoteLabel is the Remote: value init shows: "origin (<url>)", or
@@ -21,7 +22,8 @@ func initRemoteLabel(g git.GitInterface, repoPath string) string {
 // current at it; a regular one keeps the repository root as that branch's
 // working tree and adds worktrees/ beside it. branch is never empty: a
 // detached HEAD is refused before the plan (see refuseDetachedHead).
-func initConversionPlan(backupRoot, branch string, useBare bool) []string {
+// linked is the bare conversion's carry of the linked worktrees.
+func initConversionPlan(backupRoot, branch string, useBare bool, linked *hop.LinkedCarryPlan) []string {
 	plan := []string{
 		fmt.Sprintf("  1. Create backup in %s/", backupRoot),
 		"  2. Create worktree structure",
@@ -32,6 +34,7 @@ func initConversionPlan(backupRoot, branch string, useBare bool) []string {
 			fmt.Sprintf("     - Create hops/%s/ worktree for the %s branch", branch, branch),
 			fmt.Sprintf("     - Point current at hops/%s", branch),
 		)
+		plan = append(plan, initLinkedCarrySteps(linked)...)
 	} else {
 		plan = append(plan,
 			fmt.Sprintf("     - Keep the repository root as the %s branch working tree", branch),
@@ -50,4 +53,29 @@ func initConversionPlan(backupRoot, branch string, useBare bool) []string {
 func initSetUpStep(branch string) string {
 	return fmt.Sprintf("  5. Set up the %s worktree's environment, when it has one: ports,\n"+
 		"     volumes, .env, compose override, then shared dependencies", branch)
+}
+
+// initLinkedCarrySteps lists, for the plan, what a bare conversion does
+// with each linked worktree: carried where it is, or moved into hops/
+// when it sits inside the working tree; a prunable one is left behind.
+func initLinkedCarrySteps(linked *hop.LinkedCarryPlan) []string {
+	if linked == nil {
+		return nil
+	}
+	var steps []string
+	for _, w := range linked.Worktrees {
+		what := "detached HEAD"
+		if w.Branch != "" {
+			what = w.Branch
+		}
+		if w.Dest != "" {
+			steps = append(steps, fmt.Sprintf("     - Carry linked worktree %s (%s), moved to %s", w.Path, what, w.Dest))
+			continue
+		}
+		steps = append(steps, fmt.Sprintf("     - Carry linked worktree %s (%s), where it is", w.Path, what))
+	}
+	for _, p := range linked.Prunable {
+		steps = append(steps, fmt.Sprintf("     - Leave prunable linked worktree %s behind", p))
+	}
+	return steps
 }

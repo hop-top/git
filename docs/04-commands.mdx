@@ -1235,10 +1235,8 @@ root as its branch's worktree, so `git hop list`, `status --all` and
 hub by its `hop.json`. Commands that change a hub's worktrees (`add`,
 `remove`, `move`, `merge`, `repair`, `env gc`) still need a `hop.json`.
 
-A bare conversion refuses a repository that has linked worktrees: their
-admin directories live in the `.git` directory the conversion replaces,
-so they would be disconnected. Remove them with `git worktree remove`
-first, or convert with `--regular`, which keeps `.git` in place.
+A bare conversion carries the repository's linked worktrees (from `git
+worktree add`) into the hub; see [Linked worktrees](#linked-worktrees).
 
 A conversion then sets up its initial worktree (`hops/<branch>` for a
 bare conversion, the repository root for `--regular`) as `add` does:
@@ -1321,6 +1319,7 @@ means something in a bare hub:
 | `logs/` | Reflogs carry over, including every stash entry. The old `HEAD` reflog goes before the default worktree's own. A shallow repository keeps only its latest stash: its hub may lack the commits older reflog entries name. |
 | `modules/` (submodule repositories) | Moved to the default worktree's own git dir (`<hub>/worktrees/<name>/modules/`), which is where git keeps a linked worktree's submodules. Each checked-out submodule is reconnected, so `git submodule status`, `update` and `git -C <path> log` work without cloning again. Nested submodules at any depth are reconnected the same way. Other worktrees start without submodules; run `git submodule update --init` in each one, as git requires for any linked worktree. |
 | `rr-cache/`, `lfs/`, `description`, `branches/`, `remotes/` | Moved into the hub. |
+| `worktrees/` (linked worktrees' admin directories) | Copied into the hub's `worktrees/` under the same names; see [Linked worktrees](#linked-worktrees). Entries git calls prunable (their directory is gone and they are not locked) are left behind, with a `warning:`. |
 
 Nothing else is kept. The objects and the shallow boundary come with the
 clone. The index is rebuilt in the default worktree with the same
@@ -1330,6 +1329,54 @@ prints a `warning:` for each of these:
 - `config.worktree` when `extensions.worktreeConfig` is off: git was
   not reading it, so it is not carried over.
 - Any entry git-hop does not recognise.
+
+### Linked worktrees
+
+A bare conversion carries each linked worktree into the hub. git keeps
+a linked worktree's state in its admin directory,
+`.git/worktrees/<name>/`: HEAD and its reflog, the index, per-worktree
+refs (`refs/worktree/`, `refs/bisect/`), the lock, `config.worktree`,
+`info/sparse-checkout`, and the git directories of its submodules.
+`init` copies each admin directory to the hub's `worktrees/<name>/`,
+under the same name, and reconnects the worktree to it, so the worktree
+keeps its branch, staged and unstaged changes, untracked files, lock,
+per-worktree config and sparse patterns. Uncommitted changes in a linked
+worktree need no `--force`: its files do not move.
+
+Where each one ends up:
+
+- Outside the repository: it stays where it is. `hop.json` lists it
+  under its branch with its absolute path.
+- Inside the repository's working tree (such as `.worktrees/<name>`,
+  ignored or not): it moves to `hops/<branch>/`, or `hops/<name>/` when
+  its HEAD is detached, as `git hop add` would have placed it, instead
+  of ending up inside the default worktree. Directories left empty by
+  the move are removed.
+- Locked and absent (on a disk that is not mounted): it is carried as
+  it is, with a `warning:`. Once it is back, run `git -C <hub> worktree
+  repair` to reconnect it.
+
+A worktree with a detached HEAD is carried but not listed in `hop.json`,
+which lists worktrees by branch. `hop.json` and git-hop's state record
+the carried worktrees, so `git hop list` shows them. `init` did not
+create them, so it runs neither the environment set-up nor the
+`post-worktree-add` hook for them; only for the default worktree.
+
+`init` refuses, before it backs up or moves anything, when a linked
+worktree cannot be carried: an operation is paused in it (see
+[Operations in progress](#operations-in-progress)), git seems to be
+running in it (its admin directory holds `index.lock`), its branch is
+also checked out in another worktree (with `git worktree add -f`; a hub
+has one worktree per branch), it lies inside `.git`, inside another
+linked worktree, or at `<repo>.new` or `<repo>.old`, where the conversion
+builds the hub, or its `hops/` destination is taken. Each reason is
+printed as an `error:`. `--dry-run` lists what happens to each linked
+worktree, and refuses the same way.
+
+After the conversion, `init` checks that git, run in each carried
+worktree, finds its admin directory in the hub. If one does not, the
+conversion fails and rolls back: the repository is restored from the
+backup and every linked worktree is reconnected to it.
 
 ### Uncommitted changes and `--force`
 
@@ -1359,7 +1406,16 @@ is in progress, even when the working tree is clean (a rebase at an
 `edit` stop, a bisect), and before it backs up or moves anything. It
 looks for the same markers git does: `MERGE_HEAD`, `rebase-merge/`,
 `rebase-apply/`, `CHERRY_PICK_HEAD`, `REVERT_HEAD`, `sequencer/`,
-`BISECT_START` and `BISECT_LOG`.
+`BISECT_START` and `BISECT_LOG`. It looks in every linked worktree's
+admin directory too; the refusal then names the worktree, and the hints
+run in it:
+
+```text
+$ git hop init --no-prompt
+hint: finish the rebase with 'git -C /src/feat rebase --continue' or abort it with 'git -C /src/feat rebase --abort'
+hint: then run git hop init --no-prompt again
+fatal: a rebase is in progress in the linked worktree /src/feat; converting would abandon it
+```
 
 ```text
 $ git hop init --no-prompt

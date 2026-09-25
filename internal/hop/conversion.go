@@ -2,6 +2,7 @@ package hop
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -23,6 +24,9 @@ type Converter struct {
 	BackupRoot string
 
 	identity repoIdentity
+	// linked is what a bare conversion does with the repository's
+	// linked worktrees; nil for a regular conversion.
+	linked *LinkedCarryPlan
 }
 
 func NewConverter(fs afero.Fs, g git.GitInterface) *Converter {
@@ -47,13 +51,6 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		return result, fmt.Errorf("invalid repository structure")
 	}
 
-	if useBare {
-		if err := refuseLinkedWorktrees(c.git, repoPath); err != nil {
-			result.Errors = append(result.Errors, err.Error())
-			return result, ErrLinkedWorktrees
-		}
-	}
-
 	// Ahead of the clean check, and not waived by Force: an operation in
 	// progress would be lost, not carried, whatever the working tree.
 	if useBare {
@@ -61,6 +58,22 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 			result.Errors = append(result.Errors, err.Error())
 			return result, err
 		}
+	}
+
+	// Before the backup: a linked worktree the conversion cannot carry
+	// refuses it, with every reason at once.
+	if useBare {
+		plan, err := PlanLinkedCarry(c.fs, c.git, repoPath)
+		if err != nil {
+			var le *LinkedWorktreesError
+			if errors.As(err, &le) {
+				result.Errors = append(result.Errors, le.Problems...)
+			} else {
+				result.Errors = append(result.Errors, err.Error())
+			}
+			return result, err
+		}
+		c.linked = plan
 	}
 
 	// After the in-progress check: a paused rebase detaches HEAD, and
@@ -74,7 +87,7 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 	// working tree; Force (init --force) is the caller's explicit consent
 	// to carry uncommitted changes across. The backup is taken either way.
 	if enforceClean && useBare && !c.Force {
-		status, err := c.git.RunInDir(repoPath, "git", "status", "--porcelain")
+		status, err := c.git.RunInDir(repoPath, "git", StatusPorcelainArgs(c.linked, repoPath)...)
 		if err == nil && status != "" {
 			result.Errors = append(result.Errors, "repository has uncommitted changes (commit or stash before conversion)")
 			return result, fmt.Errorf("repository is not clean")
@@ -116,6 +129,8 @@ func (c *Converter) ConvertToBareWorktree(repoPath string, useBare bool, enforce
 		if c.backupMgr != nil {
 			if rollbackErr := c.backupMgr.Restore(repoPath); rollbackErr != nil {
 				result.Warnings = append(result.Warnings, fmt.Sprintf("rollback failed: %v", rollbackErr))
+			} else if repairErr := c.repairLinkedAfterRollback(repoPath); repairErr != nil {
+				result.Warnings = append(result.Warnings, repairErr.Error())
 			}
 		}
 
@@ -190,6 +205,11 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		if err := c.carryOverRemotes(repoPath, bareRepoPath); err != nil {
 			return err
 		}
+		// Before the default worktree is added: the carried worktrees
+		// keep their ids, and on a clash git renames the default's.
+		if err := c.carryLinkedAdminDirs(repoPath, bareRepoPath); err != nil {
+			return err
+		}
 
 		// Worktree checkouts live under hops/<branch>, matching `git hop
 		// add` and config.MakeWorktreePath. They must NOT go under
@@ -214,6 +234,11 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		// Before the move, which hides what the old working tree lacked.
 		index, err := c.planIndexCarry(repoPath, worktreeGitDir)
 		if err != nil {
+			return err
+		}
+		// Out of the working tree before it moves, so they do not end
+		// up inside the default worktree.
+		if err := c.moveNestedLinked(repoPath, bareRepoPath); err != nil {
 			return err
 		}
 		if err := c.moveFilesToWorktree(repoPath, defaultPath); err != nil {
@@ -255,8 +280,13 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		// self-heal. Naming the worktree's new path explicitly gives git
 		// the anchor it needs to rewrite both.
 		repairedPath := filepath.Join(repoPath, "hops", defaultBranch)
+		// repair sweeps every admin dir first, which reconnects the
+		// carried linked worktrees too.
 		if _, err := c.git.Run("git", "-C", repoPath, "worktree", "repair", repairedPath); err != nil {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("failed to repair worktree links: %v", err))
+		}
+		if err := c.finishLinkedCarry(repoPath, result); err != nil {
+			return err
 		}
 	} else {
 		// For regular repo conversion, the repo root remains as the working tree
@@ -269,6 +299,23 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		// Note: No worktree created for current branch - repo root is its working tree
 	}
 
+	// A bare conversion carried the linked worktrees above; re-adding
+	// their branches under hops/ would only fail on them.
+	if !useBare {
+		c.addRegularWorktrees(repoPath, result)
+	}
+
+	if err := c.createHopConfig(repoPath, useBare, result); err != nil {
+		return fmt.Errorf("failed to create hop.json: %w", err)
+	}
+
+	return nil
+}
+
+// addRegularWorktrees adds, under hops/, a worktree for each branch
+// `git worktree list` reports that has none there yet; a regular
+// conversion's pass, unchanged.
+func (c *Converter) addRegularWorktrees(repoPath string, result *config.ConversionResult) {
 	defaultBranch, _ := c.git.GetCurrentBranch(repoPath)
 
 	worktrees, err := ListWorktrees(c.git, repoPath)
@@ -276,8 +323,7 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 		result.Warnings = append(result.Warnings, fmt.Sprintf("failed to list worktrees: %v", err))
 	} else {
 		for _, branch := range worktrees {
-			// The default branch's worktree was materialized above (bare)
-			// or is the repo root itself (regular).
+			// The default branch's worktree is the repo root itself.
 			if branch == defaultBranch {
 				continue
 			}
@@ -292,12 +338,6 @@ func (c *Converter) performConversion(repoPath string, useBare bool, result *con
 			}
 		}
 	}
-
-	if err := c.createHopConfig(repoPath, useBare, result); err != nil {
-		return fmt.Errorf("failed to create hop.json: %w", err)
-	}
-
-	return nil
 }
 
 // moveFilesToWorktree relocates the source repo's working-tree contents into
@@ -420,12 +460,7 @@ func (c *Converter) createHopConfig(repoPath string, useBare bool, result *confi
 			"structure":     structure,
 			"isBare":        useBare,
 		},
-		"branches": map[string]interface{}{
-			defaultBranch: map[string]interface{}{
-				"path":   branchPath,
-				"exists": true,
-			},
-		},
+		"branches": c.hopConfigBranches(repoPath, defaultBranch, branchPath),
 	}
 
 	content, err := json.MarshalIndent(hopConfig, "", "  ")

@@ -76,9 +76,8 @@ var gitDirLeftBehind = map[string]string{
 	"gitk.cache":            "cache",
 	"fsmonitor--daemon":     "runtime state of the fsmonitor daemon",
 	"fsmonitor--daemon.ipc": "runtime state of the fsmonitor daemon",
-	"worktrees": "admin dirs of linked worktrees: a bare conversion refuses " +
-		"a repository with live ones (refuseLinkedWorktrees), so only " +
-		"prunable entries are left",
+	"worktrees": "admin dirs of linked worktrees: the live ones are copied " +
+		"into the hub (carryLinkedAdminDirs); prunable ones are left, with a warning",
 }
 
 // Left-behind name prefixes, for entries whose names carry a suffix.
