@@ -94,6 +94,7 @@ var moveCmd = &cobra.Command{
 			Org:      hub.Config.Repo.Org,
 			Repo:     hub.Config.Repo.Repo,
 			DataHome: dataHome,
+			URI:      hub.Config.Repo.URI,
 		}
 		newPath := filepath.Clean(hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx))
 
