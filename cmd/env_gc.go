@@ -73,9 +73,10 @@ silently cancelling.`,
 			output.Fatal("Failed to initialize dependency manager: %v", err)
 		}
 
-		// Collect all worktree paths
+		// Collect the worktrees that are there; one whose path a file
+		// occupies would fail the whole collection with ENOTDIR.
 		output.Info("Scanning worktrees...")
-		worktrees := hub.WorktreePaths()
+		worktrees := auditableWorktrees(fs, hub)
 
 		output.Info("  Found %d worktree(s)", len(worktrees))
 

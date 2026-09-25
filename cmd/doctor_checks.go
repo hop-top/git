@@ -226,11 +226,11 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 }
 
 // auditableWorktrees returns the worktree paths of hub, by branch, whose
-// directory is there (hop.WorktreeAt). A missing one has no dependencies to
-// audit. Neither has a path something else occupies, and looking for
-// package-manager files below a file fails with ENOTDIR, which would
-// abort the audit of every other worktree; it is skipped with a note,
-// the hub check having reported it.
+// directory is there (hop.WorktreeAt): the ones doctor's dependency audit
+// and env gc scan. A missing one has no dependencies. Neither has a path
+// something else occupies, and looking for package-manager files below a
+// file fails with ENOTDIR, which would abort the scan of every other
+// worktree; it is skipped with a note.
 func auditableWorktrees(fs afero.Fs, hub *hop.Hub) map[string]string {
 	paths := hub.WorktreePaths()
 	for _, name := range sortedBranchNames(hub) {
