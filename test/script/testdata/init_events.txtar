@@ -1,0 +1,54 @@
+# A conversion publishes worktree.created for the initial worktree it
+# leaves the current branch in, after hopspace.initialized and with add's
+# payload keys: hops/<branch> for a bare conversion, the repository root
+# for a regular one. Register-as-is creates no worktree and publishes
+# hopspace.initialized alone. --dry-run publishes nothing.
+#
+# The regression this pins: init published hopspace.initialized only, so
+# a consumer tracking worktrees from events never learned about the
+# worktree a conversion created.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git clone $WORK/org/repo.git $WORK/bare
+exec git clone $WORK/org/repo.git $WORK/regular
+exec git clone $WORK/org/repo.git $WORK/asis
+
+exec git config --global hop.events.sink jsonl
+
+# --- --dry-run: nothing published ---
+exec git config --global hop.events.path $WORK/dry.jsonl
+cd $WORK/bare
+exec git-hop init --no-prompt --no-hooks --dry-run
+! exists $WORK/dry.jsonl
+! exists $WORK/bare/hop.json
+
+# --- bare conversion: the worktree is hops/<branch> ---
+exec git config --global hop.events.path $WORK/bare.jsonl
+exec git-hop init --no-prompt --no-hooks
+grep -count=2 '"topic":' $WORK/bare.jsonl
+grep -count=1 '"topic":"git.runtime.worktree.created","source":"git-hop".*"payload":\{"path":"[^"]*/bare/hops/main","branch":"main","hopspace_path":"[^"]*/bare","repo_path":"[^"]*/bare"\}' $WORK/bare.jsonl
+grep '(?s)hopspace\.initialized.*\n.*worktree\.created' $WORK/bare.jsonl
+
+# --- regular conversion: the worktree is the repository root ---
+exec git config --global hop.events.path $WORK/regular.jsonl
+cd $WORK/regular
+exec git-hop init --no-prompt --regular --no-hooks
+grep -count=2 '"topic":' $WORK/regular.jsonl
+grep -count=1 '"topic":"git.runtime.worktree.created","source":"git-hop".*"payload":\{"path":"[^"]*/regular","branch":"main","hopspace_path":"[^"]*/regular","repo_path":"[^"]*/regular"\}' $WORK/regular.jsonl
+grep '(?s)hopspace\.initialized.*\n.*worktree\.created' $WORK/regular.jsonl
+
+# --- register as-is: no worktree created, no worktree.created ---
+exec git config --global hop.events.path $WORK/asis.jsonl
+cd $WORK/asis
+stdin $WORK/choice3.txt
+exec git-hop init --no-hooks
+grep -count=1 '"topic":"git.runtime.hopspace.initialized"' $WORK/asis.jsonl
+! grep 'worktree\.created' $WORK/asis.jsonl
+
+-- choice3.txt --
+3
