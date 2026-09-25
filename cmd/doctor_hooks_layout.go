@@ -109,7 +109,8 @@ func reportLegacyHooksDir(fs afero.Fs, opts doctorOpts, r *doctorReport, legacy,
 		output.Info("[dry-run] Would move %s -> %s", legacy, newDir)
 		r.repaired(opts, doctorCheckHopspace, legacy, "move to %s", newDir)
 	default:
-		if err := moveDirNoClobber(fs, legacy, newDir); err != nil {
+		present := func() bool { ok, _ := afero.DirExists(fs, legacy); return ok }
+		if err := moveUnderHopspaceLocks(fs, filepath.Dir(legacy), legacy, newDir, present); err != nil {
 			output.Error("Failed to move %s: %v", legacy, err)
 			r.failed(doctorCheckHopspace, legacy, "move to %s: %v", newDir, err)
 			return

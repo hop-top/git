@@ -135,3 +135,43 @@ func TestLock_HeldReportsLiveLockOnly(t *testing.T) {
 		t.Fatal("Held must report true while another handle holds the lock")
 	}
 }
+
+// TestLock_ReleaseAfterMoveKeepsNewLock: a holder that renamed the lock
+// file's directory must not unlink the file now at the old path, which is
+// another process's lock taken since; unlinking it would let a third
+// process take the lock while the second holds it.
+func TestLock_ReleaseAfterMoveKeepsNewLock(t *testing.T) {
+	root := t.TempDir()
+	from, to := filepath.Join(root, "from"), filepath.Join(root, "to")
+	path := filepath.Join(from, "test.lock")
+
+	mover := New(path)
+	if ok, err := mover.TryAcquire(); err != nil || !ok {
+		t.Fatalf("mover acquire: ok=%v err=%v", ok, err)
+	}
+	if err := os.Rename(from, to); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+
+	second := New(path)
+	if ok, err := second.TryAcquire(); err != nil || !ok {
+		t.Fatalf("second acquire at the old path: ok=%v err=%v", ok, err)
+	}
+	defer second.Release()
+
+	if err := mover.Release(); err != nil {
+		t.Fatalf("mover release: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the second holder's lock file must survive the mover's release: %v", err)
+	}
+	third := New(path)
+	ok, err := third.TryAcquire()
+	if err != nil {
+		t.Fatalf("third TryAcquire: %v", err)
+	}
+	if ok {
+		_ = third.Release()
+		t.Fatal("third process took the lock while the second holds it")
+	}
+}

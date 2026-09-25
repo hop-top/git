@@ -77,11 +77,17 @@ func (l *Lock) TryAcquire() (bool, error) {
 // can acquire the old inode after we let go; a waiter that already
 // opened it detects the swap in TryAcquire. Where the platform refuses
 // to unlink an open file (Windows), the removal is retried after close.
+//
+// A lock file the holder moved (a rename of its directory) is no longer
+// at the path: the file there, if any, is another process's lock, taken
+// since, and unlinking it would let a third process take the lock while
+// that one holds it. Release then only drops its own lock; the file it
+// holds is the mover's to remove, at its new path, before releasing.
 func (l *Lock) Release() error {
 	if l.file == nil {
 		return nil
 	}
-	removed := removeIgnoringMissing(l.path) == nil
+	removed := !sameInode(l.file, l.path) || removeIgnoringMissing(l.path) == nil
 	unErr := unflock(l.file)
 	clErr := l.file.Close()
 	l.file = nil

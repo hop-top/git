@@ -244,7 +244,8 @@ func reportMisplacedHopspace(fs afero.Fs, opts doctorOpts, r *doctorReport, repo
 		r.repaired(opts, doctorCheckHopspace, alt, "move to %s", current)
 		previewHopspaceMove(fs, alt, current)
 	default:
-		if err := moveDirNoClobber(fs, alt, current); err != nil {
+		present := func() bool { return len(presentMarkers(fs, alt)) > 0 }
+		if err := moveUnderHopspaceLocks(fs, alt, alt, current, present); err != nil {
 			output.Error("Failed to move %s: %v", alt, err)
 			r.failed(doctorCheckHopspace, alt, "move to %s: %v", current, err)
 			r.markMisplaced(current)
