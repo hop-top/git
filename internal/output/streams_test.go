@@ -89,3 +89,37 @@ func TestSetupLoggerResetsQuiet(t *testing.T) {
 		t.Errorf("stderr = %q, want the warning", got)
 	}
 }
+
+// A warning for a failure the command survives must never go unseen: -q
+// keeps it, in every mode, where it drops a plain Warn.
+func TestWarnAlways_SurvivesQuiet(t *testing.T) {
+	for _, tt := range []struct {
+		name  string
+		mode  output.Mode
+		quiet bool
+		want  string
+	}{
+		{"human", output.ModeHuman, false, "warning: start failed\n"},
+		{"quiet", output.ModeQuiet, false, "warning: start failed\n"},
+		{"porcelain+quiet", output.ModePorcelain, true, "warning: start failed\n"},
+		{"json+quiet", output.ModeJSON, true, `{"level":"warn","msg":"start failed"}` + "\n"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			var stdout string
+			stderr := captureStderr(t, func() {
+				stdout = captureStdout(t, func() {
+					output.SetupLogger(tt.mode, false)
+					output.SetQuiet(tt.quiet)
+					output.WarnAlways("start %s", "failed")
+				})
+			})
+			if stderr != tt.want {
+				t.Errorf("stderr = %q, want %q", stderr, tt.want)
+			}
+			if stdout != "" {
+				t.Errorf("stdout = %q, want empty", stdout)
+			}
+		})
+	}
+	output.SetupLogger(output.ModeHuman, false)
+}

@@ -84,6 +84,9 @@ func ErrorJSON(w io.Writer, msg string) {
 // mode once -q is given. Call it after SetupLogger, which resets it.
 func SetQuiet(q bool) { quiet = q || CurrentMode == ModeQuiet }
 
+// IsQuiet reports whether -q is in effect, in whatever mode.
+func IsQuiet() bool { return quiet }
+
 // rootViper returns the shared viper instance set by SetViper, or a
 // zero-value viper if none has been wired yet.
 var viperInstance *viper.Viper
@@ -154,12 +157,23 @@ func Warn(msg string, args ...interface{}) {
 	if quiet {
 		return
 	}
-	formatted := fmt.Sprintf(msg, args...)
+	printWarning(fmt.Sprintf(msg, args...))
+}
+
+// WarnAlways is Warn for a failure the command survives but must never
+// leave unseen, such as an environment that did not start after the
+// worktree was created: -q does not drop it. It stays a warning, not an
+// error, because the command still succeeds.
+func WarnAlways(msg string, args ...interface{}) {
+	printWarning(fmt.Sprintf(msg, args...))
+}
+
+func printWarning(msg string) {
 	if CurrentMode == ModeJSON {
-		logger.Warn(formatted)
+		logger.Warn(msg)
 		return
 	}
-	fmt.Fprintf(os.Stderr, "warning: %s\n", formatted)
+	fmt.Fprintf(os.Stderr, "warning: %s\n", msg)
 }
 
 // Hint prints advice with git's lowercase "hint:" prefix on stderr, one

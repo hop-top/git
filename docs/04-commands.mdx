@@ -370,6 +370,12 @@ result on stdout.
 The status and step lines above are progress for a person at a terminal:
 `-q`, `--json` and `--porcelain` drop them. Errors are always printed.
 
+Under `-q`, the hook output and the lifecycle command's own output are
+held back: dropped when the start or stop succeeds, printed on stderr
+before the error when it fails. A failed automatic start after `add` or
+`clone` is never silent either: its warning prints under `-q`, and the
+command still exits 0.
+
 #### stop
 
 Stop services for current worktree.

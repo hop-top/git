@@ -62,13 +62,15 @@ stderr '^stub-compose-up-stdout$'
 stderr '^stub-compose-up-stderr$'
 stderr '^  Environment started successfully$'
 
-# --- -q: the start's own progress lines are dropped; stdout stays empty ---
+# --- -q: the start's own progress lines are dropped, and compose's output
+# is held back and discarded on success; stdout stays empty ---
 exec git-hop add feat/quiet -q
 grep ' on feat/quiet$' $WORK/up.log
 ! stdout .
 ! stderr 'Environment'
 ! stderr 'Dependencies'
 ! stderr 'Starting services'
+! stderr 'stub-compose-up'
 
 # --- --no-env-start overrides hop.env.autoStart=true ---
 exec git-hop add feat/off --no-env-start
@@ -147,6 +149,17 @@ exec git-hop env start
 grep -count=8 '^up ' $WORK/up.log
 grep ' in .*/hub/hops/feat/default on feat/default$' $WORK/up.log
 
+# --- -q and a failed start: never silent. The held-back compose output is
+# printed on stderr, then the warning; add still exits 0 ---
+cd $WORK/hub
+env STUB_UP_FAIL=1
+exec git-hop add feat/quiet-broken -q
+! stdout .
+stderr '(?s)^stub-up-fail-stdout\nstub: up failed\nwarning: failed to start environment: '
+! stderr 'Starting services'
+exists $WORK/hub/hops/feat/quiet-broken/docker-compose.yml
+env STUB_UP_FAIL=
+
 -- compose.yml --
 services:
   web:
@@ -157,6 +170,7 @@ case " $* " in
 *" up "*)
 	echo "up $* in $PWD on $(git rev-parse --abbrev-ref HEAD)" >> "$WORK/up.log"
 	if [ -n "$STUB_UP_FAIL" ]; then
+		echo "stub-up-fail-stdout"
 		echo "stub: up failed" >&2
 		exit 1
 	fi

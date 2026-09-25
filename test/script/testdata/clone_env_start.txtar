@@ -59,6 +59,7 @@ grep ' in .*/hub-quiet/hops/main on main$' $WORK/up.log
 ! stderr 'Environment'
 ! stderr 'Dependencies'
 ! stderr 'Starting services'
+! stderr 'stub-compose-up'
 
 # --- --no-env-start overrides it ---
 exec git-hop $WORK/org/repo.git hub-off --no-env-start
@@ -85,6 +86,13 @@ stderr '^hint: .*git hop env start'
 exists $WORK/hub-broken/hops/main/docker-compose.yml
 exists $WORK/hub-broken/hop.json
 
+# --- -q and a failed start: never silent. The held-back compose output is
+# printed on stderr, then the warning; the clone still succeeds ---
+exec git-hop $WORK/org/repo.git hub-quiet-broken --env-start -q
+stderr '(?s)^stub-up-fail-stdout\nstub: up failed\nwarning: failed to start environment: '
+! stderr 'Starting services'
+exists $WORK/hub-quiet-broken/hops/main/docker-compose.yml
+
 -- compose.yml --
 services:
   web:
@@ -95,6 +103,7 @@ case " $* " in
 *" up "*)
 	echo "up $* in $PWD on $(git rev-parse --abbrev-ref HEAD)" >> "$WORK/up.log"
 	if [ -n "$STUB_UP_FAIL" ]; then
+		echo "stub-up-fail-stdout"
 		echo "stub: up failed" >&2
 		exit 1
 	fi
