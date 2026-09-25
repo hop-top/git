@@ -219,15 +219,20 @@ If a worktree directory was already deleted by hand (so the entry is
 "missing on disk") and its branch is merged, the right tool is
 `git hop doctor --fix` — it will silently drop those entries.
 
-### Prune Orphaned Resources
+### Prune Orphaned Records
 
 ```bash
-# Clean up orphaned hopspaces
+# Drop the records of worktrees and hubs whose directories are gone
 git hop prune
 
 # Dry run first
 git hop prune --dry-run
 ```
+
+Prune drops records only. It never runs Docker: stop a worktree's
+environment with `git hop env stop` before removing it. See
+[Orphaned Resources](./08-advanced-usage#orphaned-resources) for
+containers and volume data left behind.
 
 ### Check Health
 
@@ -269,11 +274,12 @@ git push origin feature-new-api
 # 7. Create PR
 gh pr create --title "Add new API endpoint"
 
-# 8. After merge, clean up
+# 8. After merge, stop the environment and clean up
+git hop env stop
 cd ..
 git hop remove feature-new-api
 
-# 9. Prune orphaned resources
+# 9. Drop records of worktrees deleted by hand
 git hop prune
 ```
 

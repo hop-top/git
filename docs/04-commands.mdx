@@ -944,9 +944,16 @@ have the action `skipped` and a `reason`. Once the worktree is unlocked,
 the next prune removes the entries.
 
 `prune` does **not** remove merged branches that still exist on disk —
-for that, use [`git hop remove --merged`](#git-hop-remove). It also
-does not touch containers, volume directories, or symlinks; those go through
-[`git hop env gc`](#gc) and [`git hop doctor --fix`](#git-hop-doctor).
+for that, use [`git hop remove --merged`](#git-hop-remove). It never
+runs Docker: the containers, networks and Docker volumes of a worktree
+whose records it drops stay as they are. Stop them with
+[`git hop env stop`](#stop) before the worktree goes, or with
+`docker compose -p <project> down` once it has (see
+[What Gets Removed](#what-gets-removed)). Nor does it delete volume
+directories; removing a hub moves them aside, or deletes them with
+`--delete-volumes` ([Volume data](#volume-data)). Broken dependency
+symlinks and unused dependency directories go through
+[`git hop doctor --fix`](#git-hop-doctor) and [`git hop env gc`](#gc).
 
 ## git hop doctor
 
