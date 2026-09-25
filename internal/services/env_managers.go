@@ -1,6 +1,7 @@
 package services
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -79,9 +80,10 @@ type EnvironmentManager struct {
 	Commands    EnvCommands
 	Hooks       EnvHooks
 	// Out receives the step lines, hook output and the lifecycle
-	// command's stdout; nil means os.Stdout. The command's stderr always
-	// goes to os.Stderr.
+	// command's stdout; nil means os.Stdout.
 	Out io.Writer
+	// Err receives the lifecycle command's stderr; nil means os.Stderr.
+	Err io.Writer
 }
 
 func (m *EnvironmentManager) out() io.Writer {
@@ -89,6 +91,29 @@ func (m *EnvironmentManager) out() io.Writer {
 		return os.Stdout
 	}
 	return m.Out
+}
+
+func (m *EnvironmentManager) err() io.Writer {
+	if m.Err == nil {
+		return os.Stderr
+	}
+	return m.Err
+}
+
+// streams returns where a start's or stop's hooks and lifecycle command
+// write. Without -q that is Out and Err, live. Under -q both are held in
+// one buffer; done(err) replays it on Err when the run failed, before the
+// caller reports the failure, and drops it otherwise.
+func (m *EnvironmentManager) streams() (out, errOut io.Writer, done func(error)) {
+	if !output.IsQuiet() {
+		return m.out(), m.err(), func(error) {}
+	}
+	held := &bytes.Buffer{}
+	return held, held, func(err error) {
+		if err != nil {
+			_, _ = m.err().Write(held.Bytes())
+		}
+	}
 }
 
 // step prints one of the manager's step lines on its Out. Steps are
@@ -194,13 +219,15 @@ func DetectEnvManager(worktreePath string, repoConfig *config.HubConfig, availab
 
 // Start starts the environment using this manager.
 // If overridePath is non-empty, it is passed as an additional -f flag to docker compose.
-func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoConfig *config.HubConfig, overridePath string) error {
+func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoConfig *config.HubConfig, overridePath string) (err error) {
+	out, errOut, done := m.streams()
+	defer func() { done(err) }()
 	ctx := HookContext{
 		WorktreePath: worktreePath,
 		Branch:       branch,
 		RepoPath:     repoPath,
 		Command:      "start",
-		Out:          m.out(),
+		Out:          out,
 	}
 
 	// Merge hooks: global hooks first, then per-repo hooks
@@ -224,7 +251,7 @@ func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoCo
 	m.step("  Starting services: %s", m.Name)
 	org, repo := repoIdentity(repoConfig)
 	startCmd := m.buildComposeCommand(m.Commands.Start, worktreePath, overridePath, org, repo, branch)
-	if err := m.executeCommand(startCmd, worktreePath); err != nil {
+	if err := m.executeCommand(startCmd, worktreePath, out, errOut); err != nil {
 		return fmt.Errorf("start command failed: %w", err)
 	}
 
@@ -242,13 +269,15 @@ func (m *EnvironmentManager) Start(worktreePath, branch, repoPath string, repoCo
 
 // Stop stops the environment using this manager.
 // If overridePath is non-empty, it is passed as an additional -f flag to docker compose.
-func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoConfig *config.HubConfig, overridePath string) error {
+func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoConfig *config.HubConfig, overridePath string) (err error) {
+	out, errOut, done := m.streams()
+	defer func() { done(err) }()
 	ctx := HookContext{
 		WorktreePath: worktreePath,
 		Branch:       branch,
 		RepoPath:     repoPath,
 		Command:      "stop",
-		Out:          m.out(),
+		Out:          out,
 	}
 
 	// Merge hooks: global hooks first, then per-repo hooks
@@ -272,7 +301,7 @@ func (m *EnvironmentManager) Stop(worktreePath, branch, repoPath string, repoCon
 	m.step("  Stopping services: %s", m.Name)
 	org, repo := repoIdentity(repoConfig)
 	stopCmd := m.buildComposeCommand(m.Commands.Stop, worktreePath, overridePath, org, repo, branch)
-	if err := m.executeCommand(stopCmd, worktreePath); err != nil {
+	if err := m.executeCommand(stopCmd, worktreePath, out, errOut); err != nil {
 		return fmt.Errorf("stop command failed: %w", err)
 	}
 
@@ -307,16 +336,17 @@ func (m *EnvironmentManager) Health(worktreePath string) (bool, error) {
 	return true, nil
 }
 
-// executeCommand executes a command in the worktree directory
-func (m *EnvironmentManager) executeCommand(cmdParts []string, worktreePath string) error {
+// executeCommand executes a command in the worktree directory, its
+// stdout on out and its stderr on errOut.
+func (m *EnvironmentManager) executeCommand(cmdParts []string, worktreePath string, out, errOut io.Writer) error {
 	if len(cmdParts) == 0 {
 		return fmt.Errorf("empty command")
 	}
 
 	cmd := exec.Command(cmdParts[0], cmdParts[1:]...)
 	cmd.Dir = worktreePath
-	cmd.Stdout = m.out()
-	cmd.Stderr = os.Stderr
+	cmd.Stdout = out
+	cmd.Stderr = errOut
 
 	return cmd.Run()
 }

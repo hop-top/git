@@ -136,7 +136,9 @@ func StartNewWorktreeEnv(fs afero.Fs, t EnvTarget, globalConfig *config.GlobalCo
 
 // WarnEnvNotStarted reports an automatic start of root's environment that
 // failed after the worktree itself was created.
+// It is never silent: -q, which held back the start's own output until
+// the failure replayed it, keeps the warning too.
 func WarnEnvNotStarted(err error, root string) {
-	output.Warn("failed to start environment: %v", err)
+	output.WarnAlways("failed to start environment: %v", err)
 	output.Hint("the worktree is ready; start its environment with 'git hop env start' from %s", root)
 }

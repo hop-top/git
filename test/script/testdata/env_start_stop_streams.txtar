@@ -51,23 +51,24 @@ exec git-hop env stop --porcelain
 ! stderr 'Stopping services'
 ! stderr 'Environment stopped'
 
-# --- -q: the manager's step lines are progress and are dropped ---
+# --- -q: the manager's step lines are progress and are dropped, and
+# compose's output is held back and discarded on success ---
 exec git-hop env start -q
 ! stdout .
-! stderr 'Environment'
-! stderr 'Dependencies'
-! stderr 'Starting services'
+! stderr .
 exec git-hop env stop -q
 ! stdout .
-! stderr 'Environment'
-! stderr 'Stopping services'
+! stderr .
 
-# --- -q never drops an error ---
+# --- -q never hides a failure: the held-back output, then the error ---
 env STUB_FAIL=1
 ! exec git-hop env start -q
 ! stdout .
-stderr '^fatal: .*start command failed'
+stderr '(?s)^stub-fail-stdout\nstub: failed\nfatal: .*start command failed'
 ! stderr 'Starting services'
+! exec git-hop env stop -q
+! stdout .
+stderr '(?s)^stub-fail-stdout\nstub: failed\nfatal: .*stop command failed'
 env STUB_FAIL=
 
 # --- no environment: the skip notice is progress as well ---
@@ -95,6 +96,7 @@ case " $* " in
 	;;
 esac
 if [ -n "$STUB_FAIL" ]; then
+	echo "stub-fail-stdout"
 	echo "stub: failed" >&2
 	exit 1
 fi
