@@ -129,6 +129,16 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 
 	output.Info("Fork ancestry verified.")
 
+	// The hub's worktree of the fork's branch: <branch>-fork-<org>. One
+	// already there from an earlier attach is checked before anything
+	// changes, so a refusal leaves the fork's hopspace untouched too.
+	forkBranchName := fmt.Sprintf("%s-fork-%s", branch, org)
+	forkWorktreePath := filepath.Join(hubPath, "hops", forkBranchName)
+	existingHub, err := checkHubForkWorktree(fs, g, mainRepoPath, forkWorktreePath)
+	if err != nil {
+		return ForkAttachment{}, err
+	}
+
 	// Now proceed to create worktree in fork hopspace
 	// We can clone/add.
 	// Since we verified it, we can now add it.
@@ -187,12 +197,22 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 			return ForkAttachment{}, fmt.Errorf("failed to fetch fork branch into fork hopspace: %v", err)
 		}
 
-		wm := NewWorktreeManager(fs, g)
-		// For forks, the hopspace path acts as the hub path (worktrees are stored in hopspace)
-		locationPattern := "{hubPath}/hops/{branch}"
-		worktreePath, err := wm.CreateWorktree(forkHopspace, forkHopspacePath, branch, locationPattern, forkHopspace.Config.Repo.Org, forkHopspace.Config.Repo.Repo, forkHopspace.Config.Repo.DefaultBranch, "")
-		if err != nil {
-			return ForkAttachment{}, fmt.Errorf("failed to create worktree in fork: %v", err)
+		// An earlier attach of this branch, whole or interrupted, left its
+		// worktree here: bring it to the fork's branch instead of adding
+		// a second one, which git refuses.
+		worktreePath := existingForkWorktree(fs, forkHopspace, forkHopspacePath, branch)
+		if worktreePath != "" {
+			if err := reuseForkWorktree(g, base, worktreePath, branch); err != nil {
+				return ForkAttachment{}, err
+			}
+		} else {
+			wm := NewWorktreeManager(fs, g)
+			// For forks, the hopspace path acts as the hub path (worktrees are stored in hopspace)
+			locationPattern := "{hubPath}/hops/{branch}"
+			worktreePath, err = wm.CreateWorktree(forkHopspace, forkHopspacePath, branch, locationPattern, forkHopspace.Config.Repo.Org, forkHopspace.Config.Repo.Repo, forkHopspace.Config.Repo.DefaultBranch, "")
+			if err != nil {
+				return ForkAttachment{}, fmt.Errorf("failed to create worktree in fork: %v", err)
+			}
 		}
 
 		if err := forkHopspace.RegisterBranch(branch, worktreePath); err != nil {
@@ -201,11 +221,8 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 		sourceWorktreePath = worktreePath
 	}
 
-	// 4. Create worktree in hub's hops directory
-	// Name: <branch>-fork-<org>
-	forkBranchName := fmt.Sprintf("%s-fork-%s", branch, org)
-	forkWorktreePath := filepath.Join(hubPath, "hops", forkBranchName)
-
+	// 4. Create worktree in hub's hops directory, or bring the one an
+	// earlier attach created to the fork's commit.
 	// We need to add a worktree from the fork hopspace.
 	// Since the branch is already checked out there, we need to:
 	// 1. Add a remote to the main repo pointing to the fork
@@ -222,9 +239,12 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 	}
 	commitHash = strings.TrimSpace(commitHash)
 
-	// Create a detached worktree at that commit in the main repo
-	// We use the main repo worktree as the base
-	if _, err := g.RunInDir(mainRepoPath, "git", "worktree", "add", "--detach", forkWorktreePath, commitHash); err != nil {
+	if existingHub != nil {
+		if err := updateHubForkWorktree(g, existingHub, commitHash, forkBranchName); err != nil {
+			return ForkAttachment{}, err
+		}
+	} else if _, err := g.RunInDir(mainRepoPath, "git", "worktree", "add", "--detach", forkWorktreePath, commitHash); err != nil {
+		// Create a detached worktree at that commit in the main repo
 		return ForkAttachment{}, fmt.Errorf("failed to add fork worktree: %v", err)
 	}
 
@@ -262,12 +282,18 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 			})
 		}
 		_ = st.AddHub(mainRepoID, &state.HubState{Path: hubPath, Mode: mode, CreatedAt: time.Now(), LastAccessed: time.Now()})
+		// A re-attach keeps when the worktree was created, read from the
+		// state Update just loaded under its lock.
+		createdAt := time.Now()
+		if _, prev, ok := st.Repositories[mainRepoID].WorktreeAt(forkWorktreePath); ok && prev != nil && !prev.CreatedAt.IsZero() {
+			createdAt = prev.CreatedAt
+		}
 		return st.PutWorktree(mainRepoID, &state.WorktreeState{
 			Path:         forkWorktreePath,
 			Branch:       forkBranchName,
 			Type:         "linked",
 			HubPath:      hubPath,
-			CreatedAt:    time.Now(),
+			CreatedAt:    createdAt,
 			LastAccessed: time.Now(),
 		})
 	}); err != nil {

@@ -11,7 +11,11 @@
 # --porcelain and its human progress under --format json|yaml; and a
 # second branch of an already-attached fork failed (its commit was read
 # from a path the fork's worktree was never created at) and, once past
-# that, started from the fork's first branch instead of its own.
+# that, started from the fork's first branch instead of its own; and
+# attaching a branch that was already attached, in whole or in part (a
+# hub that hit the second-branch failure keeps the fork's worktree
+# registered in the fork's hopspace), failed with "worktree already
+# exists" instead of reusing what was there.
 
 # --- upstream, a hub of it, and two forks with branches of their own ---
 exec git init --bare $WORK/org/repo.git
@@ -27,6 +31,9 @@ exec git push fork feat
 exec git checkout -b feat2 main
 exec git commit --allow-empty -m 'fork work 2'
 exec git push fork feat2
+exec git checkout -b feat3 main
+exec git commit --allow-empty -m 'fork work 3'
+exec git push fork feat3
 exec git clone --bare $WORK/forker/repo.git $WORK/other/repo.git
 cd $WORK
 exec git-hop file://$WORK/org/repo.git hub
@@ -71,6 +78,45 @@ exists $WORK/hub/hops/feat-fork-forker
 exec git -C $WORK/hub/hops/feat-fork-forker log -1 --format=%s
 stdout '^fork work$'
 
+# --- attaching it again reuses both worktrees ---
+exec git-hop file://$WORK/forker/repo.git --branch feat --json
+decode json stdout action fork-attached
+decode json stdout branch feat-fork-forker
+decode json stdout path '~/hub/hops/feat-fork-forker$'
+decode json stdout fork_branch feat
+! stdout 'Reusing'
+exec git -C $WORK/hub/hops/feat-fork-forker log -1 --format=%s
+stdout '^fork work$'
+
+# --- the fork moved on: a re-attach fast-forwards both worktrees ---
+cd $WORK/seed
+exec git checkout feat
+cp $WORK/fork-file f.txt
+exec git add f.txt
+exec git commit -m 'fork more'
+exec git push fork feat
+cd $WORK/hub
+
+# a local change the update would overwrite is refused, left untouched
+cp $WORK/mine-file $WORK/hub/hops/feat-fork-forker/f.txt
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr 'would be overwritten'
+cmp $WORK/hub/hops/feat-fork-forker/f.txt $WORK/mine-file
+exec git -C $WORK/hub/hops/feat-fork-forker log -1 --format=%s
+stdout '^fork work$'
+rm $WORK/hub/hops/feat-fork-forker/f.txt
+
+exec git-hop file://$WORK/forker/repo.git --branch feat --json
+decode json stdout action fork-attached
+decode json stdout branch feat-fork-forker
+exec git -C $WORK/hub/hops/feat-fork-forker log -1 --format=%s
+stdout '^fork more$'
+cmp $WORK/hub/hops/feat-fork-forker/f.txt $WORK/fork-file
+exec git -C $WORK/data/forker/repo/feat log -1 --format=%s
+stdout '^fork more$'
+
 # --- a second branch of the same fork: the fork is already attached ---
 exec git-hop file://$WORK/forker/repo.git --branch feat2 --json
 decode json stdout action fork-attached
@@ -80,6 +126,41 @@ decode json stdout fork_branch feat2
 ! stdout 'Attaching'
 exec git -C $WORK/hub/hops/feat2-fork-forker log -1 --format=%s
 stdout '^fork work 2$'
+
+# --- the fork's worktree on another branch is refused, not overwritten ---
+exec git -C $WORK/data/forker/repo/hops/feat2 switch -c elsewhere
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat2 --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr 'on branch elsewhere, not feat2'
+exec git -C $WORK/data/forker/repo/hops/feat2 branch --show-current
+stdout '^elsewhere$'
+exec git -C $WORK/data/forker/repo/hops/feat2 switch feat2
+
+# --- work committed in the fork's worktree is never reset away ---
+exec git -C $WORK/data/forker/repo/hops/feat2 commit --allow-empty -m 'hopspace work'
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat2 --json; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'commits on no branch of the fork'
+exec git -C $WORK/data/forker/repo/hops/feat2 log -1 --format=%s
+stdout '^hopspace work$'
+
+# --- half attached: the fork's worktree exists and is registered, the ---
+# --- hub's does not; it started from the fork's first branch          ---
+exec git -C $WORK/data/forker/repo/feat worktree add -b feat3 $WORK/data/forker/repo/hops/feat3
+exec sh -c 'sed "s|\"branches\": {|\"branches\": {\"feat3\": {\"exists\": true, \"path\": \"$WORK/data/forker/repo/hops/feat3\"},|" $WORK/data/forker/repo/hop.json > $WORK/hop.json.new && mv $WORK/hop.json.new $WORK/data/forker/repo/hop.json'
+grep '"feat3"' $WORK/data/forker/repo/hop.json
+! exists $WORK/hub/hops/feat3-fork-forker
+exec git-hop file://$WORK/forker/repo.git --branch feat3 --json
+decode json stdout action fork-attached
+decode json stdout branch feat3-fork-forker
+decode json stdout path '~/hub/hops/feat3-fork-forker$'
+decode json stdout fork_branch feat3
+exec git -C $WORK/hub/hops/feat3-fork-forker log -1 --format=%s
+stdout '^fork work 3$'
+exec git -C $WORK/data/forker/repo/hops/feat3 log -1 --format=%s
+stdout '^fork work 3$'
+grep '"feat3-fork-forker"' $WORK/hub/hop.json
 
 exec git-hop file://$WORK/other/repo.git --branch feat --porcelain
 stdout '^fork-attached\tfeat-fork-other\t\S+/hub/hops/feat-fork-other\t\S+/hub$'
@@ -91,3 +172,26 @@ stdout '^exit=1$'
 ! stdout '\{'
 stderr '"level":"error"'
 stderr 'does not share history'
+
+# --- a commit made in the hub's worktree is never left behind ---
+exec git -C $WORK/hub/hops/feat-fork-forker commit --allow-empty -m 'local work'
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr 'which the fork.s branch does not contain'
+exec git -C $WORK/hub/hops/feat-fork-forker log -1 --format=%s
+stdout '^local work$'
+
+# --- the hub's worktree on a branch of its own is refused, not moved ---
+exec git -C $WORK/hub/hops/feat-fork-forker switch -c mine
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr 'on branch mine'
+exec git -C $WORK/hub/hops/feat-fork-forker branch --show-current
+stdout '^mine$'
+
+-- fork-file --
+fork
+-- mine-file --
+mine
