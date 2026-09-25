@@ -70,30 +70,18 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 	// Clean the path to resolve .. and . segments
 	worktreePath = filepath.Clean(worktreePath)
 
-	// Step 2: Pre-flight validation. Refusals come first, so a refused
-	// add clears nothing; a preview runs the same checks.
+	// Step 2: Pre-flight validation; a preview runs the same checks.
+	// Whatever occupies the path is refused, never cleared: only an
+	// empty directory is reused, as `git worktree add` reuses it.
 	if err := m.CheckAdd(hopspace, hubPath, branch, worktreePath); err != nil {
 		return worktreePath, err
 	}
 	if err := m.CheckStartPoint(hopspace, hubPath, branch, startPoint); err != nil {
 		return worktreePath, err
 	}
-	validator := NewStateValidator(m.fs, m.git)
-	validation, err := validator.ValidateWorktreeAdd(hopspace, hubPath, branch, worktreePath)
-	if err != nil {
-		return worktreePath, fmt.Errorf("validation failed: %w", err)
-	}
 
-	// Step 3: Auto-cleanup orphaned directories if needed
-	if !validation.CanProceed && validation.RequiresCleanup {
-		cleanup := NewCleanupManager(m.fs, m.git)
-		if err := cleanup.CleanupOrphanedDirectory(worktreePath); err != nil {
-			return worktreePath, fmt.Errorf("failed to cleanup orphaned directory: %w", err)
-		}
-	}
-
-	// Step 4: Call existing CreateWorktree method to do the actual work
-	_, err = m.CreateWorktree(hopspace, hubPath, branch, locationPattern, org, repo, defaultBranch, startPoint)
+	// Step 3: Call existing CreateWorktree method to do the actual work
+	_, err := m.CreateWorktree(hopspace, hubPath, branch, locationPattern, org, repo, defaultBranch, startPoint)
 	if err != nil {
 		// Return our cleaned path on error
 		return worktreePath, err
@@ -149,8 +137,9 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	}
 	worktreePath := ExpandWorktreeLocation(locationPattern, ctx)
 
-	// Check if already exists
-	if exists, _ := afero.Exists(m.fs, worktreePath); exists {
+	// Anything but an empty directory at the path is in the way; an
+	// empty one is reused, as `git worktree add` reuses it.
+	if occupied(m.fs, worktreePath) {
 		return worktreePath, fmt.Errorf("worktree already exists at %s", worktreePath)
 	}
 

@@ -5,7 +5,9 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/state"
 )
 
 // StateIssue represents a detected state inconsistency
@@ -146,17 +148,8 @@ func (v *StateValidator) ValidateWorktreeAdd(hopspace *Hopspace, hubPath string,
 		validation.IsClean = false
 		validation.RequiresCleanup = true
 
-		// Check if path is registered in config
-		registered := false
-		for _, configBranch := range hopspace.Config.Branches {
-			if configBranch.Path == worktreePath {
-				registered = true
-				break
-			}
-		}
-
 		// If not registered, it's an orphaned directory - cannot proceed
-		if !registered {
+		if !recordsWorktree(hopspace, hubPath, worktreePath) {
 			validation.CanProceed = false
 			validation.Issues = append(validation.Issues, StateIssue{
 				Type:        OrphanedDirectory,
@@ -168,4 +161,28 @@ func (v *StateValidator) ValidateWorktreeAdd(hopspace *Hopspace, hubPath string,
 	}
 
 	return validation, nil
+}
+
+// recordsWorktree reports whether hopspace records a worktree at path. A
+// relative record is taken against the hub, then the hopspace. Paths
+// compare as state.SamePath compares them: absolute, cleaned, symlinks
+// resolved where they exist (macOS /tmp is /private/tmp), case as given.
+func recordsWorktree(hopspace *Hopspace, hubPath, path string) bool {
+	if hopspace == nil || hopspace.Config == nil {
+		return false
+	}
+	for _, b := range hopspace.Config.Branches {
+		if b.Path == "" {
+			continue
+		}
+		for _, base := range []string{hubPath, hopspace.Path} {
+			if base == "" && !filepath.IsAbs(b.Path) {
+				continue
+			}
+			if state.SamePath(config.ResolveWorktreePath(b.Path, base), path) {
+				return true
+			}
+		}
+	}
+	return false
 }

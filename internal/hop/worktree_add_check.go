@@ -13,11 +13,10 @@ import (
 //   - branch is not a valid branch name;
 //   - worktreePath is already a worktree: one the hopspace records, or
 //     one git has registered, present or missing;
-//   - branch is checked out in another worktree.
-//
-// A directory at worktreePath that neither the hopspace nor git knows is
-// not a refusal: CreateWorktreeTransactional clears it (see
-// ValidateWorktreeAdd).
+//   - branch is checked out in another worktree;
+//   - something else occupies worktreePath: a file, or a directory that
+//     is not empty. Like `git worktree add`, an empty directory is
+//     reused; nothing at worktreePath is ever deleted.
 func (m *WorktreeManager) CheckAdd(hopspace *Hopspace, hubPath, branch, worktreePath string) error {
 	if err := checkBranchName(m, branch); err != nil {
 		return err
@@ -31,9 +30,21 @@ func (m *WorktreeManager) CheckAdd(hopspace *Hopspace, hubPath, branch, worktree
 		return fmt.Errorf("worktree already exists at %s", worktreePath)
 	}
 
-	// git's own registry: a worktree git-hop does not record, or whose
-	// directory is gone, still blocks `git worktree add`. An unreadable
-	// list leaves the verdict to git.
+	if err := m.checkRegistered(hopspace, hubPath, branch, worktreePath); err != nil {
+		return err
+	}
+	if occupied(m.fs, worktreePath) {
+		return fmt.Errorf("'%s' already exists and is not an empty directory\n"+
+			"hint: move it away, or add another branch or set another hop.worktreeLocation", worktreePath)
+	}
+	return nil
+}
+
+// checkRegistered consults git's own registry: a worktree git-hop does
+// not record, or whose directory is gone, still blocks `git worktree
+// add`, as does branch checked out elsewhere. An unreadable list leaves
+// the verdict to git.
+func (m *WorktreeManager) checkRegistered(hopspace *Hopspace, hubPath, branch, worktreePath string) error {
 	out, err := m.git.WorktreeListPorcelain(findBaseWorktree(hopspace, hubPath))
 	if err != nil {
 		return nil
@@ -57,6 +68,21 @@ func (m *WorktreeManager) CheckAdd(hopspace *Hopspace, hubPath, branch, worktree
 			"hint: clear it with 'git worktree prune', then retry", worktreePath)
 	}
 	return nil
+}
+
+// occupied reports whether something at path keeps `git worktree add`
+// from creating a worktree there: anything but an empty directory. A
+// directory that cannot be read counts as occupied.
+func occupied(fs afero.Fs, path string) bool {
+	info, err := fs.Stat(path)
+	if err != nil {
+		return false
+	}
+	if !info.IsDir() {
+		return true
+	}
+	empty, err := afero.IsEmpty(fs, path)
+	return err != nil || !empty
 }
 
 // CheckStartPoint reports why the add of branch would refuse its

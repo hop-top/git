@@ -85,12 +85,16 @@ automatic one only warns and carries on from the refs already present.
 A hub with no origin remote has nothing to fetch: a requested fetch is
 skipped with a hint.
 
+add never deletes what it finds at the worktree path: a file or a
+non-empty directory there is refused, and an empty directory is reused,
+as 'git worktree add' does.
+
 With --dry-run, add reports the fetch, branch, start-point, worktree path,
 hooks and environment start it would run, then stops: nothing is fetched,
 created or written and no hook runs. An add the real run would refuse
-(the worktree exists, the branch name is invalid or checked out in
-another worktree, the start-point is not a commit) fails the same way,
-with exit status 1.`,
+(the worktree exists, a file or non-empty directory is in its way, the
+branch name is invalid or checked out in another worktree, the
+start-point is not a commit) fails the same way, with exit status 1.`,
 	Args: addArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()

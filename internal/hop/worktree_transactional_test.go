@@ -67,7 +67,7 @@ func TestCreateWorktreeTransactional_Clean(t *testing.T) {
 	assert.Error(t, err)
 }
 
-func TestCreateWorktreeTransactional_CleansUpOrphanedDirectory(t *testing.T) {
+func TestCreateWorktreeTransactional_RefusesOccupiedDirectory(t *testing.T) {
 	// Setup
 	fs := afero.NewMemMapFs()
 	g := git.New()
@@ -114,7 +114,7 @@ func TestCreateWorktreeTransactional_CleansUpOrphanedDirectory(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, exists)
 
-	// Execute - should detect orphaned directory and clean it up before creating worktree
+	// Execute - should refuse the occupied path and leave it as it was
 	worktreePath, err := manager.CreateWorktreeTransactional(
 		hopspace,
 		hubPath,
@@ -128,14 +128,13 @@ func TestCreateWorktreeTransactional_CleansUpOrphanedDirectory(t *testing.T) {
 
 	// Assert
 	assert.Equal(t, expectedPath, worktreePath)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "already exists and is not an empty directory")
 
-	// The orphaned directory should have been cleaned up
-	// We can verify by checking if the orphaned file is gone
-	fileExists, _ := afero.Exists(fs, orphanedFile)
-	assert.False(t, fileExists, "Orphaned file should have been cleaned up")
-
-	// Will fail at git operation since not a real repo, but cleanup should have happened
-	assert.Error(t, err)
+	// Nothing at the path is ever deleted
+	content, readErr := afero.ReadFile(fs, orphanedFile)
+	require.NoError(t, readErr, "Orphaned file must survive")
+	assert.Equal(t, "orphaned", string(content))
 }
 
 func TestCreateWorktreeTransactional_AlreadyExists(t *testing.T) {
