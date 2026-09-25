@@ -1,0 +1,148 @@
+# remove honours the structured output modes.
+#
+# Every form (a branch, --merged, a whole hub) renders a list of records:
+# one per worktree removed or left in place, plus the hub (and a data-home
+# hopspace) when a hub is removed. --dry-run renders the records the run
+# would produce, marked dry_run in json/yaml. Human progress never reaches
+# stdout in those modes; a refusal keeps its exit status and says why on
+# stderr.
+#
+# The regression this pins: remove printed nothing under --json /
+# --porcelain and its human progress under --format json|yaml.
+
+# --- upstream repo, hub, a merged branch and an unmerged one ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/done
+exec git-hop add feat/wip
+cd $WORK/hub/hops/feat/wip
+cp $WORK/note.txt note.txt
+exec git add note.txt
+exec git commit -m 'unmerged, unpushed work'
+cd $WORK/hub
+
+# --- an unknown column is refused before anything is removed ---
+exec sh -c 'git-hop remove feat/done --no-prompt --json --cols nope; echo "exit=$?"'
+stdout '^exit=129$'
+exists $WORK/hub/hops/feat/done
+
+# --- a branch, --dry-run: the would-be record, nothing removed ---
+exec git-hop remove feat/done --dry-run --no-prompt --json
+decode json stdout '#' 1
+decode json stdout 0.kind worktree
+decode json stdout 0.branch feat/done
+decode json stdout 0.path '~/hub/hops/feat/done$'
+decode json stdout 0.removed true
+decode json stdout 0.branch_deleted true
+decode json stdout 0.remote_deleted false
+decode json stdout 0.dry_run true
+! decode json stdout 0.reason
+! stdout 'dry-run\]'
+exists $WORK/hub/hops/feat/done
+
+exec git-hop remove feat/done --dry-run --no-prompt --delete-remote --format yaml
+decode yaml stdout 0.remote_deleted true
+decode yaml stdout 0.dry_run true
+
+exec git-hop remove feat/done --dry-run --no-prompt --porcelain
+stdout '^worktree\tfeat/done\t\S+/hub/hops/feat/done\ttrue\ttrue\tfalse$'
+! stdout 'dry-run\]'
+
+# --- a refusal keeps exit 1; the error is on stderr, stdout is empty ---
+exec sh -c 'git-hop remove feat/wip --no-prompt --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\['
+stderr '"level":"error"'
+stderr 'not merged'
+exec sh -c 'git-hop remove feat/wip --no-prompt --porcelain; echo "exit=$?"'
+stdout '^exit=1$'
+stderr '^fatal: .*not merged'
+exec sh -c 'git-hop remove feat/wip --dry-run --no-prompt --json; echo "exit=$?"'
+stdout '^exit=1$'
+exists $WORK/hub/hops/feat/wip
+
+# --- a branch: the record of what was removed ---
+exec git-hop remove feat/done --no-prompt --format yaml
+decode yaml stdout '#' 1
+decode yaml stdout 0.kind worktree
+decode yaml stdout 0.branch feat/done
+decode yaml stdout 0.removed true
+decode yaml stdout 0.branch_deleted true
+decode yaml stdout 0.remote_deleted false
+! decode yaml stdout 0.dry_run
+! stdout 'Successfully'
+! stdout 'Removing'
+! exists $WORK/hub/hops/feat/done
+
+# --- --merged: one record per candidate, in branch order ---
+exec git-hop add feat/m1
+exec git-hop add feat/m2
+cp $WORK/note.txt $WORK/hub/hops/feat/m2/untracked.txt
+
+# feat/m2 is merged but dirty: the gate skips it and the run exits 1,
+# after the records.
+exec sh -c 'git-hop remove --merged --dry-run --no-prompt --json > $WORK/out.json; echo "exit=$?"'
+stdout '^exit=1$'
+decode json $WORK/out.json '#' 2
+decode json $WORK/out.json 0.branch feat/m1
+decode json $WORK/out.json 0.removed true
+decode json $WORK/out.json 0.dry_run true
+decode json $WORK/out.json 1.branch feat/m2
+decode json $WORK/out.json 1.removed false
+decode json $WORK/out.json 1.reason '~uncommitted'
+exists $WORK/hub/hops/feat/m1
+
+exec sh -c 'git-hop remove --merged --no-prompt --json > $WORK/out.json; echo "exit=$?"'
+stdout '^exit=1$'
+decode json $WORK/out.json '#' 2
+decode json $WORK/out.json 0.branch feat/m1
+decode json $WORK/out.json 0.removed true
+decode json $WORK/out.json 0.branch_deleted true
+! decode json $WORK/out.json 0.dry_run
+decode json $WORK/out.json 1.branch feat/m2
+decode json $WORK/out.json 1.removed false
+decode json $WORK/out.json 1.branch_deleted false
+decode json $WORK/out.json 1.reason '~uncommitted'
+! exists $WORK/hub/hops/feat/m1
+exists $WORK/hub/hops/feat/m2
+
+rm $WORK/hub/hops/feat/m2/untracked.txt
+exec git-hop remove --merged --no-prompt --porcelain
+stdout '^worktree\tfeat/m2\t\S+/hub/hops/feat/m2\ttrue\ttrue\tfalse$'
+! stdout 'Removed'
+! exists $WORK/hub/hops/feat/m2
+
+# Nothing left to remove: an empty list, not an empty stdout.
+exec git-hop remove --merged --no-prompt --json
+decode json stdout '#' 0
+
+# --- a whole hub: its worktrees in branch order, then the hub ---
+cd $WORK
+exec git-hop remove $WORK/hub --dry-run --no-prompt --json
+decode json stdout '#' 3
+decode json stdout 0.kind worktree
+decode json stdout 0.branch feat/wip
+decode json stdout 0.removed true
+decode json stdout 0.branch_deleted false
+decode json stdout 1.branch main
+decode json stdout 2.kind hub
+decode json stdout 2.branch ''
+decode json stdout 2.path '~/hub$'
+decode json stdout 2.dry_run true
+exists $WORK/hub/hop.json
+
+exec git-hop remove $WORK/hub --no-prompt --porcelain
+stdout '^worktree\tfeat/wip\t\S+/hub/hops/feat/wip\ttrue\tfalse\tfalse$'
+stdout '^worktree\tmain\t\S+/hub/hops/main\ttrue\tfalse\tfalse$'
+stdout '^hub\t\t\S+/hub\ttrue\tfalse\tfalse$'
+! stdout 'Successfully'
+! exists $WORK/hub
+
+-- note.txt --
+note

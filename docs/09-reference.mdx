@@ -317,8 +317,15 @@ Rules:
 - `csv`, `text` and `--porcelain` carry the columns listed for each shape
   below, in that order. Fields marked *json/yaml only* appear in `json`
   and `yaml` alone, so the columnar layouts stay stable.
-- Result shapes are versioned together (currently 1.8): a MINOR bump adds
+- Result shapes are versioned together (currently 1.9): a MINOR bump adds
   fields or enum values, a MAJOR bump renames or removes them.
+- Under `--dry-run`, `init` and `remove` render the result the run would
+  produce, in the same shape; `json` and `yaml` add `dry_run: true` to
+  each record (absent on a real run). A preview
+  the real run would refuse fails the same way, with no result.
+- A refusal or failure keeps its exit status and reports on stderr (the
+  JSON error record under `--json`); stdout then carries no result,
+  except where a shape below says otherwise.
 - Commands not listed here have no structured result: the output flags
   only switch their log format.
 
@@ -387,6 +394,28 @@ Records of two hubs of one repository can share a branch; `path` and
 `hub` tell them apart.
 
 Columns: `repository branch base type path state status`.
+
+### remove
+
+A list of records, in every form: `remove <branch>` gives one, `remove
+--merged` one per candidate (sorted by branch, removed or left in place),
+and `remove <hub>` one per worktree (sorted by branch), then the hub, then
+the repository's data-home hopspace when it exists. `--merged` with nothing
+to remove gives `[]`. When `--merged` leaves a candidate in place (safety
+gate, failure) the records still print and the exit status is 1.
+
+| Field | Type | Meaning |
+|-------|------|---------|
+| `kind` | string | `worktree` (a branch worktree), `hub` (the hub directory), `hopspace` (the data-home hopspace, `remove <hub>` only) |
+| `branch` | string | Branch of a `worktree` record; empty for `hub` and `hopspace` |
+| `path` | string | Absolute path of the worktree, hub or hopspace |
+| `removed` | bool | `true` when removed (or, under `--dry-run`, would be); `false` when left in place (see `reason`) |
+| `branch_deleted` | bool | `true` when the local branch was deleted; `false` when it was already absent, or for a hub's worktrees (the hub goes with its repository) |
+| `remote_deleted` | bool | `true` when the branch was deleted on origin (`--delete-remote`); under `--dry-run`, `true` when `--delete-remote` would try (origin is not probed) |
+| `reason` | string | *json/yaml only*; why the entry was left in place: the safety gate's refusal, a failure, a `--merged` skip (current worktree, missing path), a hopspace still used by another hub; absent when removed |
+| `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
+
+Columns: `kind branch path removed branch_deleted remote_deleted`.
 
 ### doctor
 
