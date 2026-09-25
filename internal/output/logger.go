@@ -191,10 +191,16 @@ func Hint(msg string, args ...interface{}) {
 // than in it, such as a summary of side work. Like Info it is for a
 // person at a terminal: every other mode drops it.
 func Note(msg string, args ...interface{}) {
+	NoteTo(os.Stderr, msg, args...)
+}
+
+// NoteTo is Note on w, for feedback whose stream the caller owns, such as
+// the progress of a step that runs subprocesses on the same writer.
+func NoteTo(w io.Writer, msg string, args ...interface{}) {
 	if CurrentMode != ModeHuman {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "%s\n", fmt.Sprintf(msg, args...))
+	fmt.Fprintf(w, "%s\n", fmt.Sprintf(msg, args...))
 }
 
 // Info prints standard feedback (unless quiet/porcelain/json).

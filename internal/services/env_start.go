@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"os"
 
@@ -28,8 +27,9 @@ type EnvTarget struct {
 	Hub          *config.HubConfig
 	// Progress, when set, receives everything a start or stop says: the
 	// status lines, the manager's steps, hook output and the lifecycle
-	// command's stdout. `git hop env start/stop` set it to stderr, having
-	// no result of their own. Nil keeps the caller's streams: status via
+	// command's stdout. `git hop env start/stop` and the automatic start
+	// after add and clone set it to stderr: a start has no result of its
+	// own, and add's and clone's results are theirs alone. Nil keeps the caller's streams: status via
 	// output.Info, the rest on stdout, or stderr under a structured result.
 	Progress io.Writer
 }
@@ -41,9 +41,7 @@ func (t EnvTarget) status(format string, args ...any) {
 		output.Info(format, args...)
 		return
 	}
-	if output.IsModeHuman() {
-		fmt.Fprintf(t.Progress, format+"\n", args...)
-	}
+	output.NoteTo(t.Progress, format, args...)
 }
 
 // ResolveEnv picks the environment manager for t and the compose override

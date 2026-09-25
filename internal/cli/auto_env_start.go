@@ -95,12 +95,14 @@ func setUpClonedWorktree(fs afero.Fs, hubPath string, globalCfg *config.GlobalCo
 }
 
 // startClonedEnv starts the environment setUpClonedWorktree prepared, once
-// the clone is complete. A failed start only warns.
+// the clone is complete. A failed start only warns. The start is progress
+// beside the clone's result, so it goes to stderr.
 func startClonedEnv(fs afero.Fs, hubPath string, globalCfg *config.GlobalConfig) {
 	target, err := clonedEnvTarget(fs, hubPath)
 	if err != nil {
 		services.WarnEnvNotStarted(err, hubPath)
 		return
 	}
+	target.Progress = os.Stderr
 	services.StartNewWorktreeEnv(fs, target, globalCfg, EventBus)
 }

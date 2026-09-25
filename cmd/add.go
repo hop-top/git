@@ -279,7 +279,10 @@ created or written and no hook runs.`,
 		setup.PublishCreated(context.Background(), cli.EventBus, hubPath)
 
 		// Last, once the worktree is complete: a failed start only warns.
-		envStarted := envStart && services.StartNewWorktreeEnv(fs, envTarget, globalConfig, cli.EventBus)
+		// The start is progress beside add's result, so it goes to stderr.
+		startTarget := envTarget
+		startTarget.Progress = os.Stderr
+		envStarted := envStart && services.StartNewWorktreeEnv(fs, startTarget, globalConfig, cli.EventBus)
 
 		if output.IsStructured() {
 			emitResult(cmd, newAddResult(g, hub, branch, worktreePath, !branchExisted, branchPorts, envStarted))
