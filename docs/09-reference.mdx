@@ -51,7 +51,7 @@ worktree switches to it instead. `&lt;path&gt;` is the hub directory to create
 | `--git-domain &lt;domain&gt;` | Host for expanding an `org/repo` shorthand (default: `defaults.gitDomain` in the global config, else `github.com`) |
 | `--hooks &lt;mode&gt;` | Mirror committed `.git-hop/hooks/` into the hopspace: `symlink`, `copy`, `prompt` or `none`. Falls back to `$GIT_HOP_HOOKS`, then `git config hop.hooks.installMode`, then `prompt`; without a terminal, `prompt` installs nothing |
 | `--hooks-overwrite` | Overwrite a hopspace hook whose content differs (`symlink` and `copy` modes) |
-| `--branch &lt;name&gt;` | Inside an existing hub: attach `&lt;uri&gt;` as a fork and check out `&lt;name&gt;` from it, instead of cloning a new hub. Attaching a branch again, or finishing an attach that stopped halfway, reuses the worktrees already there and fast-forwards them to the fork's branch; one on another branch, holding commits the fork does not have, or with local changes the update would overwrite is refused and left as it is |
+| `--branch &lt;name&gt;` | Inside an existing hub only: attach `&lt;uri&gt;` as a fork and check out `&lt;name&gt;` from it, instead of cloning a new hub; outside a hub it is a usage error, never ignored. A branch sharing no history with the hub is refused. Attaching a branch again, or finishing an attach that stopped halfway, reuses the worktrees already there and fast-forwards them to the fork's branch; one on another branch, holding commits the fork does not have, or with local changes the update would overwrite is refused and left as it is. Each refusal prints a `hint:` saying how to get past it; `--force` overrides none of them |
 | `--env-start` | Start the environment of the worktree the clone creates, as `git hop env start` would. Without it or `--no-env-start`, `$GIT_HOP_AUTO_ENV_START` and then `git config hop.env.autoStart` (default `false`) decide. A failed start warns and hints at `git hop env start`; the clone still exits 0 |
 | `--no-env-start` | Do not start it, whatever `hop.env.autoStart` says |
 
@@ -67,7 +67,7 @@ With `--json`, `--format` or `--porcelain` a clone prints the
 | 0 | Success |
 | 1 | Clone failed: repository unreachable, `&lt;path&gt;` already exists, or a `pre-clone` hook aborted |
 | 128 | `$GIT_HOP_AUTO_ENV_START` is not a boolean |
-| 129 | Usage error: unknown flag, bad flag value, or `--dry-run`. Prints `error:` (or `fatal:` for `--dry-run`) on stderr |
+| 129 | Usage error: unknown flag, bad flag value, `--dry-run`, or `--branch` outside a hub. Prints `error:` (or `fatal:` for `--dry-run` and `--branch`) on stderr |
 
 ### git hop add
 
@@ -114,7 +114,7 @@ git hop [-n] &lt;branch&gt;
 ```
 
 `&lt;branch&gt;` must be registered in the hub's `hop.json`. No flags of its
-own; `-n, --dry-run` names the hooks and the `current` target without
+own (`--branch` is a usage error here); `-n, --dry-run` names the hooks and the `current` target without
 running or writing anything. With `--json`, `--format` or `--porcelain`
 it prints the [root command's result](#root-command) (`action:
 switched`), also on exit 93.
@@ -125,7 +125,7 @@ switched`), also on exit 93.
 | 0 | Switched |
 | 1 | Branch not registered in the hub, not in a hub, or `pre-worktree-switch` aborted |
 | 93 | Switched; `post-worktree-switch` navigated itself (see [Exit Codes](#exit-codes)) |
-| 129 | Usage error: unknown flag |
+| 129 | Usage error: unknown flag, or `--branch` |
 
 ### git hop
 

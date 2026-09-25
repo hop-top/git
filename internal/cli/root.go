@@ -309,6 +309,12 @@ attaches a fork:
 
 		expandedArg := ResolveArg(arg, shorthandDomain(gitDomain, hubPath, hubErr), knownBranches)
 
+		// --branch selects the fork's branch to attach; a clone or a
+		// switch has no use for it, so it is refused rather than ignored.
+		if cmd.Flags().Changed("branch") && (!IsURI(expandedArg) || hubErr != nil) {
+			output.FatalCode(exitUsage, "--branch is only for fork-attach inside a hub (git hop <uri> --branch <branch>)")
+		}
+
 		if IsURI(expandedArg) {
 			if dryRun {
 				RejectDryRun("clone")

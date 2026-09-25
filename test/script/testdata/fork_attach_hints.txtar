@@ -1,0 +1,182 @@
+# Every fork-attach refusal says how to get past it, and following that
+# hint gets past it: the attach run again succeeds. No refusal suggests
+# --force, which fork-attach does not read.
+#
+# --branch belongs to fork-attach alone: given anywhere else (a clone
+# outside a hub, a switch inside one) it is a usage error, not ignored.
+#
+# The regressions this pins: a fork sharing no history with the hub was
+# refused with "use --force to override", yet --force changed nothing;
+# the local-changes refusals said to commit, which only trades them for
+# the local-commits refusal; `git hop <uri> --branch <b>` outside a hub
+# ignored --branch and cloned the whole repository.
+
+# --- upstream, a fork with branches of its own, an unrelated repo ---
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git clone --bare $WORK/org/repo.git $WORK/forker/repo.git
+exec git remote add fork $WORK/forker/repo.git
+exec git checkout -b feat
+exec git commit --allow-empty -m 'fork work'
+exec git push fork feat
+exec git checkout -b feat2 main
+exec git commit --allow-empty -m 'fork work 2'
+exec git push fork feat2
+exec git init $WORK/stranger-seed
+cd $WORK/stranger-seed
+exec git commit --allow-empty -m 'unrelated'
+exec git branch -M feat
+exec git init --bare $WORK/stranger/repo.git
+exec git push $WORK/stranger/repo.git feat
+
+# --- --branch outside a hub is a usage error; nothing is cloned ---
+cd $WORK
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat; echo "exit=$?"'
+stdout '^exit=129$'
+stderr '^fatal: --branch is only for fork-attach'
+stderr 'inside a hub'
+! exists $WORK/repo
+! exists $WORK/data/forker
+
+exec git-hop file://$WORK/org/repo.git hub
+cd $WORK/hub
+
+# --- --branch with a worktree name (a switch) is a usage error too ---
+exec sh -c 'git-hop main --branch feat; echo "exit=$?"'
+stdout '^exit=129$'
+stderr '^fatal: --branch is only for fork-attach'
+! exists $WORK/data/forker
+
+# --- a repository that shares no history: no --force, a real hint ---
+exec sh -c 'git-hop file://$WORK/stranger/repo.git --branch feat; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'does not share history'
+stderr '^hint: .*fork of this hub.s repository'
+! stderr 'force'
+! exists $WORK/hub/hops/feat-fork-stranger
+
+exec git-hop file://$WORK/forker/repo.git --branch feat
+exec git-hop file://$WORK/forker/repo.git --branch feat2
+
+# --- fork's worktree on another branch: switch it back ---
+exec git -C $WORK/data/forker/repo/hops/feat2 switch -c elsewhere
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat2; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'on branch elsewhere, not feat2'
+stderr '^hint: switch it back to feat2 \(git -C \S+/hops/feat2 switch feat2\), then attach again$'
+! stderr 'force'
+exec git -C $WORK/data/forker/repo/hops/feat2 switch feat2
+exec git-hop file://$WORK/forker/repo.git --branch feat2
+
+# --- commits of its own in the fork's worktree: keep them elsewhere ---
+exec git -C $WORK/data/forker/repo/hops/feat2 commit --allow-empty -m 'hopspace work'
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat2; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'commits on no branch of the fork'
+stderr '^hint: .*git -C \S+/hops/feat2 branch <new-branch>.*git -C \S+/hops/feat2 reset --keep origin/feat2.*then attach again$'
+! stderr 'force'
+exec git -C $WORK/data/forker/repo/hops/feat2 branch kept
+exec git -C $WORK/data/forker/repo/hops/feat2 reset --keep origin/feat2
+exec git-hop file://$WORK/forker/repo.git --branch feat2
+exec git -C $WORK/data/forker/repo/hops/feat2 log -1 --format=%s kept
+stdout '^hopspace work$'
+
+# --- the fork moves on, so both worktrees need updating ---
+cd $WORK/seed
+exec git checkout feat2
+cp $WORK/fork-file f.txt
+exec git add f.txt
+exec git commit -m 'fork more'
+exec git push fork feat2
+cd $WORK/hub
+
+# --- local changes in the fork's worktree: stash them, not commit ---
+cp $WORK/mine-file $WORK/data/forker/repo/hops/feat2/f.txt
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat2; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'would be overwritten'
+stderr '^hint: stash the local changes \(git -C \S+/hops/feat2 stash --include-untracked\), then attach again$'
+! stderr 'force'
+exec git -C $WORK/data/forker/repo/hops/feat2 stash --include-untracked
+exec git-hop file://$WORK/forker/repo.git --branch feat2
+exec git -C $WORK/data/forker/repo/hops/feat2 log -1 --format=%s
+stdout '^fork more$'
+exec git -C $WORK/hub/hops/feat2-fork-forker log -1 --format=%s
+stdout '^fork more$'
+
+# --- local changes in the hub's worktree: the same ---
+cd $WORK/seed
+exec git rm -q f.txt
+exec git commit -m 'fork drops f'
+exec git push fork feat2
+cd $WORK/hub
+cp $WORK/mine-file $WORK/hub/hops/feat2-fork-forker/f.txt
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat2; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'cannot update the fork.s worktree at \S+/hub/hops/feat2-fork-forker'
+stderr '^hint: stash the local changes \(git -C \S+/hub/hops/feat2-fork-forker stash --include-untracked\), then attach again$'
+! stderr 'force'
+exec git -C $WORK/hub/hops/feat2-fork-forker stash --include-untracked
+exec git-hop file://$WORK/forker/repo.git --branch feat2
+exec git -C $WORK/hub/hops/feat2-fork-forker log -1 --format=%s
+stdout '^fork drops f$'
+
+# --- the hub's worktree on a branch of its own: the branch keeps its ---
+# --- work, so the worktree can go                                    ---
+exec git -C $WORK/hub/hops/feat-fork-forker switch -c mine
+exec git -C $WORK/hub/hops/feat-fork-forker commit --allow-empty -m 'work on mine'
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'on branch mine'
+stderr '^hint: branch mine keeps its work: remove the worktree \(git -C \S+/hub/hops/main worktree remove \S+/hub/hops/feat-fork-forker\), then attach again$'
+! stderr 'force'
+exec git -C $WORK/hub/hops/main worktree remove $WORK/hub/hops/feat-fork-forker
+exec git-hop file://$WORK/forker/repo.git --branch feat
+exec git -C $WORK/hub/hops/feat-fork-forker log -1 --format=%s
+stdout '^fork work$'
+exec git -C $WORK/hub/hops/main log -1 --format=%s mine
+stdout '^work on mine$'
+
+# --- a commit made in the hub's worktree: keep it, remove the worktree ---
+exec git -C $WORK/hub/hops/feat-fork-forker commit --allow-empty -m 'local work'
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'which the fork.s branch does not contain'
+stderr '^hint: keep any work there on a branch \(git -C \S+/hub/hops/feat-fork-forker branch <new-branch>\), remove the worktree \(git -C \S+/hub/hops/main worktree remove \S+/hub/hops/feat-fork-forker\), then attach again$'
+! stderr 'force'
+exec git -C $WORK/hub/hops/feat-fork-forker branch kept-hub
+exec git -C $WORK/hub/hops/main worktree remove $WORK/hub/hops/feat-fork-forker
+exec git-hop file://$WORK/forker/repo.git --branch feat
+exec git -C $WORK/hub/hops/feat-fork-forker log -1 --format=%s
+stdout '^fork work$'
+exec git -C $WORK/hub/hops/main log -1 --format=%s kept-hub
+stdout '^local work$'
+
+# --- something that is not a worktree where either goes: move it ---
+exec git -C $WORK/hub/hops/main worktree remove $WORK/hub/hops/feat-fork-forker
+mkdir $WORK/hub/hops/feat-fork-forker
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'exists but is not a worktree of this hub'
+stderr '^hint: move it out of the way, then attach again$'
+! stderr 'force'
+exec mv $WORK/hub/hops/feat-fork-forker $WORK/moved-hub
+exec git-hop file://$WORK/forker/repo.git --branch feat
+
+exec git -C $WORK/data/forker/repo/feat worktree remove $WORK/data/forker/repo/hops/feat2
+mkdir $WORK/data/forker/repo/hops/feat2
+exec sh -c 'git-hop file://$WORK/forker/repo.git --branch feat2; echo "exit=$?"'
+stdout '^exit=1$'
+stderr 'exists but is not a worktree of the fork.s repository'
+stderr '^hint: move it out of the way, then attach again$'
+! stderr 'force'
+exec mv $WORK/data/forker/repo/hops/feat2 $WORK/moved-fork
+exec git-hop file://$WORK/forker/repo.git --branch feat2
+
+-- fork-file --
+fork
+-- mine-file --
+mine

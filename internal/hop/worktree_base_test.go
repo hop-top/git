@@ -1,6 +1,7 @@
 package hop
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -110,4 +111,62 @@ func TestFindBase(t *testing.T) {
 			t.Fatalf("hubRepository(linked worktree) = %s, want none", repo)
 		}
 	})
+}
+
+// In a fork's hopspace, git runs in a worktree recorded under it that is
+// on disk. One recorded but gone (moved away, as a fork-attach refusal's
+// hint says to, or removed with git) cannot run anything; a walk of the
+// branch map picked one at random, so an attach failed now and then.
+// The order is fixed: the default branch first, then by name.
+func TestHopspaceWorktreeIn_PicksPresentWorktreeInFixedOrder(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hsPath := "/data/forker/repo"
+	hs := &Hopspace{Config: &config.HopspaceConfig{
+		Repo:     config.RepoConfig{DefaultBranch: "feat"},
+		Branches: map[string]config.HopspaceBranch{"feat": {Path: filepath.Join(hsPath, "feat"), Exists: true}},
+	}}
+	for i := 0; i < 20; i++ {
+		name := fmt.Sprintf("gone%02d", i)
+		hs.Config.Branches[name] = config.HopspaceBranch{Path: filepath.Join(hsPath, "hops", name), Exists: true}
+	}
+	mustMkdir := func(p string) {
+		t.Helper()
+		if err := fs.MkdirAll(p, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	want := func(expected, why string) {
+		t.Helper()
+		for i := 0; i < 10; i++ {
+			if got := hopspaceWorktreeIn(fs, hs, hsPath); got != expected {
+				t.Fatalf("hopspaceWorktreeIn = %s, want %s (%s)", got, expected, why)
+			}
+		}
+	}
+
+	mustMkdir(filepath.Join(hsPath, "feat"))
+	want(filepath.Join(hsPath, "feat"), "the default branch's worktree first")
+
+	if err := fs.RemoveAll(filepath.Join(hsPath, "feat")); err != nil {
+		t.Fatal(err)
+	}
+	mustMkdir(filepath.Join(hsPath, "hops", "gone12"))
+	mustMkdir(filepath.Join(hsPath, "hops", "gone07"))
+	want(filepath.Join(hsPath, "hops", "gone07"), "else the first on disk by name")
+
+	// One recorded outside the hopspace is never used, on disk or not.
+	hs.Config.Branches["aaa"] = config.HopspaceBranch{Path: "/elsewhere/aaa", Exists: true}
+	mustMkdir("/elsewhere/aaa")
+	want(filepath.Join(hsPath, "hops", "gone07"), "never one outside the hopspace")
+
+	// None on disk: the first recorded under it, in the same order.
+	fs = afero.NewMemMapFs()
+	want(filepath.Join(hsPath, "feat"), "none on disk")
+
+	// The default branch's worktree wins over one whose name sorts first.
+	hs.Config.Branches["another"] = config.HopspaceBranch{Path: filepath.Join(hsPath, "hops", "another"), Exists: true}
+	mustMkdir(filepath.Join(hsPath, "hops", "another"))
+	want(filepath.Join(hsPath, "hops", "another"), "the default branch's gone")
+	mustMkdir(filepath.Join(hsPath, "feat"))
+	want(filepath.Join(hsPath, "feat"), "the default branch first, whatever sorts ahead")
 }
