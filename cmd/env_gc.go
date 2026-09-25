@@ -34,6 +34,9 @@ This command:
 3. Calculates the total space that can be reclaimed
 4. Optionally deletes orphaned dependencies to free up disk space
 
+It also removes the dependency stores earlier releases kept under the
+data home, once no worktree of any hub git-hop knows of links into them.
+
 Use --dry-run to preview what would be deleted without actually deleting.
 Use --no-prompt (or --force) to skip the confirmation prompt; without it a
 non-interactive run with nothing to read on stdin fails rather than
@@ -90,7 +93,13 @@ silently cancelling.`,
 		// to read.
 		records := envGCRecords(fs, depsManager.Registry, hopspacePath, orphaned)
 
-		if len(orphaned) == 0 {
+		legacy, err := unlinkedLegacyDepsStores(fs, hubPath)
+		if err != nil {
+			output.Warn("Cannot check old dependency stores, keeping them: %v", err)
+		}
+		records = append(records, legacyGCRecords(legacy)...)
+
+		if len(orphaned) == 0 && len(legacy) == 0 {
 			if output.IsStructured() {
 				emitResult(cmd, records)
 				return
@@ -100,7 +109,9 @@ silently cancelling.`,
 		}
 
 		// Display orphaned dependencies
-		output.Info("\nOrphaned dependencies:")
+		if len(orphaned) > 0 {
+			output.Info("\nOrphaned dependencies:")
+		}
 		for _, depsKey := range orphaned {
 			entry, exists := depsManager.Registry.Entries[depsKey]
 			var lastUsedStr string
@@ -126,6 +137,14 @@ silently cancelling.`,
 			output.Info("  %s  (last used: %s)  ~%.1fMB", depsKey, lastUsedStr, sizeMB)
 		}
 
+		if len(legacy) > 0 {
+			output.Info("\nOld dependency stores no worktree links to:")
+		}
+		for _, s := range legacy {
+			output.Info("  %s  ~%.1fMB", s.Path, mb(s.Size))
+			totalSize += s.Size
+		}
+
 		totalSizeMB := float64(totalSize) / 1024 / 1024
 		output.Info("\nTotal reclaimable: %.1fMB", totalSizeMB)
 
@@ -143,19 +162,36 @@ silently cancelling.`,
 		}
 
 		// Perform deletion
-		output.Info("\nDeleting orphaned dependencies...")
-		orphaned, totalSize, err = depsManager.GarbageCollect(worktrees, false)
-		if err != nil {
-			output.Fatal("Failed to delete orphaned dependencies: %v", err)
+		var deleted []envGCRecord
+		totalSize = 0
+		if len(orphaned) > 0 {
+			output.Info("\nDeleting orphaned dependencies...")
+			orphaned, totalSize, err = depsManager.GarbageCollect(worktrees, false)
+			if err != nil {
+				output.Fatal("Failed to delete orphaned dependencies: %v", err)
+			}
+			deleted = deletedEnvGCRecords(records, orphaned, hopspacePath)
+			output.Info("Deleted %d orphaned dependencies", len(orphaned))
+		}
+		if len(legacy) > 0 {
+			output.Info("\nRemoving old dependency stores...")
+			removed := removeLegacyDepsStores(fs, hubPath, legacy)
+			for _, r := range removed {
+				totalSize += r.Size
+			}
+			deleted = append(deleted, removed...)
+			output.Info("Removed %d old dependency store(s)", len(removed))
 		}
 
 		if output.IsStructured() {
-			emitResult(cmd, deletedEnvGCRecords(records, orphaned, hopspacePath))
+			if deleted == nil {
+				deleted = []envGCRecord{}
+			}
+			emitResult(cmd, deleted)
 			return
 		}
 
 		totalSizeMB = float64(totalSize) / 1024 / 1024
-		output.Info("Deleted %d orphaned dependencies", len(orphaned))
 		output.Info("Reclaimed %.1fMB", totalSizeMB)
 	},
 }

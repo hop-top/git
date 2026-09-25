@@ -6,6 +6,9 @@ This command:
 3. Calculates the total space that can be reclaimed
 4. Optionally deletes orphaned dependencies to free up disk space
 
+It also removes the dependency stores earlier releases kept under the
+data home, once no worktree of any hub git-hop knows of links into them.
+
 Use --dry-run to preview what would be deleted without actually deleting.
 Use --no-prompt (or --force) to skip the confirmation prompt; without it a
 non-interactive run with nothing to read on stdin fails rather than

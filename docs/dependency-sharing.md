@@ -45,9 +45,13 @@ home at `$GIT_HOP_DATA_HOME/<end of the hub path>/deps/`: the hub path with
 as many leading characters dropped as the data home path has. Worktrees that link there keep working: an install found there is reused, by
 existing links and by new worktrees with the same lockfile, and nothing is
 reinstalled for it. New installs go to `<hopspace>/deps/`, so worktrees move
-over as their lockfiles change. `git hop env gc` and `git hop doctor --fix`
-never delete from the old store; remove it by hand once no worktree links
-into it.
+over as their lockfiles change.
+
+Hubs whose paths end the same way could share one old store, so an old
+store is only unused once no worktree of any hub git-hop records links
+into it. `git hop doctor` lists those stores with their size, and
+`git hop env gc` removes them (`--dry-run` lists them without removing
+anything). A store any worktree still links into is kept.
 
 ### Lockfile Hashing
 

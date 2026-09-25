@@ -1,0 +1,64 @@
+# Deps stores earlier releases wrote at <data>/<tail of hub path>/deps are
+# reported by doctor and removed by env gc once no worktree of any hub
+# recorded in state links into them.
+#
+# The old slicing gave hubs whose paths share a tail at the data home's
+# length one store, so the check is global: hubs/app-shared links into
+# the store it shares with hubz/app-shared, and gc run from hubz (which
+# links nothing there) must keep it. hubs/solo-gone links nothing into
+# its own old store, which goes.
+#
+# $WORK/data is the data home: $WORK/hubs/<name> slices to <name>.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/org/repo.git $WORK/hubs/app-shared
+exec git-hop $WORK/org/repo.git $WORK/hubz/app-shared
+exec git-hop $WORK/org/repo.git $WORK/hubs/solo-gone
+
+# --- old stores: one shared and linked from hubs only, one orphaned ---
+mkdir $WORK/data/app-shared/deps/node_modules.aaa111
+cp $WORK/deps-file $WORK/data/app-shared/deps/node_modules.aaa111/f
+mkdir $WORK/data/solo-gone/deps/node_modules.bbb222
+cp $WORK/deps-file $WORK/data/solo-gone/deps/node_modules.bbb222/f
+mkdir $WORK/hubs/app-shared/hops/main/web
+symlink $WORK/hubs/app-shared/hops/main/web/node_modules -> $WORK/data/app-shared/deps/node_modules.aaa111
+
+# --- doctor names only the orphaned store, with its size ---
+cd $WORK/hubz/app-shared
+exec git-hop doctor
+stdout 'old dependency store'
+stdout 'solo-gone/deps'
+! stdout 'app-shared/deps'
+stdout 'git hop env gc'
+
+# --- preview lists the orphaned store only and deletes nothing ---
+exec git-hop env gc --dry-run --json
+decode json stdout '#' 1
+decode json stdout 0.action would-delete
+decode json stdout 0.key solo-gone/deps
+exists $WORK/data/solo-gone/deps/node_modules.bbb222/f
+
+# --- a real run removes it, keeps the store another hub links into ---
+exec git-hop env gc --no-prompt --json
+decode json stdout '#' 1
+decode json stdout 0.action deleted
+decode json stdout 0.key solo-gone/deps
+! exists $WORK/data/solo-gone
+exists $WORK/data/app-shared/deps/node_modules.aaa111/f
+exists $WORK/hubs/app-shared/hops/main/web/node_modules/f
+
+# --- once the last link goes, so does the shared store ---
+rm $WORK/hubs/app-shared/hops/main/web/node_modules
+exec git-hop env gc --no-prompt --json
+decode json stdout '#' 1
+decode json stdout 0.key app-shared/deps
+! exists $WORK/data/app-shared
+exists $WORK/data
+
+-- deps-file --
+hello
