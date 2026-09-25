@@ -1,0 +1,50 @@
+# --config/-c is kit's config flag. A bare path names the config file to
+# read in place of $XDG_CONFIG_HOME/git-hop/config.json; a key=value token
+# overrides one setting and leaves file resolution alone. An explicit file
+# that does not exist is a bad flag value: a usage error, status 129.
+#
+# `git -c <name>=<value> hop ...` never reaches this flag: git consumes its
+# own -c before it runs git-hop.
+
+# --- no flag: the default file is read ---
+exec git-hop -V list
+stderr '^debug: using config file: .*/\.config/git-hop/config\.json$'
+
+# --- --config names the file read instead of the default ---
+exec git-hop -V --config other.json list
+stderr '^debug: using config file: other\.json$'
+! stderr 'git-hop/config\.json'
+
+# --- -c is the same flag, before or after the subcommand ---
+exec git-hop -V -c other.json list
+stderr '^debug: using config file: other\.json$'
+! stderr 'git-hop/config\.json'
+
+exec git-hop list -V -c other.json
+stderr '^debug: using config file: other\.json$'
+
+# --- a key=value override keeps the default file ---
+exec git-hop -V -c some.key=1 list
+stderr '^debug: using config file: .*/\.config/git-hop/config\.json$'
+
+# --- a missing explicit file is a usage error; nothing runs ---
+exec sh -c 'git-hop --config missing.json list; echo "exit=$?"'
+stdout 'exit=129'
+! stdout 'No worktrees'
+stderr '^error: invalid -c/--config flag: -c "missing\.json": not a key=value pair and no such file$'
+stderr '^usage: git hop list'
+
+exec sh -c 'git-hop -c missing.json list; echo "exit=$?"'
+stdout 'exit=129'
+stderr '^error: invalid -c/--config flag: '
+
+# --- help advertises the flag with its shorthand ---
+exec git-hop --help
+stdout '^  -c, --config stringArray '
+exec git-hop list --help
+stdout '^  -c, --config stringArray '
+
+-- .config/git-hop/config.json --
+{}
+-- other.json --
+{}

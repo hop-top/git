@@ -22,7 +22,7 @@ Complete reference for git-hop commands, configuration, and APIs.
 | `--verbose, -V` | count | Increase log verbosity; repeatable (`-V` debug, `-VV` trace) |
 | `--force` | bool | Bypass safety checks (use with caution) |
 | `--global, -g` | bool | Use the global hopspace in `$GIT_HOP_DATA_HOME` (default: local) |
-| `--config &lt;file&gt;` | string | Config file (default: `$XDG_CONFIG_HOME/git-hop/config.json`) |
+| `--config, -c &lt;file&gt;` | string array | Config file to read instead of `$XDG_CONFIG_HOME/git-hop/config.json`, or `&lt;key&gt;=&lt;value&gt;` to override one setting; repeatable. A file that does not exist is a usage error (exit 129). Not git's `-c`: in `git -c &lt;name&gt;=&lt;value&gt; hop ...` git consumes the option itself |
 | `--dry-run, -n` | bool | Show what would happen without making changes |
 | `--no-color` | bool | Disable ANSI color |
 | `--no-hints` | bool | Suppress next-step hints after command output |
