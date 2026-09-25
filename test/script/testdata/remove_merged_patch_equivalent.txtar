@@ -1,0 +1,84 @@
+# A branch whose every commit is patch-equivalent to one on main counts
+# as merged, even when later commits on main changed the same lines
+# again: status labels it merged, `remove --merged` removes it, and
+# `remove <branch>` needs no --force.
+#
+# The regression this pins: the only rewritten-merge probe merged the
+# branch into main in memory and compared trees. After a rebase-merge,
+# later work on main that touched the same lines makes that merge
+# differ from main (here it conflicts), so the probe said "not merged"
+# although `git cherry main <branch>` shows every commit as '-'.
+#
+# A branch with one commit on main and one that is not stays unmerged:
+# a single '+' from git cherry is work that never shipped.
+
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/f0.txt f.txt
+cp $WORK/f0.txt g.txt
+exec git add f.txt g.txt
+exec git commit -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add rebased
+exec git-hop add partial
+
+# rebased: two commits changing f.txt's line.
+cd $WORK/hub/hops/rebased
+cp $WORK/f1.txt f.txt
+exec git commit -am 'rebased: first'
+cp $WORK/f2.txt f.txt
+exec git commit -am 'rebased: second'
+
+# partial: one commit main will take, one it never gets.
+cd $WORK/hub/hops/partial
+cp $WORK/f1.txt g.txt
+exec git commit -am 'partial: shipped'
+cp $WORK/f0.txt h.txt
+exec git add h.txt
+exec git commit -m 'partial: never shipped'
+
+# Rebase-merge onto a main that moved on: each commit replayed under a
+# new SHA, then later main work rewrites the same line.
+cd $WORK/hub/hops/main
+cp $WORK/f0.txt unrelated.txt
+exec git add unrelated.txt
+exec git commit -m 'unrelated main work'
+exec git cherry-pick rebased~1 rebased partial~1
+cp $WORK/f3.txt f.txt
+exec git commit -am 'later main work on the same line'
+
+# The shape under test: cherry shows only '-', the in-memory merge is not
+# main's tree.
+exec git cherry main rebased
+! stdout '^\+'
+stdout '^-'
+! exec git merge-tree --write-tree main rebased
+exec git cherry main partial
+stdout '^\+'
+
+cd $WORK/hub
+exec git-hop status
+stdout 'rebased\s+main\s+Linked\s+merged \(5 behind\)'
+stdout 'partial\s+main\s+Linked\s+diverged \(2 ahead, 5 behind\)'
+
+exec git-hop remove --merged --no-prompt
+! exists $WORK/hub/hops/rebased
+exists $WORK/hub/hops/partial
+
+! exec git-hop remove partial --no-prompt
+stderr 'not merged'
+exists $WORK/hub/hops/partial
+
+-- f0.txt --
+zero
+-- f1.txt --
+one
+-- f2.txt --
+two
+-- f3.txt --
+three

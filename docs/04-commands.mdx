@@ -322,8 +322,8 @@ Status values:
 |-------|---------|
 | `default` | This is the hub's default branch |
 | `synced` | Same tip as default — no commits ahead or behind |
-| `merged` | Branch content is already in default (squash or rebase merge) and default has not moved on |
-| `merged (N behind)` | Branch tip is reachable from default, or its content is already in default (squash and rebase merges); default has moved on by N commits |
+| `merged` | Branch content is already in default (squash or rebase merge), or every branch commit has a patch-equivalent commit there (`git cherry` shows only `-`), and default has not moved on |
+| `merged (N behind)` | Branch tip is reachable from default, or its content or every one of its commits is already in default (squash and rebase merges); default has moved on by N commits |
 | `behind (N)` | Default has moved on by N commits and the branch has none of its own |
 | `N ahead` | Branch has N commits not yet on default |
 | `diverged (N ahead, M behind)` | Branch and default have both moved |
@@ -514,9 +514,13 @@ git hop remove feature-x --no-verify
 `remove` probes the worktree before deleting and requires explicit
 flags when the operation would lose work. A clean, merged branch
 removes silently — no prompt, no warning. "Merged" covers merge
-commits as well as squash- and rebase-merges (detected by content), so
-a shipped branch never needs a bypass flag just because its commits
-were rewritten on the way in.
+commits as well as squash- and rebase-merges, so a shipped branch never
+needs a bypass flag just because its commits were rewritten on the way
+in. A rewritten merge is detected by content (merging the branch would
+not change default) or by patch-id (`git cherry <default> <branch>`
+lists no `+` commit), which still holds once later commits on default
+changed the same lines again. `status` and `remove --merged` use the
+same test.
 
 | Branch state | Required flags |
 |--------------|----------------|
