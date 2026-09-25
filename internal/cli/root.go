@@ -646,7 +646,6 @@ func buildHookMirrorRun(fs afero.Fs, flagMode string, overwrite bool) func(strin
 			RepoID:       repoID,
 			Mode:         mode,
 			Overwrite:    overwrite,
-			Stdout:       os.Stdout,
 		}
 		// Only attach Stdin in TTY interactive contexts; the install
 		// helper degrades prompt → none when Stdin is nil.

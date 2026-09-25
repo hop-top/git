@@ -25,10 +25,10 @@ func TestInitChoice_UnanswerableFailsLoudly(t *testing.T) {
 	if code != exitPromptUnanswerable {
 		t.Fatalf("unanswerable init prompt exited %d, want %d", code, exitPromptUnanswerable)
 	}
-	// The defining symptom of the bug: unbounded retry spew.
-	if strings.Count(stdout, "Invalid choice") > 1 {
-		t.Fatalf("init prompt retried without bound on unreadable stdin; stdout has %d \"Invalid choice\" lines",
-			strings.Count(stdout, "Invalid choice"))
+	// The defining symptom of the bug: unbounded retry spew. Prompt text
+	// goes to stderr, so count both streams.
+	if n := strings.Count(stdout+stderr, "Invalid choice"); n > 1 {
+		t.Fatalf("init prompt retried without bound on unreadable stdin; output has %d \"Invalid choice\" lines", n)
 	}
 	if !strings.Contains(stderr, "fatal: ") {
 		t.Fatalf("stderr %q lacks the lowercase \"fatal: \" prefix", stderr)
@@ -42,10 +42,10 @@ func TestInitChoice_UnanswerableFailsLoudly(t *testing.T) {
 // bug's signature was volume: ~100MB of retry lines in ten seconds. Even
 // a fixed exit is wrong if it first floods the caller's log.
 func TestInitChoice_UnanswerableIsBounded(t *testing.T) {
-	stdout, _, _ := runPromptScenario(t, "init-choice-unanswerable")
+	stdout, stderr, _ := runPromptScenario(t, "init-choice-unanswerable")
 
-	if len(stdout) > 64*1024 {
-		t.Fatalf("unanswerable init prompt emitted %d bytes of output; want a bounded message", len(stdout))
+	if n := len(stdout) + len(stderr); n > 64*1024 {
+		t.Fatalf("unanswerable init prompt emitted %d bytes of output; want a bounded message", n)
 	}
 }
 
