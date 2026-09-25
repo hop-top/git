@@ -1,0 +1,100 @@
+# Branch switch (git hop <branch>) honours the structured output modes.
+#
+# The result is the root command's one object with action switched: the
+# branch, its worktree path and hub, and whether the `current` symlink now
+# points at it. --dry-run renders the result the switch would produce,
+# marked dry_run in json/yaml. Human progress and hook output never reach
+# stdout in those modes; a refusal keeps its exit status and says why on
+# stderr. The bare root, with no branch, prints help and no result.
+#
+# The regression this pins: a switch printed nothing under --json /
+# --porcelain and its human progress under --format json|yaml.
+
+# --- upstream repo, hub, a second worktree ---
+exec git init --bare $WORK/repo.git
+exec git clone $WORK/repo.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git-hop $WORK/repo.git hub
+cd $WORK/hub
+exec git-hop add feat/a
+exec git-hop main
+exec readlink current
+cp stdout $WORK/current.main
+
+# --- a post-switch hook that talks on stdout ---
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/post-hook $WORK/.config/git-hop/hooks/post-worktree-switch
+exec chmod +x $WORK/.config/git-hop/hooks/post-worktree-switch
+
+# --- an unknown column is refused before anything switches ---
+exec sh -c 'git-hop feat/a --json --cols nope; echo "exit=$?"'
+stdout '^exit=129$'
+! stdout '\{'
+exec readlink current
+cmp stdout $WORK/current.main
+
+# --- --dry-run: the would-be result, nothing switched ---
+exec git-hop feat/a --dry-run --json
+decode json stdout action switched
+decode json stdout branch feat/a
+decode json stdout path '~/hub/hops/feat/a$'
+decode json stdout hub '~/hub$'
+decode json stdout current_updated true
+decode json stdout dry_run true
+! decode json stdout uri
+! decode json stdout default_branch
+! stdout 'dry-run\]'
+exec readlink current
+cmp stdout $WORK/current.main
+
+exec git-hop feat/a --dry-run --porcelain
+stdout '^switched\tfeat/a\t\S+/hub/hops/feat/a\t\S+/hub$'
+
+# --- a refusal keeps exit 1; the error is on stderr, stdout is empty ---
+exec sh -c 'git-hop nosuch --json; echo "exit=$?"'
+stdout '^exit=1$'
+! stdout '\{'
+stderr '"level":"error"'
+stderr 'does not exist'
+exec sh -c 'git-hop nosuch --porcelain; echo "exit=$?"'
+stdout '^exit=1$'
+stderr '^fatal: .*does not exist'
+
+# --- the switch: current follows; hook output goes to stderr ---
+exec git-hop feat/a --porcelain
+stdout '^switched\tfeat/a\t\S+/hub/hops/feat/a\t\S+/hub$'
+! stdout 'hook says'
+stderr 'hook says'
+! stdout 'Switched'
+exec readlink current
+stdout 'hops/feat/a'
+
+exec git-hop main --format yaml
+decode yaml stdout action switched
+decode yaml stdout branch main
+decode yaml stdout path '~/hub/hops/main$'
+decode yaml stdout hub '~/hub$'
+decode yaml stdout current_updated true
+! decode yaml stdout dry_run
+! stdout 'Path:'
+
+# --- a hook that navigated: the result still prints, the status says so ---
+cp $WORK/nav-hook $WORK/.config/git-hop/hooks/post-worktree-switch
+exec sh -c 'git-hop feat/a --json; echo "exit=$?"'
+stdout '^exit=93$'
+stdout '"action": "switched"'
+
+# --- the bare root prints help, never a result ---
+exec git-hop --json
+! stdout '"action"'
+stdout 'Usage'
+
+-- post-hook --
+#!/bin/sh
+echo 'hook says hi'
+-- nav-hook --
+#!/bin/sh
+exit 93

@@ -54,7 +54,13 @@ func emittedDoctorChecks(t *testing.T) map[string]string {
 // starts with prefix, declared in the package's non-test sources.
 func prefixedConstants(t *testing.T, prefix string) map[string]string {
 	t.Helper()
-	sources, err := filepath.Glob("*.go")
+	return prefixedConstantsIn(t, ".", prefix)
+}
+
+// prefixedConstantsIn is prefixedConstants for the package in dir.
+func prefixedConstantsIn(t *testing.T, dir, prefix string) map[string]string {
+	t.Helper()
+	sources, err := filepath.Glob(filepath.Join(dir, "*.go"))
 	require.NoError(t, err)
 	checks := map[string]string{}
 	fset := token.NewFileSet()
