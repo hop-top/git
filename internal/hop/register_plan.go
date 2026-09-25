@@ -4,6 +4,7 @@ import (
 	"sort"
 	"time"
 
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/state"
 )
 
@@ -56,7 +57,7 @@ func (h NewHub) hubWorktrees() []*state.WorktreeState {
 // not change st. A hub or worktree state records under another spelling
 // of the same path counts as recorded (state.SamePath).
 func PlanHubRegistration(st *state.State, h NewHub) HubRegistration {
-	plan := HubRegistration{RepoID: repoIDFor(h.Org, h.Repo)}
+	plan := HubRegistration{RepoID: repoid.NewIn(h.HubPath, h.URI, h.Org, h.Repo)}
 	repo := st.Repositories[plan.RepoID]
 	plan.Repo = repo == nil
 	plan.Hub = true

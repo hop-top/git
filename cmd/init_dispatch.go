@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"path/filepath"
 	"strings"
 
@@ -15,6 +14,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/services"
 )
 
@@ -23,7 +23,8 @@ import (
 // path (matches registerAsIs). Returns "" when neither yields a name.
 func initRepoID(g git.GitInterface, repoPath string) string {
 	org, repo := "", ""
-	if remoteURL := initRemoteURL(g, repoPath); remoteURL != "" {
+	remoteURL := initRemoteURL(g, repoPath)
+	if remoteURL != "" {
 		org, repo = hop.ParseRepoFromURL(remoteURL)
 	}
 	if org == "" || repo == "" {
@@ -33,10 +34,7 @@ func initRepoID(g git.GitInterface, repoPath string) string {
 			org = filepath.Base(filepath.Dir(abs))
 		}
 	}
-	if org == "" || repo == "" {
-		return ""
-	}
-	return fmt.Sprintf("github.com/%s/%s", org, repo)
+	return repoid.NewIn(repoPath, remoteURL, org, repo)
 }
 
 // initRemoteURL is the remote URL of the repository init converts, "" when

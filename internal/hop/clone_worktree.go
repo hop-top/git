@@ -12,6 +12,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 )
 
 // HookMirrorOptions describes how committed .git-hop/hooks/ scripts should
@@ -99,7 +100,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 	// remote), so the hook sees an empty GIT_HOP_BRANCH. See
 	// HookDispatchOptions.PreClone for the path it receives.
 	if dispatch.PreClone != nil {
-		if err := dispatch.PreClone(projectRoot, repoIDFor(org, repo), ""); err != nil {
+		if err := dispatch.PreClone(projectRoot, repoid.New(uri, org, repo), ""); err != nil {
 			return fmt.Errorf("pre-clone hook aborted clone: %w", err)
 		}
 	}
@@ -167,7 +168,7 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		WorktreeType:  WorktreeTypeBare,
 		Global:        globalConfig,
 	})
-	repoID := repoIDFor(org, repo)
+	repoID := repoid.New(uri, org, repo)
 
 	// Update current symlink to point to main worktree
 	if err := UpdateCurrentSymlink(fs, projectRoot, absMainWorktreePath); err != nil {
@@ -231,13 +232,6 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		mainWorktreePath)
 
 	return nil
-}
-
-// repoIDFor builds the 3-part repo ID ("host/org/repo") that hook
-// resolution and state keying both use. Hoisted so pre-clone (which runs
-// before the state block) and the later dispatches agree on one value.
-func repoIDFor(org, repo string) string {
-	return fmt.Sprintf("github.com/%s/%s", org, repo)
 }
 
 func cloneBareRepo(fs afero.Fs, g git.GitInterface, uri, projectRoot, defaultBranch string) error {

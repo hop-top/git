@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -14,6 +13,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/shell"
 )
 
@@ -128,7 +128,7 @@ func runNotifyChdir(fs afero.Fs, path string, oldPwd string) error {
 		return nil
 	}
 
-	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	repoID := repoid.For(hubPath, hub.Config.Repo)
 
 	hookEnv := hooks.SwitchEnvVars(fromBranch, fromWorktreePath, hooks.TriggerChdir)
 

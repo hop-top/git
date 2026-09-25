@@ -67,6 +67,10 @@ Checks:
   an invalid hop.dataLayout value, a warning
 - Worktree state (orphaned directories)
 - Orphaned worktrees in state
+- Repositories state still keys by another host than their origin's,
+  because the "<host>/<org>/<repo>" key their origin gives was already
+  taken: an issue. Both entries are kept; --fix does not merge them, the
+  hint says how to merge them by hand
 - The current hub's record in state: a hub with hop.json that state does
   not record, or records without some of its worktrees, is invisible to
   list, status --all and prune --all (--fix records it, merging with
@@ -414,6 +418,7 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, hubKept keptWor
 	output.Info("\n=== Checking State ===")
 	checkHubRegistration(fs, hubPath, opts, r)
 	st, stateIssues := inspectState(fs, g, r)
+	checkRepoIDCollisions(fs, st, r)
 	switch {
 	case len(stateIssues) > 0 && opts.fix:
 		r.fixed += fixStateIssues(fs, g, st, hubPath, hubKept, opts, r)

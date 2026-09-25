@@ -2,12 +2,12 @@ package hop
 
 import (
 	"fmt"
-	"net/url"
 	"path/filepath"
 	"regexp"
 	"strings"
 
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/repoid"
 )
 
 // RepoRef names a repository's place in the data home. Host is the host
@@ -33,7 +33,7 @@ func (r RepoRef) In(dir string) RepoRef {
 // NewRepoRef returns the RepoRef of the repository org/repo cloned from
 // uri, taking the host from uri.
 func NewRepoRef(uri, org, repo string) RepoRef {
-	return RepoRef{Host: ParseHostFromURL(uri), Org: org, Repo: repo}
+	return RepoRef{Host: repoid.Host(uri), Org: org, Repo: repo}
 }
 
 // RepoRefFor returns the RepoRef of the repository a hub or hopspace
@@ -42,45 +42,16 @@ func RepoRefFor(hubPath string, repo config.RepoConfig) RepoRef {
 	return NewRepoRef(repo.URI, repo.Org, repo.Repo).In(hubPath)
 }
 
-// RepoRefFromID returns the RepoRef of a 3-part repo ID ("host/org/repo"),
-// with the host taken from uri rather than the ID: repo IDs carry a fixed
-// host whatever the origin. ok is false when the ID has fewer than three
-// parts.
+// RepoRefFromID returns the RepoRef of a repo ID ("host/org/repo"), with
+// the host taken from uri as NewRepoRef does: for a local origin the ID
+// says hop.gitDomain, which the layout expands an empty Host to anyway.
+// ok is false when repoID is not a 3-part ID.
 func RepoRefFromID(repoID, uri string) (ref RepoRef, ok bool) {
-	parts := strings.Split(repoID, "/")
-	if len(parts) < 3 || parts[1] == "" || parts[2] == "" {
+	_, org, repo, ok := repoid.Split(repoID)
+	if !ok {
 		return RepoRef{}, false
 	}
-	return NewRepoRef(uri, parts[1], parts[2]), true
-}
-
-// ParseHostFromURL returns the lowercased host of a git remote URL, without
-// user or port: "gitlab.example.com" for https://gitlab.example.com/a/b.git,
-// ssh://git@gitlab.example.com:2222/a/b.git and git@gitlab.example.com:a/b.git
-// alike. Local remotes (file:// URLs and paths) have no host and yield "".
-func ParseHostFromURL(uri string) string {
-	uri = strings.TrimSpace(uri)
-	if uri == "" {
-		return ""
-	}
-	if strings.Contains(uri, "://") {
-		u, err := url.Parse(uri)
-		if err != nil || u.Scheme == "file" {
-			return ""
-		}
-		return strings.ToLower(u.Hostname())
-	}
-	// scp-like syntax, [user@]host:path. git reads it as such only when
-	// the colon comes before any slash; otherwise it is a local path.
-	colon := strings.Index(uri, ":")
-	if colon <= 0 || strings.Contains(uri[:colon], "/") {
-		return ""
-	}
-	host := uri[:colon]
-	if at := strings.LastIndex(host, "@"); at >= 0 {
-		host = host[at+1:]
-	}
-	return strings.ToLower(strings.Trim(host, "[]"))
+	return NewRepoRef(uri, org, repo), true
 }
 
 // Data layout placeholders.
@@ -137,55 +108,14 @@ type DataLayoutSetting struct {
 }
 
 // ResolveDataLayout resolves hop.dataLayout for the repository at dir
-// the way git resolves any setting: a repository (local or worktree)
-// value overrides --global, and `git -c` overrides both. With dir empty,
-// or not a directory git can enter, there is no repository: only the
-// system, --global and `git -c` values count, whatever repository the
-// process runs in.
+// the way git resolves any setting (config.ResolveScoped): a repository
+// (local or worktree) value overrides --global, and `git -c` overrides
+// both. With dir empty, or not a directory git can enter, there is no
+// repository: only the system, --global and `git -c` values count,
+// whatever repository the process runs in.
 func ResolveDataLayout(dir string) DataLayoutSetting {
-	def := config.Default(config.KeyDataLayout)
-	vals, ok := scopedDataLayout(dir)
-	if !ok || len(vals) == 0 {
-		return DataLayoutSetting{Layout: def}
-	}
-	eff := vals[len(vals)-1]
-	s := DataLayoutSetting{Layout: eff.Value, Raw: eff.Value, Scope: eff.Scope}
-	if s.Err = ValidateDataLayout(eff.Value); s.Err == nil {
-		return s
-	}
-	s.Layout = def
-	if eff.Scope != "global" {
-		for i := len(vals) - 1; i >= 0; i-- {
-			if vals[i].Scope == "global" {
-				if ValidateDataLayout(vals[i].Value) == nil {
-					s.Layout = vals[i].Value
-				}
-				break
-			}
-		}
-	}
-	return s
-}
-
-// scopedDataLayout lists the hop.dataLayout values that apply to the
-// repository at dir, lowest precedence first. ok is false when git config
-// cannot be read at all.
-func scopedDataLayout(dir string) (vals []config.ScopedValue, ok bool) {
-	if dir != "" {
-		if vals, err := config.NewGitConfigIn(dir).GetAllScoped(config.KeyDataLayout); err == nil {
-			return vals, true
-		}
-	}
-	all, err := config.NewGitConfig().GetAllScoped(config.KeyDataLayout)
-	if err != nil {
-		return nil, false
-	}
-	for _, v := range all {
-		if v.Scope != "local" && v.Scope != "worktree" {
-			vals = append(vals, v)
-		}
-	}
-	return vals, true
+	s := config.ResolveScoped(dir, config.KeyDataLayout, ValidateDataLayout)
+	return DataLayoutSetting{Layout: s.Value, Raw: s.Raw, Scope: s.Scope, Err: s.Err}
 }
 
 // DataLayout returns the hop.dataLayout template in effect outside any
@@ -195,11 +125,12 @@ func DataLayout() string {
 }
 
 // ExpandDataLayout substitutes ref into layout. An empty ref.Host becomes
-// hop.gitDomain, the host org/repo shorthands expand to.
+// hop.gitDomain as resolved for ref.Dir, the host org/repo shorthands
+// expand to.
 func ExpandDataLayout(layout string, ref RepoRef) string {
 	host := ref.Host
 	if host == "" && strings.Contains(layout, layoutHost) {
-		host = config.NewGlobalGitConfig().GetStringOrDefault(config.KeyGitDomain)
+		host = repoid.GitDomainIn(ref.Dir)
 	}
 	r := strings.NewReplacer(layoutHost, host, layoutOrg, ref.Org, layoutRepo, ref.Repo)
 	return filepath.FromSlash(r.Replace(layout))
@@ -221,15 +152,19 @@ func HopspaceHooksDir(ref RepoRef) string {
 	return filepath.Join(GetHopspacePath(GetGitHopDataHome(), ref), "hooks")
 }
 
+// LegacyHooksHost is the host every repo ID had before IDs carried the
+// origin's: releases before hop.dataLayout mirrored hooks under it.
+const LegacyHooksHost = "github.com"
+
 // LegacyHooksDir returns where releases before hop.dataLayout kept a
-// repository's hopspace hooks: <data>/<host>/<org>/<repo>/hooks, the host
-// being the fixed one of the repo ID (github.com), whatever the origin.
-// Hook lookup still reads it after HopspaceHooksDir; doctor --fix moves
-// it. "" when repoID has fewer than three parts.
+// repository's hopspace hooks: <data>/github.com/<org>/<repo>/hooks,
+// whatever the origin, since their repo IDs always said github.com. Hook
+// lookup still reads it after HopspaceHooksDir; doctor --fix moves it.
+// "" when repoID is not a 3-part ID.
 func LegacyHooksDir(repoID string) string {
-	parts := strings.Split(repoID, "/")
-	if len(parts) < 3 || parts[0] == "" || parts[1] == "" || parts[2] == "" {
+	_, org, repo, ok := repoid.Split(repoID)
+	if !ok {
 		return ""
 	}
-	return filepath.Join(GetGitHopDataHome(), parts[0], parts[1], parts[2], "hooks")
+	return filepath.Join(GetGitHopDataHome(), LegacyHooksHost, org, repo, "hooks")
 }

@@ -1,0 +1,115 @@
+# The repo ID state keys a repository by, and hooks see as GIT_HOP_REPO_ID,
+# is <host>/<org>/<repo> with the host of the origin URL. An origin with no
+# host (a local path, file://) takes hop.gitDomain, github.com by default.
+# Two repositories with one org/repo on two hosts get two entries.
+#
+# The remote hosts resolve to local bare repositories through
+# url.<base>.insteadOf, so nothing leaves the machine.
+
+exec git init --bare $WORK/srv/gitlab/acme/widgets.git
+exec git init --bare $WORK/srv/github/acme/widgets.git
+exec git clone $WORK/srv/gitlab/acme/widgets.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+exec git push $WORK/srv/github/acme/widgets.git main
+cd $WORK
+exec git config --global url.$WORK/srv/gitlab/.insteadOf https://gitlab.example.com/
+exec git config --global url.$WORK/srv/github/.insteadOf https://github.com/
+
+mkdir $WORK/.config/git-hop/hooks
+cp record-hook $WORK/.config/git-hop/hooks/post-worktree-add
+exec chmod +x $WORK/.config/git-hop/hooks/post-worktree-add
+
+# --- a non-GitHub origin keys the repository by its own host ---
+exec git-hop https://gitlab.example.com/acme/widgets.git gl
+cd $WORK/gl
+exec git-hop add feat
+grep '^gitlab.example.com/acme/widgets feat$' $WORK/repo-ids
+cd $WORK
+exec git-hop list --json
+stdout '"repository": "gitlab.example.com/acme/widgets"'
+! stdout 'github.com/acme/widgets'
+
+# --- the same org/repo on GitHub is another repository ---
+exec git-hop https://github.com/acme/widgets.git gh
+cd $WORK/gh
+exec git-hop add feat
+grep '^github.com/acme/widgets feat$' $WORK/repo-ids
+cd $WORK
+exec git-hop list --json
+decode json stdout '#' 4
+stdout '"repository": "gitlab.example.com/acme/widgets"'
+stdout '"repository": "github.com/acme/widgets"'
+exec git-hop status --all
+stdout 'gitlab.example.com/acme/widgets'
+stdout 'github.com/acme/widgets'
+
+# --- removing one hub leaves the other repository alone ---
+exec git-hop remove $WORK/gh --no-prompt
+exec git-hop list --json
+decode json stdout '#' 2
+stdout '"repository": "gitlab.example.com/acme/widgets"'
+! stdout '"repository": "github.com/acme/widgets"'
+
+# --- a local origin takes hop.gitDomain: github.com by default ---
+exec git-hop $WORK/srv/gitlab/acme/widgets.git local
+cd $WORK/local
+exec git-hop add feat
+grep '^github.com/acme/widgets feat$' $WORK/repo-ids
+cd $WORK
+exec git-hop list --json
+stdout '"repository": "github.com/acme/widgets"'
+
+# --- ... and the configured domain when it is set ---
+exec git config --global hop.gitDomain git.corp.example
+exec git-hop file://$WORK/srv/gitlab/acme/widgets.git corp
+cd $WORK/corp
+exec git-hop add feat
+grep '^git.corp.example/acme/widgets feat$' $WORK/repo-ids
+cd $WORK
+exec git-hop list --json
+stdout '"repository": "git.corp.example/acme/widgets"'
+
+# --- a hub's own hop.gitDomain overrides --global; state follows ---
+exec git -C $WORK/corp config hop.gitDomain hub.example
+cd $WORK/corp
+exec git-hop add feat2
+grep '^hub.example/acme/widgets feat2$' $WORK/repo-ids
+cd $WORK
+exec git-hop list --json
+cp stdout $WORK/list.json
+# corp's main, feat and feat2 moved; the local hub, with no value of its
+# own, stays on the --global git.corp.example
+exec sh -c 'grep -c "\"repository\": \"hub.example/acme/widgets\"" $WORK/list.json'
+stdout '^3$'
+exec sh -c 'grep -c "\"repository\": \"git.corp.example/acme/widgets\"" $WORK/list.json'
+stdout '^2$'
+
+# --- `git -c` (command scope) overrides both ---
+cd $WORK/corp
+env GIT_CONFIG_COUNT=1
+env GIT_CONFIG_KEY_0=hop.gitDomain
+env GIT_CONFIG_VALUE_0=cmd.example
+exec git-hop add feat3
+grep '^cmd.example/acme/widgets feat3$' $WORK/repo-ids
+env GIT_CONFIG_COUNT=
+env GIT_CONFIG_KEY_0=
+env GIT_CONFIG_VALUE_0=
+cd $WORK
+
+# --- org/repo shorthands expand with the same hop.gitDomain: --global
+# outside a hub, the hub's own value inside one ---
+exec git config --global --add url.$WORK/srv/gitlab/.insteadOf git@git.corp.example:
+exec git config --global --add url.$WORK/srv/gitlab/.insteadOf git@hub.example:
+exec git-hop acme/widgets short
+exec git -C $WORK/short config --get remote.origin.url
+stdout '^git@git.corp.example:acme/widgets.git$'
+cd $WORK/corp
+exec git-hop acme/widgets $WORK/short2
+exec git -C $WORK/short2 config --get remote.origin.url
+stdout '^git@hub.example:acme/widgets.git$'
+
+-- record-hook --
+#!/bin/sh
+echo "$GIT_HOP_REPO_ID $GIT_HOP_BRANCH" >> "$HOME/repo-ids"

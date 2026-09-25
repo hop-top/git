@@ -24,6 +24,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/shell"
 )
 
@@ -105,6 +106,20 @@ func ExpandShorthand(s string, gitDomain string) string {
 	}
 
 	return s
+}
+
+// shorthandDomain returns the host an org/repo shorthand expands to:
+// --git-domain when given, else hop.gitDomain resolved like any hop.*
+// setting (repoid.GitDomainIn) in the hub the command runs in, or outside
+// any repository when it runs in none (hubErr set).
+func shorthandDomain(flag, hubPath string, hubErr error) string {
+	if flag != "" {
+		return flag
+	}
+	if hubErr != nil {
+		hubPath = ""
+	}
+	return repoid.GitDomainIn(hubPath)
 }
 
 // ResolveArg decides whether the bare positional argument to `git hop` names
@@ -250,14 +265,6 @@ Worktree Mode:
 		globalLoader := config.NewGlobalLoader()
 		globalCfg := globalLoader.Load()
 
-		domain := gitDomain
-		if domain == "" {
-			domain = globalCfg.Defaults.GitDomain
-		}
-		if domain == "" {
-			domain = "github.com"
-		}
-
 		// Hub lookup is hoisted above shorthand expansion so the expansion can
 		// see which worktrees actually exist. FindHub/LoadHub are pure reads
 		// (afero stat walk + JSON unmarshal), so running them before the
@@ -279,7 +286,7 @@ Worktree Mode:
 			knownBranches = hub.Config.Branches
 		}
 
-		expandedArg := ResolveArg(arg, domain, knownBranches)
+		expandedArg := ResolveArg(arg, shorthandDomain(gitDomain, hubPath, hubErr), knownBranches)
 
 		if IsURI(expandedArg) {
 			if dryRun {
@@ -339,7 +346,7 @@ Worktree Mode:
 			// fields stay empty and SwitchEnvVars omits them entirely.
 			fromBranch, fromWorktreePath := resolveSwitchFromState(fs, hubPath, hub)
 
-			repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+			repoID := repoid.For(hubPath, hub.Config.Repo)
 
 			if dryRun {
 				previewSwitch(fs, hub.Config.Repo.URI, hubPath, repoID, arg, worktreePath)

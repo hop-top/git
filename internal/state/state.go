@@ -95,8 +95,9 @@ func statePath() string {
 
 // LoadState loads the state from disk or returns a new empty state.
 //
-// A file an earlier release wrote is migrated in memory (migrate): every
-// caller sees worktrees keyed by path. Nothing is written here; the next
+// A file an earlier release wrote is migrated in memory: every caller
+// sees worktrees keyed by path (migrate) and repositories keyed by the
+// host of their origin (rekeyRepoIDs). Nothing is written here; the next
 // SaveState persists the migration, backing the old file up first.
 func LoadState(fs afero.Fs) (*State, error) {
 	path := statePath()
@@ -121,6 +122,8 @@ func LoadState(fs afero.Fs) (*State, error) {
 	}
 	if !newerThanSupported(state.Version) {
 		migrate(state)
+		_, collisions := rekeyRepoIDs(fs, state)
+		warnCollisions(collisions)
 		state.Version = Version
 	}
 	return state, nil
@@ -142,8 +145,10 @@ func parseState(data []byte) (*State, error) {
 //
 // It refuses to replace a state file it cannot parse, or one a newer
 // release wrote: saving over either would lose what it records. Before
-// replacing a file that still holds entries in the branch-keyed format of
-// earlier releases, it copies the file to a backup (backupLegacyState).
+// replacing a file that still needs a migration LoadState does (entries
+// in the branch-keyed format, repositories under a github.com key their
+// origin does not give), it copies the file to a backup
+// (backupLegacyState).
 func SaveState(fs afero.Fs, state *State) error {
 	stateDir := GetStateHome()
 	path := statePath()
@@ -180,7 +185,8 @@ func SaveState(fs afero.Fs, state *State) error {
 
 // guardExisting checks the state file SaveState is about to replace: it
 // must parse and must not come from a newer release. When it still holds
-// branch-keyed entries it is backed up first.
+// branch-keyed entries, or repositories keyed by another host than their
+// origin's, it is backed up first.
 func guardExisting(fs afero.Fs, path string) error {
 	data, err := afero.ReadFile(fs, path)
 	if err != nil {
@@ -196,7 +202,7 @@ func guardExisting(fs afero.Fs, path string) error {
 	if newerThanSupported(onDisk.Version) {
 		return fmt.Errorf("state not saved: %s was written by a newer git-hop (format %s)", path, onDisk.Version)
 	}
-	if hasLegacyEntries(onDisk) {
+	if hasLegacyEntries(onDisk) || needsRekey(fs, onDisk) {
 		if _, err := backupLegacyState(fs, data, time.Now()); err != nil {
 			return fmt.Errorf("state not saved: back up %s: %w", path, err)
 		}

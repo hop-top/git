@@ -11,8 +11,9 @@ import (
 	"github.com/spf13/afero"
 )
 
-// Before SaveState replaces a state file that still holds branch-keyed
-// entries, the file is copied to BackupDir as state-<UTC stamp>.json. A
+// Before SaveState replaces a state file that still needs migrating
+// (branch-keyed entries, repositories not keyed by their origin's host),
+// the file is copied to BackupDir as state-<UTC stamp>.json. A
 // backup is written once and never overwritten; `git hop prune` ages
 // backups out after hop.repair.backupRetention, like repair backups.
 

@@ -10,6 +10,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 )
@@ -27,7 +28,7 @@ func removeHub(fs afero.Fs, hubPath string) []removeRecord {
 		output.Fatal("Failed to load hub: %v", err)
 	}
 
-	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	repoID := repoid.For(hubPath, hub.Config.Repo)
 
 	// Read before anything is deleted, as the dry run reads it.
 	registry := hop.LoadRegistry(fs)

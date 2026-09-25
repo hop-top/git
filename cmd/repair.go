@@ -13,6 +13,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 )
 
 var (
@@ -424,7 +425,7 @@ func firePostRepairHook(fs afero.Fs, hubPath string) error {
 //   - GIT_HOP_BRANCH        — empty. A repair run spans every registered
 //     branch, so no single branch is the subject. Empty is the honest
 //     answer; naming an arbitrary branch would be worse.
-//   - GIT_HOP_REPO_ID       — "github.com/<org>/<repo>" when resolvable,
+//   - GIT_HOP_REPO_ID       — "<host>/<org>/<repo>" when resolvable,
 //     otherwise empty. See repairHookRepoID.
 //
 // The repo ID is resolved at dispatch time rather than passed in, which
@@ -453,7 +454,7 @@ func repairHookRepoURI(fs afero.Fs, hubPath string) string {
 //
 // Returns "" when the hub config is missing, unreadable, or lacks org or
 // repo. A partial ID is worse than none: the runner splits on "/" and
-// needs at least three segments, so "github.com//" would fail hopspace
+// needs at least three segments, so "<host>//" would fail hopspace
 // lookup anyway while looking like a real value to a hook. Empty is the
 // truthful signal that the field could not be determined.
 //
@@ -472,11 +473,7 @@ func repairHookRepoID(fs afero.Fs, hubPath string) string {
 	if err != nil {
 		return ""
 	}
-	org, repo := hub.Config.Repo.Org, hub.Config.Repo.Repo
-	if org == "" || repo == "" {
-		return ""
-	}
-	return fmt.Sprintf("github.com/%s/%s", org, repo)
+	return repoid.For(hubPath, hub.Config.Repo)
 }
 
 // fatal returns an error that the cobra layer surfaces with exit 128.
