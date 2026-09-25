@@ -143,7 +143,12 @@ exits 0 without prompting.
 /usr/bin/git hop remove --merged                                  # interactive
 /usr/bin/git hop remove --merged --no-prompt                      # non-interactive
 
-# Result: [{kind, branch, path, removed, branch_deleted, remote_deleted, reason?, dry_run?}]
+# Remove a whole hub: volume data kept (moved to $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, hint says where)
+/usr/bin/git hop remove <hub-path> --no-prompt
+/usr/bin/git hop remove <hub-path> --no-prompt --delete-volumes   # also delete volume data (hub only; else exit 129)
+
+# Result: [{kind, branch, path, removed, branch_deleted, remote_deleted, reason?, dry_run?, volumes?, volume_paths?}]
+# volumes (hub/hopspace records): kept | deleted; absent when there is no volume data
 # kind: worktree | hub | hopspace; one record per branch, --merged candidate, or hub entry
 # --merged leaving any candidate in place: records still printed, exit 1
 /usr/bin/git hop remove <branch> --no-prompt --json

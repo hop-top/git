@@ -14,6 +14,7 @@ import (
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/repoid"
+	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 )
 
@@ -140,7 +141,7 @@ func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noV
 
 // previewRemoveHub reports what removing the hub at hubPath would delete,
 // and returns the records removeHub would produce.
-func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord {
+func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt, deleteVolumes bool) []removeRecord {
 	hub, err := hop.LoadHub(fs, hubPath)
 	if err != nil {
 		output.Fatal("Failed to load hub: %v", err)
@@ -148,6 +149,8 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord
 	if !noPrompt {
 		output.Info("[dry-run] Would ask for confirmation before removing hub %s (--no-prompt skips it)", hubPath)
 	}
+	ref := hop.RepoRefFor(hubPath, hub.Config.Repo)
+	hubVols := newVolumeMove(fs, hubPath, hubPath, ref, services.HubKey(hubPath), deleteVolumes)
 
 	branches := make([]string, 0, len(hub.Config.Branches))
 	for name := range hub.Config.Branches {
@@ -162,7 +165,8 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord
 	}
 
 	output.Info("[dry-run] Would remove hub directory %s", hubPath)
-	recs = append(recs, removeRecord{Kind: removeKindHub, Path: hubPath, Removed: true})
+	hubVols.preview()
+	recs = append(recs, volumesRecord(removeRecord{Kind: removeKindHub, Path: hubPath, Removed: true}, hubVols, hubVols.paths))
 	repoID := repoid.For(hubPath, hub.Config.Repo)
 	st, stErr := state.LoadState(fs)
 	if stErr == nil && st.Repositories[repoID] != nil {
@@ -173,12 +177,24 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord
 	case !d.exists:
 	case d.remove():
 		output.Info("[dry-run] Would remove hopspace data at %s: %s", d.path, d.reason())
+		vols := newVolumeMove(fs, d.path, d.path, ref, "hopspace", deleteVolumes)
+		vols.preview()
+		recs = append(recs, volumesRecord(d.record(true), vols, vols.paths))
 	default:
 		output.Info("[dry-run] Would keep hopspace data at %s: %s", d.path, d.reason())
+		rec := d.record(false)
+		if dir := hubVolumesIn(fs, d.path, hubPath); d.ofHub && dir != "" {
+			rec.VolumePaths = []string{dir}
+			rec.Volumes = volumesKept
+			if deleteVolumes {
+				rec.Volumes = volumesDeleted
+				output.Info("[dry-run] Would delete volume data at %s (--delete-volumes)", dir)
+			} else {
+				output.Info("[dry-run] Would keep volume data at %s", dir)
+			}
+		}
 		previewHubHopspaceRecords(fs, d, hubPath)
-	}
-	if d.exists {
-		recs = append(recs, d.record(d.remove()))
+		recs = append(recs, rec)
 	}
 	return recs
 }

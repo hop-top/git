@@ -1037,8 +1037,10 @@ references, gets a directory `hop_<branch>_<name>` in `basePath`
 `--global` hopspace each get a subdirectory named by their hub key, so no
 two hubs share a volume directory.
 
-A worktree keeps the directories its entry records; git-hop never moves
-or deletes volume data. Earlier releases put `${HOP_VOLUME_*}` directories
+A worktree keeps the directories its entry records; git-hop never deletes
+volume data unless asked. Removing a hub moves its volume data aside, to
+`$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/`, and deletes it only
+with `git hop remove <hub> --delete-volumes`. Earlier releases put `${HOP_VOLUME_*}` directories
 in `$GIT_HOP_DATA_HOME/volumes/<branch>/<name>`, one for every repository
 and hub, and gave every `--global` hub of a repository the same
 directories. An entry that records such a directory keeps it, unless a hub

@@ -515,6 +515,8 @@ gate, failure) the records still print and the exit status is 1.
 | `remote_deleted` | bool | `true` when the branch was deleted on origin (`--delete-remote`); under `--dry-run`, `true` when `--delete-remote` would try (origin is not probed) |
 | `reason` | string | *json/yaml only*; why the entry was left in place: the safety gate's refusal, a failure, a `--merged` skip (current worktree, missing path), a hopspace still used by another hub; absent when removed |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
+| `volumes` | string | *json/yaml only*; `hub` and `hopspace` records: what the removal did (under `--dry-run`, would do) with the volume data in it: `kept` (the default: moved aside to `$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/`, or left in place when it cannot be moved or the hopspace stays) or `deleted` (`--delete-volumes`); absent when it holds none |
+| `volume_paths` | string[] | *json/yaml only*; where kept volume data is now, or where deleted data was; under `--dry-run`, where it is now |
 
 ```json
 [
