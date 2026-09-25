@@ -67,10 +67,10 @@ func bufferedPromptIn() *bufio.Reader {
 	return promptReader
 }
 
-// promptInIsTerminal reports whether promptIn is a terminal. A variable
-// so tests can stand in for one.
-var promptInIsTerminal = func() bool {
-	f, ok := promptIn.(*os.File)
+// isTerminal reports whether in is a terminal. A variable so tests can
+// stand in for one.
+var isTerminal = func(in io.Reader) bool {
+	f, ok := in.(*os.File)
 	if !ok {
 		return false
 	}
@@ -78,21 +78,31 @@ var promptInIsTerminal = func() bool {
 	return isatty.IsTerminal(fd) || isatty.IsCygwinTerminal(fd)
 }
 
-// readPromptLine reads one answer from promptIn and ends the prompt's
-// line on w. It returns ErrPromptUnanswerable when nothing at all could
-// be read — EOF on an empty stdin, or a read failure. A partial final
-// line without a trailing newline still counts as an answer.
+// EndPromptLine ends a prompt's line on w once answer has been read from
+// in (answer is what was read, "" at EOF).
 //
 // A terminal echoes the answer and the Enter that ends it, which closes
 // the line. Nothing else does: an answer piped in is never echoed, and
 // neither is an EOF, on a terminal or not. Then the line is closed here,
 // so whatever is printed next (a hint:, a warning:, the next prompt)
 // starts at column zero instead of after the prompt.
-func readPromptLine(w io.Writer) (string, error) {
-	response, err := bufferedPromptIn().ReadString('\n')
-	if !strings.HasSuffix(response, "\n") || !promptInIsTerminal() {
+//
+// Every prompt that reads its own answer calls it: the ones in this
+// package through readPromptLine, and any with a reader of its own.
+func EndPromptLine(w io.Writer, in io.Reader, answer string) {
+	if !strings.HasSuffix(answer, "\n") || !isTerminal(in) {
 		fmt.Fprintln(w)
 	}
+}
+
+// readPromptLine reads one answer from promptIn and ends the prompt's
+// line on w (EndPromptLine). It returns ErrPromptUnanswerable when
+// nothing at all could be read — EOF on an empty stdin, or a read
+// failure. A partial final line without a trailing newline still counts
+// as an answer.
+func readPromptLine(w io.Writer) (string, error) {
+	response, err := bufferedPromptIn().ReadString('\n')
+	EndPromptLine(w, promptIn, response)
 	if err != nil && response == "" {
 		return "", ErrPromptUnanswerable
 	}
