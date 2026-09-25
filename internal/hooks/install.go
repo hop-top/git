@@ -100,17 +100,6 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 		mode = ModePrompt
 	}
 
-	// Non-interactive prompt mode degrades to none.
-	if mode == ModePrompt && opts.Stdin == nil && !opts.Interactive {
-		output.Note("Skipping hook mirror (non-interactive). Re-run with --hooks=symlink to install committed hooks.")
-		return res, nil
-	}
-
-	if mode == ModeNone {
-		output.Note("skipping hook mirror (--hooks=none)")
-		return res, nil
-	}
-
 	if !validMode(mode) {
 		return res, fmt.Errorf("invalid hooks install mode: %q (want symlink|copy|prompt|none)", mode)
 	}
@@ -122,6 +111,19 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	}
 	if !exists {
 		// Most repos don't commit hooks; silent no-op.
+		return res, nil
+	}
+
+	// Non-interactive prompt mode degrades to none.
+	if mode == ModePrompt && opts.Stdin == nil && !opts.Interactive {
+		output.Hint("Committed hooks were not mirrored: stdin is non-interactive, so --hooks=prompt cannot ask.\n"+
+			"Run %s to mirror them.", remirrorCommand(opts.WorktreePath, ModeSymlink))
+		return res, nil
+	}
+
+	if mode == ModeNone {
+		output.Hint("Committed hooks were not mirrored (hooks mode is none).\n"+
+			"Run %s to mirror them.", remirrorCommand(opts.WorktreePath, ModeSymlink))
 		return res, nil
 	}
 
@@ -175,7 +177,9 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 		if runtime.GOOS != "windows" && info.Mode()&0111 == 0 {
 			res.Warned++
 			res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: "not executable"})
-			output.Warn("hook %s is not executable; skipping. chmod +x then run git hop hooks sync (TBD)", name)
+			output.Warn("hook %s is not executable; skipping", name)
+			output.Hint("Run 'chmod +x .git-hop/hooks/%s', then %s to mirror it.",
+				name, remirrorCommand(opts.WorktreePath, mode))
 			continue
 		}
 
@@ -266,6 +270,12 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	}
 
 	return res, nil
+}
+
+// remirrorCommand names the command that mirrors committed hooks into
+// the hopspace after the fact: init re-run in the worktree mirrors again.
+func remirrorCommand(worktreePath, mode string) string {
+	return fmt.Sprintf("'git hop init --hooks=%s' in %s", mode, worktreePath)
 }
 
 func validMode(m string) bool {

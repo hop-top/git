@@ -1,0 +1,43 @@
+# Committed hooks a clone does not mirror come with git-style advice: a
+# hint: naming the command that mirrors them in place, never an
+# unprefixed line or a command that does not exist. -q drops the advice.
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+mkdir .git-hop/hooks
+cp $WORK/hook.sh .git-hop/hooks/post-worktree-add
+exec git add .
+exec git commit -m 'initial'
+exec git push origin main
+cd $WORK
+
+# --- non-interactive prompt: skipped with a hint ---
+stdin empty.txt
+exec git-hop $WORK/org/repo.git hub-prompt
+! stdout .
+stderr '^hint: Committed hooks were not mirrored: stdin is non-interactive'
+stderr '^hint: Run ''git hop init --hooks=symlink'' in .*/hub-prompt/hops/main to mirror them\.$'
+! stderr '^[Ss]kipping hook mirror'
+
+# --- --hooks=none: skipped with a hint ---
+exec git-hop $WORK/org/repo.git hub-none --hooks=none
+stderr '^hint: Committed hooks were not mirrored \(hooks mode is none\)\.$'
+! stderr '^[Ss]kipping hook mirror'
+
+# --- non-executable hook: warning, then a remedy that exists ---
+exec git-hop $WORK/org/repo.git hub-copy --hooks=copy
+stderr '^warning: hook post-worktree-add is not executable; skipping$'
+stderr '^hint: Run ''chmod \+x \.git-hop/hooks/post-worktree-add'', then ''git hop init --hooks=copy'' in .*/hub-copy/hops/main to mirror it\.$'
+! stderr 'hooks sync'
+
+# --- -q: no advice ---
+stdin empty.txt
+exec git-hop -q $WORK/org/repo.git hub-quiet
+! stdout .
+! stderr .
+
+-- empty.txt --
+-- hook.sh --
+#!/bin/sh
+exit 0

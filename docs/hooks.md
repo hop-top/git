@@ -296,11 +296,13 @@ Controlled by flags on `clone` (and equivalents on `init`):
 |------|--------|
 | `--hooks=symlink` | Hopspace hook becomes a symlink to the committed file (committed file stays the single source of truth) |
 | `--hooks=copy` | Hopspace hook is a copy of the committed file |
-| `--hooks=prompt` | Ask per hook. Degrades to `none` with a notice when stdin is not interactive |
+| `--hooks=prompt` | Ask per hook. Degrades to `none` with a `hint:` when stdin is not interactive |
 | `--hooks=none` | Skip mirroring |
 | `--hooks-overwrite` | Replace an existing hopspace hook whose content differs (symlink/copy modes only) |
 
 Default is `prompt`. Only filenames in `ValidHookNames` are mirrored; anything else in `.git-hop/hooks/` is ignored. A repo with no `.git-hop/hooks/` directory is a silent no-op — most repos commit no hooks.
+
+When committed hooks are not mirrored (mode `none`, a non-interactive `prompt`, or a hook that is not executable), a `hint:` names the remedy: run `git hop init --hooks=<mode>` inside the worktree, which mirrors again without re-cloning. `-q` drops the hint.
 
 ### `pre-clone` has no repo level
 

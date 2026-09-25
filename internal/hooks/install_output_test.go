@@ -71,11 +71,20 @@ func TestMirror_WarningsFollowOutputMode(t *testing.T) {
 	}
 
 	got := mirrorStderr(t, output.ModeJSON)
-	var rec map[string]any
-	if err := json.Unmarshal([]byte(strings.TrimSpace(got)), &rec); err != nil {
-		t.Fatalf("JSON-mode stderr is not one JSON record: %q (%v)", got, err)
+	lines := strings.Split(strings.TrimSpace(got), "\n")
+	recs := make([]map[string]any, len(lines))
+	for i, line := range lines {
+		if err := json.Unmarshal([]byte(line), &recs[i]); err != nil {
+			t.Fatalf("JSON-mode stderr line %d is not a JSON record: %q (%v)", i, line, err)
+		}
 	}
-	if rec["level"] != "warn" || !strings.Contains(rec["msg"].(string), "not executable") {
+	if len(recs) != 2 {
+		t.Fatalf("JSON-mode stderr = %q, want a warning record then a hint record", got)
+	}
+	if rec := recs[0]; rec["level"] != "warn" || !strings.Contains(rec["msg"].(string), "not executable") {
 		t.Errorf("JSON record = %v, want level=warn about the non-executable hook", rec)
+	}
+	if rec := recs[1]; rec["kind"] != "hint" {
+		t.Errorf("JSON record = %v, want kind=hint with the remedy", rec)
 	}
 }
