@@ -960,7 +960,7 @@ to a JSONL file.
 
 | Topic | Published by | Payload keys |
 |---|---|---|
-| `git.runtime.worktree.created` | `git hop add`, and `git hop clone` for the initial worktree (after `hopspace.initialized`) | `path`, `branch`, `hopspace_path`, `repo_path` |
+| `git.runtime.worktree.created` | `git hop add`; `git hop clone` and `git hop init` (bare or regular conversion, not register-as-is) for the initial worktree, after `hopspace.initialized` | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.worktree.removed` | `git hop remove` | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.worktree.merged` | `git hop merge` (the source worktree, which merge also removes) | `path`, `branch`, `hopspace_path`, `repo_path` |
 | `git.runtime.worktree.moved` | `git hop move` (new path and branch) | `path`, `branch`, `hopspace_path`, `repo_path` |

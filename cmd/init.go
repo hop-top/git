@@ -16,6 +16,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/services"
 	"hop.top/git/internal/shell"
 	"hop.top/kit/go/runtime/bus"
 )
@@ -284,7 +285,9 @@ staged and unstaged as they are:
 
 	registerConvertedHub(fs, hub, repoPath, mainWorktreePath, currentBranchName, isRegularRepo)
 
-	// Emit hopspace.initialized after successful conversion.
+	// Emit hopspace.initialized after successful conversion, then
+	// worktree.created for the worktree the conversion created, as clone
+	// does for its initial worktree.
 	if hub != nil {
 		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
 			events.HopspaceInitialized, events.Source,
@@ -294,6 +297,15 @@ staged and unstaged as they are:
 				Repo: hub.Config.Repo.Repo,
 			},
 		))
+		if mainWorktreePath != "" {
+			created := services.WorktreeSetup{Target: services.EnvTarget{
+				Root:         mainWorktreePath,
+				Branch:       currentBranchName,
+				HopspacePath: hop.ResolveHopspacePath(repoPath, hub.Config.Repo),
+				Hub:          hub.Config,
+			}}
+			created.PublishCreated(context.Background(), cli.EventBus, repoPath)
+		}
 	}
 
 	fmt.Println("\nConversion successful!")
