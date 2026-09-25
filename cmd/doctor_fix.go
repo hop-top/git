@@ -181,9 +181,10 @@ func (k keptWorktrees) has(path string) bool {
 
 // fixMissingWorktrees handles worktrees whose paths no longer exist on disk.
 // For each missing worktree it checks whether the branch was merged into
-// the default branch (mergedIntoDefault, the hub check's rule: never the
-// default branch itself); if so it removes the state entry automatically. Otherwise it asks the user to either
-// provide a new location, delete the entry, or keep it as-is.
+// the default branch (mergedIntoDefault, the hub check's rule: squash- and
+// rebase-merges count, the default branch itself never does); if so it
+// removes the state entry automatically. Otherwise it asks the user to
+// either provide a new location, delete the entry, or keep it as-is.
 // A worktree git has locked is kept without asking: git will not prune
 // it, since its directory may only be unavailable (a drive that is not
 // mounted).

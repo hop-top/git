@@ -108,17 +108,22 @@ func mergedMissingBranch(g git.GitInterface, hub *hop.Hub, branch string) (strin
 	return base, mergedIntoDefault(g, hub.Path, branch, base)
 }
 
-// mergedIntoDefault reports whether branch is merged into defaultBranch,
+// mergedIntoDefault reports whether branch's work is on defaultBranch,
 // run in the repository at dir. It is how both the hub check and the
 // state check decide that a missing worktree is cleanup rather than work
-// to keep. The default branch never counts, since it is trivially merged
-// into itself. An unknown default branch, or a merge test that fails,
-// answers false: keeping or recreating is the repair that loses nothing.
+// to keep. The branch counts as merged when its tip is reachable from
+// defaultBranch, or when its work landed there under rewritten commits
+// (a squash- or rebase-merge; branchWorkLandedIn, the test remove and
+// status share). The default branch never counts, since it is trivially
+// merged into itself. An unknown default branch, a branch ref that no
+// longer exists, or a merge test that fails answers false: keeping or
+// recreating is the repair that loses nothing.
 func mergedIntoDefault(g git.GitInterface, dir, branch, defaultBranch string) bool {
 	if defaultBranch == "" || branch == defaultBranch {
 		return false
 	}
-	return isBranchMerged(g, dir, branch, defaultBranch)
+	return isBranchMerged(g, dir, branch, defaultBranch) ||
+		branchWorkLandedIn(g, dir, branch, defaultBranch)
 }
 
 // recreateWorktree checks out branch again at linkPath, the directory its
