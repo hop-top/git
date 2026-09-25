@@ -691,7 +691,7 @@ git-hop exports these *into* lifecycle hooks; you do not set them yourself. See 
 |----------|---------|-------------|
 | `GIT_HOP_HOOK_NAME` | all (except `pre/post-repair`) | Name of the hook being run |
 | `GIT_HOP_WORKTREE_PATH` | all (except `pre/post-repair`) | Absolute worktree path |
-| `GIT_HOP_REPO_ID` | all (except `pre/post-repair`) | `<host>/<org>/<repo>` |
+| `GIT_HOP_REPO_ID` | all (except `pre/post-repair`) | `<host>/<org>/<repo>`: the host of the origin URL, or `hop.gitDomain` when it has none |
 | `GIT_HOP_BRANCH` | all (except `pre/post-repair`) | Branch name; empty for `pre-clone` |
 | `GIT_HOP_OLD_BRANCH`, `GIT_HOP_NEW_BRANCH`, `GIT_HOP_OLD_PATH`, `GIT_HOP_NEW_PATH` | `pre/post-worktree-move` | Before/after branch and path |
 | `GIT_HOP_FROM_BRANCH`, `GIT_HOP_FROM_WORKTREE_PATH` | `pre/post-worktree-switch` | Worktree being left. **Absent, not empty**, when there is no previous worktree |

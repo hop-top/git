@@ -54,6 +54,7 @@ The labspace dir `~/.w/ideacrafterslabs/git/` is a `git hop`-managed bare worktr
   - `internal/events` — event emission for plugins/integrations
   - `internal/task` — `tlc` lookup behind `add --task`
   - `internal/testenv` — isolated HOME/XDG env for tests (`TestMain`)
+  - `internal/repoid` — the repo ID (`<host>/<org>/<repo>`) state keys and `GIT_HOP_REPO_ID`, plus origin-URL host parsing
 
 ### Two domain concepts
 - **Hub** — the dir where you run `git hop` from, found by walking up for `hop.json`. Usually a bare repo with worktrees under `hops/<branch>/`, a `hop.json` listing them (`branches`), and a `current` symlink.
@@ -98,6 +99,7 @@ Production code constructs concrete impls; tests inject fakes. Add new dependenc
 - **Bare-worktree repos**: don't conclude a repo is empty just because the root has no source files; the source lives in `hops/<branch>/` (usually `hops/main/`). `git hop init` converts regular repos to this layout.
 - **`current` symlink**: each hub has a `current` symlink pointing at the last-hopped worktree. `cmd/remove.go:updateCurrentToDefault` handles fallback when the target of `current` is removed.
 - **State v2 keyed by worktree path**: `state.json` format 2.x keys each repo's `worktrees` by absolute worktree path (`state.WorktreeKey`), not branch, so two hubs can both record the same branch. Look entries up with `RepositoryState.Worktree(hubPath, branch)` / `WorktreeAt(path)` and compare paths with `state.SamePath`. `state.LoadState` migrates branch-keyed entries in memory (`internal/state/migrate.go`); the next save backs the old file up to `$XDG_STATE_HOME/git-hop/backups/state-<ts>.json`.
+- **Repo IDs carry the origin's host**: a repository's state key and `GIT_HOP_REPO_ID` are `<host>/<org>/<repo>`, the host from the origin URL or `hop.gitDomain` when it has none (resolved per hub by `repoid.GitDomainIn`, the same `config.ResolveScoped` resolver as `hop.dataLayout`). Build one only with `repoid.New` / `NewIn` / `For`; never `fmt.Sprintf` it. `state.LoadState` moves repositories an earlier release keyed `github.com/...` to their origin's host (`internal/state/rekey.go`), keeping both entries when the new key is taken (a doctor issue).
 - **Transactional creates**: `WorktreeManager.CreateWorktreeTransactional` rolls back on failure (cleans up half-created dirs, port allocations, etc.). Prefer it over `CreateWorktree` for any user-facing operation.
 - **`go test ./...` vs `make test`**: `make test` only runs `./internal/...`. CI runs the full tree. If your change affects `cmd/` or `test/`, run `go test ./...` locally.
 
