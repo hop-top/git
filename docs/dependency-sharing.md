@@ -73,6 +73,12 @@ even where that path does not exist.
 
 The cost is one full install per worktree for such repositories.
 
+pnpm installs always stay in the worktree, recognised by the
+`node_modules/.modules.yaml` pnpm writes. pnpm refuses to install through a
+link to a directory outside the project (`ERR_PNPM_UNSAFE_MODULES_DIR`), and
+it already shares package files between projects through its own
+content-addressable store, so a shared `node_modules` would gain little.
+
 - `git hop doctor` accepts a local install marked for the current lockfile,
   and `--fix` leaves it alone.
 - One marked for an older lockfile is a warning; the next install refreshes
@@ -81,8 +87,8 @@ The cost is one full install per worktree for such repositories.
   install that could not be shared anyway is a warning too, and the next
   install (or `doctor --fix`) marks it again. An unmarked `node_modules`
   that could be shared is still reported as a local folder.
-- A worktree linked to a store install with such links, made by an earlier
-  release, is an error: `doctor --fix` gives the worktree its own install,
+- A worktree linked to a store install with such links, or to a pnpm
+  install, made by an earlier release, is an error: `doctor --fix` gives the worktree its own install,
   and `git hop env gc` removes the store install once nothing links to it.
 
 ### Installs from earlier releases
@@ -140,7 +146,7 @@ git-hop includes built-in support for common package managers:
 | Package Manager | Detect File | Lockfile | Deps Dir |
 |----------------|-------------|----------|----------|
 | npm | package.json | package-lock.json, npm-shrinkwrap.json | node_modules |
-| pnpm | pnpm-lock.yaml | pnpm-lock.yaml | node_modules |
+| pnpm | pnpm-lock.yaml | pnpm-lock.yaml | node_modules (per worktree, never shared) |
 | yarn | yarn.lock | yarn.lock | node_modules |
 | Go | go.mod | go.sum | vendor |
 | pip | requirements.txt, setup.py | requirements.txt | venv |
@@ -437,8 +443,8 @@ It detects:
 - **Damaged shared installs**: a link to an install missing entries it was
   made with, e.g. emptied by `npm ci` in another worktree — error
 - **Links to unshareable store installs**: a store install with links out
-  of it (`file:`, `link:`, workspace packages), made by an earlier
-  release — error
+  of it (`file:`, `link:`, workspace packages), or a pnpm install, made by
+  an earlier release — error
 - **Local installs for an older lockfile**, or not marked by git-hop but
   unshareable anyway — warning
 - **Stale symlinks** pointing to old lockfile versions — warning

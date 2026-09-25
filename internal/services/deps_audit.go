@@ -123,6 +123,9 @@ func (m *DepsManager) unshareableStoreInstall(pm PackageManager, target string, 
 // before it was put in the store; only installs an earlier release put
 // there are walked for links.
 func (m *DepsManager) storeLocalReason(depsPath string) (LocalReason, error) {
+	if isPnpmInstall(m.fs, depsPath) {
+		return LocalReasonPnpm, nil
+	}
 	if ok, _ := afero.Exists(m.fs, InstallManifestPath(depsPath)); ok {
 		return "", nil
 	}

@@ -326,7 +326,9 @@ This checks for:
 An install with `file:`, `link:` or workspace dependencies has links out of
 `node_modules` that only resolve from the worktree that made it, so it stays
 in that worktree (marked with `node_modules/.git-hop-local`) instead of the
-store. `doctor` accepts it and `--fix` leaves it alone.
+store. `doctor` accepts it and `--fix` leaves it alone. pnpm installs always
+stay in the worktree: pnpm refuses to install through a link out of the
+project.
 - Orphaned dependencies (no branches using them)
 
 #### Auto-fix Issues
