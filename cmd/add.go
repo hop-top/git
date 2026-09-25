@@ -217,12 +217,26 @@ created or written and no hook runs.`,
 
 		// Seed the new worktree with the ignored local state (.env files,
 		// tool config, local caches) of the worktree it was forked from.
-		// Runs before the deps subscriber so any deps-managed path is still
+		// Runs before the set-up below so any deps-managed path is still
 		// absent here and the symlink EnsureDeps creates lands on a clean
 		// name. Never fatal — see copyIgnoredIntoWorktree.
 		copyIgnoredIntoWorktree(fs, g, hub, hopspacePath, worktreePath, startPoint,
 			globalConfig, config.NewGitConfig(),
 			copyIgnoredOverride(cmd, addCopyIgnoredFlag, addNoCopyIgnoredFlag))
+
+		// Environment and shared deps before post-worktree-add, so the hook
+		// finds .env, the compose override and linked deps. Never fatal.
+		envTarget := services.EnvTarget{
+			Root:         worktreePath,
+			Branch:       branch,
+			HopspacePath: hopspacePath,
+			Hub:          hub.Config,
+		}
+		setup := services.SetUpWorktree(fs, d, envTarget, globalConfig)
+		var branchPorts *config.BranchPorts
+		if setup.Env != nil {
+			branchPorts = setup.Env.Ports
+		}
 
 		// Execute post-worktree-add hook
 		if _, err := hookRunner.ExecuteHookWithDetector("post-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
@@ -253,59 +267,6 @@ created or written and no hook runs.`,
 
 		recordAddedWorktree(fs, hub, repoID, hubPath, branch, worktreePath)
 
-		// Generate Environment
-		var branchPorts *config.BranchPorts
-		env, err := services.GenerateWorktreeEnv(fs, d, hopspacePath, worktreePath, branch, hub.Config.Repo.Org, hub.Config.Repo.Repo)
-		if err != nil {
-			output.Error("Failed to generate environment: %v", err)
-		} else if env != nil {
-			branchPorts = env.Ports
-		}
-
-		// Register deps-as-sync-subscriber on worktree.created.
-		// EnsureDeps errors are non-fatal: log warning, return nil
-		// so bus.Publish does not propagate as fatal.
-		//
-		// The "Setting up dependencies…" / "Dependencies installed." UX
-		// pair is gated on a package manager actually being detected —
-		// emitting them for a plain project (no package.json, no go.mod,
-		// etc.) is misleading noise. Covered by
-		// TestAdd_NoDockerProject_NoEnvNoise.
-		cli.EventBus.Subscribe(string(events.WorktreeCreated),
-			func(ctx context.Context, e bus.Event) error {
-				dm, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
-				if err != nil {
-					output.Warn("Failed to initialize dependency manager: %v", err)
-					return nil
-				}
-				payload := e.Payload.(events.WorktreeEvent)
-				detected, err := dm.DetectInWorktree(payload.Path)
-				if err != nil {
-					output.Warn("Failed to detect package managers: %v", err)
-					return nil
-				}
-				if len(detected) == 0 {
-					// No PM → no UX, no work. Stay silent.
-					return nil
-				}
-				output.Info("Setting up dependencies...")
-				if err := dm.EnsureDeps(payload.Path, payload.Branch); err != nil {
-					output.Warn("Failed to ensure dependencies: %v", err)
-					return nil
-				}
-				output.Info("Dependencies installed.")
-				// Emit deps.installed for external consumers.
-				_ = cli.EventBus.Publish(ctx, bus.NewEvent(
-					events.DepsInstalled, events.Source,
-					events.DepsEvent{
-						WorktreePath: payload.Path,
-						Branch:       payload.Branch,
-					},
-				))
-				return nil
-			},
-		)
-
 		// Update current symlink to point to new worktree
 		if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
 			// Don't fail on symlink error, just warn
@@ -317,7 +278,6 @@ created or written and no hook runs.`,
 		// the handler stays blind to it for the rest of the session.
 		refreshRootsCache(fs, hub, hubPath)
 
-		// Emit worktree.created — triggers deps subscriber above.
 		_ = cli.EventBus.Publish(context.Background(), bus.NewEvent(
 			events.WorktreeCreated, events.Source,
 			events.WorktreeEvent{
@@ -327,14 +287,10 @@ created or written and no hook runs.`,
 				RepoPath:     hubPath,
 			},
 		))
+		setup.PublishDepsInstalled(context.Background(), cli.EventBus)
 
 		// Last, once the worktree is complete: a failed start only warns.
-		envStarted := envStart && services.StartNewWorktreeEnv(fs, services.EnvTarget{
-			Root:         worktreePath,
-			Branch:       branch,
-			HopspacePath: hopspacePath,
-			Hub:          hub.Config,
-		}, globalConfig, cli.EventBus)
+		envStarted := envStart && services.StartNewWorktreeEnv(fs, envTarget, globalConfig, cli.EventBus)
 
 		if output.IsStructured() {
 			emitResult(cmd, newAddResult(g, hub, branch, worktreePath, !branchExisted, branchPorts, envStarted))

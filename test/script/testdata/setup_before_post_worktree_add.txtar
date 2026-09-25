@@ -1,0 +1,122 @@
+# add and clone set up the environment of the worktree they create before
+# post-worktree-add fires: ports, volumes, .env and compose override, then
+# (for add) the shared dependencies. Every hook of the worktree finds them.
+# The optional environment start runs last: after post-worktree-add for an
+# add, after post-clone for a clone. A failed set-up is reported; the hook
+# still fires and the command succeeds.
+#
+# Global post-worktree-add / post-clone hooks and stub docker / npm on PATH
+# log to events.log: each hook what it found, the docker stub each `up`.
+
+mkdir $WORK/bin
+cp $WORK/docker-stub $WORK/bin/docker
+cp $WORK/npm-stub $WORK/bin/npm
+chmod 755 $WORK/bin/docker
+chmod 755 $WORK/bin/npm
+env PATH=$WORK/bin${:}$PATH
+
+mkdir $WORK/.config/git-hop/hooks
+cp $WORK/hook $WORK/.config/git-hop/hooks/post-worktree-add
+cp $WORK/hook $WORK/.config/git-hop/hooks/post-clone
+chmod 755 $WORK/.config/git-hop/hooks/post-worktree-add
+chmod 755 $WORK/.config/git-hop/hooks/post-clone
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+cp $WORK/compose.yml docker-compose.yml
+cp $WORK/package.json package.json
+cp $WORK/package.json package-lock.json
+exec git add docker-compose.yml package.json package-lock.json
+exec git commit -m 'compose and npm'
+exec git push origin main
+exec git checkout -b other-lock
+cp $WORK/other-lock.json package-lock.json
+exec git commit -am 'other lockfile'
+exec git push origin other-lock
+cd $WORK
+
+# --- clone: set-up, post-worktree-add, post-clone, then the start ---
+exec git-hop $WORK/org/repo.git hub --env-start --hooks=none
+grep '\Apost-worktree-add main HOP_PORT_WEB=[0-9]+ override (deps|no-deps)\npost-clone main HOP_PORT_WEB=[0-9]+ override (deps|no-deps)\nup\n\z' $WORK/events.log
+
+# --- add: set-up (environment and deps), post-worktree-add, then the start ---
+rm $WORK/events.log
+cd $WORK/hub
+exec git-hop add feat/x --env-start
+grep '\Apost-worktree-add feat/x HOP_PORT_WEB=[0-9]+ override deps\nup\n\z' $WORK/events.log
+! grep 'HOP_PORT_WEB=8080 ' $WORK/events.log
+
+# --- add: a deps failure warns; the hook still fires and add succeeds ---
+# other-lock has a lockfile no worktree installed yet, so npm must run.
+rm $WORK/events.log
+env STUB_NPM_FAIL=1
+exec git-hop add other-lock
+stderr 'Failed to ensure dependencies'
+grep '\Apost-worktree-add other-lock HOP_PORT_WEB=[0-9]+ override no-deps\n\z' $WORK/events.log
+grep '"other-lock"' $WORK/hub/hop.json
+env STUB_NPM_FAIL=
+
+# --- a generation failure is reported; the hooks still fire ---
+# A file where the override's cache directory belongs fails generation.
+env XDG_CACHE_HOME=$WORK/broken-cache
+mkdir $WORK/broken-cache/git-hop
+cp $WORK/compose.yml $WORK/broken-cache/git-hop/org
+
+rm $WORK/events.log
+exec git-hop add feat/broken
+stderr 'Failed to generate environment'
+grep '\Apost-worktree-add feat/broken no-env no-override deps\n\z' $WORK/events.log
+grep '"feat/broken"' $WORK/hub/hop.json
+
+rm $WORK/events.log
+cd $WORK
+exec git-hop $WORK/org/repo.git hub-broken --hooks=none
+stderr 'Failed to generate environment'
+grep '\Apost-worktree-add main no-env no-override (deps|no-deps)\npost-clone main no-env no-override (deps|no-deps)\n\z' $WORK/events.log
+exists $WORK/hub-broken/hop.json
+
+-- compose.yml --
+services:
+  web:
+    image: nginx
+    ports:
+      - "8080:80"
+-- package.json --
+{}
+-- other-lock.json --
+{"lockfileVersion": 3}
+-- hook --
+#!/bin/sh
+env=no-env
+override=no-override
+deps=no-deps
+if [ -f "$GIT_HOP_WORKTREE_PATH/.env" ]; then
+	env=$(grep '^HOP_PORT_WEB=' "$GIT_HOP_WORKTREE_PATH/.env")
+fi
+if [ -f "$XDG_CACHE_HOME/git-hop/org/repo/$GIT_HOP_BRANCH/docker-compose.override.yml" ]; then
+	override=override
+fi
+if [ -f "$GIT_HOP_WORKTREE_PATH/node_modules/installed" ]; then
+	deps=deps
+fi
+echo "$GIT_HOP_HOOK_NAME $GIT_HOP_BRANCH $env $override $deps" >> "$WORK/events.log"
+-- npm-stub --
+#!/bin/sh
+if [ -n "$STUB_NPM_FAIL" ]; then
+	echo "stub: npm failed" >&2
+	exit 1
+fi
+mkdir -p node_modules && echo ok > node_modules/installed
+-- docker-stub --
+#!/bin/sh
+case " $* " in
+*" up "*)
+	echo "up" >> "$WORK/events.log"
+	exit 0
+	;;
+*" config "*)
+	exit 1
+	;;
+esac
+exit 0

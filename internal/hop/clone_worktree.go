@@ -48,10 +48,11 @@ type HookDispatchOptions struct {
 	// exist yet. The hook runner resolves pre-clone at hopspace and
 	// global level only, since there is no repo on disk to hold one.
 	PreClone func(path, repoID, branch string) error
-	// PostWorktreeAdd fires after the initial worktree exists AND after
-	// the committed-hook mirror has run, so a repo-level hook carried by
-	// the clone itself applies to the very worktree that carried it. Its
-	// path argument is the initial worktree, never the hub root.
+	// PostWorktreeAdd fires after the initial worktree exists, after the
+	// committed-hook mirror has run (so a repo-level hook carried by the
+	// clone itself applies to the very worktree that carried it) and after
+	// SetUpEnv. Its path argument is the initial worktree, never the hub
+	// root.
 	PostWorktreeAdd func(path, repoID, branch string) error
 	// PostClone fires last, after the initial worktree is fully
 	// registered and SetUpEnv has run. Its path argument is the initial
@@ -59,9 +60,10 @@ type HookDispatchOptions struct {
 	PostClone func(path, repoID, branch string) error
 	// SetUpEnv is not a hook: it prepares the initial worktree's
 	// environment (ports, volumes, .env, compose override) for the hub at
-	// hubPath. It runs after PostWorktreeAdd, as add generates after its
-	// own post-worktree-add, and before PostClone, so post-clone sees the
-	// environment. It reports its own failures and never fails the clone.
+	// hubPath. It runs before PostWorktreeAdd, as add sets up before its
+	// own post-worktree-add, so every hook of the initial worktree sees
+	// the environment. It reports its own failures and never fails the
+	// clone.
 	SetUpEnv func(hubPath string)
 }
 
@@ -179,6 +181,12 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		}
 	}
 
+	// The environment is set up before any hook of the initial worktree
+	// fires, so post-worktree-add and post-clone both find it.
+	if dispatch.SetUpEnv != nil {
+		dispatch.SetUpEnv(projectRoot)
+	}
+
 	// ORDERING IS LOAD-BEARING: post-worktree-add fires AFTER the mirror
 	// above, which is what makes a committed repo-level hook apply to the
 	// very worktree that carried it. Moving this dispatch before the
@@ -190,12 +198,8 @@ func CloneWorktree(fs afero.Fs, g git.GitInterface, uri, projectPath string, glo
 		}
 	}
 
-	if dispatch.SetUpEnv != nil {
-		dispatch.SetUpEnv(projectRoot)
-	}
-
 	// post-clone fires last, once the initial worktree is fully
-	// registered (state, symlink, mirror, post-worktree-add, environment
+	// registered (state, symlink, mirror, environment, post-worktree-add
 	// all done).
 	if dispatch.PostClone != nil {
 		if err := dispatch.PostClone(absMainWorktreePath, repoID, defaultBranch); err != nil {

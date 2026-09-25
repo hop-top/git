@@ -197,15 +197,15 @@ func assertSeq(t *testing.T, got, want []string) {
 // committed in the cloned repo apply to the very worktree that carried
 // it — mirror it into the hopspace first, then fire.
 //
-// "env" sits after post-worktree-add, as add generates after its own
-// post-worktree-add, and before post-clone, so post-clone sees the
-// worktree's .env and compose override.
+// "env" sits before post-worktree-add, as add sets up before its own
+// post-worktree-add, so every hook of the initial worktree (post-worktree-add
+// and post-clone alike) sees its .env and compose override.
 func TestCloneDispatchesHooksInOrder(t *testing.T) {
 	c := newCloneRecorder()
 	projectRoot := runRecordedClone(t, c)
 
 	assertSeq(t, c.seq, []string{
-		"pre-clone", "mirror", "post-worktree-add", "env", "post-clone",
+		"pre-clone", "mirror", "env", "post-worktree-add", "post-clone",
 	})
 
 	if got := c.paths["env"]; got != projectRoot {

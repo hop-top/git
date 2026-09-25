@@ -13,7 +13,7 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | Hook Name | When It Runs | Resolvable levels |
 |-----------|--------------|-------------------|
 | `pre-worktree-add` | `git hop add`, before the worktree is created. Non-zero exit aborts the add. | repo (via parent walk only — the worktree does not exist yet), hopspace, global |
-| `post-worktree-add` | `git hop add`, after the worktree exists. Also fired by `git hop clone` and by `git hop init` (bare or regular conversion) for the initial worktree, after the committed-hook mirror — see [Init hooks](#init-hooks). Failure warns, does not roll back. | repo, hopspace, global |
+| `post-worktree-add` | `git hop add`, after the worktree exists and its environment is set up: `.env`, compose override and linked shared deps exist when the hook runs — see [Add hooks](#add-hooks). Also fired by `git hop clone` (after the same set-up) and by `git hop init` (bare or regular conversion) for the initial worktree, after the committed-hook mirror — see [Clone hooks](#clone-hooks) and [Init hooks](#init-hooks). Failure warns, does not roll back. | repo, hopspace, global |
 | `pre-worktree-remove` | `git hop remove`, before the worktree is deleted. Non-zero exit aborts the remove. | repo, hopspace, global |
 | `post-worktree-remove` | `git hop remove`, after the worktree is gone and state is updated. Failure warns. | hopspace, global (the repo-level file was inside the worktree that was just deleted) |
 | `pre-worktree-move` | `git hop move`, before the rename and after the move's own refusals (target already registered, target an existing local branch the worktree does not have checked out, hopspace unreadable), so a move git-hop rejects never fires it. Non-zero exit aborts the move. Path is the OLD worktree. | repo, hopspace, global |
@@ -21,7 +21,7 @@ This table is exhaustive against `ValidHookNames` in `internal/hooks/runner.go`.
 | `pre-worktree-switch` | `git hop <branch>`, before the `current` symlink is rewritten. Non-zero exit aborts the switch. **Never fires for a plain `cd`** — see [Switch hooks](#switch-hooks). | repo, hopspace, global |
 | `post-worktree-switch` | `git hop <branch>` after the symlink is written, and on a plain `cd` into a registered worktree. Failure warns. The only hook that may exit [93](#the-navigation-handled-directive-exit-93). | repo, hopspace, global |
 | `pre-clone` | `git hop clone`, before any filesystem work. Non-zero exit aborts the clone. | hopspace, global **only** — no repo level and no parent walk; see [`pre-clone` has no repo level](#pre-clone-has-no-repo-level) |
-| `post-clone` | `git hop clone`, after state, symlink, mirror, `post-worktree-add`, and the initial worktree's environment generation: its `.env` and compose override exist when the hook runs. The optional environment start (`--env-start`, `hop.env.autoStart`) comes after it. Failure warns. | repo, hopspace, global |
+| `post-clone` | `git hop clone`, after state, symlink, mirror, the initial worktree's environment generation, and `post-worktree-add`: its `.env` and compose override exist when the hook runs. The optional environment start (`--env-start`, `hop.env.autoStart`) comes after it. Failure warns. | repo, hopspace, global |
 | `pre-repair` | `git hop repair`, before the backup and any mutation; only when the plan has mutations and `--dry-run` was not passed. Non-zero exit aborts. See [Repair hooks](#repair-hooks). | repo (anchored on the hub: `<hub>/.git-hop/hooks/`, plus parent walk), hopspace, global |
 | `post-repair` | `git hop repair`, after mutations and post-verification. Exit status ignored entirely. | repo (anchored on the hub), hopspace, global |
 | `pre-env-start` | **Never dispatched.** Accepted by `ValidateHookName` and mirrored by the installer, but no code fires it. | — |
@@ -234,6 +234,31 @@ exit 93                                      # handled: stand down
 
 The `93` constant is `hooks.ExitNavigationHandled`. See `examples/tmux/hooks/post-worktree-switch` for the full worked version, including the case where the user is running outside tmux while a session exists elsewhere — which also exits 0, because the *calling* shell was not moved.
 
+## Add hooks
+
+`git hop add` sets up the new worktree's environment **before** any hook of that worktree fires, so every hook finds it ready:
+
+```
+pre-worktree-add
+  ↓  (worktree created; ignored local files copied from the source worktree)
+environment set-up: ports, volumes, .env, compose override, then shared deps
+  ↓
+post-worktree-add
+  ↓  (hop.json, state, current symlink; worktree.created, deps.installed)
+environment start, only with --env-start / hop.env.autoStart
+```
+
+What exists when each hook runs:
+
+| Hook | Worktree | `.env` + compose override | Shared deps (`node_modules`, ...) | Registered in `hop.json` | Environment running |
+|---|---|---|---|---|---|
+| `pre-worktree-add` | no | no | no | no | no |
+| `post-worktree-add` | yes | yes | yes (linked) | no | no |
+
+The `.env` and override exist only for a worktree with a Docker environment (a compose file); the deps only for a worktree with a detected package manager and lockfile. The set-up never fails the add: a generation or deps failure is reported, and `post-worktree-add` still fires, finding whatever did get set up.
+
+> **Behaviour change.** `post-worktree-add` used to run before the set-up. A hook that writes its own `.env` now finds git-hop's already there, with the allocated `HOP_PORT_*` values: append to it (`>>`) rather than overwrite it, or the ports are lost. A hook that installs dependencies now finds them linked into the hopspace's shared store; installing again writes through that link into the store other worktrees share, so leave dependencies to git-hop.
+
 ## Clone hooks
 
 `git hop clone` runs the widest hook sequence in git-hop, and **the ordering is load-bearing**:
@@ -242,16 +267,16 @@ The `93` constant is `hooks.ExitNavigationHandled`. See `examples/tmux/hooks/pos
 pre-clone
   ↓  (clone; hopspace init; state; current symlink)
 committed-hook mirror
-  ↓
-post-worktree-add
   ↓  (environment generation: ports, volumes, .env, compose override)
+post-worktree-add
+  ↓
 post-clone
   ↓  (environment start, only with --env-start / hop.env.autoStart)
 ```
 
 Dispatched from `internal/hop/clone_worktree.go`. Because `internal/hooks` already imports `internal/hop` (for `LooksLikeGitCheckout`), `internal/hop` cannot import `internal/hooks` back without an import cycle — so the dispatch is injected as callbacks (`HookDispatchOptions`), built by `BuildHookDispatch` in `internal/cli/root.go`. `git hop init` reuses the same builder — see [Init hooks](#init-hooks).
 
-The environment is generated after `post-worktree-add`, as `git hop add` generates after its own `post-worktree-add`, and before `post-clone`, so a `post-clone` hook can read the allocated ports from the worktree's `.env`. A generation failure is reported and the clone continues; `post-clone` still fires. The generation is injected like the hooks (`HookDispatchOptions.SetUpEnv`) and is not itself a hook.
+The environment is generated before `post-worktree-add`, as `git hop add` sets up before its own `post-worktree-add`, so both `post-worktree-add` and `post-clone` can read the allocated ports from the worktree's `.env`. A generation failure is reported and the clone continues; both hooks still fire. The generation is injected like the hooks (`HookDispatchOptions.SetUpEnv`) and is not itself a hook. The [behaviour change](#add-hooks) noted for add applies here too.
 
 ### Why mirror-then-fire
 
@@ -309,6 +334,7 @@ post-worktree-add
 The dispatch follows the mirror for the reason given in [Why mirror-then-fire](#why-mirror-then-fire): a `post-worktree-add` committed to the repo being converted applies to the worktree that carries it. A failing hook warns; the conversion stands.
 
 - Both conversions fire it. Register-as-is and a re-run on an already-initialized repo convert nothing and fire nothing.
+- Unlike add and clone, init sets up no environment first: its `post-worktree-add` finds no generated `.env`, compose override or linked shared deps.
 - Like clone, init fires no `pre-worktree-add`. It fires no `pre-clone` / `post-clone` either: nothing is cloned.
 - `git hop init --dry-run` lists the `post-worktree-add` hook it would run (when one resolves) and runs none.
 - `git hop init --no-hooks` fires nothing: no hooks directory, no committed-hook mirror (unless `--hooks` names a mode), and no `post-worktree-add`. The `--dry-run` preview agrees and lists no hook.
@@ -604,12 +630,13 @@ Load different configurations per branch:
 
 cd "$GIT_HOP_WORKTREE_PATH"
 
+# Append: git-hop has already written .env with the allocated ports.
 if [ "$GIT_HOP_BRANCH" = "main" ]; then
-    cp .env.production .env
+    cat .env.production >> .env
 elif [ "$GIT_HOP_BRANCH" = "staging" ]; then
-    cp .env.staging .env
+    cat .env.staging >> .env
 else
-    cp .env.development .env
+    cat .env.development >> .env
 fi
 
 echo "Environment configured for $GIT_HOP_BRANCH"
@@ -637,9 +664,9 @@ osascript -e "display notification \"$msg\" with title \"git-hop\""
 exit 0   # 0, not 93: we navigated nothing
 ```
 
-### 5. Dependency Installation
+### 5. Per-Worktree Tooling
 
-Install dependencies after creating a worktree:
+git-hop installs and links the shared dependencies of every package manager it detects (npm, pnpm, yarn, pip, ...) before `post-worktree-add` fires, so the hook does not install them again (see [Add hooks](#add-hooks)). Use it for the per-worktree setup git-hop does not manage:
 
 ```bash
 #!/bin/bash
@@ -647,19 +674,14 @@ Install dependencies after creating a worktree:
 
 cd "$GIT_HOP_WORKTREE_PATH"
 
-echo "Installing dependencies for $GIT_HOP_BRANCH..."
-
-# Check for package.json
-if [ -f package.json ]; then
-    npm ci
+# Dependencies are already linked; tools that need them can run.
+if [ -f .pre-commit-config.yaml ]; then
+    pre-commit install
 fi
 
-# Check for go.mod
-if [ -f go.mod ]; then
-    go mod download
+if [ -f .envrc ]; then
+    direnv allow
 fi
-
-echo "Dependencies installed"
 ```
 
 ### 6. Branch Name Validation
