@@ -63,11 +63,7 @@ func runEnvCommand(action string) {
 
 	// Load global config
 	globalLoader := config.NewGlobalLoader()
-	globalConfig, err := globalLoader.Load()
-	if err != nil {
-		output.Warn("Failed to load global config, using defaults: %v", err)
-		globalConfig = globalLoader.GetDefaults()
-	}
+	globalConfig := globalLoader.Load()
 
 	// Hub context is optional: outside a hub the worktree's own files
 	// still select a manager.

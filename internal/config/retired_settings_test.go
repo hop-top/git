@@ -42,10 +42,7 @@ func TestMigration_DropsRetiredSettings(t *testing.T) {
 
 	store := map[string]string{}
 	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 
 	want := []string{"hop.backup.maxBackups", "hop.gitDomain", "hop.migrated"}
 	if got := hopKeys(store); strings.Join(got, ",") != strings.Join(want, ",") {
@@ -67,10 +64,7 @@ func TestLoad_IgnoresRetiredSettingsInGitConfig(t *testing.T) {
 	store["hop.showAllManagedRepos"] = "not-a-bool"
 
 	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 	if defs := loader.GetDefaults(); !reflect.DeepEqual(cfg, defs) {
 		t.Errorf("Load with retired keys = %+v\nwant defaults %+v", cfg, defs)
 	}

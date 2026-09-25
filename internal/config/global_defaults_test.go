@@ -24,7 +24,7 @@ func memGitConfig(store map[string]string) *GitConfig {
 	}
 }
 
-// GetDefaults is the fallback when Load fails; Load reads the git-config
+// GetDefaults is what Load gives with no hop.* keys; Load reads the git-config
 // defaults table. Setting every key in that table explicitly to its default
 // value must load exactly GetDefaults: the explicit-value parse path and the
 // fallback path agree for every key GlobalConfig models.
@@ -43,10 +43,7 @@ func TestGetDefaults_AgreesWithGitConfigDefaultsForEveryKey(t *testing.T) {
 func TestGetDefaults_EqualsLoadOnEmptyGitConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	loader := NewGlobalLoaderWithGitConfig(memGitConfig(map[string]string{}))
-	loaded, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load: %v", err)
-	}
+	loaded := loader.Load()
 	if defs := loader.GetDefaults(); !reflect.DeepEqual(loaded, defs) {
 		t.Errorf("Load on empty git config = %+v\nGetDefaults = %+v", loaded, defs)
 	}

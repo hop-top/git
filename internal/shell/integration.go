@@ -85,10 +85,7 @@ func InstallIntegration(fs afero.Fs) (*IntegrationResult, error) {
 
 	// Update config
 	loader := config.NewGlobalLoader()
-	cfg, err := loader.Load()
-	if err != nil {
-		cfg = loader.GetDefaults()
-	}
+	cfg := loader.Load()
 
 	cfg.ShellIntegration.Status = "approved"
 	cfg.ShellIntegration.InstalledShell = shellType
@@ -111,10 +108,7 @@ func InstallIntegration(fs afero.Fs) (*IntegrationResult, error) {
 func UninstallIntegration(fs afero.Fs) error {
 	// Load config to get installed shell info
 	loader := config.NewGlobalLoader()
-	cfg, err := loader.Load()
-	if err != nil {
-		cfg = loader.GetDefaults()
-	}
+	cfg := loader.Load()
 
 	// Get shell and RC path
 	shellType := cfg.ShellIntegration.InstalledShell
@@ -148,10 +142,7 @@ func UninstallIntegration(fs afero.Fs) error {
 // SetIntegrationStatus updates the shell integration status in global config
 func SetIntegrationStatus(status string) error {
 	loader := config.NewGlobalLoader()
-	cfg, err := loader.Load()
-	if err != nil {
-		cfg = loader.GetDefaults()
-	}
+	cfg := loader.Load()
 
 	cfg.ShellIntegration.Status = status
 

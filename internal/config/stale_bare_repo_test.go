@@ -29,10 +29,7 @@ func TestLoad_StaleBareRepoGitConfigIsIgnored(t *testing.T) {
 			}
 			loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
 
-			cfg, err := loader.Load()
-			if err != nil {
-				t.Fatalf("Load() error = %v", err)
-			}
+			cfg := loader.Load()
 			if cfg.Defaults.GitDomain != "gitlab.com" {
 				t.Errorf("GitDomain = %q, want gitlab.com", cfg.Defaults.GitDomain)
 			}
@@ -66,10 +63,7 @@ func TestMigration_LegacyJSONWithBareRepo(t *testing.T) {
 	store := map[string]string{}
 	loader := config.NewGlobalLoaderWithGitConfig(fakeGitConfig(store))
 
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 	if store["hop.migrated"] != "true" {
 		t.Fatalf("legacy global.json was not migrated; store = %v", store)
 	}

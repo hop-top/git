@@ -37,10 +37,7 @@ func TestLoad_DefaultsFromGitConfig(t *testing.T) {
 	gc := fakeGitConfig(store)
 	loader := config.NewGlobalLoaderWithGitConfig(gc)
 
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 
 	// gitconfig.go defaults: gitDomain=github.com, env.autoStart=false
 	if cfg.Defaults.EnvAutoStart != false {
@@ -70,10 +67,7 @@ func TestLoad_OverridesFromGitConfig(t *testing.T) {
 	gc := fakeGitConfig(store)
 	loader := config.NewGlobalLoaderWithGitConfig(gc)
 
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	cfg := loader.Load()
 
 	if cfg.Defaults.GitDomain != "gitlab.com" {
 		t.Errorf("GitDomain = %q, want %q", cfg.Defaults.GitDomain, "gitlab.com")
@@ -140,10 +134,7 @@ func TestMigration_JSONToGitConfig(t *testing.T) {
 	gc := fakeGitConfig(store)
 	loader := config.NewGlobalLoaderWithGitConfig(gc)
 
-	cfg, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() with migration error = %v", err)
-	}
+	cfg := loader.Load()
 
 	// Verify scalars migrated to git config
 	if cfg.Defaults.GitDomain != "gitlab.com" {
@@ -202,10 +193,7 @@ func TestMigration_SkipsWhenAlreadyMigrated(t *testing.T) {
 	gc := fakeGitConfig(store)
 	loader := config.NewGlobalLoaderWithGitConfig(gc)
 
-	_, err := loader.Load()
-	if err != nil {
-		t.Fatalf("Load() error = %v", err)
-	}
+	loader.Load()
 
 	// global.json should NOT be renamed (migration skipped)
 	if _, err := os.Stat(jsonPath); os.IsNotExist(err) {

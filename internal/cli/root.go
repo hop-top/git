@@ -248,10 +248,10 @@ Worktree Mode:
 		g := git.New()
 
 		globalLoader := config.NewGlobalLoader()
-		globalCfg, err := globalLoader.Load()
+		globalCfg := globalLoader.Load()
 
 		domain := gitDomain
-		if domain == "" && err == nil {
+		if domain == "" {
 			domain = globalCfg.Defaults.GitDomain
 		}
 		if domain == "" {
@@ -299,9 +299,6 @@ Worktree Mode:
 				projectPath = args[1]
 			}
 
-			if err != nil {
-				globalCfg = globalLoader.GetDefaults()
-			}
 			startEnv := DecideAutoEnvStart(NegatableFlag(cmd, "env-start", cloneEnvStartFlag, cloneNoEnvStartFlag), globalCfg)
 
 			hookOpts := hop.HookMirrorOptions{

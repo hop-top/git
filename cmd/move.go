@@ -85,10 +85,7 @@ var moveCmd = &cobra.Command{
 
 		// Compute new path for hook env vars
 		globalLoader := config.NewGlobalLoader()
-		globalConfig, err := globalLoader.Load()
-		if err != nil {
-			globalConfig = globalLoader.GetDefaults()
-		}
+		globalConfig := globalLoader.Load()
 
 		dataHome := hop.GetGitHopDataHome()
 		ctx := hop.WorktreeLocationContext{

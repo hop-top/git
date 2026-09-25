@@ -75,10 +75,7 @@ func setUpInitWorktree(fs afero.Fs, hub *hop.Hub, repoPath, worktreePath, branch
 		return
 	}
 	loader := config.NewGlobalLoader()
-	globalConfig, err := loader.Load()
-	if err != nil {
-		globalConfig = loader.GetDefaults()
-	}
+	globalConfig := loader.Load()
 	target := services.EnvTarget{
 		Root:         worktreePath,
 		Branch:       branch,

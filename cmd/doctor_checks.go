@@ -169,10 +169,7 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 
 	globalLoader := config.NewGlobalLoader()
-	globalConfig, err := globalLoader.Load()
-	if err != nil {
-		globalConfig = globalLoader.GetDefaults()
-	}
+	globalConfig := globalLoader.Load()
 
 	depsManager, err := services.NewDepsManager(fs, hopspacePath, globalConfig)
 	if err != nil {

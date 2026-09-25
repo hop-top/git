@@ -42,7 +42,10 @@ func NewGlobalLoaderWithGitConfig(gc *GitConfig) *GlobalLoader {
 // Load reads global config from git config hop.* keys,
 // falling back to compiled defaults for missing keys.
 // A legacy global.json is migrated first, once (see maybeMigrate).
-func (l *GlobalLoader) Load() (*GlobalConfig, error) {
+// It cannot fail: a managers.json that cannot be read or parsed is named in
+// a warning and skipped (built-in managers apply), and the hop.* settings
+// from git config still hold.
+func (l *GlobalLoader) Load() *GlobalConfig {
 	if err := l.maybeMigrate(); err != nil {
 		// Migration failure is non-fatal; log and continue
 		output.Warn("git-hop config migration failed: %v", err)
@@ -53,12 +56,13 @@ func (l *GlobalLoader) Load() (*GlobalConfig, error) {
 	// Load complex arrays from managers.json sidecar
 	mgrs, err := l.loadManagers()
 	if err != nil {
-		return nil, fmt.Errorf("load managers: %w", err)
+		output.WarnAlways("ignoring %v", managersFileError(err))
+		return cfg
 	}
 	cfg.PackageManagers = mgrs.PackageManagers
 	cfg.EnvironmentManagers = mgrs.EnvironmentManagers
 
-	return cfg, nil
+	return cfg
 }
 
 // GetDefaults returns the default global configuration: what Load returns
@@ -193,12 +197,28 @@ type managersFile struct {
 	EnvironmentManagers []EnvManagerConfig     `json:"environmentManagers,omitempty"`
 }
 
+// ManagersPath is where the managers.json sidecar lives.
+func ManagersPath() string { return getManagersPath() }
+
 func getManagersPath() string {
 	dir, err := xdg.ConfigDir("git-hop")
 	if err != nil {
 		return filepath.Join(".config", "git-hop", "managers.json")
 	}
 	return filepath.Join(dir, "managers.json")
+}
+
+// ManagersFileError reports why managers.json cannot be used, naming the
+// file; nil when it is absent or valid.
+func (l *GlobalLoader) ManagersFileError() error {
+	if _, err := l.loadManagers(); err != nil {
+		return managersFileError(err)
+	}
+	return nil
+}
+
+func managersFileError(err error) error {
+	return fmt.Errorf("%s: %w", getManagersPath(), err)
 }
 
 func (l *GlobalLoader) loadManagers() (*managersFile, error) {
