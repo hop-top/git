@@ -62,7 +62,7 @@ func TestPruneAll_TwoHubsSameBranch(t *testing.T) {
 	st := twoHubRepoState(t, fs)
 	require.NoError(t, fs.RemoveAll("/hubs/b/hops/feat"))
 
-	counts := runPruneAll(fs, mocks.NewMockGit(), st, false)
+	counts := runPruneAll(fs, mocks.NewMockGit(), st, false, nil)
 
 	assert.Equal(t, 1, counts.worktrees)
 	repo := st.Repositories[registerRepoID]

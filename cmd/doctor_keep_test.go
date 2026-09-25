@@ -89,7 +89,7 @@ func TestFixMissingWorktrees_ReportsKept(t *testing.T) {
 	g.Runner.Responses = map[string]string{hubPath + ":git branch --merged main": "  merged\n* main\n"}
 
 	var r doctorReport
-	resolved, kept := fixMissingWorktrees(fs, g, st, nil, doctorOpts{fix: true, dryRun: true}, &r)
+	resolved, kept := fixMissingWorktrees(fs, g, st, nil, doctorOpts{fix: true, dryRun: true}, &r, nil)
 
 	assert.Equal(t, 1, resolved, "the merged entry would be removed")
 	assert.True(t, kept.has(path("usb")), "a locked worktree is kept")

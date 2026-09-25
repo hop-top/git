@@ -169,24 +169,21 @@ var moveCmd = &cobra.Command{
 
 		// Update global state
 		// A state file that cannot be read is not replaced.
-		if st, err := state.LoadState(fs); err != nil {
-			output.Warn("Failed to update state: %v", err)
-		} else if st.Repositories[repoID] == nil {
-			output.Warn("Failed to update state: repository not found: %s", repoID)
-		} else {
+		if err := state.Update(fs, func(st *state.State) error {
+			if st.Repositories[repoID] == nil {
+				return fmt.Errorf("repository not found: %s", repoID)
+			}
 			_ = st.RemoveWorktreeAt(repoID, actualOldPath)
-			if err := st.PutWorktree(repoID, &state.WorktreeState{
+			return st.PutWorktree(repoID, &state.WorktreeState{
 				Path:         actualNewPath,
 				Branch:       newBranch,
 				Type:         "linked",
 				HubPath:      hubPath,
 				CreatedAt:    time.Now(),
 				LastAccessed: time.Now(),
-			}); err != nil {
-				output.Warn("Failed to update state: %v", err)
-			} else if err := state.SaveState(fs, st); err != nil {
-				output.Warn("Failed to save state: %v", err)
-			}
+			})
+		}); err != nil {
+			output.Warn("Failed to update state: %v", err)
 		}
 
 		// Rekey ports/volumes configs

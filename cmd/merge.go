@@ -182,13 +182,10 @@ If only one argument is given, the current branch is used as the source.`,
 		}
 
 		// Update global state
-		st, err := state.LoadState(fs)
-		if err == nil {
-			if err := st.RemoveWorktreeAt(repoID, srcPath); err != nil {
-				output.Warn("Failed to update state: %v", err)
-			} else if err := state.SaveState(fs, st); err != nil {
-				output.Warn("Failed to save state: %v", err)
-			}
+		if err := state.Update(fs, func(st *state.State) error {
+			return st.RemoveWorktreeAt(repoID, srcPath)
+		}); err != nil {
+			output.Warn("Failed to update state: %v", err)
 		}
 
 		// Symlink "current" → receiving branch worktree

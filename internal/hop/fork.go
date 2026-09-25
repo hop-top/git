@@ -244,49 +244,34 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 
 	// Update global state
 	// A state file that cannot be read is not replaced.
-	st, err := state.LoadState(fs)
-	if err != nil {
-		output.Warn("Failed to update state: %v", err)
-		output.Info("Successfully attached fork branch as %s", forkBranchName)
-		return attached, nil
-	}
-
-	// Get the main repo ID
 	mainRepoID := repoid.For(hubPath, hub.Config.Repo)
-
-	// Ensure repository exists in state
-	if st.Repositories[mainRepoID] == nil {
-		st.AddRepository(mainRepoID, &state.RepositoryState{
-			URI:           hub.Config.Repo.URI,
-			Org:           hub.Config.Repo.Org,
-			Repo:          hub.Config.Repo.Repo,
-			DefaultBranch: hub.Config.Repo.DefaultBranch,
-			Worktrees:     make(map[string]*state.WorktreeState),
-			Hubs:          []*state.HubState{},
-		})
-	}
-
 	// The hub the fork's worktree belongs to, when state does not have it.
 	mode := state.HubModeLocal
 	if hub.Config.Repo.Mode == config.RepoModeGlobal {
 		mode = state.HubModeGlobal
 	}
-	_ = st.AddHub(mainRepoID, &state.HubState{Path: hubPath, Mode: mode, CreatedAt: time.Now(), LastAccessed: time.Now()})
-
-	// Add fork worktree to state
-	if err := st.PutWorktree(mainRepoID, &state.WorktreeState{
-		Path:         forkWorktreePath,
-		Branch:       forkBranchName,
-		Type:         "linked",
-		HubPath:      hubPath,
-		CreatedAt:    time.Now(),
-		LastAccessed: time.Now(),
+	if err := state.Update(fs, func(st *state.State) error {
+		if st.Repositories[mainRepoID] == nil {
+			st.AddRepository(mainRepoID, &state.RepositoryState{
+				URI:           hub.Config.Repo.URI,
+				Org:           hub.Config.Repo.Org,
+				Repo:          hub.Config.Repo.Repo,
+				DefaultBranch: hub.Config.Repo.DefaultBranch,
+				Worktrees:     make(map[string]*state.WorktreeState),
+				Hubs:          []*state.HubState{},
+			})
+		}
+		_ = st.AddHub(mainRepoID, &state.HubState{Path: hubPath, Mode: mode, CreatedAt: time.Now(), LastAccessed: time.Now()})
+		return st.PutWorktree(mainRepoID, &state.WorktreeState{
+			Path:         forkWorktreePath,
+			Branch:       forkBranchName,
+			Type:         "linked",
+			HubPath:      hubPath,
+			CreatedAt:    time.Now(),
+			LastAccessed: time.Now(),
+		})
 	}); err != nil {
 		output.Warn("Failed to update state: %v", err)
-	} else {
-		if err := state.SaveState(fs, st); err != nil {
-			output.Warn("Failed to save state: %v", err)
-		}
 	}
 
 	output.Info("Successfully attached fork branch as %s", forkBranchName)

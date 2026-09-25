@@ -58,20 +58,27 @@ func RegisterNewHub(fs afero.Fs, h NewHub) (HubRegistration, error) {
 		output.Warn("failed to create data directory: %v", err)
 	}
 
-	st, err := state.LoadState(fs)
-	if err != nil {
+	// The plan is made against state as it is when saved (state.Update),
+	// so what another run recorded meanwhile is merged with, not undone.
+	var plan HubRegistration
+	loaded := false
+	err := state.Update(fs, func(st *state.State) error {
+		loaded = true
+		plan = PlanHubRegistration(st, h)
+		if plan.Empty() {
+			return state.ErrSkipSave
+		}
+		plan.apply(st, h, time.Now())
+		return nil
+	})
+	switch {
+	case err == nil:
+		return plan, nil
+	case !loaded:
 		output.Warn("state not updated: %v", err)
 		return HubRegistration{}, err
-	}
-
-	plan := PlanHubRegistration(st, h)
-	if plan.Empty() {
-		return plan, nil
-	}
-	plan.apply(st, h, time.Now())
-	if err := state.SaveState(fs, st); err != nil {
+	default:
 		output.Warn("failed to save state: %v", err)
 		return plan, err
 	}
-	return plan, nil
 }

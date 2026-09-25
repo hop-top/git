@@ -1,7 +1,10 @@
 package hop
 
 import (
+	"fmt"
 	"path/filepath"
+	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -162,4 +165,41 @@ func TestRegisterNewHub_UnreadableStateUntouched(t *testing.T) {
 	data, readErr := afero.ReadFile(fs, statePath)
 	require.NoError(t, readErr)
 	assert.Equal(t, "{not json", string(data))
+}
+
+// Hubs registered at once (clones and inits running side by side) are
+// all recorded: none saves over another.
+func TestRegisterNewHub_ConcurrentHubsLoseNothing(t *testing.T) {
+	isolateRegisterPaths(t)
+	fs := afero.NewMemMapFs()
+
+	const hubs = 24
+	var want []string
+	var wg sync.WaitGroup
+	for i := 0; i < hubs; i++ {
+		hubPath := fmt.Sprintf("/hubs/h%02d", i)
+		want = append(want, hubPath)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := RegisterNewHub(fs, NewHub{
+				Org: "acme", Repo: "widget", DefaultBranch: "main", HubPath: hubPath,
+				WorktreePath: hubPath + "/hops/main", WorktreeType: WorktreeTypeBare,
+			})
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+
+	st, err := state.LoadState(fs)
+	require.NoError(t, err)
+	repo := st.Repositories["github.com/acme/widget"]
+	require.NotNil(t, repo)
+	var got []string
+	for _, h := range repo.Hubs {
+		got = append(got, h.Path)
+	}
+	sort.Strings(got)
+	assert.Equal(t, want, got)
+	assert.Len(t, repo.Worktrees, hubs)
 }

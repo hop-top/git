@@ -749,6 +749,18 @@ The state file tracks all repositories and their locations across your system so
 **Linux/Unix:** `~/.local/state/git-hop/state.json`
 **macOS:** `~/Library/Application Support/git-hop/state/state.json`
 
+Several git-hop commands can change state at once. Each change re-reads
+`state.json` and rewrites it while holding a lock on `state.json.lock`
+beside it, so one command never undoes another's change. `prune` and
+`doctor --fix` decide what to drop while they scan, without the lock,
+then drop exactly that from the file as it is when they save: entries
+another command recorded or removed meanwhile stay as it left them. Each
+save writes a temporary file of its own beside `state.json` and renames
+it over the file, so a reader always sees a whole file. The lock file
+exists only while a change is being written; the lock belongs to the
+process holding it and goes away when that process exits. A command that
+waits more than 30 seconds for the lock fails.
+
 ### Schema
 
 ```json
@@ -826,7 +838,8 @@ format.
 
 Before that first save, the old file is copied to
 `$XDG_STATE_HOME/git-hop/backups/state-<UTC timestamp>.json`. A backup is
-written once and never overwritten. `git hop prune --all` removes backups
+written once and never overwritten, and commands saving at once take one
+backup between them. `git hop prune --all` removes backups
 older than `hop.repair.backupRetention` (default 30 days; `0` or a
 negative value keeps them).
 

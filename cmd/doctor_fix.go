@@ -48,12 +48,15 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 	// below, once their outcome is known: a state save that fails turns
 	// every state repair into a failure.
 	var fixes doctorReport
+	// The repairs change st as they go and are recorded here, to be
+	// replayed on state.json as it is when saved (stateEdits).
+	var edits stateEdits
 
 	output.Info("\nFixing missing worktrees...")
-	missingFixed, kept := fixMissingWorktrees(fs, g, st, hubKept, opts, &fixes)
+	missingFixed, kept := fixMissingWorktrees(fs, g, st, hubKept, opts, &fixes, &edits)
 
 	output.Info("\nPruning orphaned hubs from state...")
-	hubsPruned := pruneOrphanedHubs(fs, st, dryRun)
+	hubsPruned := pruneOrphanedHubs(fs, st, dryRun, &edits)
 	for _, p := range hubsPruned {
 		recordStatePrune(&fixes, opts, p)
 	}
@@ -65,7 +68,7 @@ func fixStateIssues(fs afero.Fs, g git.GitInterface, st *state.State, hubPath st
 			output.Info("[dry-run] Would prune %d hub(s) from state", len(hubsPruned))
 			fixed += len(hubsPruned)
 		default:
-			if err := state.SaveState(fs, st); err != nil {
+			if err := edits.save(fs); err != nil {
 				output.Error("Failed to save state: %v", err)
 				for i := range fixes.records {
 					fixes.records[i].Kind = doctorKindFailed
@@ -200,8 +203,8 @@ func (k keptWorktrees) has(path string) bool {
 // then discard. An entry that would be put to the user counts as kept,
 // since the preview cannot know the answer.
 //
-// Each resolved entry is recorded in r.
-func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKept keptWorktrees, opts doctorOpts, r *doctorReport) (int, keptWorktrees) {
+// Each resolved entry is recorded in r, and each change to st in edits.
+func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKept keptWorktrees, opts doctorOpts, r *doctorReport, edits *stateEdits) (int, keptWorktrees) {
 	dryRun := !opts.mutating()
 	resolved := 0
 	kept := keptWorktrees{}
@@ -248,7 +251,7 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 
 			if merged {
 				output.Info("  Branch '%s' is merged into '%s'; auto-removing entry.", branch, repo.DefaultBranch)
-				delete(repo.Worktrees, key)
+				edits.dropWorktree(st, repoID, key)
 				r.repaired(opts, doctorCheckState, subject, "remove entry: branch is merged into %s", repo.DefaultBranch)
 				resolved++
 				continue
@@ -279,16 +282,14 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 					continue
 				}
 				kept.remove(wt.Path)
-				delete(repo.Worktrees, key)
-				wt.Path = newPath
-				_ = st.PutWorktree(repoID, wt)
+				edits.relocateWorktree(st, repoID, key, *wt, newPath)
 				output.Info("  Updated path to %s", newPath)
 				r.repaired(opts, doctorCheckState, subject, "relocate entry to %s", newPath)
 				resolved++
 
 			case 1: // delete
 				kept.remove(wt.Path)
-				delete(repo.Worktrees, key)
+				edits.dropWorktree(st, repoID, key)
 				output.Info("  Deleted entry for '%s'", branch)
 				r.repaired(opts, doctorCheckState, subject, "delete entry")
 				resolved++

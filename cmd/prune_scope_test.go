@@ -163,7 +163,7 @@ func TestRunPruneAll_ScopedLeavesOtherRepoUntouched(t *testing.T) {
 	scoped, err := resolvePruneScope(fs, st, filepath.Join(hubA, "hops", "main"), false)
 	require.NoError(t, err)
 
-	counts := runPruneAll(fs, mocks.NewMockGit(), scoped, false)
+	counts := runPruneAll(fs, mocks.NewMockGit(), scoped, false, nil)
 
 	// Repo A was pruned.
 	assert.Equal(t, 1, counts.worktrees, "repo A's orphaned worktree pruned")
@@ -213,7 +213,7 @@ func TestRunPruneAll_AllStillSweepsGlobally(t *testing.T) {
 	scoped, err := resolvePruneScope(fs, st, filepath.Join(hubA, "hops", "main"), true /* all */)
 	require.NoError(t, err)
 
-	counts := runPruneAll(fs, mocks.NewMockGit(), scoped, false)
+	counts := runPruneAll(fs, mocks.NewMockGit(), scoped, false, nil)
 
 	assert.Equal(t, 2, counts.worktrees, "--all must prune both repos' orphaned worktrees")
 	assert.Equal(t, 1, counts.hubs, "--all must prune repo B's orphaned hub")
@@ -292,7 +292,7 @@ func TestPruneOutput_NamesAffectedRepo(t *testing.T) {
 		&state.HubState{Path: "/elsewhere/b/gone-hub", Mode: "local"})
 
 	out := captureStdout(t, func() {
-		runPruneAll(fs, mocks.NewMockGit(), st, false)
+		runPruneAll(fs, mocks.NewMockGit(), st, false, nil)
 	})
 
 	assert.Contains(t, out, "github.com/other/b",
