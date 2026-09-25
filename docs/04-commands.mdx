@@ -1140,6 +1140,12 @@ One tab-separated record per worktree:
 ```
 
 `<status>` ∈ `ok | repaired`. `<action>` ∈ `noop | rewrite-gitdir | register | unregister | update-hopjson | record-base | restore-fetch-refspec`.
+An `update-hopjson` record that adds a worktree git knows but `hop.json`
+lacks carries, as `<new-value>`, the branch git has checked out there
+(`git worktree list --porcelain`): the entry is recorded under that
+branch, with the worktree's absolute path, whatever its directory is
+called. A worktree on a detached HEAD has no branch to record; repair
+leaves it out of `hop.json` with a warning.
 `--json` and `--format json` / `--format yaml` carry the same records with the keys
 `status`, `path`, `kind`, `old`, `new`, plus `reason`; see
 [Structured Output](./09-reference#repair).

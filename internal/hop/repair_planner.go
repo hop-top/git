@@ -59,6 +59,7 @@ func (p *Planner) Build(hubPath string, pathspec []string) (*Plan, error) {
 		return nil, fmt.Errorf("list worktrees: %w", err)
 	}
 	registered := parsePorcelainWorktrees(porcelain)
+	checkedOut := porcelainBranches(porcelain)
 
 	plan := &Plan{HubPath: hubPath}
 
@@ -109,10 +110,20 @@ func (p *Planner) Build(hubPath string, pathspec []string) (*Plan, error) {
 		}
 		exists, _ := afero.DirExists(p.fs, regPath)
 		if exists {
-			// Registered in git, on disk, but absent from hop.json.
+			// Registered in git, on disk, but absent from hop.json. It
+			// is recorded under the branch git has checked out there;
+			// without one there is nothing to record it under.
+			branch := checkedOut[regPath]
+			if branch == "" {
+				plan.Warnings = append(plan.Warnings, fmt.Sprintf(
+					"%s is registered in git but not in hop.json, and has a detached HEAD; "+
+						"check out a branch there and re-run `git hop repair` to add it", regPath))
+				continue
+			}
 			plan.Actions = append(plan.Actions, Action{
 				Kind:         ActionUpdateHopJSON,
 				WorktreePath: regPath,
+				NewValue:     branch,
 				Reason:       "registered in git but missing from hop.json",
 			})
 			continue
@@ -309,6 +320,27 @@ func parsePorcelainWorktrees(out string) []string {
 		}
 	}
 	return paths
+}
+
+// porcelainBranches maps each worktree path in `git worktree list
+// --porcelain` output to the branch it has checked out, without the
+// refs/heads/ prefix. A worktree on a detached HEAD, and the bare entry,
+// are not in the map.
+func porcelainBranches(out string) map[string]string {
+	branches := map[string]string{}
+	var path string
+	for _, line := range strings.Split(out, "\n") {
+		if p, ok := strings.CutPrefix(line, "worktree "); ok {
+			path = strings.TrimSpace(p)
+			continue
+		}
+		if ref, ok := strings.CutPrefix(line, "branch "); ok && path != "" {
+			if name := strings.TrimPrefix(strings.TrimSpace(ref), "refs/heads/"); name != "" {
+				branches[path] = name
+			}
+		}
+	}
+	return branches
 }
 
 func pathInRegistered(p string, registered []string) bool {

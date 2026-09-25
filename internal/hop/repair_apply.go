@@ -209,11 +209,12 @@ func (a *Applier) unregisterFromGit(hubPath string, action *Action) (bool, error
 // updateHopJSON realigns hop.json with reality. Two sub-cases:
 //
 //   - hop.json references a path that does not exist on disk: drop the entry.
-//   - git registry has a worktree hop.json doesn't know about: add the entry.
-//
-// Branch name resolution falls back to the directory basename when the
-// porcelain output is unavailable, since registering arbitrary git
-// worktrees that pre-date hop is best-effort.
+//   - git registry has a worktree hop.json doesn't know about: add the entry,
+//     under the branch git has checked out there (action.NewValue, which
+//     the planner reads from `git worktree list --porcelain`), with the
+//     absolute path add and clone record. The directory name is never a
+//     stand-in for the branch: the two differ for any worktree added by
+//     hand with a directory of its own.
 func (a *Applier) updateHopJSON(hubPath string, action *Action) (bool, error) {
 	hub, err := LoadHub(a.fs, hubPath)
 	if err != nil {
@@ -226,12 +227,14 @@ func (a *Applier) updateHopJSON(hubPath string, action *Action) (bool, error) {
 	case branchInHub != "" && !exists:
 		delete(hub.Config.Branches, branchInHub)
 	case branchInHub == "" && exists:
-		key := filepath.Base(action.WorktreePath)
-		rel, err := filepath.Rel(hubPath, action.WorktreePath)
-		if err != nil {
-			rel = action.WorktreePath
+		branch := action.NewValue
+		if branch == "" {
+			return false, fmt.Errorf("no branch checked out at %s to record it under", action.WorktreePath)
 		}
-		hub.Config.Branches[key] = config.HubBranch{Path: rel, HopspaceBranch: key}
+		if other, ok := hub.Config.Branches[branch]; ok {
+			return false, fmt.Errorf("hop.json already lists branch %q at %s", branch, other.Path)
+		}
+		hub.Config.Branches[branch] = config.HubBranch{Path: action.WorktreePath, HopspaceBranch: branch}
 	default:
 		return false, nil
 	}
