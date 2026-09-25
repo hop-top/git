@@ -6,6 +6,7 @@ import (
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/state"
 )
 
@@ -40,7 +41,7 @@ func ResolveHub(fs afero.Fs, st *state.State, dir string) (*ResolvedHub, error) 
 		}
 		return &ResolvedHub{
 			Hub:    hub,
-			RepoID: repoIDFor(hub.Config.Repo.Org, hub.Config.Repo.Repo),
+			RepoID: repoid.For(hubPath, hub.Config.Repo),
 		}, nil
 	}
 

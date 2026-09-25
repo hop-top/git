@@ -1,0 +1,143 @@
+# Releases before repo IDs carried the origin's host keyed every repository
+# github.com/<org>/<repo>. Loading state moves such a repository to the key
+# its hub's origin gives; the next command that saves state writes it,
+# after backing the old file up byte for byte. Running again changes
+# nothing. When the new key is already taken the two entries are kept, a
+# warning says so, and doctor reports it as an issue --fix leaves alone.
+
+exec git init --bare $WORK/srv/acme/widgets.git
+exec git clone $WORK/srv/acme/widgets.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+exec git config --global url.$WORK/srv/.insteadOf https://gitlab.example.com/
+
+exec git-hop https://gitlab.example.com/acme/widgets.git gl
+grep '"gitlab.example.com/acme/widgets"' $WORK/.local/state/git-hop/state.json
+
+# --- rewrite state as an earlier release keyed it ---
+exec sh -c 'sed "s|\"gitlab.example.com/acme/widgets\"|\"github.com/acme/widgets\"|" $WORK/.local/state/git-hop/state.json > $WORK/old.json'
+cp $WORK/old.json $WORK/.local/state/git-hop/state.json
+grep '"github.com/acme/widgets"' $WORK/old.json
+
+# --- read-only commands see the new key and write nothing ---
+exec git-hop list --json
+stdout '"repository": "gitlab.example.com/acme/widgets"'
+! stdout 'github.com/acme/widgets'
+! stderr warning
+cmp $WORK/.local/state/git-hop/state.json $WORK/old.json
+! exists $WORK/.local/state/git-hop/backups
+
+# --- the first save writes the new key, after backing the file up ---
+cd $WORK/gl
+exec git-hop add feat
+grep '"gitlab.example.com/acme/widgets"' $WORK/.local/state/git-hop/state.json
+! grep 'github.com/acme/widgets' $WORK/.local/state/git-hop/state.json
+exec sh -c 'ls $WORK/.local/state/git-hop/backups | wc -l | tr -d " "'
+stdout '^1$'
+exec sh -c 'cat $WORK/.local/state/git-hop/backups/state-*.json'
+cmp stdout $WORK/old.json
+
+# --- running again changes nothing and takes no second backup ---
+exec git-hop add fix
+grep '"gitlab.example.com/acme/widgets"' $WORK/.local/state/git-hop/state.json
+! grep 'github.com/acme/widgets' $WORK/.local/state/git-hop/state.json
+exec sh -c 'ls $WORK/.local/state/git-hop/backups | wc -l | tr -d " "'
+stdout '^1$'
+cd $WORK
+exec git-hop list --json
+decode json stdout '#' 3
+
+# --- collision: the new key is taken, so both entries stay ---
+exec git-hop https://gitlab.example.com/acme/widgets.git gl2
+exec sh -c 'sed "s|@WORK@|$WORK|g" $WORK/collision.json.in > $WORK/.local/state/git-hop/state.json'
+cp $WORK/.local/state/git-hop/state.json $WORK/collision.json
+exec git-hop list
+stderr '^warning: state: github.com/acme/widgets records .*/gl, whose origin gives the repo ID gitlab.example.com/acme/widgets, which is already recorded; both kept'
+exec git-hop list --json
+stdout '"repository": "github.com/acme/widgets"'
+stdout '"repository": "gitlab.example.com/acme/widgets"'
+cmp $WORK/.local/state/git-hop/state.json $WORK/collision.json
+
+# --- saving keeps both and backs nothing up for it ---
+cd $WORK/gl2
+exec git-hop add other
+grep '"github.com/acme/widgets"' $WORK/.local/state/git-hop/state.json
+grep '"gitlab.example.com/acme/widgets"' $WORK/.local/state/git-hop/state.json
+exec sh -c 'ls $WORK/.local/state/git-hop/backups | wc -l | tr -d " "'
+stdout '^1$'
+
+# --- doctor reports it as an issue (exit 1) and says how to merge ---
+cd $WORK
+! exec git-hop doctor
+stderr 'gitlab.example.com/acme/widgets, which state already holds; both entries kept'
+stderr '^hint: .*merge by hand'
+! exec git-hop doctor --json
+stdout '"kind": "issue"'
+stdout '"subject": "github.com/acme/widgets"'
+
+# --- --fix leaves it: still exit 1, state untouched ---
+cp $WORK/.local/state/git-hop/state.json $WORK/before-fix.json
+! exec git-hop doctor --fix
+stderr 'both entries kept'
+cmp $WORK/.local/state/git-hop/state.json $WORK/before-fix.json
+
+-- collision.json.in --
+{
+  "version": "2.0.0",
+  "lastUpdated": "2026-09-24T17:20:24.384707-04:00",
+  "repositories": {
+    "github.com/acme/widgets": {
+      "uri": "https://gitlab.example.com/acme/widgets.git",
+      "org": "acme",
+      "repo": "widgets",
+      "defaultBranch": "main",
+      "worktrees": {
+        "@WORK@/gl/hops/main": {
+          "path": "@WORK@/gl/hops/main",
+          "branch": "main",
+          "type": "bare",
+          "hubPath": "@WORK@/gl",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      },
+      "hubs": [
+        {
+          "path": "@WORK@/gl",
+          "mode": "local",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      ],
+      "globalHopspace": null
+    },
+    "gitlab.example.com/acme/widgets": {
+      "uri": "https://gitlab.example.com/acme/widgets.git",
+      "org": "acme",
+      "repo": "widgets",
+      "defaultBranch": "main",
+      "worktrees": {
+        "@WORK@/gl2/hops/main": {
+          "path": "@WORK@/gl2/hops/main",
+          "branch": "main",
+          "type": "bare",
+          "hubPath": "@WORK@/gl2",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      },
+      "hubs": [
+        {
+          "path": "@WORK@/gl2",
+          "mode": "local",
+          "createdAt": "2026-09-24T17:20:23.699799-04:00",
+          "lastAccessed": "2026-09-24T17:20:23.699799-04:00"
+        }
+      ],
+      "globalHopspace": null
+    }
+  },
+  "orphaned": []
+}

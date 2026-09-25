@@ -11,12 +11,13 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/state"
 )
 
 // legacyHooksHost is the host every hopspace hooks dir was mirrored under
-// before hop.dataLayout: the fixed host of the repo ID, whatever the origin.
-const legacyHooksHost = "github.com"
+// before hop.dataLayout, whatever the origin.
+const legacyHooksHost = hop.LegacyHooksHost
 
 // checkDataLayout warns about an invalid hop.dataLayout, about hopspaces
 // of --global hubs left at another layout's path, and about hopspace
@@ -70,9 +71,8 @@ func checkLegacyHooksDirs(fs afero.Fs, opts doctorOpts, r *doctorReport, skip ma
 		}
 		org := filepath.Base(filepath.Dir(filepath.Dir(legacy)))
 		repo := filepath.Base(filepath.Dir(legacy))
-		repoID := legacyHooksHost + "/" + org + "/" + repo
 		var uri, hubDir string
-		if st := repos[repoID]; st != nil {
+		if st := legacyHooksRepo(repos, org, repo); st != nil {
 			uri = st.URI
 			if len(st.Hubs) > 0 && st.Hubs[0] != nil {
 				hubDir = st.Hubs[0].Path
@@ -175,6 +175,30 @@ func hookDirsConflict(fs afero.Fs, a, b string) bool {
 		}
 	}
 	return false
+}
+
+// legacyHooksRepo returns the repository whose hooks releases before
+// hop.dataLayout kept in <data>/github.com/<org>/<repo>: those releases
+// keyed every repository github.com/<org>/<repo>, and state now keys it by
+// its origin's host. The github.com entry wins when there is one;
+// otherwise the one entry of org/repo on another host. nil when there is
+// none, or several on other hosts, in which case the host falls back to
+// hop.gitDomain and hop.dataLayout to the --global value.
+func legacyHooksRepo(repos map[string]*state.RepositoryState, org, repo string) *state.RepositoryState {
+	if st, ok := repos[legacyHooksHost+"/"+org+"/"+repo]; ok {
+		return st
+	}
+	var found *state.RepositoryState
+	n := 0
+	for id, st := range repos {
+		if _, o, r, ok := repoid.Split(id); ok && o == org && r == repo {
+			found, n = st, n+1
+		}
+	}
+	if n != 1 {
+		return nil
+	}
+	return found
 }
 
 // stateRepos returns the repositories state records, by repo ID; empty

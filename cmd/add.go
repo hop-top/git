@@ -18,6 +18,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/services"
 	"hop.top/kit/go/core/xdg"
 )
@@ -136,7 +137,7 @@ created or written and no hook runs.`,
 		worktreePath := hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx)
 		worktreePath = filepath.Clean(worktreePath)
 
-		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		repoID := repoid.For(hubPath, hub.Config.Repo)
 
 		// Resolve the branch start-point per precedence:
 		// --from (CLI) > GIT_HOP_ADD_FROM env > hop.add.defaultStartPoint > built-in default ("default-branch").

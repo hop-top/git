@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"hop.top/git/internal/hop"
+	"hop.top/git/internal/state"
 	"hop.top/git/test/mocks"
 )
 
@@ -205,4 +206,25 @@ func TestMoveDirNoClobber_RefusesExistingTarget(t *testing.T) {
 	assert.False(t, ok, "target must not be replaced")
 	ok, _ = afero.Exists(fs, "/data/new/ports.json")
 	assert.True(t, ok, "target must not be replaced")
+}
+
+// Under {host}/{org}/{repo}, the old hooks dir of a repository cloned from
+// another host belongs under that host. State keys the repository by its
+// origin's host, so doctor finds its origin by org/repo, not under the
+// github.com key the old dir is named after.
+func TestDoctor_HostLayoutNonGitHubHooksMoveUnderOriginHost(t *testing.T) {
+	e := newLegacyHooksEnv(t)
+	out, err := exec.Command("git", "config", "--global", "hop.dataLayout", "{host}/{org}/{repo}").CombinedOutput()
+	require.NoError(t, err, string(out))
+	const origin = "git@gitlab.example.com:acme/widgets.git"
+	st := state.NewState()
+	st.AddRepository("gitlab.example.com/acme/widgets", &state.RepositoryState{URI: origin, Org: "acme", Repo: "widgets"})
+	require.NoError(t, state.SaveState(e.fs, st))
+
+	r := runDoctor(e.fs, mocks.NewMockGit(), "/nowhere", doctorOpts{})
+
+	recs := legacyHooksRecords(r, e.legacy)
+	require.Len(t, recs, 1, "want one record for the old hooks dir; got %+v", r.records)
+	dataHome := hop.GetGitHopDataHome()
+	assert.Contains(t, recs[0].Message, filepath.Join(dataHome, "gitlab.example.com", "acme", "widgets", "hooks"))
 }

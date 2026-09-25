@@ -18,6 +18,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 	"hop.top/kit/go/runtime/bus"
@@ -98,7 +99,7 @@ var moveCmd = &cobra.Command{
 		}
 		newPath := filepath.Clean(hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx))
 
-		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		repoID := repoid.For(hubPath, hub.Config.Repo)
 		plan := movePlan{
 			hub:       hub,
 			hubPath:   hubPath,

@@ -11,6 +11,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/state"
 )
 
@@ -224,7 +225,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) er
 	}
 
 	// Get the main repo ID
-	mainRepoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	mainRepoID := repoid.For(hubPath, hub.Config.Repo)
 
 	// Ensure repository exists in state
 	if st.Repositories[mainRepoID] == nil {

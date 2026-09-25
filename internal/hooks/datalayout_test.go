@@ -31,8 +31,10 @@ func writeFile(t *testing.T, fs afero.Fs, path, body string) {
 	}
 }
 
+// layoutRepoID is the repo ID of a repository cloned from gitlabURI: it
+// carries the origin's host.
 const (
-	layoutRepoID = "github.com/acme/widgets"
+	layoutRepoID = "gitlab.example.com/acme/widgets"
 	gitlabURI    = "https://gitlab.example.com/acme/widgets.git"
 )
 
@@ -70,8 +72,9 @@ func TestFindHookFile_DefaultLayoutFindsOrgRepoHooks(t *testing.T) {
 	}
 }
 
-// Hooks mirrored by earlier releases, at <data>/github.com/<org>/<repo>/hooks,
-// keep firing until they are moved.
+// Hooks mirrored by earlier releases, at <data>/github.com/<org>/<repo>/hooks
+// whatever the origin (repo IDs then always said github.com), keep firing
+// until they are moved.
 func TestFindHookFile_LegacyLocationStillResolves(t *testing.T) {
 	withGlobalGitConfig(t, nil)
 	fs := afero.NewMemMapFs()
@@ -93,13 +96,13 @@ func TestFindHookFile_NewLocationWinsOverLegacy(t *testing.T) {
 	writeFile(t, fs, legacy, "#!/bin/sh\necho old\n")
 	writeFile(t, fs, current, "#!/bin/sh\necho new\n")
 
-	if got := NewRunner(fs).FindHookFile("pre-worktree-add", "/nowhere", layoutRepoID); got != current {
+	if got := NewRunner(fs).ForRepo(gitlabURI, "").FindHookFile("pre-worktree-add", "/nowhere", layoutRepoID); got != current {
 		t.Fatalf("FindHookFile() = %q, want the new-location hook %q", got, current)
 	}
 }
 
 // With hop.dataLayout={host}/{org}/{repo} the host comes from the origin
-// URL, not from the repo ID's fixed github.com.
+// URL.
 func TestHostLayout_NonGitHubOriginEndToEnd(t *testing.T) {
 	withGlobalGitConfig(t, map[string]string{"hop.dataLayout": "{host}/{org}/{repo}"})
 	fs := afero.NewMemMapFs()

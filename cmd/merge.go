@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -15,6 +14,7 @@ import (
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/state"
 	"hop.top/kit/go/runtime/bus"
 )
@@ -128,7 +128,7 @@ If only one argument is given, the current branch is used as the source.`,
 			return
 		}
 
-		repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		repoID := repoid.For(hubPath, hub.Config.Repo)
 
 		// Perform merge: run `git merge` inside the receiving branch's worktree
 		mergeArgs := []string{"merge"}

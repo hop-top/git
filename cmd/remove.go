@@ -17,6 +17,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 	"hop.top/kit/go/runtime/bus"
@@ -289,7 +290,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	worktreePath := config.ResolveWorktreePath(branchConfig.Path, hubPath)
 	rec := removeRecord{Kind: removeKindWorktree, Branch: branch, Path: worktreePath}
 
-	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	repoID := repoid.For(hubPath, hub.Config.Repo)
 
 	// Create detector manager and register detectors
 	detectorMgr := newBranchDetectors(fs, g, hubPath)

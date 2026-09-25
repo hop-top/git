@@ -13,6 +13,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/state"
 )
 
@@ -49,7 +50,7 @@ func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath,
 // record it would produce.
 func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) removeRecord {
 	worktreePath := config.ResolveWorktreePath(hub.Config.Branches[branch].Path, hubPath)
-	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	repoID := repoid.For(hubPath, hub.Config.Repo)
 	runner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI, hubPath)
 
 	if err := previewDetector(g, branch, hubPath, "finish"); err != nil {
@@ -144,7 +145,7 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt bool) []removeRecord
 
 	output.Info("[dry-run] Would remove hub directory %s", hubPath)
 	recs = append(recs, removeRecord{Kind: removeKindHub, Path: hubPath, Removed: true})
-	repoID := fmt.Sprintf("github.com/%s/%s", hub.Config.Repo.Org, hub.Config.Repo.Repo)
+	repoID := repoid.For(hubPath, hub.Config.Repo)
 	st, stErr := state.LoadState(fs)
 	if stErr == nil && st.Repositories[repoID] != nil {
 		output.Info("[dry-run] Would remove %s", stateRemoval(repoID, hubPath, otherHubsInState(st, repoID, hubPath)))

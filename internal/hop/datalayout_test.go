@@ -172,30 +172,15 @@ func TestDataLayout_IgnoresRepositoryConfig(t *testing.T) {
 	}
 }
 
-func TestParseHostFromURL(t *testing.T) {
-	cases := map[string]string{
-		"https://github.com/acme/widgets.git":          "github.com",
-		"https://user:tok@GitLab.Example.com/a/b.git":  "gitlab.example.com",
-		"ssh://git@gitlab.example.com:2222/acme/w.git": "gitlab.example.com",
-		"git@bitbucket.org:acme/widgets.git":           "bitbucket.org",
-		"gitea.local:acme/widgets.git":                 "gitea.local",
-		"file:///srv/git/acme/widgets.git":             "",
-		"/srv/git/acme/widgets.git":                    "",
-		"./relative/acme:widgets":                      "",
-		"":                                             "",
-	}
-	for in, want := range cases {
-		if got := hop.ParseHostFromURL(in); got != want {
-			t.Errorf("ParseHostFromURL(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
-func TestLegacyHooksDir_UsesRepoIDHost(t *testing.T) {
+// Releases before repo IDs carried the origin's host kept every
+// repository's hooks under <data>/github.com, whatever its origin.
+func TestLegacyHooksDir_AlwaysUnderGitHub(t *testing.T) {
 	t.Setenv("GIT_HOP_DATA_HOME", "/data")
-	got := hop.LegacyHooksDir("github.com/acme/widgets")
-	if want := filepath.Join("/data", "github.com", "acme", "widgets", "hooks"); got != want {
-		t.Fatalf("LegacyHooksDir() = %s, want %s", got, want)
+	want := filepath.Join("/data", "github.com", "acme", "widgets", "hooks")
+	for _, id := range []string{"github.com/acme/widgets", "gitlab.example.com/acme/widgets"} {
+		if got := hop.LegacyHooksDir(id); got != want {
+			t.Fatalf("LegacyHooksDir(%s) = %s, want %s", id, got, want)
+		}
 	}
 	if got := hop.LegacyHooksDir("acme/widgets"); got != "" {
 		t.Fatalf("LegacyHooksDir(2-part) = %s, want empty", got)
