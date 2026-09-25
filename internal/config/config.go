@@ -110,6 +110,10 @@ type PortRange struct {
 
 type BranchPorts struct {
 	Ports map[string]int `json:"ports"`
+	// OverrideDir is the directory holding the worktree's compose
+	// override. Empty in an entry an earlier release wrote, whose
+	// override is in the repository-wide cache directory of the branch.
+	OverrideDir string `json:"overrideDir,omitempty"`
 }
 
 // VolumesConfig represents volumes.json

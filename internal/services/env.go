@@ -40,7 +40,10 @@ type EnvManager struct {
 	Ports   *PortAllocator
 	Volumes *VolumeManager
 	Docker  *docker.Docker
-	fs      afero.Fs
+	// OverrideDir is where Generate writes the compose override; empty
+	// means the repository-wide directory of the branch (legacyOverrideDir).
+	OverrideDir string
+	fs          afero.Fs
 }
 
 // NewEnvManager creates a new env manager
@@ -84,14 +87,17 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 			overrideYAML, _ := docker.GenerateOverride(servicePorts)
 			portVarNames = docker.ComputePortVarNames(servicePorts)
 
-			overridePath = hop.GetComposeOverrideCachePath(org, repo, branch)
+			overrideDir := m.OverrideDir
+			if overrideDir == "" {
+				overrideDir = legacyOverrideDir(org, repo, branch)
+			}
+			overridePath = filepath.Join(overrideDir, overrideFileName)
 
 			// Check cache: skip regeneration if compose file hash matches
-			if !m.needsRegeneration(composeContent, org, repo, branch) {
+			if !m.needsRegeneration(composeContent, overrideDir) {
 				// Override already up to date, just use existing port var names
 			} else {
 				// Write override file
-				overrideDir := filepath.Dir(overridePath)
 				if err := m.fs.MkdirAll(overrideDir, 0755); err != nil {
 					return nil, nil, "", fmt.Errorf("failed to create override cache dir: %w", err)
 				}
@@ -100,7 +106,7 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 				}
 
 				// Write meta file for cache invalidation
-				m.writeOverrideMeta(composeContent, org, repo, branch)
+				m.writeOverrideMeta(composeContent, overrideDir)
 			}
 		}
 	}
@@ -175,8 +181,11 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 	return &config.BranchPorts{Ports: ports}, &config.BranchVolumes{Volumes: vols}, overridePath, nil
 }
 
-func (m *EnvManager) needsRegeneration(composeContent []byte, org, repo, branch string) bool {
-	metaPath := hop.GetOverrideMetaCachePath(org, repo, branch)
+func (m *EnvManager) needsRegeneration(composeContent []byte, overrideDir string) bool {
+	if _, err := m.fs.Stat(filepath.Join(overrideDir, overrideFileName)); err != nil {
+		return true
+	}
+	metaPath := filepath.Join(overrideDir, overrideMetaFileName)
 	metaData, err := afero.ReadFile(m.fs, metaPath)
 	if err != nil {
 		return true
@@ -191,15 +200,14 @@ func (m *EnvManager) needsRegeneration(composeContent []byte, org, repo, branch 
 	return meta.ComposeHash != hex.EncodeToString(hash[:])
 }
 
-func (m *EnvManager) writeOverrideMeta(composeContent []byte, org, repo, branch string) {
+func (m *EnvManager) writeOverrideMeta(composeContent []byte, overrideDir string) {
 	hash := sha256.Sum256(composeContent)
 	meta := overrideMeta{ComposeHash: hex.EncodeToString(hash[:])}
 	data, err := json.Marshal(meta)
 	if err != nil {
 		return
 	}
-	metaPath := hop.GetOverrideMetaCachePath(org, repo, branch)
-	afero.WriteFile(m.fs, metaPath, data, 0644)
+	afero.WriteFile(m.fs, filepath.Join(overrideDir, overrideMetaFileName), data, 0644)
 }
 
 func (m *EnvManager) writeEnvFile(path string, ports map[string]int, vols map[string]string) error {

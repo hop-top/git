@@ -309,6 +309,7 @@ staged and unstaged as they are:
 			created := services.WorktreeSetup{Target: services.EnvTarget{
 				Root:         mainWorktreePath,
 				Branch:       currentBranchName,
+				HubPath:      repoPath,
 				HopspacePath: hop.ResolveHopspacePath(repoPath, hub.Config.Repo),
 				Hub:          hub.Config,
 			}}

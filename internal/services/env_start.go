@@ -5,11 +5,11 @@ import (
 	"errors"
 	"io"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/events"
-	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/kit/go/runtime/bus"
 )
@@ -21,8 +21,10 @@ var ErrNoEnvironment = errors.New("no environment manager detected")
 // EnvTarget is the worktree whose environment is started or stopped.
 // HopspacePath and Hub are empty for a worktree outside a hub.
 type EnvTarget struct {
-	Root         string
-	Branch       string
+	Root   string
+	Branch string
+	// HubPath is the hub the worktree belongs to; empty outside a hub.
+	HubPath      string
 	HopspacePath string
 	Hub          *config.HubConfig
 	// Progress, when set, receives everything a start or stop says: the
@@ -47,6 +49,9 @@ func (t EnvTarget) status(format string, args ...any) {
 // ResolveEnv picks the environment manager for t and the compose override
 // cached for its branch ("" when none was generated). A nil manager means
 // t has no environment.
+//
+// The override is the one the branch's ports.json entry names; an entry
+// an earlier release wrote names none and uses the repository-wide one.
 func ResolveEnv(t EnvTarget, globalConfig *config.GlobalConfig) (*EnvironmentManager, string, error) {
 	managers, err := LoadEnvManagers(globalConfig)
 	if err != nil {
@@ -65,14 +70,28 @@ func ResolveEnv(t EnvTarget, globalConfig *config.GlobalConfig) (*EnvironmentMan
 		manager.Out = os.Stderr
 	}
 
-	var overridePath string
-	if t.Hub != nil && t.Hub.Repo.Org != "" && t.Hub.Repo.Repo != "" && t.Branch != "" {
-		candidate := hop.GetComposeOverrideCachePath(t.Hub.Repo.Org, t.Hub.Repo.Repo, t.Branch)
-		if _, err := os.Stat(candidate); err == nil {
-			overridePath = candidate
+	return manager, resolveOverridePath(t), nil
+}
+
+// resolveOverridePath returns the compose override t's branch uses, or ""
+// when there is none on disk.
+func resolveOverridePath(t EnvTarget) string {
+	if t.Hub == nil || t.Hub.Repo.Org == "" || t.Hub.Repo.Repo == "" || t.Branch == "" {
+		return ""
+	}
+	dir := legacyOverrideDir(t.Hub.Repo.Org, t.Hub.Repo.Repo, t.Branch)
+	if t.HopspacePath != "" {
+		if cfg, err := config.NewLoader(afero.NewOsFs()).LoadPortsConfig(t.HopspacePath); err == nil {
+			if entry, ok := cfg.Branches[t.Branch]; ok && entry.OverrideDir != "" {
+				dir = entry.OverrideDir
+			}
 		}
 	}
-	return manager, overridePath, nil
+	candidate := filepath.Join(dir, overrideFileName)
+	if _, err := os.Stat(candidate); err != nil {
+		return ""
+	}
+	return candidate
 }
 
 // StartEnv starts t's environment. It is the one start path: `git hop env

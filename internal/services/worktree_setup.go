@@ -33,7 +33,7 @@ func SetUpWorktree(fs afero.Fs, d *docker.Docker, t EnvTarget, globalConfig *con
 	if t.Hub != nil {
 		org, repo = t.Hub.Repo.Org, t.Hub.Repo.Repo
 	}
-	env, err := GenerateWorktreeEnv(fs, d, t.HopspacePath, t.Root, t.Branch, org, repo)
+	env, err := GenerateWorktreeEnv(fs, d, t.HopspacePath, t.HubPath, t.Root, t.Branch, org, repo)
 	if err != nil {
 		output.Error("Failed to generate environment: %v", err)
 	} else {

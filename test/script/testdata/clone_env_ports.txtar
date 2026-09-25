@@ -30,21 +30,22 @@ grep '^HOP_PORT_WEB=[0-9]+$' $WORK/hub/hops/main/.env
 ! grep 'HOP_PORT_WEB=8080$' $WORK/hub/hops/main/.env
 grep '"main"' $WORK/hub/ports.json
 grep '"WEB": [0-9]+' $WORK/hub/ports.json
-exists $WORK/.cache/git-hop/org/repo/main/docker-compose.override.yml
-grep 'HOP_PORT_WEB' $WORK/.cache/git-hop/org/repo/main/docker-compose.override.yml
-! grep '8080' $WORK/.cache/git-hop/org/repo/main/docker-compose.override.yml
+grep '"overrideDir": ".*/.cache/git-hop/org/repo/hub-[0-9a-f]{8}/main"' $WORK/hub/ports.json
+exec sh -c 'cat $WORK/.cache/git-hop/org/repo/hub-*/main/docker-compose.override.yml'
+stdout 'HOP_PORT_WEB'
+! stdout '8080'
 
 # --- env start in the cloned worktree runs compose with them ---
 cd $WORK/hub/hops/main
 exec git-hop env start
 grep -count=1 '^up ' $WORK/up.log
-grep '^up compose -p org-repo-main -f docker-compose.yml -f .*/org/repo/main/docker-compose.override.yml --env-file .env up -d in .*/hub/hops/main$' $WORK/up.log
+grep '^up compose -p org-repo-main -f docker-compose.yml -f .*/org/repo/hub-[0-9a-f]{8}/main/docker-compose.override.yml --env-file .env up -d in .*/hub/hops/main$' $WORK/up.log
 cd $WORK
 
 # --- the automatic start after clone does too ---
 exec git-hop $WORK/org/repo.git hub-auto --env-start
 grep -count=2 '^up ' $WORK/up.log
-grep '^up compose -p org-repo-main -f docker-compose.yml -f .*/org/repo/main/docker-compose.override.yml --env-file .env up -d in .*/hub-auto/hops/main$' $WORK/up.log
+grep '^up compose -p org-repo-main -f docker-compose.yml -f .*/org/repo/hub-auto-[0-9a-f]{8}/main/docker-compose.override.yml --env-file .env up -d in .*/hub-auto/hops/main$' $WORK/up.log
 grep '^HOP_PORT_WEB=[0-9]+$' $WORK/hub-auto/hops/main/.env
 
 -- compose.yml --

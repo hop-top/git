@@ -77,6 +77,7 @@ func runEnvCommand(action string) {
 	if hubPath, err := hop.FindHub(fs, cwd); err == nil {
 		if hub, err := hop.LoadHub(fs, hubPath); err == nil {
 			target.Hub = hub.Config
+			target.HubPath = hubPath
 			target.HopspacePath = hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 			target.Branch, _ = g.GetCurrentBranch(root)
 		}
@@ -156,7 +157,7 @@ var envGenerateCmd = &cobra.Command{
 			output.Fatal("Failed to load hopspace at %s: %v", hopspacePath, err)
 		}
 
-		env, err := services.GenerateWorktreeEnv(fs, d, hopspacePath, root, branch, org, repo)
+		env, err := services.GenerateWorktreeEnv(fs, d, hopspacePath, hubPath, root, branch, org, repo)
 		if err != nil {
 			output.Fatal("Failed to generate environment: %v", err)
 		}
