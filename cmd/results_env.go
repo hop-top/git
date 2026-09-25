@@ -50,7 +50,7 @@ func newEnvResult(fs afero.Fs, d *docker.Docker, t services.EnvTarget, branch, m
 	res := envStartResult{Branch: branch, Path: t.Root, Manager: manager, Done: done}
 	if t.HopspacePath != "" && branch != "" {
 		if portsCfg, _ := config.NewLoader(fs).LoadPortsConfig(t.HopspacePath); portsCfg != nil {
-			if bp, ok := portsCfg.Branches[branch]; ok && len(bp.Ports) > 0 {
+			if bp, ok := services.LookupEnvEntry(portsCfg, t.HopspacePath, t.HubPath, t.Root, branch); ok && len(bp.Ports) > 0 {
 				res.Ports = bp.Ports
 			}
 		}
@@ -60,7 +60,8 @@ func newEnvResult(fs afero.Fs, d *docker.Docker, t services.EnvTarget, branch, m
 		if t.Hub != nil {
 			org, repo = t.Hub.Repo.Org, t.Hub.Repo.Repo
 		}
-		if ps, err := d.ComposePs(t.Root, services.ComposeProjectName(org, repo, branch)); err == nil {
+		project := services.EnvProjectName(fs, t.HubPath, t.Root, branch, org, repo)
+		if ps, err := d.ComposePs(t.Root, project); err == nil {
 			if svcs := parseComposePs(ps); len(svcs) > 0 {
 				res.Services = svcs
 			}
