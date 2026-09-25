@@ -854,6 +854,9 @@ state, of every repository), so no two worktrees get the same port:
   (`git hop env generate`), with a warning. Until then `git hop doctor`
   lists the port (`--fix` does not re-port a running environment) and
   `git hop env start` warns about it.
+- `git hop remove` drops the worktree's entries, freeing its ports;
+  removing a `--global` hub drops its entries from the hopspace the other
+  hubs keep.
 
 `overrideDir` is where the branch's compose override is cached, when its
 compose file has hardcoded host ports: `$XDG_CACHE_HOME/git-hop/<org>/<repo>/<hub key>/<branch>`,

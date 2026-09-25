@@ -17,6 +17,7 @@ import (
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
+	"hop.top/git/internal/services"
 	"hop.top/git/internal/state"
 	"hop.top/kit/go/runtime/bus"
 )
@@ -356,6 +357,11 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 				output.Warn("Failed to delete remote branch: %v", err)
 			}
 		}
+	}
+
+	// Free the worktree's ports and volumes for other worktrees.
+	if err := services.DropEnvEntry(fs, hop.ResolveHopspacePath(hubPath, hub.Config.Repo), hubPath, worktreePath, branch); err != nil {
+		output.Warn("Failed to update ports and volumes: %v", err)
 	}
 
 	// Remove branch from hub config so it no longer appears in status
