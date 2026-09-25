@@ -14,10 +14,10 @@ import (
 // checkGoneHubRecords warns about the records a data-home hopspace
 // several --global hubs share holds for worktrees of a hub that no longer
 // exists: state does not record it and its directory is gone (deleted by
-// hand, then taken out of state by doctor --fix or an earlier release's
-// prune). Nothing reads them, so they are
-// warnings; --fix drops them. A hub's own hopspace has no such records:
-// it goes with the hub.
+// hand, then taken out of state by an earlier release's doctor --fix or
+// prune; both now drop the records with the hub, dropGoneHubRecords).
+// Nothing reads them, so they are warnings; --fix drops them. A hub's own
+// hopspace has no such records: it goes with the hub.
 func checkGoneHubRecords(fs afero.Fs, hubPath, hopspacePath string, opts doctorOpts, r *doctorReport) {
 	if !hop.SharedHopspace(hopspacePath, hubPath) {
 		return

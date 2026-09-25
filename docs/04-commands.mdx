@@ -927,8 +927,8 @@ git hop doctor --fix --dry-run
   to an unmarked hub is reported as a warning and left alone
 - Records in a `--global` hopspace of worktrees of a hub that no longer
   exists: state does not record it and its directory is gone (deleted by
-  hand, then taken out of state by `doctor --fix` or by a `prune` of an
-  earlier release; `prune` now drops them with the hub). Nothing reads
+  hand, then taken out of state by a `doctor --fix` or `prune` of an
+  earlier release; both now drop them with the hub). Nothing reads
   them: a warning, and `--fix` drops them from the hopspace's `hop.json`
 - Hopspaces of `--global` hubs left at the path another `hop.dataLayout`
   builds (`<org>/<repo>` after switching to `{host}/{org}/{repo}`, or the
@@ -957,7 +957,13 @@ git hop doctor --fix --dry-run
   or remove it with `git worktree remove`. Any other directory with
   something in it is left for you to empty or delete; `--fix` cannot
   repair either
-- Orphaned worktrees
+- Orphaned worktrees and hubs in state. `--fix` prunes a hub whose
+  directory is gone; for a `--global` hub it also drops, in the same run,
+  the hub's records in the hopspace it shared with the repository's other
+  `--global` hubs, as [`git hop prune`](#git-hop-prune) does: the worktree
+  records in its `hop.json` and the entries in its `ports.json` and
+  `volumes.json` (`fixed` records under the `hopspace` check, subject the
+  worktree path). The volume directories, and the data in them, stay
 - A hub worktree registered in another repository than the hub's own:
   an issue `--fix` cannot repair. Earlier releases could register a
   `--global` hub's new worktree in another hub of the same repository.
