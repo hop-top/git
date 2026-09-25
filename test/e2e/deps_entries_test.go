@@ -203,3 +203,63 @@ func treeDigest(t *testing.T, root string) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// Worktrees an earlier release linked to the shared install as a whole:
+// doctor warns, and doctor --fix converts them to per-entry links into the
+// same install without reinstalling or writing it. npm ci in one of them
+// then leaves the other working.
+func TestDepsEntries_SingleLinkMigratedByDoctorFix(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("Skipping e2e test in short mode")
+	}
+	env := npmTestEnv(t)
+	seedEntriesRepo(t, env)
+	main := filepath.Join(env.HubPath, "hops", "main")
+	feat := filepath.Join(env.HubPath, "hops", "feat")
+	install := installOf(t, main)
+	for _, wt := range []string{main, feat} {
+		if err := os.RemoveAll(filepath.Join(wt, "node_modules")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(install, filepath.Join(wt, "node_modules")); err != nil {
+			t.Fatal(err)
+		}
+		assertResolves(t, env, wt, "through a single link")
+	}
+	before := treeDigest(t, install)
+	pkgJSON := filepath.Join(install, "a", "package.json")
+	original, err := os.Stat(pkgJSON)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	out := runHop(t, env, "doctor")
+	for _, branch := range []string{"main", "feat"} {
+		want := branch + ": node_modules is a single link to shared install " + filepath.Base(filepath.Dir(install)) + "/node_modules"
+		if !strings.Contains(out, want) {
+			t.Errorf("doctor should warn %q; output:\n%s", want, out)
+		}
+	}
+
+	runHop(t, env, "doctor", "--fix")
+	if now, err := os.Stat(pkgJSON); err != nil || !os.SameFile(original, now) {
+		t.Errorf("doctor --fix reinstalled the shared install (%v)", err)
+	}
+	for _, wt := range []string{main, feat} {
+		assertEntryLayout(t, wt, install)
+		assertResolves(t, env, wt, "after doctor --fix")
+	}
+	if got := treeDigest(t, install); got != before {
+		t.Errorf("the conversion changed the shared install:\n%s\nwant:\n%s", got, before)
+	}
+	if out := runHop(t, env, "doctor"); !strings.Contains(out, "All dependencies are properly configured") {
+		t.Errorf("doctor after --fix should be clean; output:\n%s", out)
+	}
+
+	env.RunCommand(t, feat, "npm", "ci")
+	assertResolves(t, env, main, "after npm ci in feat")
+	if got := treeDigest(t, install); got != before {
+		t.Errorf("npm ci in feat changed the shared install")
+	}
+}

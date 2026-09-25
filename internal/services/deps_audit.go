@@ -78,7 +78,7 @@ func (m *DepsManager) auditDeps(branch, worktreePath string, pm PackageManager) 
 	case m.unshareableStoreInstall(pm, currentTarget, &issue):
 		issue.Type = IssueNeedsLocal
 	case currentTarget == expectedDepsPath:
-		return Issue{}, false
+		issue.Type = IssueSingleLink
 	case slices.Contains(m.flatDepsPaths(pm, expectedHash), currentTarget):
 		issue.Type = IssueOldLayout
 	default:

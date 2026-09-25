@@ -56,10 +56,9 @@ func (m *DepsManager) linkDeps(worktreePath, branch string, pm PackageManager, h
 	}
 
 	if shareable {
-		if cur.kind == depsDirLink && cur.install == depsPath {
-			m.Registry.AddUsage(depsKey, branch)
-			return nil
-		}
+		// A single link to this install, as earlier releases made, is
+		// converted here: npm ci through it would empty the install for
+		// every worktree. Only the link is replaced; the install is read.
 		if err := m.linkEntriesInto(depsPath, depsDir, cur); err != nil {
 			return err
 		}

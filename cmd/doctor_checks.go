@@ -230,6 +230,9 @@ func checkDependencies(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorRe
 		case services.IssueNeedsLocal:
 			msg = fmt.Sprintf("%s links to shared install %s, which cannot be shared: %s", issue.PM.DepsDir, issue.TargetName(), issue.LocalReason)
 			output.Error("  %s: %s", issue.Branch, msg)
+		case services.IssueSingleLink:
+			msg = fmt.Sprintf("%s is a single link to shared install %s, which npm ci through it empties for every worktree; linked entry by entry by the next install", issue.PM.DepsDir, issue.TargetName())
+			output.Warn("  %s: %s", issue.Branch, msg)
 		case services.IssueEntryLinks:
 			msg = fmt.Sprintf("%s is missing links into shared install %s: %s", issue.PM.DepsDir, issue.TargetName(), issue.MissingSummary())
 			output.Error("  %s: %s", issue.Branch, msg)
