@@ -127,7 +127,7 @@ stdout '\[dry-run\] Would check out existing branch ''existing'' \(already at ''
 exec git rev-parse refs/heads/ahead
 cp stdout $WORK/before-ahead
 ! exec git-hop add ahead --from origin/ahead --dry-run
-stderr '^fatal: .*branch ''ahead'' already exists at [0-9a-f]{7}.*ahead of ''origin/ahead'' \([0-9a-f]{7}\)'
+stderr '^fatal: \[dry-run\] would refuse to add ''ahead'': branch ''ahead'' already exists at [0-9a-f]{7}.*ahead of ''origin/ahead'' \([0-9a-f]{7}\)'
 stderr 'git branch -f ahead origin/ahead'
 ! stdout 'Would create worktree'
 ! exists $WORK/hub/hops/ahead
