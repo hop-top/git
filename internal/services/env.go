@@ -63,8 +63,39 @@ type overrideMeta struct {
 // Generate ensures ports and volumes exist for a branch.
 // When org and repo are provided, it also generates a docker-compose override file
 // for services with hardcoded ports. Returns the override path (empty if not needed).
+// It is Discover followed by Apply.
 func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.BranchPorts, *config.BranchVolumes, string, error) {
-	var overridePath string
+	needs, err := m.Discover(branch, worktreePath, org, repo)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	ports, vols, err := m.Apply(branch, worktreePath, needs)
+	if err != nil {
+		return nil, nil, "", err
+	}
+	return ports, vols, needs.OverridePath, nil
+}
+
+// ComposeNeeds is what a worktree's compose file asks of its
+// environment: the services that get a port, the volumes that get a
+// directory, and the compose override written for hardcoded host ports.
+type ComposeNeeds struct {
+	// Services get a port each (Config.Services names, without the
+	// HOP_PORT_ prefix).
+	Services []string
+	// Volumes get a directory each.
+	Volumes []string
+	// OverridePath is the compose override, "" when none is needed.
+	OverridePath string
+}
+
+// Discover reads what the compose file of the worktree at worktreePath
+// needs, asking docker compose for its services and volumes, and writes
+// the compose override for hardcoded host ports when org and repo are
+// provided. It records nothing, so it runs before, and outside, the
+// lock Apply's caller holds.
+func (m *EnvManager) Discover(branch, worktreePath, org, repo string) (ComposeNeeds, error) {
+	var needs ComposeNeeds
 
 	// Try to read raw compose file content to detect hardcoded ports
 	composeFileName := docker.FindComposeFile(m.fs, worktreePath)
@@ -90,7 +121,7 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 			if overrideDir == "" {
 				overrideDir = legacyOverrideDir(org, repo, branch)
 			}
-			overridePath = filepath.Join(overrideDir, overrideFileName)
+			needs.OverridePath = filepath.Join(overrideDir, overrideFileName)
 
 			// Check cache: skip regeneration if compose file hash matches
 			if !m.needsRegeneration(composeContent, overrideDir) {
@@ -98,10 +129,10 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 			} else {
 				// Write override file
 				if err := m.fs.MkdirAll(overrideDir, 0755); err != nil {
-					return nil, nil, "", fmt.Errorf("failed to create override cache dir: %w", err)
+					return ComposeNeeds{}, fmt.Errorf("failed to create override cache dir: %w", err)
 				}
-				if err := afero.WriteFile(m.fs, overridePath, overrideYAML, 0644); err != nil {
-					return nil, nil, "", fmt.Errorf("failed to write override file: %w", err)
+				if err := afero.WriteFile(m.fs, needs.OverridePath, overrideYAML, 0644); err != nil {
+					return ComposeNeeds{}, fmt.Errorf("failed to write override file: %w", err)
 				}
 
 				// Write meta file for cache invalidation
@@ -113,44 +144,23 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 	// If we computed port var names from override, use those as service names
 	// Otherwise fall back to docker compose service names
 	if len(portVarNames) > 0 {
-		existingSvcs := make(map[string]bool)
-		for _, s := range m.Ports.Config.Services {
-			existingSvcs[s] = true
-		}
 		for _, name := range portVarNames {
 			// portVarNames are full env var names like "HOP_PORT_WEB".
 			// Config.Services holds the suffix only (e.g. "WEB") so that
 			// writeEnvFile can apply the HOP_PORT_ prefix without doubling it.
-			svcKey := strings.TrimPrefix(name, "HOP_PORT_")
-			if !existingSvcs[svcKey] {
-				m.Ports.Config.Services = append(m.Ports.Config.Services, svcKey)
-			}
+			needs.Services = append(needs.Services, strings.TrimPrefix(name, "HOP_PORT_"))
 		}
 	} else {
 		serviceNames, err := m.Docker.GetServiceNames(worktreePath)
 		if err != nil {
-			return nil, nil, "", err
+			return ComposeNeeds{}, err
 		}
-
-		existingSvcs := make(map[string]bool)
-		for _, s := range m.Ports.Config.Services {
-			existingSvcs[s] = true
-		}
-		for _, s := range serviceNames {
-			if !existingSvcs[s] {
-				m.Ports.Config.Services = append(m.Ports.Config.Services, s)
-			}
-		}
-	}
-
-	ports, err := m.Ports.AllocatePorts(branch)
-	if err != nil {
-		return nil, nil, "", err
+		needs.Services = serviceNames
 	}
 
 	volNames, err := m.Docker.GetVolumeNames(worktreePath)
 	if err != nil {
-		return nil, nil, "", err
+		return ComposeNeeds{}, err
 	}
 
 	// Every HOP_VOLUME_* reference in the compose file gets a directory
@@ -166,18 +176,44 @@ func (m *EnvManager) Generate(branch, worktreePath, org, repo string) (*config.B
 			volNames = append(volNames, lower)
 		}
 	}
+	needs.Volumes = volNames
 
-	vols, err := m.Volumes.CreateVolumes(branch, volNames)
+	return needs, nil
+}
+
+// Apply allocates the ports and volume directories needs asks for,
+// adding its services to the hopspace's (Config.Services), creates the
+// directories and writes the worktree's .env. It runs no docker command:
+// a caller recording the result holds the lock on ports.json and
+// volumes.json around it.
+func (m *EnvManager) Apply(branch, worktreePath string, needs ComposeNeeds) (*config.BranchPorts, *config.BranchVolumes, error) {
+	existingSvcs := make(map[string]bool)
+	for _, s := range m.Ports.Config.Services {
+		existingSvcs[s] = true
+	}
+	for _, s := range needs.Services {
+		if !existingSvcs[s] {
+			existingSvcs[s] = true
+			m.Ports.Config.Services = append(m.Ports.Config.Services, s)
+		}
+	}
+
+	ports, err := m.Ports.AllocatePorts(branch)
 	if err != nil {
-		return nil, nil, "", err
+		return nil, nil, err
+	}
+
+	vols, err := m.Volumes.CreateVolumes(branch, needs.Volumes)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	envPath := filepath.Join(worktreePath, ".env")
 	if err := m.writeEnvFile(envPath, ports, vols); err != nil {
-		return nil, nil, "", fmt.Errorf("failed to write .env file: %w", err)
+		return nil, nil, fmt.Errorf("failed to write .env file: %w", err)
 	}
 
-	return &config.BranchPorts{Ports: ports}, &config.BranchVolumes{Volumes: vols}, overridePath, nil
+	return &config.BranchPorts{Ports: ports}, &config.BranchVolumes{Volumes: vols}, nil
 }
 
 func (m *EnvManager) needsRegeneration(composeContent []byte, overrideDir string) bool {

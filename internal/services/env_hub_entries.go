@@ -53,6 +53,21 @@ func ofHub(hubPath string) func(string, config.BranchPorts) bool {
 // volumes.json entries under the same keys, and returns them. A file is
 // written only when an entry of it goes.
 func dropEnvEntries(fs afero.Fs, hopspacePath string, drop func(string, config.BranchPorts) bool) ([]EnvEntry, error) {
+	if !hasPortsFile(fs, hopspacePath) {
+		return nil, nil
+	}
+	var entries []EnvEntry
+	err := withEnvLock(fs, hopspacePath, func() error {
+		var err error
+		entries, err = dropEnvEntriesLocked(fs, hopspacePath, drop)
+		return err
+	})
+	return entries, err
+}
+
+// dropEnvEntriesLocked is dropEnvEntries for a caller holding the lock
+// on ports.json and volumes.json: it loads them afresh.
+func dropEnvEntriesLocked(fs afero.Fs, hopspacePath string, drop func(string, config.BranchPorts) bool) ([]EnvEntry, error) {
 	loader, writer := config.NewLoader(fs), config.NewWriter(fs)
 	ports, err := loader.LoadPortsConfig(hopspacePath)
 	if err != nil {
@@ -87,6 +102,14 @@ func dropEnvEntries(fs afero.Fs, hopspacePath string, drop func(string, config.B
 		}
 	}
 	return entries, nil
+}
+
+// hasPortsFile reports whether the hopspace at hopspacePath has a
+// ports.json. A writer with nothing to change checks it before taking the
+// lock, which would create the hopspace directory were it gone.
+func hasPortsFile(fs afero.Fs, hopspacePath string) bool {
+	ok, _ := afero.Exists(fs, filepath.Join(hopspacePath, "ports.json"))
+	return ok
 }
 
 // envEntries returns the entries of ports that match selects, by key,

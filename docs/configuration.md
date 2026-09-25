@@ -928,6 +928,20 @@ default clone, `$GIT_HOP_DATA_HOME/<org>/<repo>` for a `--global` one.
 git-hop creates both files the first time it generates a worktree's Docker
 environment.
 
+Several git-hop commands can change them at once (`add`, `clone`,
+`env generate`, `remove`, `move`, `prune`). Each change re-reads both
+files and rewrites them while holding a lock on `ports.json.lock` beside
+them, so one command never undoes another's change. Allocating ports also
+holds `port-allocation.lock` in git-hop's state directory, beside
+`state.json`, while it reads every hub's ports and records its own, so two
+commands allocating at once, in one hub or in two, never pick the same
+ports. Neither lock is held while docker compose runs. Each save writes a
+temporary file of its own beside the file and renames it over the file,
+so a reader always sees a whole file. The lock files exist only while a
+change is being written; a lock belongs to the process holding it and goes
+away when that process exits. A command that waits more than 30 seconds
+for a lock fails.
+
 ### Ports Configuration
 
 `<hopspace>/ports.json`
