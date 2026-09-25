@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spf13/afero"
+	"hop.top/git/internal/filelock"
 )
 
 func shortHopJSONLockTimeout(t *testing.T) {
@@ -22,7 +23,7 @@ func shortHopJSONLockTimeout(t *testing.T) {
 func TestWithHopJSONLock_HeldLockTimesOut(t *testing.T) {
 	shortHopJSONLockTimeout(t)
 	dir := t.TempDir()
-	holder := NewFileLock(filepath.Join(dir, HopJSONLockName))
+	holder := filelock.New(filepath.Join(dir, HopJSONLockName))
 	if ok, err := holder.TryAcquire(); err != nil || !ok {
 		t.Fatalf("TryAcquire: ok=%v err=%v", ok, err)
 	}
@@ -41,7 +42,7 @@ func TestWithHopJSONLock_HeldLockTimesOut(t *testing.T) {
 // A writer waiting on the lock gets it once the holder lets go.
 func TestWithHopJSONLock_WaitsForHolder(t *testing.T) {
 	dir := t.TempDir()
-	holder := NewFileLock(filepath.Join(dir, HopJSONLockName))
+	holder := filelock.New(filepath.Join(dir, HopJSONLockName))
 	if ok, err := holder.TryAcquire(); err != nil || !ok {
 		t.Fatalf("TryAcquire: ok=%v err=%v", ok, err)
 	}
@@ -94,7 +95,7 @@ func TestWithHopJSONLock_ReturnsFnErrorAndReleases(t *testing.T) {
 	if err := WithHopJSONLock(afero.NewOsFs(), dir, func() error { return want }); !errors.Is(err, want) {
 		t.Fatalf("err = %v, want %v", err, want)
 	}
-	if Held(filepath.Join(dir, HopJSONLockName)) {
+	if filelock.Held(filepath.Join(dir, HopJSONLockName)) {
 		t.Fatal("lock still held after fn returned")
 	}
 }

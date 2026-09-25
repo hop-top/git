@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"hop.top/git/internal/cli"
+	"hop.top/git/internal/filelock"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -170,7 +171,7 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 	}
 
 	// 1. Acquire lock. Lives in the per-hub state dir, never in the hub.
-	lock := hop.NewFileLock(hop.RepairLockPath(hubPath))
+	lock := filelock.New(hop.RepairLockPath(hubPath))
 	ok, err := lock.TryAcquire()
 	if err != nil {
 		return fatal("acquire lock: " + err.Error())

@@ -1,4 +1,7 @@
-package hop
+// Package filelock provides an OS-level advisory lock on a file, and a
+// helper that serialises a read-modify-write of a file shared by several
+// git-hop processes.
+package filelock
 
 import (
 	"errors"
@@ -7,7 +10,7 @@ import (
 	"path/filepath"
 )
 
-// FileLock is an OS-level advisory lock on a file. TryAcquire fails
+// Lock is an OS-level advisory lock on a file. TryAcquire fails
 // immediately when another process holds the lock.
 //
 // The lock file exists only while the lock is held: TryAcquire creates
@@ -16,15 +19,15 @@ import (
 // "released" means "gone". An abandoned process loses the lock when its
 // handle closes; the stale file it leaves is harmless and is reclaimed
 // by the next TryAcquire.
-type FileLock struct {
+type Lock struct {
 	path string
 	file *os.File
 }
 
-// NewFileLock creates a lock object for path. The file is not opened
+// New creates a lock object for path. The file is not opened
 // until TryAcquire is called.
-func NewFileLock(path string) *FileLock {
-	return &FileLock{path: path}
+func New(path string) *Lock {
+	return &Lock{path: path}
 }
 
 // acquireAttempts bounds the open/lock/verify loop in TryAcquire. Each
@@ -35,7 +38,7 @@ const acquireAttempts = 5
 // TryAcquire attempts to acquire the lock without blocking. Returns
 // (true, nil) on success, (false, nil) if another process holds it,
 // or (false, err) on a real error (e.g. permission denied, mkdir failure).
-func (l *FileLock) TryAcquire() (bool, error) {
+func (l *Lock) TryAcquire() (bool, error) {
 	if err := os.MkdirAll(filepath.Dir(l.path), 0755); err != nil {
 		return false, fmt.Errorf("create lock dir: %w", err)
 	}
@@ -74,7 +77,7 @@ func (l *FileLock) TryAcquire() (bool, error) {
 // can acquire the old inode after we let go; a waiter that already
 // opened it detects the swap in TryAcquire. Where the platform refuses
 // to unlink an open file (Windows), the removal is retried after close.
-func (l *FileLock) Release() error {
+func (l *Lock) Release() error {
 	if l.file == nil {
 		return nil
 	}

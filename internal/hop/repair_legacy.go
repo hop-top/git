@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/spf13/afero"
+	"hop.top/git/internal/filelock"
 )
 
 // LegacyCleanup describes one step taken (or, under dryRun, proposed) by
@@ -72,7 +73,7 @@ func CleanupLegacyRepairDir(fs afero.Fs, hubPath string, dryRun bool) ([]LegacyC
 
 	// 2. Stale lock.
 	lock := LegacyRepairLockPath(hubPath)
-	if exists, _ := afero.Exists(fs, lock); exists && !Held(lock) {
+	if exists, _ := afero.Exists(fs, lock); exists && !filelock.Held(lock) {
 		if dryRun {
 			steps = append(steps, LegacyCleanup{Kind: "removed", Path: lock})
 		} else if err := fs.Remove(lock); err != nil {
