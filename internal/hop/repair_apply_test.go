@@ -395,3 +395,20 @@ func TestApplier_RestoreFetchRefspec_RejectsEmptyValue(t *testing.T) {
 		t.Errorf("expected error on empty NewValue, got nil")
 	}
 }
+
+// TestApplier_OnActionCountsEveryAction pins the progress hook: one call
+// per action applied, NoOps included, so a meter over plan.Actions
+// reaches its total.
+func TestApplier_OnActionCountsEveryAction(t *testing.T) {
+	plan := &Plan{HubPath: "/hub", Actions: []Action{
+		{Kind: ActionNoOp, WorktreePath: "/hub/hops/main"},
+		{Kind: ActionNoOp, WorktreePath: "/hub/hops/feat"},
+	}}
+	calls := 0
+	if _, err := NewApplier(afero.NewMemMapFs(), mocks.NewMockGit()).OnAction(func() { calls++ }).Apply(plan); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if calls != len(plan.Actions) {
+		t.Errorf("OnAction called %d times, want %d", calls, len(plan.Actions))
+	}
+}

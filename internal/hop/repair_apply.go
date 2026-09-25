@@ -20,11 +20,20 @@ import (
 type Applier struct {
 	fs  afero.Fs
 	git git.GitInterface
+	// onAction, when set, is called after each action applies cleanly.
+	onAction func()
 }
 
 // NewApplier constructs an Applier.
 func NewApplier(fs afero.Fs, g git.GitInterface) *Applier {
 	return &Applier{fs: fs, git: g}
+}
+
+// OnAction registers fn to be called after each action applies cleanly,
+// NoOps included, so a caller can report progress over plan.Actions.
+func (a *Applier) OnAction(fn func()) *Applier {
+	a.onAction = fn
+	return a
 }
 
 // Apply runs every Action in plan in order. It returns the count of
@@ -41,6 +50,9 @@ func (a *Applier) Apply(plan *Plan) (int, error) {
 		}
 		if changed {
 			mutations++
+		}
+		if a.onAction != nil {
+			a.onAction()
 		}
 	}
 	return mutations, nil

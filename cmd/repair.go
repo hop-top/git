@@ -20,8 +20,7 @@ var (
 	repairListBackupsFlag bool
 	repairNoBackup        bool
 	repairForceDirty      bool
-	repairProgressFlag    bool
-	repairNoProgressFlag  bool
+	repairProgress        output.ProgressWhen
 	repairColor           = output.ColorAuto
 	repairBaseFlag        bool
 	repairDryRunFlag      bool
@@ -51,8 +50,7 @@ func init() {
 	f.BoolVar(&repairListBackupsFlag, "list-backups", false, "list available backups")
 	f.BoolVar(&repairNoBackup, "no-backup", false, "skip backup (requires --force)")
 	f.BoolVar(&repairForceDirty, "force-dirty", false, "allow repair when worktrees have uncommitted changes")
-	f.BoolVar(&repairProgressFlag, "progress", false, "force progress to stderr")
-	f.BoolVar(&repairNoProgressFlag, "no-progress", false, "force progress off")
+	output.BindProgressFlags(f, &repairProgress)
 	f.Var(&repairColor, "color", "color output: always|auto|never (bare --color: always)")
 	f.Lookup("color").NoOptDefVal = string(output.ColorAlways)
 	f.BoolVar(&repairBaseFlag, "base", false, "infer and record HubBranch.Base for legacy entries (best-effort heuristic; use --dry-run to preview)")
@@ -190,6 +188,8 @@ func repairRun(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, pathspec []s
 // repairLocked is the body of a repair run, executed while the lock is
 // held. It must not exit the process; see repairOutcome.
 func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath string, pathspec []string) repairOutcome {
+	showProgress := output.ShowProgress(repairProgress)
+
 	// 2. Detect / build plan.
 	plan, err := hop.NewPlanner(fs, g).WithBaseInference(repairBaseFlag).Build(hubPath, pathspec)
 	if err != nil {
@@ -198,7 +198,7 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 
 	// 3. Dirty-check.
 	if !repairForceDirty {
-		if dirty := dirtyWorktrees(g, plan); len(dirty) > 0 {
+		if dirty := dirtyWorktrees(g, plan, showProgress); len(dirty) > 0 {
 			for _, p := range dirty {
 				output.Error("%s has uncommitted changes", p)
 			}
@@ -244,8 +244,9 @@ func repairLocked(cmd *cobra.Command, fs afero.Fs, g git.GitInterface, hubPath s
 	}
 
 	// 8. Apply.
-	applier := hop.NewApplier(fs, g)
-	mutations, err := applier.Apply(plan)
+	meter := output.NewProgress(showProgress, "Applying repairs", len(plan.Actions))
+	mutations, err := hop.NewApplier(fs, g).OnAction(meter.Tick).Apply(plan)
+	meter.Stop()
 	if err != nil {
 		if backupID != "" {
 			output.Error("apply failed; backup at %s", backupDir)
@@ -295,18 +296,28 @@ func resolveHubPath(fs afero.Fs) (string, error) {
 	return hubPath, nil
 }
 
-func dirtyWorktrees(g git.GitInterface, plan *hop.Plan) []string {
-	var dirty []string
+// dirtyWorktrees runs git status in every worktree the plan touches,
+// reporting progress over them when showProgress is set: on a large
+// repository each status can take a while.
+func dirtyWorktrees(g git.GitInterface, plan *hop.Plan, showProgress bool) []string {
+	var targets []string
 	for _, a := range plan.Actions {
-		if a.Kind == hop.ActionNoOp {
-			continue
+		if a.Kind != hop.ActionNoOp {
+			targets = append(targets, a.WorktreePath)
 		}
-		out, err := g.RunInDir(a.WorktreePath, "git", "status", "--porcelain")
+	}
+	meter := output.NewProgress(showProgress && len(targets) > 0, "Checking worktrees", len(targets))
+	defer meter.Stop()
+
+	var dirty []string
+	for _, p := range targets {
+		out, err := g.RunInDir(p, "git", "status", "--porcelain")
+		meter.Tick()
 		if err != nil {
 			continue
 		}
 		if strings.TrimSpace(out) != "" {
-			dirty = append(dirty, a.WorktreePath)
+			dirty = append(dirty, p)
 		}
 	}
 	return dirty
