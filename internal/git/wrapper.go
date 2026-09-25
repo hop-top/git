@@ -38,7 +38,7 @@ type GitInterface interface {
 	Run(cmd string, args ...string) (string, error)
 	GetConfig(dir, key string) (string, error)
 	GetConfigRegex(dir, pattern string) (map[string]string, error)
-	RunGitFlowStart(dir, branchType, name string) error
+	RunGitFlowStart(dir, branchType, name, base string) error
 	RunGitFlowFinish(dir, branchType, name string) error
 	WorktreeMove(basePath, oldPath, newPath string) error
 	RenameBranch(dir, oldBranch, newBranch string) error
@@ -494,10 +494,21 @@ func (g *Git) LocalBranchExists(dir, branch string) bool {
 	return err == nil && strings.TrimSpace(out) != ""
 }
 
-// RunGitFlowStart executes git flow <type> start <name>
-func (g *Git) RunGitFlowStart(dir, branchType, name string) error {
-	_, err := g.Runner.RunInDir(dir, "git", "flow", branchType, "start", name)
+// RunGitFlowStart executes `git flow <type> start <name> [<base>]
+// --no-worktree` in dir. --no-worktree: the caller owns the worktree the
+// branch lives in, even for a type git-flow would give one of its own.
+func (g *Git) RunGitFlowStart(dir, branchType, name, base string) error {
+	_, err := g.Runner.RunInDir(dir, "git", GitFlowStartArgs(branchType, name, base)...)
 	return err
+}
+
+// GitFlowStartArgs are the git arguments RunGitFlowStart runs.
+func GitFlowStartArgs(branchType, name, base string) []string {
+	args := []string{"flow", branchType, "start", name}
+	if base != "" {
+		args = append(args, base)
+	}
+	return append(args, "--no-worktree")
 }
 
 // RunGitFlowFinish executes git flow <type> finish <name>

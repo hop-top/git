@@ -345,8 +345,8 @@ func (m *MockGit) LocalBranchExists(dir, branch string) bool {
 }
 
 // RunGitFlowStart mocks running git flow start
-func (m *MockGit) RunGitFlowStart(dir, branchType, name string) error {
-	_, err := m.Runner.RunInDir(dir, "git", "flow", branchType, "start", name)
+func (m *MockGit) RunGitFlowStart(dir, branchType, name, base string) error {
+	_, err := m.Runner.RunInDir(dir, "git", git.GitFlowStartArgs(branchType, name, base)...)
 	return err
 }
 

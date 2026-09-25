@@ -28,8 +28,9 @@ type Detector interface {
 type GitInterface interface {
 	GetConfig(repoPath, key string) (string, error)
 	GetConfigRegex(repoPath, pattern string) (map[string]string, error)
-	RunGitFlowStart(repoPath, branchType, name string) error
-	RunGitFlowFinish(repoPath, branchType, name string) error
+	RunGitFlowStart(dir, branchType, name, base string) error
+	RunGitFlowFinish(dir, branchType, name string) error
+	RunInDir(dir string, cmd string, args ...string) (string, error)
 }
 
 type Manager struct {
@@ -77,26 +78,18 @@ func (m *Manager) DetectBranch(branch string, repoPath string) (*BranchTypeInfo,
 	return nil, nil
 }
 
-func (m *Manager) ExecutePreAdd(ctx context.Context, branch string, repoPath string, worktreePath string) (*BranchTypeInfo, error) {
-	info, err := m.DetectBranch(branch, repoPath)
-	if err != nil {
-		return nil, err
-	}
-
+// ExecuteAdd runs the add action of the detector that detected info, once
+// the worktree at worktreePath exists. A nil info has none.
+func (m *Manager) ExecuteAdd(ctx context.Context, info *BranchTypeInfo, repoPath string, worktreePath string) error {
 	if info == nil {
-		return nil, nil
+		return nil
 	}
-
 	for _, d := range m.detectors {
 		if d.Name() == info.Source {
-			if err := d.OnAdd(ctx, info, worktreePath, repoPath); err != nil {
-				return nil, err
-			}
-			break
+			return d.OnAdd(ctx, info, worktreePath, repoPath)
 		}
 	}
-
-	return info, nil
+	return nil
 }
 
 func (m *Manager) ExecutePreRemove(ctx context.Context, branch string, repoPath string, worktreePath string) (*BranchTypeInfo, error) {

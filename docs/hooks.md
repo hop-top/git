@@ -744,12 +744,12 @@ git config hop.gitflow.enabled true
 
 With it on, for a branch whose prefix matches a git-flow type:
 
-1. `git hop add feature/my-feature` runs `git flow feature start my-feature` before the `pre-worktree-add` hook, then creates the worktree
-2. `git hop remove feature/my-feature` runs `git flow feature finish my-feature` before the `pre-worktree-remove` hook, then removes the worktree
+1. `git hop add feature/my-feature`, for a new branch, runs the `pre-worktree-add` hook, creates the worktree on a detached HEAD, then runs `git flow feature start my-feature --no-worktree` in it. git-flow creates the branch (from the type's start point, or from `--from` given as its `[base]`), records its base and checks it out there; git-hop never creates the branch itself. A branch that already exists, locally or on origin, is checked out as usual and not started. If the start fails, the worktree is removed again.
+2. `git hop remove feature/my-feature` runs `git flow feature finish my-feature` in the branch's own worktree before the `pre-worktree-remove` hook, then removes the worktree. git-flow merges in the worktree that has the finish target (the recorded base, else the type's parent) checked out. When no worktree has it, git-hop first detaches the branch's worktree, so git-flow checks the target out there, in the worktree about to be removed, and no other worktree changes branch.
 
-A failing git-flow command aborts the add or remove. `--dry-run` shows the `Would run 'git flow ...'` step only when the setting is on. With it off, `--verbose` prints one `hint:` line per command when a git-flow action was skipped.
+git-flow-next needs a work tree, and the hub git-hop clones or converts a repository into is a bare repository, so git-hop never runs git-flow in the hub.
 
-git-flow-next refuses to run outside a work tree, so with the setting on, add and remove currently fail in a bare hub (the layout git-hop creates when it clones or converts a repository).
+A failing git-flow command aborts the add or remove. `--dry-run` shows the `Would run 'git flow ...'` step only when a real run would run it. With the setting off, `--verbose` prints one `hint:` line per command when a git-flow action was skipped.
 
 #### Environment Variables
 

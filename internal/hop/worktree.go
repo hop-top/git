@@ -29,6 +29,11 @@ type WorktreeManager struct {
 	// existing branch being linked as-is. Set it when the user named the
 	// start-point explicitly; configured defaults only seed new branches.
 	EnforceStartPoint bool
+
+	// Detach makes CreateWorktree check out the start-point on a detached
+	// HEAD and leave the branch uncreated, for a caller that creates the
+	// branch inside the new worktree (git flow start).
+	Detach bool
 }
 
 // NewWorktreeManager creates a new manager
@@ -147,6 +152,15 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 	// When the caller (or the resolved default) names a concrete ref, we
 	// suppress trackBranch so the explicit start-point wins.
 	resolvedBase, suppressTrack := m.resolveStartPoint(baseWorktreePath, startPoint, defaultBranch)
+
+	if m.Detach {
+		addDir := worktreeAddDir(m.fs, m.git, baseWorktreePath)
+		commit := pinStartPoint(m.git, baseWorktreePath, addDir, resolvedBase)
+		if _, err := m.git.RunInDir(addDir, "git", "worktree", "add", "--detach", worktreePath, commit); err != nil {
+			return "", fmt.Errorf("failed to create worktree: %w", err)
+		}
+		return worktreePath, nil
+	}
 
 	trackBranch := ""
 	if !suppressTrack && defaultBranch != "" {

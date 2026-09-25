@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/afero"
+
+	"hop.top/git/internal/detector"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
@@ -37,12 +40,15 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	if p.fetch {
 		output.Info("[dry-run] Would fetch origin")
 	}
-	if err := previewDetector(g, p.branch, p.hubPath, "start"); err != nil {
+	started, err := previewGitflowStart(g, wm, p)
+	if err != nil {
 		refuseDryRun(fmt.Sprintf("add '%s'", p.branch), fmt.Errorf("branch type detector failed: %v", err))
 	}
-	if wm.EnforceStartPoint {
+	switch {
+	case started:
+	case wm.EnforceStartPoint:
 		previewEnforcedBranch(wm, p)
-	} else {
+	default:
 		previewBranch(g, p)
 	}
 
@@ -61,6 +67,30 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	if p.envStart {
 		output.Info("[dry-run] Would start environment (when the worktree has one)")
 	}
+}
+
+// previewGitflowStart reports the git flow start add would run to create
+// p.branch, and whether it would run one (it then creates the branch).
+func previewGitflowStart(g git.GitInterface, wm *hop.WorktreeManager, p addPlan) (bool, error) {
+	base := ""
+	if wm.EnforceStartPoint {
+		base = gitflowStartBase(g, p.hubPath, p.startPoint, p.defaultBranch)
+	}
+	gitflow := newGitflowDetector(g, p.hubPath, detector.WithStartBase(base))
+	info, err := branchDetectors(afero.NewOsFs(), g, gitflow).DetectBranch(p.branch, p.hubPath)
+	if err != nil || info == nil || info.Source != gitflow.Name() {
+		return false, err
+	}
+	if !gitflow.ActionsEnabled() {
+		hintGitflowOptIn()
+		return false, nil
+	}
+	if !gitflowStartsNewBranch(g, gitflow, info, p.hubPath, p.branch) {
+		return false, nil
+	}
+	cmd := strings.TrimSpace(fmt.Sprintf("git flow %s start %s %s", info.Type, info.Name, base))
+	output.Info("[dry-run] Would run '%s' in a new detached worktree at %s", cmd, displayPath(p.cwd, p.worktreePath))
+	return true, nil
 }
 
 // previewBranch reports how add links or creates the branch when the

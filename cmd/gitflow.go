@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"fmt"
+	"strings"
 	"sync"
 
 	"github.com/spf13/afero"
@@ -8,6 +10,7 @@ import (
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/detector"
 	"hop.top/git/internal/git"
+	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 )
 
@@ -16,8 +19,13 @@ import (
 // reads git config and always runs, so hooks get GIT_HOP_BRANCH_* either
 // way; git-flow's start/finish run only when hop.gitflow.enabled is true.
 func newBranchDetectors(fs afero.Fs, g git.GitInterface, repoPath string) *detector.Manager {
+	return branchDetectors(fs, g, newGitflowDetector(g, repoPath))
+}
+
+// branchDetectors is newBranchDetectors around a given git-flow detector.
+func branchDetectors(fs afero.Fs, g git.GitInterface, gitflow *detector.GitFlowNextDetector) *detector.Manager {
 	mgr := detector.NewManager(fs, g)
-	mgr.Register(newGitflowDetector(g, repoPath))
+	mgr.Register(gitflow)
 	mgr.Register(detector.NewGenericDetector(detector.DefaultGenericConfig()))
 	return mgr
 }
@@ -25,11 +33,76 @@ func newBranchDetectors(fs afero.Fs, g git.GitInterface, repoPath string) *detec
 // newGitflowDetector returns the git-flow-next detector with its actions
 // gated on hop.gitflow.enabled for the repository at repoPath, the same
 // repository its gitflow.* config is read from.
-func newGitflowDetector(g git.GitInterface, repoPath string) *detector.GitFlowNextDetector {
-	return detector.NewGitFlowNextDetector(g,
+func newGitflowDetector(g git.GitInterface, repoPath string, opts ...detector.GitFlowOption) *detector.GitFlowNextDetector {
+	return detector.NewGitFlowNextDetector(g, append([]detector.GitFlowOption{
 		detector.WithGitFlowActions(gitflowEnabled(repoPath)),
 		detector.WithSkippedAction(func(*detector.BranchTypeInfo, string) { hintGitflowOptIn() }),
-	)
+	}, opts...)...)
+}
+
+// gitflowStartBase maps add's --from onto git flow start's [base]: empty
+// (no --from) leaves the start-point to the branch type, the
+// "default-branch" sentinel names the default branch, and "initial" the
+// root commit. Anything else is a ref and passes through.
+func gitflowStartBase(g git.GitInterface, hubPath, from, defaultBranch string) string {
+	switch from {
+	case hop.StartPointDefaultBranch:
+		return defaultBranch
+	case hop.StartPointInitial:
+		out, err := g.RunInDir(hubPath, "git", "rev-list", "--max-parents=0", "HEAD")
+		if err != nil {
+			return from
+		}
+		lines := strings.Fields(out)
+		if len(lines) == 0 {
+			return from
+		}
+		return lines[len(lines)-1]
+	}
+	return from
+}
+
+// gitflowStartsNewBranch reports whether add hands creating branch to git
+// flow start: the git-flow detector would start it and it exists neither
+// locally nor on origin. An existing branch is checked out as usual, as
+// git flow start would refuse it.
+func gitflowStartsNewBranch(g git.GitInterface, gitflow *detector.GitFlowNextDetector, info *detector.BranchTypeInfo, hubPath, branch string) bool {
+	return gitflow.StartsBranch(info) &&
+		!refExists(g, hubPath, "refs/heads/"+branch) &&
+		!refExists(g, hubPath, "refs/remotes/origin/"+branch)
+}
+
+// checkGitflowStarted fails when git flow start left the worktree at path
+// on anything but branch, for a git-flow that did not check it out there.
+func checkGitflowStarted(g git.GitInterface, path, branch string) error {
+	cur, err := g.GetCurrentBranch(path)
+	if err != nil {
+		return fmt.Errorf("git flow start: cannot read the branch of %s: %w", path, err)
+	}
+	if cur != branch {
+		return fmt.Errorf("git flow start left %s on '%s', not '%s'", path, cur, branch)
+	}
+	return nil
+}
+
+// undoGitflowWorktree removes the detached worktree add created for git
+// flow start to create branch in, after the start failed, along with the
+// branch if the start got as far as creating it.
+func undoGitflowWorktree(fs afero.Fs, g git.GitInterface, hubPath, worktreePath, branch string) {
+	if err := g.WorktreeRemove(hubPath, worktreePath, true); err != nil {
+		output.Warn("Failed to remove worktree via git: %v", err)
+	}
+	if err := fs.RemoveAll(worktreePath); err != nil {
+		output.Warn("Failed to remove worktree directory: %v", err)
+	}
+	if err := hop.NewCleanupManager(fs, g).RemoveEmptyParent(worktreePath, hubPath); err != nil {
+		output.Warn("Failed to remove empty parent directory: %v", err)
+	}
+	if refExists(g, hubPath, "refs/heads/"+branch) {
+		if err := g.DeleteLocalBranch(hubPath, branch); err != nil {
+			output.Warn("Failed to delete local branch: %v", err)
+		}
+	}
 }
 
 func gitflowEnabled(repoPath string) bool {
