@@ -95,9 +95,13 @@ func initConvertCommand(flags *pflag.FlagSet) string {
 	return initCommandLine(flags, initProceedFlags, initArg{name: "no-prompt"})
 }
 
-// initRestoreCommand restores backupPath over whatever occupies its
-// original location. No conversion flag applies to a restore.
-func initRestoreCommand(backupPath string) string {
-	return initCommandLine(nil, nil,
-		initArg{name: "restore", value: backupPath}, initArg{name: "force"})
+// initRestoreCommand restores backupPath to its original location; with
+// force, over whatever occupies it. No conversion flag applies to a
+// restore.
+func initRestoreCommand(backupPath string, force bool) string {
+	set := []initArg{{name: "restore", value: backupPath}}
+	if force {
+		set = append(set, initArg{name: "force"})
+	}
+	return initCommandLine(nil, nil, set...)
 }

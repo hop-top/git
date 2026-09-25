@@ -266,3 +266,84 @@ func TestRestoreToOriginal_FailedMoveTouchesNothing(t *testing.T) {
 		assert.NotContains(t, e.Name(), "pre-restore", "failed restore left %s behind", e.Name())
 	}
 }
+
+// A dry run over an occupied location reports the move a real run would
+// make, to the name it would use, and moves and restores nothing.
+func TestRestoreToOriginal_DryRunOccupiedChangesNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only")
+	}
+	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
+	parent := filepath.Dir(repoPath)
+	before := treeSnapshot(t, parent)
+
+	conv := hop.NewConverter(afero.NewOsFs(), git.New())
+	conv.DryRun = true
+	res, err := conv.RestoreToOriginal(backupPath, force)
+	require.NoError(t, err)
+
+	assert.Equal(t, repoPath, res.Target)
+	assert.True(t, res.Occupied)
+	assert.Equal(t, repoPath+".pre-restore-20260924T101500Z", res.MovedAside)
+	assert.Equal(t, before, treeSnapshot(t, parent), "dry run changed the location or its parent")
+}
+
+// A dry run to a missing location plans no move and creates nothing.
+func TestRestoreToOriginal_DryRunMissingTargetChangesNothing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only")
+	}
+	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
+	require.NoError(t, os.RemoveAll(repoPath))
+
+	conv := hop.NewConverter(afero.NewOsFs(), git.New())
+	conv.DryRun = true
+	res, err := conv.RestoreToOriginal(backupPath, hop.RestoreOptions{})
+	require.NoError(t, err)
+
+	assert.False(t, res.Occupied)
+	assert.Empty(t, res.MovedAside)
+	_, err = os.Lstat(repoPath)
+	assert.True(t, os.IsNotExist(err), "dry run created %s", repoPath)
+}
+
+// A dry run refuses what a real run refuses, with the same error.
+func TestRestoreToOriginal_DryRunRefusesLikeARealRun(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only")
+	}
+	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
+	before := treeSnapshot(t, repoPath)
+
+	for _, dry := range []bool{true, false} {
+		conv := hop.NewConverter(afero.NewOsFs(), git.New())
+		conv.DryRun = dry
+		_, err := conv.RestoreToOriginal(backupPath, hop.RestoreOptions{})
+		require.Error(t, err, "dry=%v", dry)
+		assert.True(t, errors.Is(err, hop.ErrRestoreTargetNotEmpty), "dry=%v: err = %v", dry, err)
+	}
+	assert.Equal(t, before, treeSnapshot(t, repoPath))
+}
+
+// A backup whose copy of the repository is gone is refused before the
+// occupant is moved aside, on a real run as on a dry run: there would be
+// nothing to put in its place.
+func TestRestoreToOriginal_MissingCopyRefusedBeforeMoving(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("posix-only")
+	}
+	repoPath, backupPath := convertKeepingBackup(t, filepath.Join(t.TempDir(), "bk"))
+	require.NoError(t, os.Rename(filepath.Join(backupPath, "original"), filepath.Join(backupPath, "gone")))
+	parent := filepath.Dir(repoPath)
+	before := treeSnapshot(t, parent)
+
+	for _, dry := range []bool{true, false} {
+		conv := hop.NewConverter(afero.NewOsFs(), git.New())
+		conv.DryRun = dry
+		res, err := conv.RestoreToOriginal(backupPath, force)
+		require.Error(t, err, "dry=%v", dry)
+		assert.Contains(t, err.Error(), "backup not found", "dry=%v", dry)
+		assert.Empty(t, res.MovedAside, "dry=%v", dry)
+	}
+	assert.Equal(t, before, treeSnapshot(t, parent), "refused restore moved the occupant")
+}

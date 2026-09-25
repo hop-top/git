@@ -19,7 +19,7 @@ var initHintCommands = map[string]func(*pflag.FlagSet) string{
 	"retry":    initRetryCommand,
 	"regular":  initRegularCommand,
 	"register": initConvertCommand,
-	"restore":  func(*pflag.FlagSet) string { return initRestoreCommand("/bk/proj") },
+	"restore":  func(*pflag.FlagSet) string { return initRestoreCommand("/bk/proj", true) },
 }
 
 // TestInitHintCommands pins the command each init hint offers: the

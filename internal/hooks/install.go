@@ -48,12 +48,16 @@ type MirrorOpts struct {
 	// tests; production callers should leave this false and rely on TTY
 	// detection by the caller.
 	Interactive bool
+	// DryRun makes every decision a real run makes but writes nothing and
+	// asks nothing: a hook a real run would install is reported with
+	// status "would-install", one it would ask about with "would-prompt".
+	DryRun bool
 }
 
 // HookOutcome describes what happened to one hook during MirrorCommittedHooks.
 type HookOutcome struct {
 	Name   string // hook filename
-	Status string // "installed", "skipped", "already-present", "warned"
+	Status string // "installed", "skipped", "already-present", "warned"; on a dry run "would-install", "would-prompt"
 	Reason string // optional human-readable reason
 	Target string // installed location (when applicable)
 }
@@ -135,8 +139,10 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 		return res, fmt.Errorf("invalid repoID %q: expected host/org/repo", opts.RepoID)
 	}
 	hopspaceHooksDir := filepath.Join(hop.GetGitHopDataHome(), parts[0], parts[1], parts[2], "hooks")
-	if err := fs.MkdirAll(hopspaceHooksDir, 0755); err != nil {
-		return res, fmt.Errorf("create hopspace hooks dir: %w", err)
+	if !opts.DryRun {
+		if err := fs.MkdirAll(hopspaceHooksDir, 0755); err != nil {
+			return res, fmt.Errorf("create hopspace hooks dir: %w", err)
+		}
 	}
 
 	// Prompt-mode session state: 'a' (all-yes) or 's' (skip-all).
@@ -198,6 +204,10 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 				output.Warn("hopspace hook %s already exists with different content; pass --hooks-overwrite to replace", name)
 				continue
 			}
+			if opts.DryRun {
+				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "would-install", Target: dstPath})
+				continue
+			}
 			if err := installHook(fs, mode, srcPath, dstPath, info); err != nil {
 				res.Warned++
 				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: err.Error()})
@@ -208,6 +218,10 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 			res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "installed", Target: dstPath})
 
 		case ModePrompt:
+			if opts.DryRun {
+				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "would-prompt", Target: dstPath})
+				continue
+			}
 			if skipAll {
 				res.Skipped++
 				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "skipped", Reason: "skip-all"})

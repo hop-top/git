@@ -67,7 +67,7 @@ See docs/hooks.md for details.`,
 		initRunFlags = cmd.Flags()
 
 		if restorePath != "" {
-			handleRestore(fs, g, restorePath, forceFlag)
+			handleRestore(fs, g, restorePath, forceFlag, dryRunFlag)
 			return
 		}
 
@@ -203,7 +203,7 @@ staged and unstaged as they are:
 	}
 
 	if dryRunFlag {
-		fmt.Println("DRY RUN - No changes will be made")
+		fmt.Println(initDryRunBanner)
 		fmt.Printf("Repository: %s\n", repoPath)
 
 		fmt.Printf("Remote: %s\n", initRemoteLabel(g, repoPath))
@@ -211,7 +211,8 @@ staged and unstaged as they are:
 		branch, _ := g.GetCurrentBranch(repoPath)
 		fmt.Printf("Branch: %s\n", branch)
 
-		status, _ := g.RunInDir(repoPath, "git", "status", "--porcelain")
+		// Without optional locks: status would otherwise refresh the index.
+		status, _ := g.RunInDir(repoPath, "git", "--no-optional-locks", "status", "--porcelain")
 		if status == "" {
 			fmt.Println("Status: clean")
 		} else {
@@ -228,6 +229,7 @@ staged and unstaged as they are:
 		if !noHooks {
 			previewInitWorktreeAdd(fs, g, repoPath, branch, useBare)
 		}
+		previewInitFinish(fs, g, initWorktreePath(repoPath, branch, useBare), repoPath, repoPath, noHooks, enableChdir)
 
 		output.Hint("To proceed with conversion, run:\n  %s", initProceedCommand(initRunFlags))
 		return
@@ -424,7 +426,9 @@ const initNextSteps = `  git hop add <branch>       # Add new branch
 
 func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, enableChdir bool) {
 	refuseDetachedHead(fs, g, repoPath)
-	output.Info("Registering repository as-is...")
+	if !dryRunFlag {
+		output.Info("Registering repository as-is...")
+	}
 
 	remoteURL, err := g.GetRemoteURL(repoPath)
 	var org, repo string
@@ -451,6 +455,11 @@ func registerAsIs(fs afero.Fs, g git.GitInterface, repoPath string, noHooks, ena
 	if err != nil {
 		output.Error("Failed to get current branch: %v", err)
 		os.Exit(1)
+	}
+
+	if dryRunFlag {
+		previewRegisterAsIs(fs, g, org, repo, branch, repoPath, noHooks, enableChdir)
+		return
 	}
 
 	repoKey := org + "/" + repo
@@ -512,7 +521,14 @@ func handleAlreadyInitialized(fs afero.Fs, g git.GitInterface, path string, stru
 // was lost). Without the back-fill, those repos report "already
 // initialized" and yet downstream commands (status, list, add) treat
 // the directory as an un-registered hub. See cmd/init_backfill.go.
+//
+// A dry run reports all of that and does none of it.
 func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path string, structure config.StructureType, noHooks, enableChdir bool) {
+	if dryRunFlag {
+		previewAlreadyInitialized(fs, g, path, structure, noHooks, enableChdir)
+		output.Hint("%s", "You can use git-hop normally:\n"+initNextSteps)
+		return
+	}
 	if hubPath, ok := resolveBackfillRoot(fs, g, path, structure); ok {
 		if created, err := backfillHubConfigIfMissing(fs, g, hubPath); err != nil {
 			output.Warn("failed to back-fill hop.json at %s: %v", hubPath, err)
@@ -522,9 +538,7 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 		}
 	}
 
-	fmt.Println("Repository already initialized with git-hop worktree structure.")
-	fmt.Printf("Structure: %s\n", structure)
-	fmt.Printf("Path:      %s\n", path)
+	printAlreadyInitialized(path, structure)
 
 	if !noHooks {
 		if err := installInitHooks(fs, path, "", true); err != nil {
@@ -546,6 +560,14 @@ func handleAlreadyInitializedWithFlags(fs afero.Fs, g git.GitInterface, path str
 	output.Hint("%s", "You can use git-hop normally:\n"+initNextSteps)
 }
 
+// printAlreadyInitialized is the summary init prints for a repository
+// that already has the worktree structure.
+func printAlreadyInitialized(path string, structure config.StructureType) {
+	fmt.Println("Repository already initialized with git-hop worktree structure.")
+	fmt.Printf("Structure: %s\n", structure)
+	fmt.Printf("Path:      %s\n", path)
+}
+
 // installInitHooks installs the .git-hop/hooks directory after init.
 // For bare repos it installs in the main worktree; otherwise in the repo root.
 func installInitHooks(fs afero.Fs, repoPath, mainWorktreePath string, isRegularRepo bool) error {
@@ -562,6 +584,25 @@ func installInitHooks(fs afero.Fs, repoPath, mainWorktreePath string, isRegularR
 // CLI flag → GIT_HOP_HOOKS env → hop.hooks.installMode git config → "prompt".
 // If --no-hooks was passed and --hooks was not, this is a no-op.
 func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath string, flagMode string, overwrite, noHooks bool) {
+	mopts, ok := initMirrorOpts(g, worktreePath, repoPath, flagMode, overwrite, noHooks)
+	if !ok {
+		return
+	}
+	res, err := hooks.MirrorCommittedHooks(fs, mopts)
+	if err != nil {
+		output.Warn("failed to mirror committed hooks: %v", err)
+		return
+	}
+	if res.Installed > 0 || res.Warned > 0 || res.Skipped > 0 || res.AlreadyPresent > 0 {
+		output.Note("hooks: installed=%d skipped=%d already-present=%d warned=%d",
+			res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
+	}
+}
+
+// initMirrorOpts resolves the hook mirror mirrorInitHooks runs; ok is
+// false, with a warning, when the repository has no org/repo to mirror
+// into.
+func initMirrorOpts(g git.GitInterface, worktreePath, repoPath string, flagMode string, overwrite, noHooks bool) (hooks.MirrorOpts, bool) {
 	// --hooks wins over --no-hooks; otherwise --no-hooks → mode=none.
 	mode := flagMode
 	if mode == "" && noHooks {
@@ -578,7 +619,7 @@ func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath str
 	repoID := initRepoID(g, repoPath)
 	if repoID == "" {
 		output.Warn("could not determine org/repo for hook mirror; skipping")
-		return
+		return hooks.MirrorOpts{}, false
 	}
 
 	mopts := hooks.MirrorOpts{
@@ -591,16 +632,7 @@ func mirrorInitHooks(fs afero.Fs, g git.GitInterface, worktreePath, repoPath str
 	if resolved == hooks.ModePrompt && isStdinTTYInit() {
 		mopts.Stdin = os.Stdin
 	}
-
-	res, err := hooks.MirrorCommittedHooks(fs, mopts)
-	if err != nil {
-		output.Warn("failed to mirror committed hooks: %v", err)
-		return
-	}
-	if res.Installed > 0 || res.Warned > 0 || res.Skipped > 0 || res.AlreadyPresent > 0 {
-		output.Note("hooks: installed=%d skipped=%d already-present=%d warned=%d",
-			res.Installed, res.Skipped, res.AlreadyPresent, res.Warned)
-	}
+	return mopts, true
 }
 
 func isStdinTTYInit() bool {

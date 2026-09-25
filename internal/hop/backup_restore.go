@@ -29,8 +29,12 @@ type RestoreResult struct {
 	// Target is the location the backup was restored to: the one its
 	// metadata records.
 	Target string
-	// MovedAside is where the previous occupant of Target was moved;
-	// empty when Target was missing or empty.
+	// Occupied reports that Target held something other than an empty
+	// directory.
+	Occupied bool
+	// MovedAside is where the previous occupant of Target was moved (on
+	// a dry run, where it would be moved); empty when Target was missing
+	// or empty.
 	MovedAside string
 }
 
@@ -43,7 +47,12 @@ type RestoreResult struct {
 // case it is moved aside to <location>.pre-restore-<UTC time> (see
 // preRestorePath), never deleted. When that move fails, nothing has been
 // touched. A backup that lies inside the location is refused either way:
-// it would move aside along with everything else.
+// it would move aside along with everything else, and so is a backup
+// whose copy of the repository is missing: there would be nothing to
+// restore.
+//
+// With c.DryRun set, every check runs and res says what a real run would
+// do, but nothing is moved or restored.
 func (c *Converter) RestoreToOriginal(backupPath string, opts RestoreOptions) (RestoreResult, error) {
 	mgr, err := LoadBackupManager(c.fs, c.git, backupPath)
 	if err != nil {
@@ -61,18 +70,33 @@ func (c *Converter) RestoreToOriginal(backupPath string, opts RestoreOptions) (R
 			backupPath, res.Target)
 	}
 
-	occupied, err := pathOccupied(c.fs, res.Target)
+	original := filepath.Join(backupPath, "original")
+	if ok, err := afero.DirExists(c.fs, original); err != nil {
+		return res, fmt.Errorf("failed to check backup directory: %w", err)
+	} else if !ok {
+		return res, fmt.Errorf("backup not found: %s", original)
+	}
+
+	res.Occupied, err = pathOccupied(c.fs, res.Target)
 	if err != nil {
 		return res, fmt.Errorf("failed to inspect %s: %w", res.Target, err)
 	}
-	if occupied {
+	var aside string
+	if res.Occupied {
 		if !opts.Replace {
 			return res, fmt.Errorf("%w: %s", ErrRestoreTargetNotEmpty, res.Target)
 		}
-		aside, err := preRestorePath(c.fs, res.Target, opts.Clock)
+		aside, err = preRestorePath(c.fs, res.Target, opts.Clock)
 		if err != nil {
 			return res, fmt.Errorf("failed to choose where to move %s aside: %w; nothing was changed", res.Target, err)
 		}
+	}
+	if c.DryRun {
+		res.MovedAside = aside
+		return res, nil
+	}
+
+	if aside != "" {
 		if err := c.fs.Rename(res.Target, aside); err != nil {
 			return res, fmt.Errorf("failed to move %s aside to %s: %w; nothing was changed", res.Target, aside, err)
 		}

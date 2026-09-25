@@ -61,16 +61,22 @@ func ShouldPromptForSetup(cfg *config.GlobalConfig, fs afero.Fs) bool {
 	return false
 }
 
+// IntegrationTarget is the shell InstallIntegration installs for and the
+// rc file it writes, or why it cannot install.
+func IntegrationTarget() (shellType, rcPath string, err error) {
+	shellType = DetectShell()
+	if shellType == "unknown" {
+		return "", "", fmt.Errorf("unsupported shell (detected: %s)", os.Getenv("SHELL"))
+	}
+	return shellType, GetRcFile(shellType), nil
+}
+
 // InstallIntegration installs the shell wrapper function and updates config
 func InstallIntegration(fs afero.Fs) (*IntegrationResult, error) {
-	// Detect shell
-	shellType := DetectShell()
-	if shellType == "unknown" {
-		return nil, fmt.Errorf("unsupported shell (detected: %s)", os.Getenv("SHELL"))
+	shellType, rcPath, err := IntegrationTarget()
+	if err != nil {
+		return nil, err
 	}
-
-	// Get RC file path
-	rcPath := GetRcFile(shellType)
 
 	// Install wrapper
 	if err := InstallWrapper(fs, shellType, rcPath); err != nil {
