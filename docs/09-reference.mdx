@@ -588,7 +588,7 @@ target without `--force`, dirty tree) fails the same way as the real run.
 | `dry_run` | bool | *json/yaml only*; `true` when `--dry-run` previewed the run and changed nothing; absent otherwise |
 | `backup_kept` | bool | *json/yaml only*; `true` when the backup is still on disk (`--keep-backup`, `hop.backup.keepBackup`; under `--dry-run`, would be); absent otherwise |
 | `registered` | bool | *json/yaml only*; `true` when this run recorded the hub in git-hop's state (`converted`, `adopted`; under `--dry-run`, would); absent otherwise |
-| `worktrees` | list of `{branch, path}` | *json/yaml only*; worktrees this run created (or would create); `[]` when none |
+| `worktrees` | list of `{branch, path, action, moved_from}` | *json/yaml only*; the worktree this run created (`action: created`), then each linked worktree a bare conversion carried into the hub (`action: carried`), in the order of their git admin directories; under `--dry-run`, the ones it would create and carry. `path` is where the worktree is after the conversion; `moved_from`, present only for a carried worktree that sat inside the working tree and moved into `hops/<branch>`, is where it was. `branch` is empty for a carried worktree on a detached HEAD. A prunable linked worktree is left behind and not listed; a regular conversion carries none. `[]` when none |
 | `moved_aside` | string | *json/yaml only*; `restored` with `--force`: where what occupied the original location was moved (would be, under `--dry-run`) |
 
 Columns: `action hub layout default_branch backup`.

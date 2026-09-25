@@ -214,7 +214,7 @@ staged and unstaged as they are:
 	if dryRunFlag {
 		if output.IsStructured() {
 			branch, _ := g.GetCurrentBranch(repoPath)
-			res := initConversionResult(repoPath, branch, initWorktreePath(repoPath, branch, useBare), useBare)
+			res := initConversionResult(repoPath, branch, initWorktreePath(repoPath, branch, useBare), useBare, initPlannedCarry(linked, repoPath))
 			res.DryRun = true
 			res.BackupKept = converter.KeepBackup
 			res.Registered = true
@@ -402,7 +402,7 @@ staged and unstaged as they are:
 	}
 
 	if output.IsStructured() {
-		res := initConversionResult(repoPath, currentBranchName, mainWorktreePath, !isRegularRepo)
+		res := initConversionResult(repoPath, currentBranchName, mainWorktreePath, !isRegularRepo, result.Carried)
 		res.Backup = result.BackupPath
 		res.BackupKept = backupOnDisk(fs, result.BackupPath)
 		res.Registered = registered
