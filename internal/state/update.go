@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/spf13/afero"
-
-	"hop.top/git/internal/filelock"
 )
 
 // state.json is rewritten by every git-hop run that records or drops a
@@ -69,11 +67,7 @@ func Update(fs afero.Fs, fn func(st *State) error) error {
 
 // withStateLock runs fn holding the lock on state.json.
 func withStateLock(fs afero.Fs, fn func() error) error {
-	return filelock.Guard{
-		Path:    filepath.Join(GetStateHome(), LockName),
-		Timeout: lockTimeout,
-		Busy:    ErrLocked,
-	}.Do(fs, fn)
+	return stateGuard().Do(fs, fn)
 }
 
 // replaceFile atomically replaces path with data: it writes a temp file
@@ -81,7 +75,7 @@ func withStateLock(fs afero.Fs, fn func() error) error {
 // file's name is unique, so saves that overlap (another process, or a
 // writer that bypassed the lock) never write into each other's copy.
 func replaceFile(fs afero.Fs, path string, data []byte) (err error) {
-	f, err := afero.TempFile(fs, filepath.Dir(path), filepath.Base(path)+".*.tmp")
+	f, err := afero.TempFile(fs, filepath.Dir(path), filepath.Base(path)+tempSuffixPattern)
 	if err != nil {
 		return fmt.Errorf("failed to create temp state file: %w", err)
 	}

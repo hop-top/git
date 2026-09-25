@@ -179,11 +179,12 @@ exits 0 without prompting.
                                       #   exit 0 only if every issue would be fixed
 /usr/bin/git hop prune --dry-run      # list this repo's orphaned state + hop.json entries
 /usr/bin/git hop prune                # remove them (clears status Missing rows); current repo only
-/usr/bin/git hop prune --all          # sweep every registered repo (+ aged state backups); state removals are not undoable
+/usr/bin/git hop prune --all          # sweep every registered repo (+ aged state backups, state.json temp files); state removals are not undoable
 /usr/bin/git hop prune --dry-run --json  # [{action, kind, repository, branch, path, reason?}]
 # action: pruned | would-prune | skipped (locked worktree kept; reason says why)
-# kind: worktree | hub | hop-json-entry | repair-backup | conversion-backup
+# kind: worktree | hub | hop-json-entry | repair-backup | conversion-backup | state-backup | temp-file
 # conversion-backup = init backup beyond hop.backup.maxBackups (3) / cleanupAgeDays (30)
+# temp-file = hop.json (or, --all, state.json) temp file an interrupted save left, 1h+ old; kept while a save holds the lock
 /usr/bin/git hop repair -n --json     # plan: [{status, path, kind, old, new, reason}]
 ```
 
@@ -230,7 +231,7 @@ Structured output rules:
 
 ## Result Shapes
 
-Result schema 1.12 (MINOR = fields or enum values added, MAJOR = renamed or
+Result schema 1.13 (MINOR = fields or enum values added, MAJOR = renamed or
 removed). Columns = `csv`, `text`, `--porcelain` order; other fields are
 json/yaml only.
 

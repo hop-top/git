@@ -39,6 +39,10 @@ hub's hop.json, removing:
   - Conversion backups 'git hop init' kept, beyond hop.backup.maxBackups
     per repository or older than hop.backup.cleanupAgeDays (backups of
     failed conversions are never removed)
+  - Temp files a save of hop.json left beside it when its run died
+    before renaming them into place, once an hour old; with --all, a
+    save of the state file's too. A save running at the time (it holds
+    the file's lock) leaves them for a later prune
 
 A worktree git has locked ('git worktree lock') is kept even when its
 directory is missing, as 'git worktree prune' keeps it: prune reports
@@ -128,11 +132,11 @@ func runPrune(cmd *cobra.Command, args []string) {
 	case counts.total() == 0:
 		output.Success("No orphaned entries found.")
 	case dryRun:
-		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), and %d state backup(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups)
+		output.Success("[dry-run] Would prune %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), %d state backup(s), and %d temp file(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups, counts.tempFiles)
 	default:
-		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), and %d state backup(s)",
-			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups)
+		output.Success("Pruned %d worktree(s), %d hub(s), %d hop.json entry(ies), %d repair backup(s), %d conversion backup(s), %d state backup(s), and %d temp file(s)",
+			counts.worktrees, counts.hubs, counts.hopJSONEntries, counts.repairBackups, counts.conversionBackups, counts.stateBackups, counts.tempFiles)
 	}
 }
 
@@ -151,6 +155,7 @@ func pruneAndSave(fs afero.Fs, g git.GitInterface, st, scoped *state.State, all,
 		// State backups belong to no one repository, so only a prune of
 		// every repository ages them out.
 		counts.addStateBackups(pruneStateBackups(fs, g, st, dryRun))
+		counts.addTempFiles(pruneStateTemps(fs, dryRun))
 	}
 	return counts, edits.save(fs)
 }
@@ -232,16 +237,25 @@ type pruneCounts struct {
 	conversionBackups int
 	// stateBackups counts state.json backups aged out (prune --all).
 	stateBackups int
-	records      []pruneRecord
+	// tempFiles counts temp files crashed saves of hop.json (and, under
+	// --all, of state.json) left behind.
+	tempFiles int
+	records   []pruneRecord
 }
 
 func (c pruneCounts) total() int {
-	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups + c.conversionBackups + c.stateBackups
+	return c.worktrees + c.hubs + c.hopJSONEntries + c.repairBackups + c.conversionBackups + c.stateBackups + c.tempFiles
 }
 
 // addStateBackups adds the state backups a pass aged out.
 func (c *pruneCounts) addStateBackups(records []pruneRecord) {
 	c.stateBackups += len(records)
+	c.records = append(c.records, records...)
+}
+
+// addTempFiles adds the temp files a sweep removed.
+func (c *pruneCounts) addTempFiles(records []pruneRecord) {
+	c.tempFiles += len(records)
 	c.records = append(c.records, records...)
 }
 
@@ -258,9 +272,10 @@ func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, 
 	worktrees, hubs := runPruneFS(fs, g, st, dryRun, edits)
 	backups := pruneRepairBackups(fs, g, st, dryRun)
 	conversions := pruneConversionBackups(fs, st, dryRun)
+	temps := pruneHubTemps(fs, st, dryRun)
 
-	records := make([]pruneRecord, 0, len(hopJSON)+len(worktrees)+len(hubs)+len(backups)+len(conversions))
-	for _, pass := range [][]pruneRecord{hopJSON, worktrees, hubs, backups, conversions} {
+	records := make([]pruneRecord, 0, len(hopJSON)+len(worktrees)+len(hubs)+len(backups)+len(conversions)+len(temps))
+	for _, pass := range [][]pruneRecord{hopJSON, worktrees, hubs, backups, conversions, temps} {
 		records = append(records, pass...)
 	}
 	return pruneCounts{
@@ -269,6 +284,7 @@ func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, 
 		hopJSONEntries:    prunedCount(hopJSON),
 		repairBackups:     len(backups),
 		conversionBackups: len(conversions),
+		tempFiles:         len(temps),
 		records:           records,
 	}
 }
@@ -285,6 +301,9 @@ const (
 	// pruneKindStateBackup is a copy of state.json taken before a save
 	// migrated it to the current format.
 	pruneKindStateBackup = "state-backup"
+	// pruneKindTempFile is a temp file a save of hop.json or state.json
+	// left behind when its run died before renaming it into place.
+	pruneKindTempFile = "temp-file"
 )
 
 // pruneActionSkipped is the action of an entry prune left in place

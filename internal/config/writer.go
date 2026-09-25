@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"reflect"
+	"regexp"
 
 	"github.com/spf13/afero"
 )
@@ -59,6 +60,21 @@ func (w *Writer) WriteVolumesConfig(path string, config *VolumesConfig) error {
 	return w.writeConfig(filepath.Join(path, "volumes.json"), config)
 }
 
+// tempPattern names the temp file writeConfig writes next to the file
+// it replaces: the * becomes random digits.
+const tempPattern = "hop-config-*.tmp"
+
+// tempName matches the names writeConfig gives its temp files, and
+// nothing else.
+var tempName = regexp.MustCompile(`^hop-config-[0-9]+\.tmp$`)
+
+// IsTempName reports whether name is the name of a temp file a write of
+// hop.json, ports.json or volumes.json creates next to it. A writer that
+// dies before renaming it over the file leaves it behind.
+func IsTempName(name string) bool {
+	return tempName.MatchString(name)
+}
+
 // writeConfig writes the config to a temp file and renames it (atomic).
 // Members of the existing file that config's type does not model are
 // preserved (see mergeUnmodeled), following any branch renames in opts.
@@ -86,7 +102,7 @@ func (w *Writer) writeConfig(path string, config interface{}, opts ...WriteOptio
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	tmpFile, err := afero.TempFile(w.fs, dir, "hop-config-*.tmp")
+	tmpFile, err := afero.TempFile(w.fs, dir, tempPattern)
 	if err != nil {
 		return fmt.Errorf("failed to create temp file: %w", err)
 	}

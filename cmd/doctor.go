@@ -89,6 +89,10 @@ Checks:
 - Retired hop.* settings (hop.autoEnvStart, hop.bareRepo and the other
   settings git-hop no longer has) in --global or the current hub's
   config, whatever their value: never read; a warning (--fix unsets them)
+- Temp files a save of the state file, or of the current hub's
+  hop.json, left beside it when its run died before renaming them into
+  place, once an hour old: a warning (--fix removes them, as 'git hop
+  prune' does, unless a save holds the file's lock at the time)
 - The current hub's repository format: extensions.worktreeConfig on at
   core.repositoryformatversion 0, which tools other than git may not
   honour; a warning (--fix sets version 1)
@@ -471,6 +475,7 @@ func checkState(fs afero.Fs, g git.GitInterface, hubPath string, hubKept keptWor
 		// whose directory is gone) when state never recorded it.
 		r.fixed += pruneMissingHubRows(fs, g, hubPath, hubKept, opts, r)
 	}
+	checkStaleTemps(fs, hubPath, opts, r)
 }
 
 // inspectState loads the global state and reports every worktree it

@@ -15,6 +15,10 @@ hub's hop.json, removing:
   - Conversion backups 'git hop init' kept, beyond hop.backup.maxBackups
     per repository or older than hop.backup.cleanupAgeDays (backups of
     failed conversions are never removed)
+  - Temp files a save of hop.json left beside it when its run died
+    before renaming them into place, once an hour old; with --all, a
+    save of the state file's too. A save running at the time (it holds
+    the file's lock) leaves them for a later prune
 
 A worktree git has locked ('git worktree lock') is kept even when its
 directory is missing, as 'git worktree prune' keeps it: prune reports

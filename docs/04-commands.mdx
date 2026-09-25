@@ -774,8 +774,8 @@ as `repository not found`.
 
 ### What It Does
 
-For the repositories in scope, `prune` cleans up five classes of stale
-data, and with `--all` a sixth:
+For the repositories in scope, `prune` cleans up six classes of stale
+data, and with `--all` two more:
 
 - **Orphan worktrees** — state entries whose paths no longer exist on
   disk. Common when a worktree dir was `rm -rf`'d manually.
@@ -804,6 +804,16 @@ data, and with `--all` a sixth:
   [State Tracking](./configuration.md#state-tracking)), older than
   `hop.repair.backupRetention`. `0` or a negative value keeps them all.
   They belong to no one repository, so a prune scoped to one leaves them.
+- **Temp files of interrupted saves** — a save of `hop.json` writes
+  `hop-config-<digits>.tmp` beside it (as saves of `ports.json` and
+  `volumes.json` do in the hopspace) and renames it into place; a run
+  that dies in between leaves the temp file. Prune removes those at
+  least an hour old next to the `hop.json` of each hub in scope and of
+  its hopspace. With `--all` it does the same for `state.json`'s
+  `state.json.<digits>.tmp` in `$XDG_STATE_HOME/git-hop`, which belong
+  to no one repository. Only files named exactly so are touched. The
+  sweep holds the file's lock; when a save holds it, prune warns and
+  leaves the files for a later run.
 
 Rewriting `hop.json` goes through the same backup mechanism
 `git hop repair` uses: the pre-prune file is snapshotted to
@@ -944,6 +954,12 @@ git hop doctor --fix --dry-run
   `hop.conversion.autoRollback`, `hop.backup.enabled` and
   `hop.backup.preserveStashes`. Nothing reads them, and earlier releases
   wrote several on their own. They are not counted as migration leftovers
+- Temp files a save of `state.json`, or of the current hub's `hop.json`
+  (and of its hopspace's, which `ports.json` and `volumes.json` share),
+  left beside it when its run died before renaming them into place, once
+  an hour old: `state.json.<digits>.tmp` and `hop-config-<digits>.tmp`.
+  A warning (exit status unaffected); `--fix` removes them with the sweep
+  [`git hop prune`](#git-hop-prune) uses
 - The current hub's repository format: `extensions.worktreeConfig` on at
   `core.repositoryformatversion` 0, as conversions by earlier releases
   left it, is reported as a warning (exit status unaffected). git honours
@@ -1014,6 +1030,8 @@ The `--fix` flag will:
   it, `--global` or the current hub's config, and no live key
 - Set the current hub's `core.repositoryformatversion` to 1 when it has
   `extensions.worktreeConfig` on at version 0
+- Remove the stale temp files interrupted saves left, unless a save
+  holds the file's lock at the time (they stay for a later run)
 - Register branches from hub to hopspace
 - Record the current hub in state, with its worktrees whose directory
   exists, as `init` and `clone` record a new hub. This merges with what
