@@ -208,6 +208,18 @@ func getManagersPath() string {
 	return filepath.Join(dir, "managers.json")
 }
 
+// RetiredConfigPath is $XDG_CONFIG_HOME/git-hop/config.json. git-hop no
+// longer reads it, or anything else there, for settings: they live in git
+// config hop.*. doctor points out a leftover copy; nothing writes or
+// removes it.
+func RetiredConfigPath() string {
+	dir, err := xdg.ConfigDir("git-hop")
+	if err != nil {
+		return filepath.Join(".config", "git-hop", "config.json")
+	}
+	return filepath.Join(dir, "config.json")
+}
+
 // ManagersFileError reports why managers.json cannot be used, naming the
 // file; nil when it is absent or valid.
 func (l *GlobalLoader) ManagersFileError() error {
