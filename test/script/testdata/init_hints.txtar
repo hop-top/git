@@ -10,9 +10,7 @@ exec git-hop init --no-hooks
 stdout 'Repository registered successfully'
 ! stdout 'Note:'
 ! stdout 'Consider converting'
-# The menu prompt read a piped answer, which the terminal never echoed,
-# so the first hint shares the prompt's line.
-stderr '^(Choose \[1/2/3/q\]: )?hint: Repository has no remote configured\.$'
+stderr '^hint: Repository has no remote configured\.$'
 stderr '^hint: Some git-hop features are limited with this structure\.$'
 stderr '^hint:   git hop init --no-prompt --no-hooks$'
 
