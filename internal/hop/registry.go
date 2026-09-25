@@ -3,7 +3,6 @@ package hop
 import (
 	"encoding/json"
 	"fmt"
-	"os"
 	"path/filepath"
 	"sort"
 	"time"
@@ -19,12 +18,13 @@ type Registry struct {
 	fs     afero.Fs
 }
 
-// LoadRegistry loads or creates the global hops registry
+// LoadRegistry loads or creates the global hops registry. It reads
+// through fs, the filesystem Save writes through.
 func LoadRegistry(fs afero.Fs) *Registry {
 	path := GetHopsRegistryPath()
 	cfg := &config.HopsConfig{Hops: make(map[string]config.HopEntry)}
 
-	if content, err := os.ReadFile(path); err == nil {
+	if content, err := afero.ReadFile(fs, path); err == nil {
 		if err := json.Unmarshal(content, cfg); err != nil {
 			output.Warn("failed to parse hops registry: %v", err)
 		}
