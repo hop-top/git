@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"bufio"
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -20,7 +18,6 @@ import (
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/repoid"
 	"hop.top/git/internal/services"
-	"hop.top/kit/go/core/xdg"
 )
 
 // addFromFlag holds the --from CLI flag value.
@@ -320,96 +317,6 @@ created or written and no hook runs.`,
 			output.Info("Services: %s", strings.Join(servicesList, ", "))
 		}
 	},
-}
-
-// agentDirHint returns a slash command hint for adding the worktree directory
-// to the current session when running inside a supported AI coding agent.
-func agentDirHint(path string) string {
-	switch {
-	case os.Getenv("CLAUDE_CODE") == "1":
-		return fmt.Sprintf("/add-dir %s", path)
-	case os.Getenv("GEMINI_CLI") == "1":
-		return fmt.Sprintf("/directory add %s", path)
-	case os.Getenv("COPILOT_GH") == "true":
-		return fmt.Sprintf("/add-dir %s", path)
-	default:
-		return ""
-	}
-}
-
-// opencodeAgentHint prompts the user to choose local or global OpenCode config,
-// then prints the external_directories snippet to add the worktree path.
-func opencodeAgentHint(path string, in *os.File) {
-	xdgConfig, err := xdg.ConfigDir("opencode")
-	if err != nil {
-		xdgConfig = filepath.Join(".config", "opencode")
-	}
-	localCfg := ".opencode/opencode.jsonc"
-	globalCfg := filepath.Join(xdgConfig, "opencode.jsonc")
-
-	fmt.Fprintf(os.Stderr, "Add %s to OpenCode config. Which?\n  1) local  (%s)\n  2) global (%s)\nChoice [1/2]: ", path, localCfg, globalCfg)
-
-	reader := bufio.NewReader(in)
-	choice, _ := reader.ReadString('\n')
-	choice = strings.TrimSpace(choice)
-
-	var cfgPath string
-	switch choice {
-	case "2":
-		cfgPath = globalCfg
-	default:
-		cfgPath = localCfg
-	}
-
-	fmt.Fprintf(os.Stderr, "\nAdd to %s:\n\n  \"external_directories\": [\"%s\"]\n\n", cfgPath, path)
-}
-
-// resolveBranchBase normalizes the start-point string fed to
-// WorktreeManager into the branch name to persist in HubBranch.Base.
-// Returns "" when the base should NOT be recorded:
-//   - empty / "default-branch" sentinel (= hub default; fallback handles it)
-//   - "initial" sentinel (root commit, not a branch)
-//   - input equal to the hub default branch (redundant with fallback)
-//   - input that doesn't resolve to a local or remote-tracking branch ref
-//     (raw SHA, tag, or a name that no longer exists)
-//
-// When the input resolves only via `refs/remotes/origin/<name>`, the
-// returned base is the bare branch name (no `origin/` prefix) — that's
-// the form used for comparison everywhere else.
-func resolveBranchBase(g git.GitInterface, worktreePath, startPoint, defaultBranch string) string {
-	switch startPoint {
-	case "", "default-branch", "initial":
-		return ""
-	}
-	if startPoint == defaultBranch {
-		return ""
-	}
-	if _, err := g.RevParse(worktreePath, "--verify", "refs/heads/"+startPoint); err == nil {
-		return startPoint
-	}
-	if _, err := g.RevParse(worktreePath, "--verify", "refs/remotes/origin/"+startPoint); err == nil {
-		return startPoint
-	}
-	return ""
-}
-
-// resolveAddStartPoint applies the configured precedence to pick the
-// start-point string passed to WorktreeManager. Empty inputs are skipped.
-// The returned value is fed verbatim into WorktreeManager, which decides
-// the final ref/SHA based on its own resolution rules (see
-// worktree.go:resolveStartPoint). An empty return is interpreted by the
-// manager as the built-in default ("default-branch").
-func resolveAddStartPoint(flagVal, envVal, configVal string) string {
-	if flagVal != "" {
-		return flagVal
-	}
-	if envVal != "" {
-		return envVal
-	}
-	if configVal != "" {
-		return configVal
-	}
-	return ""
 }
 
 func init() {

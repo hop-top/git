@@ -96,7 +96,7 @@ func isOSStdout(e ast.Expr) bool {
 // and JSON mode apply to it. Keep each entry justified.
 var rawStderrAllowed = map[string]string{
 	// An interactive prompt and its answer; only reached on a terminal.
-	"cmd/add.go:opencodeAgentHint": "interactive OpenCode config prompt",
+	"cmd/add_agent_hint.go:opencodeAgentHint": "interactive OpenCode config prompt",
 	// Fails before the CLI, and so the output package, is set up.
 	"main.go:main": "xrr cassette install failure, before any command runs",
 	// Test-only process setup, never part of a git hop run.
