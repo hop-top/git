@@ -6,6 +6,7 @@ import (
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
 	"hop.top/git/internal/docker"
+	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/state"
 )
@@ -58,7 +59,7 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	self, found := recs.Self(hopspacePath, hubPath, worktreePath, branch)
 	keep := keptPorts(recs, self, found)
 
-	key := EnvRecordKey(hopspacePath, hubPath, worktreePath, branch)
+	key := hop.HopspaceKey(hopspacePath, hubPath, worktreePath, branch)
 	if volsCfg.BasePath == "" {
 		volsCfg.BasePath = filepath.Join(hopspacePath, "volumes")
 	}
@@ -67,7 +68,7 @@ func GenerateWorktreeEnv(fs afero.Fs, d *docker.Docker, hopspacePath, hubPath, w
 	manager.Ports.Keep = keep
 	manager.Ports.Reserved = recs.Reserved(self)
 	manager.Volumes.Keep = keptVolumes(recs, volsCfg, self, found, key)
-	if hubPath != "" && !state.SamePath(hopspacePath, hubPath) {
+	if hop.SharedHopspace(hopspacePath, hubPath) {
 		// Hubs sharing a --global hopspace share its volumes directory.
 		manager.Volumes.Dir = filepath.Join(volsCfg.BasePath, HubKey(hubPath))
 	}

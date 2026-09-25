@@ -15,18 +15,6 @@ import (
 // it has: of two claims to a port, the recorded hub's comes first.
 var unknownHubCreated = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
 
-// EnvRecordKey is the key the environment of the worktree at worktreePath,
-// on branch, in the hub at hubPath, is recorded under in its hopspace's
-// ports.json and volumes.json: the branch in a hub's own hopspace, where
-// a branch has one worktree, and the worktree path in a hopspace several
-// hubs share (--global), where each hub has its own.
-func EnvRecordKey(hopspacePath, hubPath, worktreePath, branch string) string {
-	if hubPath == "" || state.SamePath(hopspacePath, hubPath) {
-		return branch
-	}
-	return state.WorktreeKey(worktreePath)
-}
-
 // EnvClaim is one entry of a ports.json: the ports a worktree holds.
 type EnvClaim struct {
 	Hopspace   string // resolved (state.ResolvePath)
@@ -213,7 +201,7 @@ func (r *EnvRecords) claim(hopspace, key string, entry config.BranchPorts) EnvCl
 // under.
 func (r *EnvRecords) Self(hopspacePath, hubPath, worktreePath, branch string) (EnvClaim, bool) {
 	hopspace := state.ResolvePath(hopspacePath)
-	key := EnvRecordKey(hopspacePath, hubPath, worktreePath, branch)
+	key := hop.HopspaceKey(hopspacePath, hubPath, worktreePath, branch)
 	for _, c := range r.Claims {
 		if c.Hopspace == hopspace && c.Key == key {
 			return c, true
@@ -272,12 +260,12 @@ func (r *EnvRecords) Reserved(self EnvClaim) map[int]bool {
 
 // LookupEnvEntry returns the entry of cfg recording the worktree at
 // worktreePath on branch, in the hub at hubPath: under its key
-// (EnvRecordKey), else under the branch, as an earlier release keyed it.
+// (hop.HopspaceKey), else under the branch, as an earlier release keyed it.
 func LookupEnvEntry(cfg *config.PortsConfig, hopspacePath, hubPath, worktreePath, branch string) (config.BranchPorts, bool) {
 	if cfg == nil {
 		return config.BranchPorts{}, false
 	}
-	if e, ok := cfg.Branches[EnvRecordKey(hopspacePath, hubPath, worktreePath, branch)]; ok {
+	if e, ok := cfg.Branches[hop.HopspaceKey(hopspacePath, hubPath, worktreePath, branch)]; ok {
 		return e, true
 	}
 	e, ok := cfg.Branches[branch]
@@ -309,8 +297,8 @@ func sortedServices(ports map[string]int) []string {
 // worktree at oldPath on oldBranch, in the hub at hubPath, to newPath on
 // newBranch, for a worktree move. A missing file or entry is left alone.
 func RekeyEnvEntry(fs afero.Fs, hopspacePath, hubPath, oldPath, newPath, oldBranch, newBranch string) error {
-	oldKey := EnvRecordKey(hopspacePath, hubPath, oldPath, oldBranch)
-	newKey := EnvRecordKey(hopspacePath, hubPath, newPath, newBranch)
+	oldKey := hop.HopspaceKey(hopspacePath, hubPath, oldPath, oldBranch)
+	newKey := hop.HopspaceKey(hopspacePath, hubPath, newPath, newBranch)
 	loader, writer := config.NewLoader(fs), config.NewWriter(fs)
 	if cfg, err := loader.LoadPortsConfig(hopspacePath); err == nil {
 		if entry, ok := cfg.Branches[oldKey]; ok {
