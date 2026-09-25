@@ -25,6 +25,20 @@ The `current` symlink updates automatically whenever you run:
 - `git hop clone <uri>` - Clone repository
 - `git hop init` - Initialize repository
 
+### A file or directory named `current`
+
+git-hop only ever replaces a symlink. When the hub holds a regular file
+or a directory named `current`, git-hop leaves it as it is, empty or
+not: the command still does its work, then warns (exit status
+unaffected) and hints to rename it. `--dry-run` previews say the same.
+Until it is renamed, `current` is not updated, and the shell
+integration, which follows `current`, does not move you:
+
+```
+warning: Failed to update current symlink: '/path/to/my-repo/current' is a file, not a symlink; git-hop leaves it as it is
+hint: rename it: while it is there, git-hop cannot keep the 'current' link
+```
+
 ## Why is it useful?
 
 ### 1. Quick Navigation

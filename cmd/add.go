@@ -165,6 +165,7 @@ before the real run's reason.`,
 		// Everything below writes; the preview must stop before any of it.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 			res := previewAdd(g, wm, hookRunner, addPlan{
+				fs:            fs,
 				cwd:           cwd,
 				hubPath:       hubPath,
 				hopspace:      hopspace,

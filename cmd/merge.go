@@ -123,6 +123,8 @@ merge exits 1, leaving the worktree, its hop.json entry and its branch.`,
 		// Everything below writes; the preview stops here.
 		if dryRun, _ := cmd.Flags().GetBool("dry-run"); dryRun {
 			emitMergeResult(cmd, previewMerge(g, mergePlan{
+				fs:           fs,
+				hubPath:      hubPath,
 				source:       sourceBranch,
 				into:         intoBranch,
 				sourcePath:   srcPath,

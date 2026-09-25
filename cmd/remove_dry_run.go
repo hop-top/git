@@ -62,7 +62,9 @@ func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 	previewBranchDeletion(branch, localExists, deleteRemote)
 	output.Info("[dry-run] Would remove '%s' from hop.json, hopspace and state", branch)
 	cli.PreviewHook(runner, "post-worktree-remove", worktreePath, repoID)
-	output.Info("[dry-run] Would point 'current' at '%s'", hub.Config.Repo.DefaultBranch)
+	if !cli.PreviewCurrentBlocked(fs, hubPath) {
+		output.Info("[dry-run] Would point 'current' at '%s'", hub.Config.Repo.DefaultBranch)
+	}
 	return removeRecord{
 		Kind:          removeKindWorktree,
 		Branch:        branch,

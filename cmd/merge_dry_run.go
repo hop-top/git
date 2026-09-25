@@ -5,12 +5,17 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/spf13/afero"
+
+	"hop.top/git/internal/cli"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/output"
 )
 
 // mergePlan is everything `git hop merge` has decided before its first write.
 type mergePlan struct {
+	fs                   afero.Fs
+	hubPath              string
 	source, into         string
 	sourcePath, intoPath string
 	noFF, deleteRemote   bool
@@ -31,7 +36,9 @@ func previewMerge(g git.GitInterface, p mergePlan) mergeResult {
 	output.Info("[dry-run] Would remove worktree at %s", p.sourcePath)
 	previewBranchDeletion(p.source, true, p.deleteRemote)
 	output.Info("[dry-run] Would remove '%s' from hop.json, hopspace and state", p.source)
-	output.Info("[dry-run] Would point 'current' at '%s'", p.into)
+	if !cli.PreviewCurrentBlocked(p.fs, p.hubPath) {
+		output.Info("[dry-run] Would point 'current' at '%s'", p.into)
+	}
 
 	res := mergeResult{
 		Source:        p.source,
