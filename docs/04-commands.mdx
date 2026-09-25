@@ -40,8 +40,9 @@ git hop file:///path/to/local/repo
 5. Symlinks worktree back into hub
 6. Generates the worktree's deterministic ports and volumes, as add does:
    `.env` and, for a compose file with hardcoded host ports, the compose
-   override. This happens before the `post-clone` hook, so the hook sees
-   them. A generation failure is reported; the clone still succeeds
+   override. This happens before the `post-worktree-add` and `post-clone`
+   hooks, so both see them. A generation failure is reported; the clone
+   still succeeds
 7. After `post-clone`, starts the new worktree's environment only when
    asked: `--env-start`, `GIT_HOP_AUTO_ENV_START=true`, or
    `hop.env.autoStart` (default `false`). `--no-env-start` skips it for one
@@ -111,7 +112,9 @@ git hop add --task T-42                       # branch derived from the task
    that exists only as `origin/<branch>` is created from it and tracks it
 3. Creates the worktree at `hops/&lt;branch&gt;`
 4. Copies git-ignored local files from the fork-source worktree (see below)
-5. Links shared dependencies and generates deterministic ports and volumes
+5. Generates deterministic ports and volumes and links shared dependencies,
+   before the `post-worktree-add` hook, so the hook finds `.env`, the
+   compose override and the deps (see [Add hooks](./hooks#add-hooks))
 6. Points the `current` symlink at the new worktree
 7. Starts the environment, when asked (`--env-start` or `hop.env.autoStart`)
    and the worktree has one

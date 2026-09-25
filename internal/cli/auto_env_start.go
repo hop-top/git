@@ -65,8 +65,8 @@ func clonedEnvTarget(fs afero.Fs, hubPath string) (services.EnvTarget, error) {
 // generateClonedEnv prepares the environment of the worktree a clone
 // just checked out at the hub at hubPath, through the same path as add
 // (services.GenerateWorktreeEnv): ports, volumes, .env and compose
-// override. Clone runs it before post-clone. Like add, it never fails
-// the clone.
+// override. Clone runs it before post-worktree-add, as add does. Like
+// add, it never fails the clone.
 func generateClonedEnv(fs afero.Fs, hubPath string) {
 	target, err := clonedEnvTarget(fs, hubPath)
 	if err != nil {

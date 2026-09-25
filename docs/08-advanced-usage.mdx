@@ -43,8 +43,8 @@ A non-zero exit from a `pre-` hook aborts the operation.
 
 cd "$GIT_HOP_WORKTREE_PATH"
 
-# Install dependencies
-npm install
+# Shared deps are already linked and .env already holds the allocated
+# ports: git-hop sets both up before post-worktree-add fires.
 
 # Run migrations
 make db-migrate
