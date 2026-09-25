@@ -64,6 +64,8 @@ rm $WORK/data/org/repo/hop.json
 stdout '"message": "hopspace does not exist"'
 exec git-hop doctor --fix
 exists $WORK/data/org/repo/hop.json
-decode json $WORK/data/org/repo/hop.json branches.main.exists true
+# A shared hopspace records the worktree under its path.
+grep '"[^"]*/hubg/hops/main": \{' $WORK/data/org/repo/hop.json
+grep '"branch": "main"' $WORK/data/org/repo/hop.json
 exec git-hop doctor --json
 ! stdout 'hopspace does not exist'

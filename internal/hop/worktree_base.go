@@ -24,8 +24,8 @@ type worktreeBase struct {
 // worktrees (the repository itself when it has none) and addDir is the
 // repository. The hopspace is never consulted then. Hubs sharing a
 // --global hopspace are separate repositories, and the hopspace
-// records one path per branch name, often another hub's, so a worktree
-// found there can belong to another repository.
+// records every hub's worktrees, so a worktree found there can belong
+// to another repository.
 //
 // A hub path that is not a repository root (a fork's hopspace, whose
 // repositories are its worktrees) falls back to a worktree the

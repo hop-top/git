@@ -26,7 +26,7 @@ exec git config --global hop.dataLayout '{org}/{repo}'
 exec git -C $WORK/hub config hop.dataLayout '{host}/{org}/{repo}'
 cd $WORK/hub
 exec git-hop add feat/x
-decode json $WORK/data/github.com/org/repo/hop.json branches.feat/x.exists true
+grep '"[^"]*/hub/hops/feat/x": \{' $WORK/data/github.com/org/repo/hop.json
 ! exists $WORK/data/org/repo/hop.json
 
 # --- with no value of its own, a hub follows --global ---
@@ -38,7 +38,7 @@ exists $WORK/data/org/repo/hop.json
 exec git -C $WORK/hub2 config hop.dataLayout '{repo}'
 cd $WORK/hub2
 exec git-hop add feat/y
-decode json $WORK/data/org/repo/hop.json branches.feat/y.exists true
+grep '"[^"]*/hub2/hops/feat/y": \{' $WORK/data/org/repo/hop.json
 exec git-hop doctor --json
 stdout 'hop.dataLayout'
 stdout '\(local config\) is invalid'

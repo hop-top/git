@@ -102,7 +102,7 @@ func TestHopspaceRenameBranch_KeepsEntryFields(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := hs.RenameBranch("feat/x", "feat/y", path+"/feat/y"); err != nil {
+	if err := hs.RenameBranch(hs.Path, "feat/x", "feat/y", path+"/feat/x", path+"/feat/y"); err != nil {
 		t.Fatalf("RenameBranch: %v", err)
 	}
 
@@ -250,7 +250,7 @@ func TestHopspaceRenameBranch_KeepsUnmodeledMembers(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := hs.RenameBranch("feat/x", "feat/y", path+"/feat/y"); err != nil {
+	if err := hs.RenameBranch(hs.Path, "feat/x", "feat/y", path+"/feat/x", path+"/feat/y"); err != nil {
 		t.Fatalf("RenameBranch: %v", err)
 	}
 

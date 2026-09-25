@@ -71,7 +71,7 @@ func TestRewrite_KeepsUnreadMembersOfEarlierRelease(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := space.RegisterBranch("feat", "/hub/hops/feat"); err != nil {
+	if err := space.RegisterBranch(space.Path, "feat", "/hub/hops/feat"); err != nil {
 		t.Fatal(err)
 	}
 	if err := hub.RemoveBranch("main"); err != nil {

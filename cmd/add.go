@@ -277,7 +277,7 @@ before the real run's reason.`,
 		}
 
 		// Register in Hopspace
-		if err := hopspace.RegisterBranch(branch, worktreePath); err != nil {
+		if err := hopspace.RegisterBranch(hubPath, branch, worktreePath); err != nil {
 			output.Fatal("Failed to register branch in hopspace: %v", err)
 		}
 

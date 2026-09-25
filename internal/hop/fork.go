@@ -218,7 +218,7 @@ func ForkAttach(fs afero.Fs, g git.GitInterface, uri, branch, hubPath string) (F
 			}
 		}
 
-		if err := forkHopspace.RegisterBranch(branch, worktreePath); err != nil {
+		if err := forkHopspace.RegisterBranch(forkHopspacePath, branch, worktreePath); err != nil {
 			return ForkAttachment{}, fmt.Errorf("failed to register branch in fork hopspace: %v", err)
 		}
 		sourceWorktreePath = worktreePath

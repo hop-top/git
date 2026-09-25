@@ -33,7 +33,7 @@ func TestRemoveCommand_PartialFailureHandling(t *testing.T) {
 	require.NoError(t, err)
 
 	// Register the feature branch
-	require.NoError(t, hopspace.RegisterBranch("feature", featurePath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "feature", featurePath))
 
 	// Verify initial state
 	assert.Contains(t, hub.Config.Branches, "feature")
@@ -52,13 +52,13 @@ func TestRemoveCommand_UnregisterAfterFailedWorktreeRemoval(t *testing.T) {
 
 	// Register a branch
 	featurePath := filepath.Join(hopspacePath, "feature")
-	require.NoError(t, hopspace.RegisterBranch("feature", featurePath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "feature", featurePath))
 
 	// Verify branch is registered
 	assert.Contains(t, hopspace.Config.Branches, "feature")
 
 	// Unregister the branch (simulating what should happen even after worktree removal fails)
-	err = hopspace.UnregisterBranch("feature")
+	err = hopspace.UnregisterBranch(hopspace.Path, "feature", "")
 	require.NoError(t, err)
 
 	// Reload and verify branch is no longer registered
@@ -82,8 +82,8 @@ func TestRemoveCommand_PruneWorktrees(t *testing.T) {
 	require.NoError(t, fs.MkdirAll(mainPath, 0755))
 	require.NoError(t, fs.MkdirAll(featurePath, 0755))
 
-	require.NoError(t, hopspace.RegisterBranch("main", mainPath))
-	require.NoError(t, hopspace.RegisterBranch("feature", featurePath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "main", mainPath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "feature", featurePath))
 
 	// Verify both branches exist
 	assert.Contains(t, hopspace.Config.Branches, "main")
@@ -135,7 +135,7 @@ func TestRemoveCommand_CleanupManagerIntegration(t *testing.T) {
 	// Register main branch
 	mainPath := filepath.Join(hopspacePath, "main")
 	require.NoError(t, fs.MkdirAll(mainPath, 0755))
-	require.NoError(t, hopspace.RegisterBranch("main", mainPath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "main", mainPath))
 
 	// Create an orphaned directory (not registered in config)
 	orphanedPath := filepath.Join(hopspacePath, "orphaned")
@@ -166,10 +166,10 @@ func TestRemoveCommand_EmptyHopspace(t *testing.T) {
 
 	// Register a branch
 	branchPath := filepath.Join(hopspacePath, "feature")
-	require.NoError(t, hopspace.RegisterBranch("feature", branchPath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "feature", branchPath))
 
 	// Unregister the only branch
-	err = hopspace.UnregisterBranch("feature")
+	err = hopspace.UnregisterBranch(hopspace.Path, "feature", "")
 	require.NoError(t, err)
 
 	// Reload and verify hopspace is now empty
@@ -194,7 +194,7 @@ func TestRemoveCommand_NonExistentWorktree(t *testing.T) {
 	// Register a branch but don't create the directory
 	// (simulating a case where the directory was manually deleted)
 	featurePath := filepath.Join(hopspacePath, "feature")
-	require.NoError(t, hopspace.RegisterBranch("feature", featurePath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "feature", featurePath))
 
 	// Verify branch is registered but directory doesn't exist
 	assert.Contains(t, hopspace.Config.Branches, "feature")
@@ -202,7 +202,7 @@ func TestRemoveCommand_NonExistentWorktree(t *testing.T) {
 	assert.False(t, exists)
 
 	// Should still be able to unregister
-	err = hopspace.UnregisterBranch("feature")
+	err = hopspace.UnregisterBranch(hopspace.Path, "feature", "")
 	require.NoError(t, err)
 
 	// Verify branch is removed from config
@@ -223,14 +223,14 @@ func TestRemoveCommand_UpdatesTimestamp(t *testing.T) {
 
 	// Register a branch
 	featurePath := filepath.Join(hopspacePath, "feature")
-	require.NoError(t, hopspace.RegisterBranch("feature", featurePath))
+	require.NoError(t, hopspace.RegisterBranch(hopspace.Path, "feature", featurePath))
 
 	// Verify branch was registered with a LastSync timestamp
 	assert.Contains(t, hopspace.Config.Branches, "feature")
 	assert.False(t, hopspace.Config.Branches["feature"].LastSync.IsZero())
 
 	// Perform removal
-	err = hopspace.UnregisterBranch("feature")
+	err = hopspace.UnregisterBranch(hopspace.Path, "feature", "")
 	require.NoError(t, err)
 
 	// Reload and verify branch is removed

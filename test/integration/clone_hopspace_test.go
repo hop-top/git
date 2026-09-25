@@ -69,7 +69,7 @@ func TestCloneWorktreeCreatesHopspace(t *testing.T) {
 	}
 
 	// Register the main branch
-	if err := hopspace.RegisterBranch(defaultBranch, mainWorktreePath); err != nil {
+	if err := hopspace.RegisterBranch(hopspace.Path, defaultBranch, mainWorktreePath); err != nil {
 		t.Fatalf("Failed to register default branch: %v", err)
 	}
 
@@ -114,7 +114,7 @@ func TestCloneWorktreeCreatesHopspace(t *testing.T) {
 	newWorktreePath := filepath.Join(dataHome, org, repo, newBranch)
 
 	// This should now work because hopspace exists
-	if err := loadedHopspace.RegisterBranch(newBranch, newWorktreePath); err != nil {
+	if err := loadedHopspace.RegisterBranch(loadedHopspace.Path, newBranch, newWorktreePath); err != nil {
 		t.Fatalf("Failed to register new branch: %v", err)
 	}
 
@@ -172,7 +172,7 @@ func TestDoctorFixesMissingHopspace(t *testing.T) {
 	// Register all branches from hub
 	for branchName, branch := range hub.Config.Branches {
 		branchWorktreePath := filepath.Join(hubPath, branch.Path)
-		if err := hopspace.RegisterBranch(branchName, branchWorktreePath); err != nil {
+		if err := hopspace.RegisterBranch(hopspace.Path, branchName, branchWorktreePath); err != nil {
 			t.Fatalf("Failed to register branch %s: %v", branchName, err)
 		}
 	}
@@ -226,7 +226,7 @@ func TestHubHopspaceConsistency(t *testing.T) {
 		}
 
 		// Add to hopspace
-		if err := hopspace.RegisterBranch(branch, worktreePath); err != nil {
+		if err := hopspace.RegisterBranch(hopspace.Path, branch, worktreePath); err != nil {
 			t.Fatalf("Failed to register branch %s in hopspace: %v", branch, err)
 		}
 	}
@@ -331,7 +331,7 @@ func TestHopspaceConfigPersistence(t *testing.T) {
 	}
 
 	for name, wpath := range branches {
-		if err := hopspace.RegisterBranch(name, wpath); err != nil {
+		if err := hopspace.RegisterBranch(hopspace.Path, name, wpath); err != nil {
 			t.Fatalf("RegisterBranch(%s) failed: %v", name, err)
 		}
 	}

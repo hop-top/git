@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/spf13/afero"
@@ -12,8 +13,8 @@ import (
 )
 
 // hopspaceRecording returns a hopspace that records each branch at the
-// given path, as a shared --global hopspace does: one path per branch
-// name, whichever hub registered it last.
+// given path, as an earlier release wrote a shared --global hopspace:
+// one path per branch name, whichever hub registered it last.
 func hopspaceRecording(path string, branches map[string]string) *Hopspace {
 	cfg := &config.HopspaceConfig{Branches: map[string]config.HopspaceBranch{}}
 	for b, p := range branches {
@@ -169,4 +170,56 @@ func TestHopspaceWorktreeIn_PicksPresentWorktreeInFixedOrder(t *testing.T) {
 	want(filepath.Join(hsPath, "hops", "another"), "the default branch's gone")
 	mustMkdir(filepath.Join(hsPath, "feat"))
 	want(filepath.Join(hsPath, "feat"), "the default branch first, whatever sorts ahead")
+}
+
+// MoveWorktree renames and moves in the hub's own repository, even when
+// every other worktree hop.json records is in another hub's repository.
+func TestMoveWorktree_RunsInHubRepository(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fs := afero.NewOsFs()
+	seed := filepath.Join(dir, "seed")
+	runGit(t, "init", "-q", "-b", "main", seed)
+	runGit(t, "-C", seed, "commit", "-q", "--allow-empty", "-m", "one")
+
+	g1 := filepath.Join(dir, "g1", "app")
+	g2 := filepath.Join(dir, "g2", "app")
+	for _, hub := range []string{g1, g2} {
+		runGit(t, "clone", "-q", "--bare", seed, hub)
+		runGit(t, "-C", hub, "worktree", "add", "-q", "hops/main", "main")
+	}
+	runGit(t, "-C", g1, "worktree", "add", "-q", "-b", "feat/x", "hops/feat/x")
+
+	hub, err := CreateHub(fs, g1, seed, "org", "repo", "main")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := hub.Update(func(cfg *config.HubConfig) error {
+		cfg.Branches = map[string]config.HubBranch{
+			// What an earlier release could leave: main recorded in g2.
+			"main":   {Path: filepath.Join(g2, "hops", "main"), HopspaceBranch: "main"},
+			"feat/x": {Path: filepath.Join(g1, "hops", "feat/x"), HopspaceBranch: "feat/x"},
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	hs, err := LoadHopspace(fs, g1)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	m := NewWorktreeManager(fs, git.New())
+	if _, _, err := m.MoveWorktree(hs, hub, "feat/x", "feat/w", "{hubPath}/hops/{branch}", "org", "repo"); err != nil {
+		t.Fatalf("MoveWorktree: %v", err)
+	}
+	runGit(t, "-C", g1, "rev-parse", "--verify", "--quiet", "refs/heads/feat/w")
+	if ok, _ := afero.DirExists(fs, filepath.Join(g1, "hops", "feat", "w")); !ok {
+		t.Error("worktree not moved to hops/feat/w")
+	}
+	if out := runGit(t, "-C", g2, "branch", "--list"); strings.Contains(out, "feat") {
+		t.Errorf("g2 branches = %q, want no feat branch", out)
+	}
 }

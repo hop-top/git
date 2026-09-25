@@ -7,6 +7,7 @@ import (
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/state"
 )
 
 // Hopspace represents a git-hop hopspace
@@ -97,8 +98,11 @@ func InitHopspace(fs afero.Fs, path, repoURI, org, repo, defaultBranch string) (
 }
 
 // Update applies fn to the hopspace's hop.json as it is on disk now and
-// writes the result under its lock; see Hub.Update.
-func (h *Hopspace) Update(fn func(cfg *config.HopspaceConfig) error, opts ...config.WriteOption) error {
+// writes the result under its lock; see Hub.Update. hubPath is the hub
+// the change is for: in a hopspace it shares with other hubs, entries
+// an earlier release keyed by branch are first moved to their worktree's
+// path (migrateSharedEntries), so fn only sees path keys there.
+func (h *Hopspace) Update(hubPath string, fn func(cfg *config.HopspaceConfig) error, opts ...config.WriteOption) error {
 	return WithHopJSONLock(h.fs, h.Path, func() error {
 		cfg, err := config.NewLoader(h.fs).LoadHopspaceConfig(h.Path)
 		if err != nil {
@@ -106,6 +110,11 @@ func (h *Hopspace) Update(fn func(cfg *config.HopspaceConfig) error, opts ...con
 		}
 		if cfg.Branches == nil {
 			cfg.Branches = make(map[string]config.HopspaceBranch)
+		}
+		if sharedHopspace(h.Path, hubPath) {
+			if err := h.migrateLocked(cfg, hubPath); err != nil {
+				return err
+			}
 		}
 		err = fn(cfg)
 		if err == nil {
@@ -123,43 +132,62 @@ func (h *Hopspace) Update(fn func(cfg *config.HopspaceConfig) error, opts ...con
 	})
 }
 
-// RegisterBranch adds a branch to the hopspace config
-func (h *Hopspace) RegisterBranch(branch, worktreePath string) error {
-	return h.Update(func(cfg *config.HopspaceConfig) error {
-		cfg.Branches[branch] = config.HopspaceBranch{
-			Exists:   true,
-			Path:     worktreePath,
-			LastSync: time.Now(),
+// RegisterBranch records the worktree at worktreePath, on branch, of the
+// hub at hubPath (HopspaceKey). The entry's other members carry over.
+func (h *Hopspace) RegisterBranch(hubPath, branch, worktreePath string) error {
+	return h.Update(hubPath, func(cfg *config.HopspaceConfig) error {
+		key := HopspaceKey(h.Path, hubPath, worktreePath, branch)
+		if old, _, ok := findEntry(cfg, h.Path, hubPath, branch, worktreePath); ok && old != key {
+			// The same worktree under another spelling of its path.
+			cfg.Branches[key] = cfg.Branches[old]
+			delete(cfg.Branches, old)
 		}
+		entry := cfg.Branches[key]
+		entry.Exists = true
+		entry.Path = worktreePath
+		entry.LastSync = time.Now()
+		if sharedHopspace(h.Path, hubPath) {
+			entry.Branch = branch
+			entry.Hub = state.WorktreeKey(hubPath)
+		}
+		cfg.Branches[key] = entry
 		return nil
 	})
 }
 
-// UnregisterBranch removes a branch from the hopspace config
-func (h *Hopspace) UnregisterBranch(branch string) error {
-	return h.Update(func(cfg *config.HopspaceConfig) error {
-		if _, exists := cfg.Branches[branch]; !exists {
-			// Branch doesn't exist in hopspace - this is not an error since it may have
-			// already been cleaned up or only existed in the hub config
+// UnregisterBranch removes the record of the worktree at worktreePath, on
+// branch, of the hub at hubPath. Another hub's worktree of the same
+// branch keeps its record.
+func (h *Hopspace) UnregisterBranch(hubPath, branch, worktreePath string) error {
+	return h.Update(hubPath, func(cfg *config.HopspaceConfig) error {
+		key, _, ok := findEntry(cfg, h.Path, hubPath, branch, worktreePath)
+		if !ok {
+			// Not recorded: already cleaned up, or only ever in the hub.
 			return errUnchanged
 		}
-		delete(cfg.Branches, branch)
+		delete(cfg.Branches, key)
 		return nil
 	})
 }
 
-// RenameBranch rekeys oldBranch's entry to newBranch at newPath; the rest
-// of the entry carries over.
-func (h *Hopspace) RenameBranch(oldBranch, newBranch, newPath string) error {
-	return h.Update(func(cfg *config.HopspaceConfig) error {
-		entry, exists := cfg.Branches[oldBranch]
-		if !exists {
-			// Not in hopspace — silently skip (same pattern as UnregisterBranch)
+// RenameBranch moves the record of the hub's worktree of oldBranch at
+// oldPath to newBranch at newPath; the rest of the entry carries over.
+func (h *Hopspace) RenameBranch(hubPath, oldBranch, newBranch, oldPath, newPath string) error {
+	renames := make(map[string]string)
+	return h.Update(hubPath, func(cfg *config.HopspaceConfig) error {
+		key, entry, ok := findEntry(cfg, h.Path, hubPath, oldBranch, oldPath)
+		if !ok {
+			// Not in hopspace: silently skip, as UnregisterBranch does.
 			return errUnchanged
 		}
+		newKey := HopspaceKey(h.Path, hubPath, newPath, newBranch)
 		entry.Path = newPath
-		delete(cfg.Branches, oldBranch)
-		cfg.Branches[newBranch] = entry
+		if entry.Branch != "" {
+			entry.Branch = newBranch
+		}
+		delete(cfg.Branches, key)
+		cfg.Branches[newKey] = entry
+		renames[key] = newKey
 		return nil
-	}, config.RenamedBranch(oldBranch, newBranch))
+	}, config.RenamedBranches(renames))
 }

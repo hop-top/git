@@ -1,0 +1,70 @@
+# Two --global hubs of one repository share a data-home hopspace, and
+# each can have a worktree of the same branch. The hopspace records each
+# worktree under its own path, so what one hub does to its feat/y (remove,
+# move) leaves the other hub's feat/y record alone, and doctor in the
+# other hub still finds it and recreates its missing worktree.
+
+exec git init --bare $WORK/org/glob.git
+exec git clone $WORK/org/glob.git $WORK/seed
+cd $WORK/seed
+exec git commit --allow-empty -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/glob.git $WORK/g1/app --global
+exec git-hop $WORK/org/glob.git $WORK/g2/app --global
+
+cd $WORK/g1/app
+exec git-hop add feat/y
+exec git-hop add feat/v
+cd $WORK/g2/app
+exec git-hop add feat/y
+exec git-hop add feat/v
+
+# --- each hub's worktree has its own record ---
+grep '"[^"]*/g1/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+! grep '"feat/y": \{' $WORK/data/org/glob/hop.json
+
+# --- remove in g2 keeps g1's record ---
+exec git-hop remove feat/y --no-verify --no-prompt
+grep '"[^"]*/g1/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+! grep '"[^"]*/g2/app/hops/feat/y": \{' $WORK/data/org/glob/hop.json
+
+# --- doctor in g1 finds it and recreates the missing worktree ---
+# A commit of its own, so doctor recreates it rather than calling it merged.
+cd $WORK/g1/app/hops/feat/y
+cp $WORK/y.txt y.txt
+exec git add y.txt
+exec git commit -q -m 'y'
+cd $WORK/g1/app
+exec rm -rf $WORK/g1/app/hops/feat/y
+! exec git-hop doctor
+! stderr 'not in hopspace'
+exec git-hop doctor --fix --dry-run
+! stderr 'not found in hopspace'
+stdout 'Would recreate worktree for branch feat/y'
+exec git-hop doctor --fix
+! stderr 'not found in hopspace'
+exists $WORK/g1/app/hops/feat/y/y.txt
+exec git -C $WORK/g1/app worktree list --porcelain
+stdout '^worktree .*/g1/app/hops/feat/y$'
+
+# --- move in g1 rekeys only g1's record ---
+exec git-hop move feat/v feat/w
+exists $WORK/g1/app/hops/feat/w
+exists $WORK/g2/app/hops/feat/v
+grep '"[^"]*/g1/app/hops/feat/w": \{' $WORK/data/org/glob/hop.json
+! grep '"[^"]*/g1/app/hops/feat/v": \{' $WORK/data/org/glob/hop.json
+grep '"[^"]*/g2/app/hops/feat/v": \{' $WORK/data/org/glob/hop.json
+exec git -C $WORK/g2/app rev-parse --verify --quiet refs/heads/feat/v
+exec git -C $WORK/g1/app rev-parse --verify --quiet refs/heads/feat/w
+! exec git -C $WORK/g1/app rev-parse --verify --quiet refs/heads/feat/v
+
+# --- doctor in g2 still finds its feat/v ---
+cd $WORK/g2/app
+exec git-hop doctor
+! stderr 'not in hopspace'
+
+-- y.txt --
+y

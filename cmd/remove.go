@@ -370,7 +370,7 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 	if hopspace, err := hop.LoadHopspace(fs, hopspacePath); err == nil {
 		// Unregister from hopspace (silent if branch doesn't exist)
-		hopspace.UnregisterBranch(branch)
+		hopspace.UnregisterBranch(hubPath, branch, worktreePath)
 	}
 
 	// Prune the hub's stale git metadata

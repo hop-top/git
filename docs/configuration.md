@@ -661,13 +661,28 @@ it, and `git hop doctor` reports it as a warning (check `hopspace`).
 | `repo.org` | string | Organization or user name |
 | `repo.repo` | string | Repository name |
 | `repo.defaultBranch` | string | Default branch (usually `main` or `master`) |
-| `branches` | object | Map of branch names to branch metadata |
+| `branches` | object | One entry per worktree (see below) |
 | `branches[].exists` | boolean | Whether the worktree exists on disk |
 | `branches[].path` | string | Absolute path to the worktree |
 | `branches[].lastSync` | string | ISO 8601 timestamp of last sync |
+| `branches[].branch` | string | The worktree's branch (`--global` hopspace only) |
+| `branches[].hub` | string | The hub the worktree belongs to (`--global` hopspace only) |
 | `forks` | object | Fork repositories (for PR testing) |
 | `packageManagers.<pm>.installCmd` | array | Install command for package manager `<pm>` in this repository |
 | `branches[].packageManagers.<pm>.installCmd` | array | The same for one branch; wins over the repository's |
+
+A hub's own hopspace keys `branches` by branch, as the hub's fields in the
+same file are keyed. A `--global` hopspace, which every `--global` hub of
+the repository shares, keys each worktree's entry by the worktree's path
+and names its branch and hub, so each hub's worktree of a branch has its
+own entry. Branch-level `packageManagers` there go under the branch name,
+in an entry without a `path`.
+
+A `--global` hopspace an earlier release wrote keys its entries by branch.
+The first git-hop command that changes it copies it to
+`hop.json.<UTC timestamp>.bak` beside it, then moves each entry to its
+worktree's path. An entry whose worktree belongs to no hub git-hop knows
+is dropped (its `packageManagers` stay under the branch name).
 
 ## Hub Configuration
 

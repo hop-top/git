@@ -295,17 +295,9 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 		return oldPath, newPath, fmt.Errorf("failed to move worktree: %w", err)
 	}
 
-	// Find a base path for git commands (any other worktree)
-	var basePath string
-	for bn, bc := range hub.Config.Branches {
-		if bn != oldBranch && bc.Path != "" {
-			basePath = config.ResolveWorktreePath(bc.Path, hub.Path)
-			break
-		}
-	}
-	if basePath == "" {
-		basePath = hub.Path
-	}
+	// git runs in the hub's own repository, never in a worktree hop.json
+	// records: a record can point into another hub's repository.
+	basePath := m.findBase(hopspace, hub.Path).addDir
 
 	// 1. Rename git branch (skip if already renamed — e.g. git hop add used newBranch directly)
 	if !m.git.LocalBranchExists(basePath, newBranch) {
@@ -325,7 +317,7 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 	}
 
 	// 4. Update hopspace config
-	if err := hopspace.RenameBranch(oldBranch, newBranch, newPath); err != nil {
+	if err := hopspace.RenameBranch(hub.Path, oldBranch, newBranch, oldPath, newPath); err != nil {
 		return oldPath, newPath, fmt.Errorf("failed to update hopspace config: %w", err)
 	}
 

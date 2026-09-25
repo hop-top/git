@@ -23,7 +23,7 @@ exec git config --global hop.worktreeLocation ''
 exec git-hop add feat/x
 exists $WORK/data/github.com/org/repo/hops/feat/x
 ! exists $WORK/data/org/repo
-decode json $WORK/data/github.com/org/repo/hop.json branches.feat/x.path '~/data/github.com/org/repo/hops/feat/x$'
+grep '"path": "[^"]*/data/github.com/org/repo/hops/feat/x"' $WORK/data/github.com/org/repo/hop.json
 
 # --- {hopspace} in a template ---
 exec git config --global hop.worktreeLocation '{hopspace}/trees/{branch}'

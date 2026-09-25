@@ -49,7 +49,7 @@ exists $WORK/data/github.com/org/other/hop.json
 ! exists $WORK/data/org/other
 exists $WORK/data/org
 exec git-hop add feat/x
-decode json $WORK/data/github.com/org/repo/hop.json branches.feat/x.exists true
+grep '"branch": "feat/x"' $WORK/data/github.com/org/repo/hop.json
 exec git-hop doctor
 ! stderr 'is not where hop.dataLayout puts it'
 
