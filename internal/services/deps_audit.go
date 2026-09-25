@@ -54,6 +54,11 @@ func (m *DepsManager) auditDeps(branch, worktreePath string, pm PackageManager) 
 			issue.Type = IssueMissingDeps
 			return issue, true
 		}
+		if _, marked := readLocalMarker(m.fs, symlinkPath); !marked {
+			if install, ok := m.entryLinksInstall(symlinkPath, pm); ok {
+				return m.auditEntryLinks(issue, symlinkPath, install)
+			}
+		}
 		return m.auditLocalDeps(issue, symlinkPath)
 	}
 

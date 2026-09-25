@@ -92,6 +92,8 @@ type Issue struct {
 	// LocalReason says why the install must stay in the worktree
 	// (IssueNeedsLocal, and IssueStaleLocal for an unmarked install).
 	LocalReason LocalReason
+	// Missing are the entries an IssueEntryLinks has no link for.
+	Missing []string
 }
 
 // NewDepsManager creates a new dependency manager
