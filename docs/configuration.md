@@ -938,7 +938,12 @@ commands allocating at once, in one hub or in two, never pick the same
 ports. `git hop doctor --fix`, moving a `--global` hopspace to where
 `hop.dataLayout` puts it, holds the hopspace's `hop.json.lock` and then its
 `ports.json.lock` while it renames the directory, so a change in progress
-moves with it and a later one waits. Neither lock is held while docker
+moves with it and a later one waits. On Windows that rename fails, a known
+limitation (tests do not run there): the lock files are open inside the
+directory, and Windows does not rename a directory with a file open in it.
+`doctor --fix` reports a failed repair, moves and loses nothing, and its
+`hint:` says to close other git-hop processes and move the directory by
+hand, naming both paths. Neither lock is held while docker
 compose runs. Each save writes a temporary file of its own beside the file
 and renames it over the file, so a reader always sees a whole file. The lock files exist only while a
 change is being written; a lock belongs to the process holding it and goes

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 
 	"github.com/spf13/afero"
 
@@ -90,4 +91,23 @@ func dropMovedLockFiles(fs afero.Fs, dir string) {
 			output.Warn("could not remove %s: %v", path, err)
 		}
 	}
+}
+
+// doctorGOOS is the operating system doctor runs on; tests replace it.
+var doctorGOOS = runtime.GOOS
+
+// hintHopspaceMoveFailed follows a failed hopspace move on Windows, a
+// known limitation: the move renames the directory while it holds the
+// lock files inside it open, and Windows refuses to rename a directory
+// with a file open in it. The move fails as a whole, so nothing is lost;
+// the hint says how to finish it by hand. A move refused for a reason
+// of its own (destination taken, source gone) gets no hint.
+func hintHopspaceMoveFailed(goos, from, to string, err error) {
+	var exists *existsError
+	if goos != "windows" || errors.Is(err, errMovedMeanwhile) || errors.As(err, &exists) {
+		return
+	}
+	output.Hint("On Windows a directory cannot be renamed while a file in it is open,\n"+
+		"and the move holds the hopspace's lock files open.\n"+
+		"Close other git-hop processes, then move %s to %s by hand.", from, to)
 }
