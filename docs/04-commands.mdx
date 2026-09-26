@@ -1028,7 +1028,17 @@ git hop doctor --fix --dry-run
   nothing is there yet, holding the old hopspace's `hop.json` and
   `ports.json` locks, so it waits for a committed-hook mirror writing
   there; with hooks at both locations nothing is moved and both are
-  named. Nothing is deleted or overwritten
+  named. The location is where every hub of the repository, `--global`
+  or not, resolves it; when hubs resolve `hop.dataLayout` differently,
+  nothing is moved (a hub still resolving the old location would go on
+  mirroring hooks there). Nothing is deleted or overwritten
+- Hubs of one repository that resolve `hop.dataLayout` to different
+  locations, found by either move above: a warning naming each hub and
+  the location it resolves, never a `--fix` suggestion. A `hint:` names
+  each hub's value and its scope (`local config`, `default`, ...) and
+  how to give them one: `git config --global hop.dataLayout <layout>`
+  and `git -C <hub> config --unset hop.dataLayout` for each hub that
+  overrides it, or the same value in every hub
 - An invalid `hop.dataLayout`, at `--global` or in effect for the current
   hub (its own config, `git -c`): a warning naming the scope; the
   `--global` value, or the default, is used

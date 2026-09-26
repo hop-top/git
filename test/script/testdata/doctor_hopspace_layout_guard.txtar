@@ -48,5 +48,7 @@ exec git -C $WORK/linkedhub2 config hop.dataLayout '{host}/{org}/{repo}'
 cd $WORK/linkedhub
 exec git-hop doctor --fix
 stderr 'hubs of org/linked resolve hop.dataLayout to different hopspaces .*; nothing moved'
+stderr '^hint:   .*/linkedhub2: \{host\}/\{org\}/\{repo\} \(local config\)$'
+stderr '^hint:   git -C .*/linkedhub2 config --unset hop.dataLayout$'
 exists $WORK/data/org/linked/hop.json
 ! exists $WORK/data/github.com/org/linked

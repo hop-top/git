@@ -149,30 +149,35 @@ func repoEntry(repos map[string]*layoutRepo, ref hop.RepoRef) *layoutRepo {
 }
 
 // agreedHopspacePath returns where hop.dataLayout, as each hub of repo
-// resolves it, puts the repository's hopspace. Hubs that resolve it to
-// different paths would pull one hopspace two ways: that is reported and
-// ok is false, so nothing moves.
+// resolves it, puts the repository's hopspace; see agreedLayoutPath.
 func agreedHopspacePath(dataHome string, repo *layoutRepo, r *doctorReport) (string, bool) {
-	byPath := map[string][]string{}
-	var paths []string
-	for _, hub := range repo.hubs {
-		p := filepath.Clean(hop.GetHopspacePath(dataHome, repo.ref.In(hub)))
-		if byPath[p] == nil {
-			paths = append(paths, p)
-		}
-		byPath[p] = append(byPath[p], hub)
+	return agreedLayoutPath(dataHome, repo.ref, repo.hubs, repo.ref.Org+"/"+repo.ref.Repo, r)
+}
+
+// agreedLayoutPath returns where hop.dataLayout, as each of hubs resolves
+// it, puts ref's hopspace. Hubs that resolve it to different paths would
+// pull one hopspace two ways, and a hub left resolving the old path
+// would write there after a move: that is reported, with the value each
+// hub has in effect and how to align them, and ok is false, so nothing
+// moves. subject is what the report is about. A hint is given once a
+// run, however many moves the same split refuses.
+func agreedLayoutPath(dataHome string, ref hop.RepoRef, hubs []string, subject string, r *doctorReport) (string, bool) {
+	layouts := hop.ResolveHubLayouts(dataHome, ref, hubs)
+	if p, ok := hop.AgreedHopspace(layouts); ok {
+		return p, true
 	}
-	if len(paths) == 1 {
-		return paths[0], true
-	}
-	var parts []string
-	for _, p := range paths {
-		parts = append(parts, fmt.Sprintf("%s -> %s", strings.Join(byPath[p], ", "), p))
-	}
-	name := repo.ref.Org + "/" + repo.ref.Repo
+	name := ref.Org + "/" + ref.Repo
+	split := hop.LayoutSplitSummary(layouts)
 	msg := "hubs of %s resolve hop.dataLayout to different hopspaces (%s); nothing moved: give them the same hop.dataLayout"
-	output.Warn(msg, name, strings.Join(parts, "; "))
-	r.record(doctorKindWarning, doctorCheckHopspace, name, msg, name, strings.Join(parts, "; "))
+	output.Warn(msg, name, split)
+	r.record(doctorKindWarning, doctorCheckHopspace, subject, msg, name, split)
+	if !r.layoutHinted[split] {
+		if r.layoutHinted == nil {
+			r.layoutHinted = map[string]bool{}
+		}
+		r.layoutHinted[split] = true
+		output.Hint("%s", hop.LayoutAlignmentHint(layouts))
+	}
 	return "", false
 }
 
