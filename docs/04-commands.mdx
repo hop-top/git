@@ -1011,7 +1011,12 @@ git hop doctor --fix --dry-run
   `--fix` renames the directory to the current location when nothing is
   there yet (`--fix --dry-run` previews the move), holding the hopspace's
   `hop.json` and `ports.json` locks, so it waits for a command changing
-  them. With data at both locations, a worktree inside the old one or a
+  them. On Windows the rename fails, a known limitation (tests do not run
+  there): the move holds those lock files open inside the directory, and
+  Windows does not rename a directory with a file open in it. It is
+  reported as a failed repair, nothing is moved or lost, and a `hint:`
+  says to close other git-hop processes and move the directory by hand,
+  naming both paths. With data at both locations, a worktree inside the old one or a
   worktree link into it (a deps store link), or hubs of the repository
   that resolve the layout differently, nothing is moved and the reason is
   named. Nothing is deleted or overwritten; emptied parent directories

@@ -248,6 +248,7 @@ func reportMisplacedHopspace(fs afero.Fs, opts doctorOpts, r *doctorReport, repo
 		if err := moveUnderHopspaceLocks(fs, alt, alt, current, present); err != nil {
 			output.Error("Failed to move %s: %v", alt, err)
 			r.failed(doctorCheckHopspace, alt, "move to %s: %v", current, err)
+			hintHopspaceMoveFailed(doctorGOOS, alt, current, err)
 			r.markMisplaced(current)
 			return
 		}
