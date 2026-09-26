@@ -175,3 +175,38 @@ func TestLock_ReleaseAfterMoveKeepsNewLock(t *testing.T) {
 		t.Fatal("third process took the lock while the second holds it")
 	}
 }
+
+// A lock's directory can go between TryAcquire's mkdir and its open: a
+// hopspace move renames it, or a hook mirror removes an emptied hopspace
+// dir it recreated. TryAcquire makes the directory again and takes the
+// lock, rather than failing the run that wanted it.
+func TestLock_DirRemovedBeforeOpen(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "hopspace")
+	path := filepath.Join(dir, "test.lock")
+	prev := beforeOpen
+	t.Cleanup(func() { beforeOpen = prev })
+	removed := false
+	beforeOpen = func(string) {
+		if !removed {
+			removed = true
+			if err := os.Remove(dir); err != nil {
+				t.Fatalf("remove lock dir: %v", err)
+			}
+		}
+	}
+
+	l := New(path)
+	ok, err := l.TryAcquire()
+	if err != nil {
+		t.Fatalf("TryAcquire: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected to acquire the lock")
+	}
+	if !removed {
+		t.Fatal("the directory was never removed; the test proves nothing")
+	}
+	if err := l.Release(); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+}
