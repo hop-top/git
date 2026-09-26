@@ -1020,8 +1020,10 @@ git hop doctor --fix --dry-run
   `$GIT_HOP_DATA_HOME/github.com/<org>/<repo>/hooks`, where they still
   fire: a warning. `--fix` moves the directory to the `hop.dataLayout`
   location (`$GIT_HOP_DATA_HOME/<org>/<repo>/hooks` by default) when
-  nothing is there yet; with hooks at both locations nothing is moved and
-  both are named. Nothing is deleted or overwritten
+  nothing is there yet, holding the old hopspace's `hop.json` and
+  `ports.json` locks, so it waits for a committed-hook mirror writing
+  there; with hooks at both locations nothing is moved and both are
+  named. Nothing is deleted or overwritten
 - An invalid `hop.dataLayout`, at `--global` or in effect for the current
   hub (its own config, `git -c`): a warning naming the scope; the
   `--global` value, or the default, is used

@@ -146,13 +146,11 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 		return res, fmt.Errorf("invalid repoID %q: expected host/org/repo", opts.RepoID)
 	}
 	// The worktree belongs to the repository, so its git config decides
-	// hop.dataLayout.
+	// hop.dataLayout. Each hook is decided against this dir, asking where
+	// the mode says to; nothing is written until every hook is decided,
+	// and then under the hopspace's lock (installPlanned).
 	hopspaceHooksDir := hop.HopspaceHooksDir(ref.In(opts.WorktreePath))
-	if !opts.DryRun {
-		if err := fs.MkdirAll(hopspaceHooksDir, 0755); err != nil {
-			return res, fmt.Errorf("create hopspace hooks dir: %w", err)
-		}
-	}
+	var plan []plannedHook
 
 	// Prompt-mode session state: 'a' (all-yes) or 's' (skip-all).
 	var allYes, skipAll bool
@@ -219,14 +217,7 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "would-install", Target: dstPath})
 				continue
 			}
-			if err := installHook(fs, mode, srcPath, dstPath, info); err != nil {
-				res.Warned++
-				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: err.Error()})
-				output.Warn("failed to install hook %s: %v", name, err)
-				continue
-			}
-			res.Installed++
-			res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "installed", Target: dstPath})
+			plan = append(plan, plannedHook{name: name, src: srcPath, info: info, mode: mode, replace: opts.Overwrite})
 
 		case ModePrompt:
 			if opts.DryRun {
@@ -242,10 +233,15 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 			if !install {
 				answer, err := promptInstall(fs, opts.Stdin, reader, promptOut, name, srcPath, dstPath, dstExists)
 				if errors.Is(err, io.EOF) {
-					warnNoAnswer(opts.WorktreePath, res.Installed+res.Skipped > 0)
-					return res, nil
+					answered := len(plan)+res.Skipped > 0
+					err := installPlanned(fs, opts.WorktreePath, ref, plan, &res)
+					warnNoAnswer(opts.WorktreePath, answered)
+					return res, err
 				}
 				if err != nil {
+					if ierr := installPlanned(fs, opts.WorktreePath, ref, plan, &res); ierr != nil {
+						return res, ierr
+					}
 					return res, fmt.Errorf("prompt: %w", err)
 				}
 				switch answer {
@@ -268,19 +264,16 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "skipped"})
 				continue
 			}
-			// In prompt mode, default to symlink (live tracking).
-			if err := installHook(fs, ModeSymlink, srcPath, dstPath, info); err != nil {
-				res.Warned++
-				res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "warned", Reason: err.Error()})
-				output.Warn("failed to install hook %s: %v", name, err)
-				continue
-			}
-			res.Installed++
-			res.Hooks = append(res.Hooks, HookOutcome{Name: name, Status: "installed", Target: dstPath})
+			// In prompt mode, default to symlink (live tracking). A "yes"
+			// to a hook that differs from the one there replaces it.
+			plan = append(plan, plannedHook{name: name, src: srcPath, info: info, mode: ModeSymlink, replace: dstExists})
 		}
 	}
 
-	return res, nil
+	if opts.DryRun {
+		return res, nil
+	}
+	return res, installPlanned(fs, opts.WorktreePath, ref, plan, &res)
 }
 
 // warnNoAnswer reports a hooks prompt that met the end of input: the

@@ -15,9 +15,11 @@ import (
 // doctor --fix moves hopspace data by renaming a directory: a whole
 // hopspace left at another hop.dataLayout path, or a hooks dir left where
 // releases before hop.dataLayout mirrored it. Other git-hop runs may be
-// rewriting that hopspace's hop.json, ports.json or volumes.json at the
-// same time; one that loaded a file before the rename and saves it after
-// would write it back at the old path, or lose its change.
+// rewriting that hopspace's hop.json, ports.json or volumes.json, or
+// mirroring committed hooks into its hooks dir, at the same time; one
+// that loaded a file before the rename and saves it after would write it
+// back at the old path, or lose its change. The hook mirror takes the
+// hop.json lock (internal/hooks/install_write.go).
 //
 // So the rename runs under the source hopspace's locks, the ones every
 // writer of those files takes: hop.json.lock, then ports.json.lock

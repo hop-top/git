@@ -307,7 +307,9 @@ Controlled by flags on `clone` (and equivalents on `init`):
 
 Default is `prompt`. Only filenames in `ValidHookNames` are mirrored; anything else in `.git-hop/hooks/` is ignored. A repo with no `.git-hop/hooks/` directory is a silent no-op — most repos commit no hooks.
 
-When committed hooks are not mirrored (mode `none`, a non-interactive `prompt`, or a hook that is not executable), a `hint:` names the remedy: run `git hop init --hooks=<mode>` inside the worktree, which mirrors again without re-cloning. `-q` drops the hint. A prompt that gets no answer (stdin at end of input, e.g. `</dev/null`) leaves the unanswered hooks unmirrored with a `warning:`, and its hint also names `git config hop.hooks.installMode symlink`, which mirrors without asking.
+When committed hooks are not mirrored (mode `none`, a non-interactive `prompt`, or a hook that is not executable), a `hint:` names the remedy: run `git hop init --hooks=<mode>` inside the worktree, which mirrors again without re-cloning. `-q` drops the hint. A prompt that gets no answer (stdin at end of input, e.g. `</dev/null`) leaves the unanswered hooks unmirrored with a `warning:`, and its hint also names `git config hop.hooks.installMode symlink`, which mirrors without asking; the hooks answered before it are mirrored.
+
+Every hook is decided first, prompts included, and the hooks are then written together while holding the `hop.json.lock` of the data-home hopspace the hooks directory belongs to (`$GIT_HOP_DATA_HOME/<org>/<repo>/hop.json.lock` by default), never while a prompt waits. `git hop doctor --fix` moves hooks directories under the same lock, so a move waits for the hooks being written and carries them, and a mirror waits for a move in progress. A mirror that finds the directory moved away once it holds the lock writes nothing there: it looks up where `hop.dataLayout` now puts the directory and writes there. A hook that appeared meanwhile with different content is kept, with a `warning:`, unless `--hooks-overwrite` or a prompt answered for it allows replacing it.
 
 ### `pre-clone` has no repo level
 
