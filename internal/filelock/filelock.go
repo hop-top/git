@@ -30,20 +30,31 @@ func New(path string) *Lock {
 	return &Lock{path: path}
 }
 
-// acquireAttempts bounds the open/lock/verify loop in TryAcquire. Each
-// retry only happens when a concurrent Release unlinked the file between
-// our open and our lock, which is rare and self-limiting.
+// acquireAttempts bounds the mkdir/open/lock/verify loop in TryAcquire.
+// Each retry only happens when a concurrent Release unlinked the file
+// between our open and our lock, or the lock's directory was renamed or
+// removed between our mkdir and our open (a hopspace move, or the
+// removal of an emptied hopspace dir), which is rare and self-limiting.
 const acquireAttempts = 5
+
+// beforeOpen runs in TryAcquire between creating the lock's directory
+// and opening the lock file. Tests replace it to remove the directory.
+var beforeOpen = func(path string) {}
 
 // TryAcquire attempts to acquire the lock without blocking. Returns
 // (true, nil) on success, (false, nil) if another process holds it,
 // or (false, err) on a real error (e.g. permission denied, mkdir failure).
 func (l *Lock) TryAcquire() (bool, error) {
-	if err := os.MkdirAll(filepath.Dir(l.path), 0755); err != nil {
-		return false, fmt.Errorf("create lock dir: %w", err)
-	}
 	for i := 0; i < acquireAttempts; i++ {
+		if err := os.MkdirAll(filepath.Dir(l.path), 0755); err != nil {
+			return false, fmt.Errorf("create lock dir: %w", err)
+		}
+		beforeOpen(l.path)
 		f, err := os.OpenFile(l.path, os.O_CREATE|os.O_RDWR, 0644)
+		if errors.Is(err, os.ErrNotExist) {
+			// The directory went between our mkdir and our open.
+			continue
+		}
 		if err != nil {
 			return false, fmt.Errorf("open lock file: %w", err)
 		}
@@ -67,7 +78,7 @@ func (l *Lock) TryAcquire() (bool, error) {
 		_ = unflock(f)
 		_ = f.Close()
 	}
-	return false, errors.New("lock file kept changing underneath us")
+	return false, errors.New("lock file or its directory kept changing underneath us")
 }
 
 // Release drops the lock and removes the lock file. Safe to call on a
