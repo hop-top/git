@@ -232,6 +232,9 @@ type doctorReport struct {
 	// The hub check reports no such hopspace missing and creates none:
 	// that would strand the real one.
 	misplaced map[string]bool
+	// layoutHinted holds the hop.dataLayout splits agreedLayoutPath has
+	// given the alignment hint for.
+	layoutHinted map[string]bool
 }
 
 // markMisplaced records that the hopspace belonging at path sits, not

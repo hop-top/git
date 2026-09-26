@@ -150,6 +150,9 @@ func MirrorCommittedHooks(fs afero.Fs, opts MirrorOpts) (Result, error) {
 	// the mode says to; nothing is written until every hook is decided,
 	// and then under the hopspace's lock (installPlanned).
 	hopspaceHooksDir := hop.HopspaceHooksDir(ref.In(opts.WorktreePath))
+	if hasValidHook(entries) {
+		warnLayoutSplit(fs, opts.WorktreePath, opts.RepoID, ref)
+	}
 	var plan []plannedHook
 
 	// Prompt-mode session state: 'a' (all-yes) or 's' (skip-all).
@@ -294,6 +297,16 @@ func warnNoAnswer(worktreePath string, answered bool) {
 // the hopspace after the fact: init re-run in the worktree mirrors again.
 func remirrorCommand(worktreePath, mode string) string {
 	return fmt.Sprintf("'git hop init --hooks=%s' in %s", mode, worktreePath)
+}
+
+// hasValidHook reports whether entries hold a file named like a hook.
+func hasValidHook(entries []os.FileInfo) bool {
+	for _, e := range entries {
+		if _, ok := validHookSet[e.Name()]; ok && !e.IsDir() {
+			return true
+		}
+	}
+	return false
 }
 
 func validMode(m string) bool {

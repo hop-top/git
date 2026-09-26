@@ -143,7 +143,12 @@ func ExpandDataLayout(layout string, ref RepoRef) string {
 // --global clone creates the hopspace; to find the hopspace an existing
 // hub uses, call ResolveHopspacePath.
 func GetHopspacePath(dataHome string, ref RepoRef) string {
-	return filepath.Join(dataHome, ExpandDataLayout(ResolveDataLayout(ref.Dir).Layout, ref))
+	return hopspacePathIn(dataHome, ResolveDataLayout(ref.Dir).Layout, ref)
+}
+
+// hopspacePathIn is GetHopspacePath with hop.dataLayout already resolved.
+func hopspacePathIn(dataHome, layout string, ref RepoRef) string {
+	return filepath.Join(dataHome, ExpandDataLayout(layout, ref))
 }
 
 // HopspaceHooksDir returns the directory hopspace-level hooks of ref are

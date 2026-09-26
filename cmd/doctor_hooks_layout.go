@@ -28,7 +28,7 @@ func checkDataLayout(fs afero.Fs, cwd string, opts doctorOpts, r *doctorReport) 
 	hubPath, _ := hop.FindHub(fs, cwd)
 	checkDataLayoutSetting(hubPath, r)
 	claimed := checkMisplacedHopspaces(fs, hubPath, opts, r)
-	checkLegacyHooksDirs(fs, opts, r, claimed)
+	checkLegacyHooksDirs(fs, hubPath, opts, r, claimed)
 }
 
 // checkDataLayoutSetting reports a hop.dataLayout git-hop cannot use: the
@@ -62,7 +62,13 @@ func warnInvalidDataLayout(r *doctorReport, scope, raw string, err error, using 
 // Nothing is ever deleted or overwritten. A hooks dir inside a hopspace
 // checkMisplacedHopspaces reported (skip) moves with that hopspace, so it
 // is left to that check.
-func checkLegacyHooksDirs(fs afero.Fs, opts doctorOpts, r *doctorReport, skip map[string]bool) {
+//
+// The new location is where hop.dataLayout, as every hub of the
+// repository resolves it, puts the hopspace: every hub, global or not,
+// mirrors hooks to and reads them from the data home. When the hubs
+// resolve different locations nothing moves (agreedLayoutPath): a hub
+// still resolving the old one would go on mirroring hooks there.
+func checkLegacyHooksDirs(fs afero.Fs, hubPath string, opts doctorOpts, r *doctorReport, skip map[string]bool) {
 	dataHome := hop.GetGitHopDataHome()
 	repos := stateRepos(fs)
 	for _, legacy := range findLegacyHooksDirs(fs, dataHome) {
@@ -71,19 +77,60 @@ func checkLegacyHooksDirs(fs afero.Fs, opts doctorOpts, r *doctorReport, skip ma
 		}
 		org := filepath.Base(filepath.Dir(filepath.Dir(legacy)))
 		repo := filepath.Base(filepath.Dir(legacy))
-		var uri, hubDir string
-		if st := legacyHooksRepo(repos, org, repo); st != nil {
-			uri = st.URI
-			if len(st.Hubs) > 0 && st.Hubs[0] != nil {
-				hubDir = st.Hubs[0].Path
-			}
+		uri, hubs := legacyHooksHubs(fs, legacyHooksRepo(repos, org, repo), hubPath, org, repo)
+		if len(hubs) == 0 {
+			// No hub to read it from: the --global hop.dataLayout.
+			hubs = []string{""}
 		}
-		newDir := hop.HopspaceHooksDir(hop.NewRepoRef(uri, org, repo).In(hubDir))
-		if filepath.Clean(newDir) == filepath.Clean(legacy) {
+		hopspace, ok := agreedLayoutPath(dataHome, hop.NewRepoRef(uri, org, repo), hubs, legacy, r)
+		if !ok {
+			continue
+		}
+		newDir := filepath.Join(hopspace, "hooks")
+		if newDir == filepath.Clean(legacy) {
 			continue
 		}
 		reportLegacyHooksDir(fs, opts, r, legacy, newDir)
 	}
+}
+
+// legacyHooksHubs returns the origin URL of the repository org/repo and
+// its hubs whose directories exist: those state records for it (st, nil
+// when state has none), and the hub at hubPath when it is one of them.
+// A hub whose directory is gone is left out: its config, and so its
+// hop.dataLayout, cannot be read.
+func legacyHooksHubs(fs afero.Fs, st *state.RepositoryState, hubPath, org, repo string) (uri string, hubs []string) {
+	add := func(path string) {
+		if path == "" {
+			return
+		}
+		if ok, _ := afero.DirExists(fs, path); !ok {
+			return
+		}
+		for _, h := range hubs {
+			if state.SamePath(h, path) {
+				return
+			}
+		}
+		hubs = append(hubs, path)
+	}
+	if st != nil {
+		uri = st.URI
+		for _, h := range st.Hubs {
+			if h != nil {
+				add(h.Path)
+			}
+		}
+	}
+	if hubPath != "" {
+		if hub, err := hop.LoadHub(fs, hubPath); err == nil && hub.Config.Repo.Org == org && hub.Config.Repo.Repo == repo {
+			if uri == "" {
+				uri = hub.Config.Repo.URI
+			}
+			add(hubPath)
+		}
+	}
+	return uri, hubs
 }
 
 func reportLegacyHooksDir(fs afero.Fs, opts doctorOpts, r *doctorReport, legacy, newDir string) {

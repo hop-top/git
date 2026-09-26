@@ -1,0 +1,59 @@
+# Two hubs of one repository that resolve hop.dataLayout differently put
+# its hopspace hooks dir at two paths. While they disagree, doctor --fix
+# does not move hooks left where releases before hop.dataLayout mirrored
+# them: it names each hub's value and how to align them. A mirror from
+# the hub with its own value warns the same way and mirrors where that
+# hub's hop.dataLayout puts the hooks, never where another hub's does.
+#
+# A local origin has no host, so {host} expands to hop.gitDomain
+# (github.com).
+
+exec git init --bare $WORK/org/repo.git
+exec git clone $WORK/org/repo.git $WORK/seed
+cd $WORK/seed
+mkdir .git-hop/hooks
+cp $WORK/hook.sh .git-hop/hooks/post-worktree-add
+chmod 0755 .git-hop/hooks/post-worktree-add
+exec git add .
+exec git commit -m 'initial'
+exec git push origin main
+cd $WORK
+
+exec git-hop $WORK/org/repo.git hubb --hooks=none
+exec git-hop $WORK/org/repo.git huba --hooks=none
+exec git -C $WORK/huba config hop.dataLayout '{host}/{org}/{repo}'
+mkdir $WORK/data/github.com/org/repo/hooks
+cp $WORK/hook.sh $WORK/data/github.com/org/repo/hooks/pre-worktree-add
+
+# --- doctor --fix refuses the move and says how to align the hubs ---
+cd $WORK/hubb
+exec git-hop doctor --fix
+stderr '^warning: hubs of org/repo resolve hop.dataLayout to different hopspaces \(.*\); nothing moved'
+stderr '^hint:   .*/huba: \{host\}/\{org\}/\{repo\} \(local config\)$'
+stderr '^hint:   .*/hubb: \{org\}/\{repo\} \(default\)$'
+stderr '^hint:   git config --global hop.dataLayout <layout>$'
+stderr '^hint:   git -C .*/huba config --unset hop.dataLayout$'
+! stderr 'doctor --fix. to move them'
+exists $WORK/data/github.com/org/repo/hooks/pre-worktree-add
+! exists $WORK/data/org/repo/hooks
+
+# --- a mirror from the hub with its own value warns, and writes where it resolves ---
+cd $WORK/huba/hops/main
+exec git-hop init --hooks=copy
+stderr '^warning: hubs of org/repo resolve hop.dataLayout to different hopspaces'
+stderr '^hint:   git -C .*/huba.* config --unset hop.dataLayout$'
+exists $WORK/data/github.com/org/repo/hooks/post-worktree-add
+! exists $WORK/data/org/repo/hooks
+
+# --- aligned, the move goes ahead ---
+exec git -C $WORK/huba config --unset hop.dataLayout
+cd $WORK/hubb
+exec git-hop doctor --fix
+! stderr 'different hopspaces'
+exists $WORK/data/org/repo/hooks/pre-worktree-add
+exists $WORK/data/org/repo/hooks/post-worktree-add
+! exists $WORK/data/github.com/org/repo/hooks
+
+-- hook.sh --
+#!/bin/sh
+exit 0
