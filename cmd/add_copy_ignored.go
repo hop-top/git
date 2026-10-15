@@ -17,9 +17,9 @@ import (
 // seed a newly-created worktree.
 //
 // `git hop add <branch>` forks the new branch from a start-point resolved by
-// WorktreeManager (see worktree.go:resolveStartPoint): the tip of
-// repo.defaultBranch by default, or whatever --from / GIT_HOP_ADD_FROM /
-// hop.add.defaultStartPoint named. The ignored files we want are the ones
+// add (see resolveAddStartPoint): the branch of the worktree add runs in
+// by default, else repo.defaultBranch, or whatever --from /
+// GIT_HOP_ADD_FROM / hop.add.defaultStartPoint named. The ignored files we want are the ones
 // sitting in the worktree that has that start-point branch checked out —
 // that is the tree the user was working in and hand-copying from.
 //
@@ -37,6 +37,7 @@ import (
 func resolveCopySource(fs afero.Fs, hub *hop.Hub, startPoint string) string {
 	var candidates []string
 
+	startPoint = startPointBranch(startPoint)
 	switch startPoint {
 	case "", hop.StartPointDefaultBranch, hop.StartPointInitial:
 		// No specific branch named (or the root commit, which belongs to
@@ -62,6 +63,16 @@ func resolveCopySource(fs afero.Fs, hub *hop.Hub, startPoint string) string {
 	return ""
 }
 
+// forkSource is the worktree the new one forks from: the one the
+// start-point came from (cwd), else resolveCopySource's pick. "" when
+// there is none.
+func forkSource(fs afero.Fs, hub *hop.Hub, start addStartPoint) string {
+	if start.Source != "" {
+		return start.Source
+	}
+	return resolveCopySource(fs, hub, start.Spec)
+}
+
 // copyIgnoredIntoWorktree seeds dstWorktree with the git-ignored local
 // state present in the fork source, subject to the size ceiling, the
 // deps-managed skip list, the #-hop-# marker opt-out, and the no-overwrite
@@ -71,8 +82,10 @@ func resolveCopySource(fs afero.Fs, hub *hop.Hub, startPoint string) string {
 // without some of its ignored files is far better than a failed create, so
 // problems are reported through output.Warn and `git hop add` carries on.
 // override, when non-nil, is an explicit --[no-]copy-ignored from the
-// command line and wins over the hop.add.copyIgnored config key.
-func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath, dstWorktree, startPoint string, globalConfig *config.GlobalConfig, gc *config.GitConfig, override *bool) {
+// command line and wins over the hop.add.copyIgnored config key. The
+// source is start.Source when the start-point came from a worktree (cwd),
+// else resolveCopySource's pick.
+func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath, dstWorktree string, start addStartPoint, globalConfig *config.GlobalConfig, gc *config.GitConfig, override *bool) {
 	enabled := gc.GetBoolOrDefault(config.KeyAddCopyIgnored)
 	if override != nil {
 		enabled = *override
@@ -81,7 +94,7 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 		return
 	}
 
-	srcWorktree := resolveCopySource(fs, hub, startPoint)
+	srcWorktree := forkSource(fs, hub, start)
 	if srcWorktree == "" {
 		output.Warn("could not determine a source worktree to copy ignored files from; skipping (disable this message with 'git config %s false')",
 			config.KeyAddCopyIgnored)

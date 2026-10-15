@@ -245,7 +245,8 @@ The `93` constant is `hooks.ExitNavigationHandled`. See `examples/tmux/hooks/pos
 
 ```
 pre-worktree-add
-  ↓  (worktree created; ignored local files copied from the source worktree)
+  ↓  (worktree created; ignored local files copied from the source worktree;
+  ↓   its mise config trusted when the source's is, see hop.add.miseTrust)
 environment set-up: ports, volumes, .env, compose override, then shared deps
   ↓
 post-worktree-add

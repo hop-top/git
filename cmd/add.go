@@ -41,6 +41,23 @@ var addCmd = &cobra.Command{
 Creates the branch (if missing) from the start-point, checks it out under
 hops/<branch>, and sets up shared dependencies.
 
+The start-point is the first of --from, GIT_HOP_ADD_FROM and 'git config
+hop.add.defaultStartPoint' that is set. Each takes a ref or SHA, or one
+of these keywords:
+
+    cwd             the branch checked out in the worktree add runs in;
+                    outside every worktree (the hub root), as
+                    default-branch. The built-in default.
+    default-branch  the local default branch (repo.defaultBranch in
+                    hop.json, else the branch origin/HEAD names);
+                    origin/<default> when there is no local one
+    origin-default  origin/<default>, the local branch when origin has
+                    none; the default before cwd
+    initial         the root commit
+
+Inside a worktree with a detached HEAD, cwd is the commit it points at,
+as with 'git switch -c'; no base branch is recorded for the new branch.
+
 The environment is not started unless asked: --env-start starts it once
 the worktree exists, through the same code as 'git hop env start'. 'git
 config hop.env.autoStart true' (or GIT_HOP_AUTO_ENV_START=true) makes that
@@ -77,20 +94,33 @@ part of the pattern.
 
 Before resolving the start-point, add runs 'git fetch origin' so a new
 branch does not start from a stale origin/<branch>. By default it does so
-only when the start-point is an origin ref: the default branch or an
-explicit origin/<branch>. 'git config hop.add.fetch true|false' makes that
-a standing choice; --fetch / --no-fetch decide for one run. When the
+only when the start-point is an origin ref: origin-default, an explicit
+origin/<branch>, or default-branch when there is no local default
+branch. 'git config hop.add.fetch true|false' makes that a standing
+choice; --fetch / --no-fetch decide for one run. When the
 fetch was asked for (--fetch, hop.add.fetch true) a failure is fatal; the
 automatic one only warns and carries on from the refs already present.
 A hub with no origin remote has nothing to fetch: a requested fetch is
 skipped with a hint.
 
+mise is optional. When it is on PATH and the new worktree has mise
+config, add trusts that config ('mise trust <worktree>') once the
+ignored files are copied, provided the source worktree's is trusted and
+the new worktree has exactly its config files, byte for byte, as mise's
+own listing names them. Otherwise it trusts nothing and says why in a
+hint (an untrusted source, a config that differs), with the command to
+trust it by hand. Without mise, or without mise config, add says
+nothing about it. 'git config hop.add.miseTrust always' trusts it
+whenever it has mise config, 'never' leaves mise alone; --mise-trust /
+--no-mise-trust decide for one run.
+
 add never deletes what it finds at the worktree path: a file or a
 non-empty directory there is refused, and an empty directory is reused,
 as 'git worktree add' does.
 
-With --dry-run, add reports the fetch, branch, start-point, worktree path,
-hooks and environment start it would run, then stops: nothing is fetched,
+With --dry-run, add reports the resolved start-point and the setting
+that picked it, then the fetch, branch, worktree path, mise trust, hooks
+and environment start it would run, and stops: nothing is fetched,
 created or written and no hook runs. An add the real run would refuse
 (the worktree exists, a file or non-empty directory is in its way, the
 branch name is invalid or checked out in another worktree, the
@@ -147,8 +177,17 @@ before the real run's reason.`,
 		repoID := repoid.For(hubPath, hub.Config.Repo)
 
 		// Resolve the branch start-point per precedence:
-		// --from (CLI) > GIT_HOP_ADD_FROM env > hop.add.defaultStartPoint > built-in default ("default-branch").
-		startPoint := resolveAddStartPoint(addFromFlag, os.Getenv("GIT_HOP_ADD_FROM"), globalConfig.Defaults.DefaultStartPoint)
+		// --from (CLI) > GIT_HOP_ADD_FROM env > hop.add.defaultStartPoint
+		// (default cwd: the branch of the worktree add runs in, else the
+		// local default branch).
+		defaultBranch := effectiveDefaultBranch(g, hubPath, hub.Config.Repo.DefaultBranch)
+		spValue, spOrigin := pickAddStartPoint(addFromFlag, os.Getenv("GIT_HOP_ADD_FROM"), globalConfig.Defaults.DefaultStartPoint)
+		start, err := resolveAddStartPoint(g, hubPath, cwd, spValue, spOrigin, defaultBranch)
+		if err != nil {
+			output.Fatal("%v", err)
+		}
+		startPoint := start.Spec
+		output.Debug("start-point: %s", start.Describe(defaultBranch))
 
 		hookRunner := hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI, hubPath)
 
@@ -157,8 +196,10 @@ before the real run's reason.`,
 
 		fetch := decideFetch(g, config.NewGitConfig(),
 			cli.NegatableFlag(cmd, "fetch", addFetchFlag, addNoFetchFlag),
-			hubPath, startPoint, hub.Config.Repo.DefaultBranch)
+			hubPath, startPoint, defaultBranch)
 		hintNoOrigin(fetch)
+		miseMode := miseTrustMode(config.NewGitConfig(),
+			cli.NegatableFlag(cmd, "mise-trust", addMiseTrustFlag, addNoMiseTrustFlag))
 		envStart := cli.DecideAutoEnvStart(
 			cli.NegatableFlag(cmd, "env-start", addEnvStartFlag, addNoEnvStartFlag), globalConfig)
 
@@ -175,9 +216,12 @@ before the real run's reason.`,
 				branch:        branch,
 				worktreePath:  worktreePath,
 				startPoint:    startPoint,
-				defaultBranch: hub.Config.Repo.DefaultBranch,
+				startWhy:      start,
+				defaultBranch: defaultBranch,
 				task:          taskID,
 				envStart:      envStart,
+				miseTrust:     miseMode,
+				miseSource:    forkSource(fs, hub, start),
 			})
 			if output.IsStructured() {
 				emitResult(cmd, res)
@@ -193,7 +237,7 @@ before the real run's reason.`,
 
 		// Detect the branch type; its action runs once the worktree exists.
 		gitflow := newGitflowDetector(g, hubPath, detector.WithStartBase(
-			gitflowStartBase(g, hubPath, addFromFlag, hub.Config.Repo.DefaultBranch)))
+			gitflowStartBase(g, hubPath, explicitStartPoint(startPoint), defaultBranch)))
 		detectorMgr := branchDetectors(fs, g, gitflow)
 		branchInfo, err := detectorMgr.DetectBranch(branch, hubPath)
 		if err != nil {
@@ -219,7 +263,7 @@ before the real run's reason.`,
 		wm.Detach = gitflowStarts
 
 		// Create Worktree in the current hub
-		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, hub.Config.Repo.DefaultBranch, startPoint)
+		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, defaultBranch, startPoint)
 		if err != nil {
 			// Check if it's a state error
 			if stateErr, ok := err.(*hop.StateError); ok {
@@ -252,9 +296,14 @@ before the real run's reason.`,
 		// Runs before the set-up below so any deps-managed path is still
 		// absent here and the symlink EnsureDeps creates lands on a clean
 		// name. Never fatal — see copyIgnoredIntoWorktree.
-		copyIgnoredIntoWorktree(fs, g, hub, hopspacePath, worktreePath, startPoint,
+		copyIgnoredIntoWorktree(fs, g, hub, hopspacePath, worktreePath, start,
 			globalConfig, config.NewGitConfig(),
 			copyIgnoredOverride(cmd, addCopyIgnoredFlag, addNoCopyIgnoredFlag))
+
+		// Trust the new worktree's mise config when its source's is
+		// trusted and the same (mise.local.toml may have just been
+		// copied), before the set-up and hooks below run mise. Never fatal.
+		trustWorktreeMise(execMise{}, miseMode, forkSource(fs, hub, start), worktreePath)
 
 		// Environment and shared deps before post-worktree-add, so the hook
 		// finds .env, the compose override and linked deps. Never fatal.
@@ -291,7 +340,7 @@ before the real run's reason.`,
 		// labels (default-branch forks fall through to the hub default).
 		// Skip "initial" (root commit, not a branch) and any input that
 		// doesn't resolve to a local or remote branch ref (raw SHA, tag).
-		if base := resolveBranchBase(g, worktreePath, startPoint, hub.Config.Repo.DefaultBranch); base != "" {
+		if base := resolveBranchBase(g, worktreePath, startPoint, defaultBranch); base != "" {
 			if err := hub.SetBranchBase(branch, base); err != nil {
 				output.Warn("Failed to record branch base: %v", err)
 			}
@@ -360,7 +409,7 @@ before the real run's reason.`,
 func init() {
 	cli.RootCmd.AddCommand(addCmd)
 	addCmd.Flags().StringVar(&addFromFlag, "from", "",
-		"start-point: branch name, ref, SHA, or 'initial' for the root commit; an existing branch is fast-forwarded to it")
+		"start-point: ref, SHA, or cwd|default-branch|origin-default|initial (default: hop.add.defaultStartPoint, else cwd); an existing branch is fast-forwarded to it")
 	// pflag has no auto-negation, so both halves of the --[no-]copy-ignored
 	// pair are registered explicitly (same shape as --no-prompt /
 	// --no-verify elsewhere). Neither flag set leaves the decision to
@@ -373,11 +422,25 @@ func init() {
 		"fetch origin before resolving the start-point (default: when it is an origin ref)")
 	addCmd.Flags().BoolVar(&addNoFetchFlag, "no-fetch", false,
 		"do not fetch origin before resolving the start-point")
+	addCmd.Flags().BoolVar(&addMiseTrustFlag, "mise-trust", false,
+		"trust the new worktree's mise config whenever it has one (default: hop.add.miseTrust, auto)")
+	addCmd.Flags().BoolVar(&addNoMiseTrustFlag, "no-mise-trust", false,
+		"do not trust the new worktree's mise config")
 	cli.AddEnvStartFlags(addCmd.Flags(), &addEnvStartFlag, &addNoEnvStartFlag)
 	addCmd.Flags().StringVar(&addTaskFlag, "task", "",
 		"record a task id for the worktree (metadata only); without <branch>, derive the branch from the task via tlc")
 	addCmd.ValidArgsFunction = completeRemoteBranchNames
 	declareOutputSchema(addCmd, &addResult{})
+}
+
+// explicitStartPoint is the start-point git flow start gets as its
+// [base]: the resolved one when --from named it, none otherwise (the
+// branch type picks its own).
+func explicitStartPoint(resolved string) string {
+	if addFromFlag == "" {
+		return ""
+	}
+	return resolved
 }
 
 // refuseAdd ends add the way a refused worktree creation does.
