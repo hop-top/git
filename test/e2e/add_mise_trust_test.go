@@ -140,7 +140,7 @@ func TestAddMiseTrust_NeverAndAlways(t *testing.T) {
 	}
 }
 
-// Without mise on PATH, add skips the trust with a hint.
+// Without mise on PATH, add skips the trust silently.
 func TestAddMiseTrust_MiseMissing(t *testing.T) {
 	t.Parallel()
 	gitPath, err := exec.LookPath("git")
@@ -169,8 +169,30 @@ func TestAddMiseTrust_MiseMissing(t *testing.T) {
 	env.RunCommand(t, env.SeedRepoPath, gitPath, "push", "origin", "main")
 	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
 
-	out := env.RunGitHopCombined(t, env.HubPath, "add", "feat/x")
-	if !strings.Contains(out, "hint: mise not found on PATH") {
-		t.Errorf("no hint for the missing mise:\n%s", out)
+	// git-hop does not need mise: without it, add says nothing about it.
+	for _, args := range [][]string{{"add", "feat/x", "--dry-run"}, {"add", "feat/x"}} {
+		if out := env.RunGitHopCombined(t, env.HubPath, args...); strings.Contains(out, "mise") {
+			t.Errorf("%v mentions mise without mise installed:\n%s", args, out)
+		}
+	}
+}
+
+// With mise installed, a repository without mise config gets no word
+// about it either.
+func TestAddMiseTrust_NoMiseConfigIsSilent(t *testing.T) {
+	t.Parallel()
+	if _, err := exec.LookPath("mise"); err != nil {
+		t.Skip("mise not installed")
+	}
+	env := SetupTestEnv(t)
+	env.RunCommand(t, env.RootDir, "git", "init", "--bare", env.BareRepoPath)
+	env.RunCommand(t, env.RootDir, "git", "clone", env.BareRepoPath, env.SeedRepoPath)
+	env.RunCommand(t, env.SeedRepoPath, "git", "commit", "--allow-empty", "-m", "init")
+	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main")
+	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
+	for _, args := range [][]string{{"add", "feat/x", "--dry-run"}, {"add", "feat/x"}} {
+		if out := env.RunGitHopCombined(t, env.HubPath, args...); strings.Contains(out, "mise") {
+			t.Errorf("%v mentions mise in a repository without mise config:\n%s", args, out)
+		}
 	}
 }

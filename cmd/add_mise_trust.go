@@ -197,14 +197,17 @@ func listOrNone(files []string) string {
 // mode says, src being the worktree it forked from ("" when there is
 // none). It runs after the ignored files are copied (mise.local.toml is
 // usually one) and before the environment set-up and post-worktree-add,
-// which may need mise. Never fatal: a skip says why on a hint line.
+// which may need mise. Never fatal. mise is optional: without it, or
+// without mise config in dst, the skip is debug output only; any other
+// skip says why on a hint line, with the command to trust it by hand.
 func trustWorktreeMise(m miseCLI, mode, src, dst string) {
 	if mode == miseTrustNever {
 		return
 	}
+	// git-hop does not need mise: without it, or without mise config in
+	// the new worktree, there is nothing to say outside debug output.
 	if !m.Available() {
-		output.Hint("mise not found on PATH; not trusting the new worktree's mise config (silence with 'git config %s %s')",
-			config.KeyAddMiseTrust, miseTrustNever)
+		output.Debug("mise not found on PATH; skipping mise trust")
 		return
 	}
 	dstFiles, err := miseConfigFiles(m, dst)
@@ -213,7 +216,7 @@ func trustWorktreeMise(m miseCLI, mode, src, dst string) {
 		return
 	}
 	if len(dstFiles) == 0 {
-		output.Hint("no mise config in the new worktree; nothing to trust")
+		output.Debug("no mise config in %s; skipping mise trust", dst)
 		return
 	}
 	if trusted, err := miseTrusted(m, dst); err == nil && trusted {
@@ -222,7 +225,7 @@ func trustWorktreeMise(m miseCLI, mode, src, dst string) {
 	}
 	if mode == miseTrustAuto {
 		if why := miseTrustRefusal(m, src, dst, dstFiles); why != "" {
-			output.Hint("not trusting the new worktree's mise config: %s; review it, then run 'mise trust %s'", why, dst)
+			output.Hint("not trusting the new worktree's mise config: %s\nreview it, then trust it with 'mise trust %s'", why, dst)
 			return
 		}
 	}
@@ -262,17 +265,23 @@ func miseTrustRefusal(m miseCLI, src, dst string, dstFiles []string) string {
 }
 
 // previewMiseTrust reports what trustWorktreeMise would do. The new
-// worktree does not exist yet, so only the source side is checked.
+// worktree does not exist yet, so only the source side is checked; with
+// mise absent, or no mise config in the source to go by, it says nothing
+// outside debug output.
 func previewMiseTrust(m miseCLI, mode, src string) {
 	switch {
 	case mode == miseTrustNever:
 	case !m.Available():
-		output.Info("[dry-run] Would skip mise trust: mise not found on PATH")
+		output.Debug("[dry-run] mise not found on PATH; would skip mise trust")
 	case mode == miseTrustAlways:
 		output.Info("[dry-run] Would trust the new worktree's mise config, if it has one (%s=%s)", config.KeyAddMiseTrust, mode)
 	case src == "":
-		output.Info("[dry-run] Would not trust the new worktree's mise config: no source worktree to compare it with")
+		output.Debug("[dry-run] no source worktree to compare mise config with")
 	default:
+		if files, err := miseConfigFiles(m, src); err != nil || len(files) == 0 {
+			output.Debug("[dry-run] no mise config in %s; would skip mise trust", src)
+			return
+		}
 		if trusted, err := miseTrusted(m, src); err != nil || !trusted {
 			output.Info("[dry-run] Would not trust the new worktree's mise config: %s has no trusted mise config", src)
 			return
