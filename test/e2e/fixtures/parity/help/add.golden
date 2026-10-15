@@ -65,12 +65,14 @@ automatic one only warns and carries on from the refs already present.
 A hub with no origin remote has nothing to fetch: a requested fetch is
 skipped with a hint.
 
-Once the ignored files are copied, add trusts the new worktree's mise
-config ('mise trust <worktree>') when the source worktree's is trusted
-and the new worktree has exactly its config files, byte for byte, as
-mise's own listing names them. Otherwise it trusts nothing and says why
-in a hint: mise not on PATH, no mise config, an untrusted source, or a
-config that differs. 'git config hop.add.miseTrust always' trusts it
+mise is optional. When it is on PATH and the new worktree has mise
+config, add trusts that config ('mise trust <worktree>') once the
+ignored files are copied, provided the source worktree's is trusted and
+the new worktree has exactly its config files, byte for byte, as mise's
+own listing names them. Otherwise it trusts nothing and says why in a
+hint (an untrusted source, a config that differs), with the command to
+trust it by hand. Without mise, or without mise config, add says
+nothing about it. 'git config hop.add.miseTrust always' trusts it
 whenever it has mise config, 'never' leaves mise alone; --mise-trust /
 --no-mise-trust decide for one run.
 

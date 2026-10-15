@@ -104,6 +104,7 @@ func TestTrustWorktreeMise(t *testing.T) {
 		noSource    bool
 		wantTrusted bool
 		wantHint    string
+		wantSilent  bool
 	}{
 		{name: "trusted source, same config", mode: miseTrustAuto, srcTrusted: true,
 			srcFiles: map[string]string{"mise.toml": cfg}, dstFiles: map[string]string{"mise.toml": cfg}, wantTrusted: true},
@@ -117,16 +118,16 @@ func TestTrustWorktreeMise(t *testing.T) {
 			srcFiles: map[string]string{"mise.toml": cfg},
 			dstFiles: map[string]string{"mise.toml": cfg, ".mise/config.toml": cfg}, wantHint: "are not the source's"},
 		{name: "no config in the new worktree", mode: miseTrustAuto, srcTrusted: true,
-			srcFiles: map[string]string{"mise.toml": cfg}, wantHint: "no mise config in the new worktree"},
+			srcFiles: map[string]string{"mise.toml": cfg}, wantSilent: true},
 		{name: "mise missing", mode: miseTrustAuto, missing: true, srcTrusted: true,
-			srcFiles: map[string]string{"mise.toml": cfg}, dstFiles: map[string]string{"mise.toml": cfg}, wantHint: "mise not found"},
+			srcFiles: map[string]string{"mise.toml": cfg}, dstFiles: map[string]string{"mise.toml": cfg}, wantSilent: true},
 		{name: "no source worktree", mode: miseTrustAuto, noSource: true,
 			dstFiles: map[string]string{"mise.toml": cfg}, wantHint: "no source worktree"},
 		{name: "never", mode: miseTrustNever, srcTrusted: true,
 			srcFiles: map[string]string{"mise.toml": cfg}, dstFiles: map[string]string{"mise.toml": cfg}},
 		{name: "always trusts without a trusted source", mode: miseTrustAlways,
 			srcFiles: map[string]string{"mise.toml": cfg}, dstFiles: map[string]string{"mise.toml": "different\n"}, wantTrusted: true},
-		{name: "always still needs config to trust", mode: miseTrustAlways, wantHint: "no mise config in the new worktree"},
+		{name: "always still needs config to trust", mode: miseTrustAlways, wantSilent: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -159,8 +160,11 @@ func TestTrustWorktreeMise(t *testing.T) {
 			if tt.wantHint != "" && !strings.Contains(stderr, "hint: ") {
 				t.Errorf("skip not reported on a hint line:\n%s", stderr)
 			}
-			if tt.mode == miseTrustNever && stderr != "" {
-				t.Errorf("never: want silence, got:\n%s", stderr)
+			if tt.wantHint != "" && !strings.Contains(stderr, "mise trust "+dst) {
+				t.Errorf("skip hint does not say how to trust manually:\n%s", stderr)
+			}
+			if (tt.mode == miseTrustNever || tt.wantSilent) && stderr != "" {
+				t.Errorf("want silence, got:\n%s", stderr)
 			}
 		})
 	}
@@ -185,5 +189,47 @@ func TestMiseTrustMode(t *testing.T) {
 		if got := miseTrustMode(stubGitConfig(tt.cfg), tt.override); got != tt.want {
 			t.Errorf("miseTrustMode(%v, %v) = %q, want %q", tt.cfg, tt.override, got, tt.want)
 		}
+	}
+}
+
+// The preview stays silent where mise is absent or the source has no
+// mise config: git-hop does not need mise.
+func TestPreviewMiseTrust(t *testing.T) {
+	const cfg = "[env]\nFOO = \"bar\"\n"
+	tests := []struct {
+		name       string
+		missing    bool
+		srcFiles   map[string]string
+		srcTrusted bool
+		noSource   bool
+		want       string // "" = silent
+	}{
+		{name: "mise missing", missing: true, srcFiles: map[string]string{"mise.toml": cfg}, srcTrusted: true},
+		{name: "source without mise config"},
+		{name: "no source worktree", noSource: true},
+		{name: "trusted source", srcFiles: map[string]string{"mise.toml": cfg}, srcTrusted: true,
+			want: "[dry-run] Would trust the new worktree's mise config if it matches"},
+		{name: "untrusted source", srcFiles: map[string]string{"mise.toml": cfg},
+			want: "[dry-run] Would not trust the new worktree's mise config"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			src := t.TempDir()
+			for n, c := range tt.srcFiles {
+				writeMise(t, src, n, c)
+			}
+			m := &fakeMise{missing: tt.missing, trusted: map[string]bool{src: tt.srcTrusted}}
+			source := src
+			if tt.noSource {
+				source = ""
+			}
+			out := captureMiseOutput(t, func() { previewMiseTrust(m, miseTrustAuto, source) })
+			if tt.want == "" && out != "" {
+				t.Errorf("want silence, got:\n%s", out)
+			}
+			if tt.want != "" && !strings.Contains(out, tt.want) {
+				t.Errorf("output lacks %q:\n%s", tt.want, out)
+			}
+		})
 	}
 }
