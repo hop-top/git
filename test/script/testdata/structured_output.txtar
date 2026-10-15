@@ -40,7 +40,9 @@ stderr 'hook-says-hi'
 exists $WORK/hub/hops/feat/json
 
 # --- add --format yaml ---
-exec git-hop add feat/yaml --format yaml
+# From origin's default branch, so git sets origin/main as its upstream
+# (the built-in default starts from the local main, which sets none).
+exec git-hop add feat/yaml --from origin-default --format yaml
 decode yaml stdout branch feat/yaml
 decode yaml stdout base main
 decode yaml stdout upstream origin/main
@@ -57,7 +59,7 @@ decode json stdout upstream ''
 decode json stdout created false
 
 # --- --porcelain: a single headerless tab-separated record (was: nothing) ---
-exec git-hop add feat/porcelain --porcelain
+exec git-hop add feat/porcelain --from origin-default --porcelain
 stdout '^feat/porcelain\t\S+/hops/feat/porcelain\tmain\torigin/main\ttrue$'
 ! stdout 'branch\tpath'
 ! stdout 'Adding branch'

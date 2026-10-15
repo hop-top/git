@@ -120,8 +120,8 @@ func TestMigration_EmptyStrings(t *testing.T) {
 	if cfg.Defaults.GitDomain != "github.com" {
 		t.Errorf("GitDomain = %q, want github.com", cfg.Defaults.GitDomain)
 	}
-	if cfg.Defaults.DefaultStartPoint != "default-branch" {
-		t.Errorf("DefaultStartPoint = %q, want default-branch", cfg.Defaults.DefaultStartPoint)
+	if cfg.Defaults.DefaultStartPoint != "cwd" {
+		t.Errorf("DefaultStartPoint = %q, want cwd", cfg.Defaults.DefaultStartPoint)
 	}
 	if cfg.ShellIntegration.Status != "unknown" {
 		t.Errorf("ShellIntegration.Status = %q, want unknown", cfg.ShellIntegration.Status)

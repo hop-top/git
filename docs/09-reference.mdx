@@ -81,7 +81,7 @@ git hop add &lt;branch&gt; [flags]
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--from <ref>` | Start-point for a new branch (branch, ref, SHA, or `initial`); fast-forwards an existing local branch to `<ref>`, refuses if it is ahead or diverged |
+| `--from <ref>` | Start-point for a new branch (ref, SHA, or `cwd`, `default-branch`, `origin-default`, `initial`; default `hop.add.defaultStartPoint`, else `cwd`); fast-forwards an existing local branch to `<ref>`, refuses if it is ahead or diverged |
 | `--copy-ignored` | Copy git-ignored local files from the fork-source worktree (default) |
 | `--no-copy-ignored` | Skip that copy for this worktree |
 | `--env-start` | Start the new worktree's environment once it exists, through the same code as `git hop env start` |
@@ -96,7 +96,7 @@ skipped silently when the worktree has no environment; a failed start
 prints `warning:` and a `hint:` to run `git hop env start`, and add still
 exits 0. `--dry-run` reports `Would start environment` when it would try.
 
-**Related git config:** `hop.env.autoStart`, `hop.add.copyIgnored`, `hop.add.copyIgnoredMaxSize`
+**Related git config:** `hop.add.defaultStartPoint`, `hop.add.fetch`, `hop.env.autoStart`, `hop.add.copyIgnored`, `hop.add.copyIgnoredMaxSize`
 — see [Configuration](configuration.md#hopaddcopyignored). A `#-hop-#`
 comment line directly above a `.gitignore` pattern excludes that pattern's
 entries from the copy.

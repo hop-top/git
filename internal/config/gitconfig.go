@@ -45,7 +45,7 @@ var defaults = map[string]string{
 	KeyDataLayout:             "{org}/{repo}",
 	KeyEnvAutoStart:           "false",
 	KeyWorktreeLocation:       "{hubPath}/hops/{branch}",
-	KeyAddDefaultStartPoint:   "default-branch",
+	KeyAddDefaultStartPoint:   "cwd",
 	KeyAddCopyIgnored:         "true",
 	KeyAddCopyIgnoredMaxSize:  "10m",
 	KeyShellIntegrationStatus: "unknown",

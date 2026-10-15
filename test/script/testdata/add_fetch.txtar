@@ -4,8 +4,13 @@
 #   --fetch / --no-fetch     explicit, wins over everything
 #   hop.add.fetch true|false standing preference (git config)
 #   neither                  fetch only when the start-point is an origin
-#                            ref: the default branch (resolved through
-#                            origin/<default>) or an explicit origin/<x>
+#                            ref: origin's default branch (origin-default)
+#                            or an explicit origin/<x>
+#
+# Most of this script runs with hop.add.defaultStartPoint origin-default,
+# so the default start-point is an origin ref. The built-in default (cwd)
+# resolves to the local default branch at the hub root and needs no fetch;
+# the last section checks that.
 #
 # A failed fetch (offline, origin gone) is fatal when the fetch was asked
 # for (--fetch, hop.add.fetch true): nothing is created. Under the
@@ -23,6 +28,7 @@ exec git-hop $WORK/repo.git hub
 cd $WORK/hub
 exec git rev-parse refs/remotes/origin/main
 cp stdout $WORK/stale-main
+exec git config hop.add.defaultStartPoint origin-default
 
 # --- origin moves on after the clone ---
 cd $WORK/seed
@@ -92,7 +98,7 @@ exec git-hop add feat/late --from origin/late
 exec git -C hops/feat/late rev-parse HEAD
 cmp stdout $WORK/fresh-late
 
-# --- default start-point, no flag, no config: fetched ---
+# --- default start-point (origin-default), no flag, no fetch config: fetched ---
 cd $WORK/seed
 exec git checkout main
 exec git commit --allow-empty -m 'main 4'
@@ -137,3 +143,15 @@ stderr '^hint: starting from the local refs, which may be stale'
 exists $WORK/hub/hops/feat/offline
 exec git -C hops/feat/offline rev-parse HEAD
 cmp stdout $WORK/fresh-main-4
+
+# --- built-in default at the hub root: the local default branch, no fetch ---
+exec git config --unset hop.add.defaultStartPoint
+exec git-hop add feat/local --dry-run
+! stdout 'Would fetch'
+stdout '^\[dry-run\] Start-point: default branch ''main'' \(not inside a worktree'
+exec git-hop add feat/local
+! stderr 'could not fetch'
+exec git rev-parse refs/heads/main
+cp stdout $WORK/local-main
+exec git -C hops/feat/local rev-parse HEAD
+cmp stdout $WORK/local-main

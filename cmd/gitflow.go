@@ -40,11 +40,13 @@ func newGitflowDetector(g git.GitInterface, repoPath string, opts ...detector.Gi
 	}, opts...)...)
 }
 
-// gitflowStartBase maps add's --from onto git flow start's [base]: empty
-// (no --from) leaves the start-point to the branch type, the
+// gitflowStartBase maps add's resolved --from onto git flow start's
+// [base]: empty (no --from) leaves the start-point to the branch type, the
 // "default-branch" sentinel names the default branch, and "initial" the
-// root commit. Anything else is a ref and passes through.
+// root commit. A local branch ref passes as its name; anything else is a
+// ref and passes through.
 func gitflowStartBase(g git.GitInterface, hubPath, from, defaultBranch string) string {
+	from = startPointBranch(from)
 	switch from {
 	case hop.StartPointDefaultBranch:
 		return defaultBranch

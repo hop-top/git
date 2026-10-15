@@ -20,7 +20,9 @@ func TestDiagnosticsFollowOutputMode(t *testing.T) {
 	env.RunCommand(t, env.SeedRepoPath, "git", "push", "origin", "main")
 	env.RunGitHop(t, env.RootDir, env.BareRepoPath, "hub")
 
-	// Point origin nowhere: the automatic fetch fails and add only warns.
+	// Point origin nowhere: the automatic fetch (of origin's default
+	// branch, the start-point) fails and add only warns.
+	env.RunCommand(t, env.HubPath, "git", "config", "hop.add.defaultStartPoint", "origin-default")
 	env.RunCommand(t, env.HubPath, "git", "config", "remote.origin.url",
 		filepath.Join(env.RootDir, "gone.git"))
 

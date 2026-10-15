@@ -161,7 +161,7 @@ data-home hopspace, so it follows `hop.dataLayout`).
 | `hop.gitDomain` | string | `github.com` | Git hosting domain used to expand `org/repo` shorthands, and the host of the repo ID (`<host>/<org>/<repo>`) of a repository whose origin has none: a local path, a `file://` URL, no origin. Resolved like `hop.dataLayout`: a hub's own value overrides `--global`, and `git -c` overrides both; outside a repository (a clone shorthand, a hub whose repo cannot be read) only `--global` and `git -c` count |
 | `hop.dataLayout` | string | `{org}/{repo}` | Where each repository's data (hopspace `hop.json`, `ports.json`, `volumes.json`, `deps/`, `hooks/`) lives under the data home. Variables: `{host}` (the host of the origin URL, or `hop.gitDomain` for a local path), `{org}`, `{repo}`; `{org}` and `{repo}` are required. Resolved like any setting: a hub's own value overrides `--global`, and `git -c` overrides both; a `--global` clone, which has no hub yet, reads `--global` and `git -c` only. Hubs sharing one repository's data should agree on it: while they do not, `git hop doctor --fix` moves none of that repository's data, and a committed-hook mirror warns. An invalid value falls back to the `--global` value (or the default when that is invalid too) and `git hop doctor` warns, naming the scope. Changing it does not move data already stored under the old layout: `git hop doctor` warns about a `--global` hub's hopspace left there, and `git hop doctor --fix` moves it |
 | `hop.worktreeLocation` | string | `{hubPath}/hops/{branch}` | Where `git hop add` and `git hop move` put worktrees. Variables: `{hubPath}`, `{branch}`, `{org}`, `{repo}`, `{dataHome}`, `{hopspace}` (the repository's data-home hopspace, `{dataHome}` plus `hop.dataLayout`; use it rather than `{dataHome}/{org}/{repo}` so worktrees follow the layout). A relative result is resolved against the hub |
-| `hop.add.defaultStartPoint` | string | `default-branch` | Start-point for new branches: `default-branch`, `initial` (root commit), or any ref / SHA |
+| `hop.add.defaultStartPoint` | string | `cwd` | Start-point for new branches: `cwd` (the branch of the worktree `add` runs in, else the local default branch), `default-branch` (local), `origin-default` (`origin/<default>`), `initial` (root commit), or any ref / SHA. See [`hop.add.defaultStartPoint`](#hopadddefaultstartpoint) |
 | `hop.env.autoStart` | boolean | `false` | Whether `git hop add` and clone start the new worktree's environment (the same start as `git hop env start`) once the worktree exists. Overridden by `GIT_HOP_AUTO_ENV_START` and, for one run, `--env-start` / `--no-env-start` |
 | `hop.hooks.installMode` | string | `prompt` | How committed `.git-hop/hooks/` scripts are mirrored on clone / init: `prompt`, `symlink`, `copy`, `none` |
 | `hop.shellIntegration.status` | string | `unknown` | Shell wrapper state: `unknown` (offer to install), `approved`, `declined`, `disabled`. Written by git-hop when you answer the prompt |
@@ -277,7 +277,7 @@ after `hop`, is [ignored with a warning](#configjson-is-not-read).
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
-| `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, it fetches only when the start-point is an origin ref: the default branch or an explicit `origin/<branch>`. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. In a hub with no `origin` remote a requested fetch is skipped with a hint. |
+| `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, add fetches only when the start-point is an origin ref: `origin-default`, an explicit `origin/<branch>`, or `default-branch` when there is no local default branch. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. In a hub with no `origin` remote a requested fetch is skipped with a hint. |
 | `hop.gitflow.enabled` | boolean | `false` | Let `git hop add` / `git hop remove` run `git flow <type> start` / `git flow <type> finish` for branches whose prefix matches a git-flow-next type. Off, git-hop only detects the branch type (for the `GIT_HOP_BRANCH_*` hook variables) and runs no git-flow command. See [`hop.gitflow.enabled`](#hopgitflowenabled). |
 | `hop.events.sink` | `jsonl` \| `none` | `none` | Append every lifecycle event (worktree created/removed/merged/moved/switched, env started/stopped, ...) to a JSONL file, so external tools can react without file hooks. See [`hop.events.sink`](#hopeventssink). |
 | `hop.events.path` | path | `$XDG_STATE_HOME/git-hop/events.jsonl` | File `hop.events.sink=jsonl` appends to. `~/` is expanded the way git expands path values. |
@@ -300,6 +300,18 @@ git config --global hop.remote.timeout 0
 Note that neither `git hop remove` nor `git hop merge` contacts the
 remote at all unless you ask for it with `--delete-remote` (or, for
 merge, `hop.merge.deleteRemote`); both are local operations by default.
+
+### `hop.add.defaultStartPoint`
+
+Where `git hop add` starts a new branch when `--from` is not given and `GIT_HOP_ADD_FROM` is not set. The default, `cwd`, starts from the branch of the worktree you run `add` in, so branching off an integration branch needs no `--from`; at the hub root it starts from the local default branch. The other values are `default-branch` (always the local default branch), `origin-default` (`origin/<default>`, the behaviour of earlier releases), `initial` (the root commit), or any ref or SHA. See [Start-point](./04-commands#start-point) for how each resolves.
+
+```bash
+# Branch from origin's default branch, as earlier releases did
+git config --global hop.add.defaultStartPoint origin-default
+
+# One repo always branches from its default branch, wherever you are
+git config hop.add.defaultStartPoint default-branch
+```
 
 ### `hop.add.copyIgnored`
 
@@ -351,10 +363,11 @@ matching a path literally named `.tlc/ #-hop-#` and stop ignoring `.tlc/`.
 
 A hub clones origin once; after that its `origin/*` refs only move when
 something fetches. `git hop add` therefore runs `git fetch origin` before
-resolving the start-point whenever that start-point is an origin ref — the
-default branch (resolved through `origin/<default>`) or an explicit
-`--from origin/<branch>` — so a new worktree does not start from days-old
-code. A local branch, tag, SHA or `initial` start-point is used as-is.
+resolving the start-point whenever that start-point is an origin ref —
+`origin-default`, an explicit `--from origin/<branch>`, or `default-branch`
+when there is no local default branch — so a new worktree does not start
+from days-old code. The built-in default, `cwd`, starts from a local branch
+and fetches nothing. A local branch, tag, SHA or `initial` start-point is used as-is.
 
 The fetch is bounded by `hop.remote.timeout`. What a failure (offline,
 origin unreachable) does depends on who asked for the fetch:

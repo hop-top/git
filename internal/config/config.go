@@ -182,9 +182,12 @@ type DefaultSettings struct {
 	GitDomain        string `json:"gitDomain"`
 	WorktreeLocation string `json:"worktreeLocation,omitempty"`
 	// DefaultStartPoint controls the start-point used by `git hop add` when
-	// creating a new branch. Allowed values: "default-branch" (default — tip
-	// of repo.defaultBranch), "initial" (root commit, legacy behavior), or
-	// any explicit refspec (branch name, "origin/<name>", tag, SHA).
+	// creating a new branch. Allowed values: "cwd" (default — the branch of
+	// the worktree add runs in, else the local default branch),
+	// "default-branch" (the local repo.defaultBranch), "origin-default"
+	// (origin/<repo.defaultBranch>), "initial" (root commit, legacy
+	// behavior), or any explicit refspec (branch name, "origin/<name>",
+	// tag, SHA).
 	DefaultStartPoint string `json:"defaultStartPoint,omitempty"`
 	// HooksInstallMode controls how committed .git-hop/hooks/ scripts are
 	// mirrored into the user's hopspace on clone/init. Allowed values:

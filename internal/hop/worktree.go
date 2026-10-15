@@ -91,7 +91,8 @@ func (m *WorktreeManager) CreateWorktreeTransactional(hopspace *Hopspace, hubPat
 }
 
 // CreateWorktree creates a git worktree at the configured location.
-// startPoint controls the start-point for newly-created branches:
+// startPoint controls the start-point for newly-created branches (git hop
+// add resolves its own keywords first; see cmd/add_startpoint.go):
 //   - ""                    → resolve to refs/remotes/origin/<defaultBranch>,
 //     falling back to refs/heads/<defaultBranch>, then "HEAD".
 //   - "default-branch"      → same as "".
@@ -190,8 +191,10 @@ func (m *WorktreeManager) CreateWorktree(hopspace *Hopspace, hubPath string, bra
 //
 // Resolution rules:
 //   - ""                  / "default-branch": probe refs/remotes/origin/<def>, then refs/heads/<def>;
-//     fall back to "HEAD" (with a stderr warning) if neither resolves. trackBranch stays
-//     active for this case so the new branch tracks origin/<def>.
+//     either one is a concrete ref, so track is suppressed (git itself sets
+//     origin/<def> as the upstream of a branch started from it, per
+//     branch.autoSetupMerge). Only when neither resolves does it fall back to
+//     "HEAD" (with a stderr warning) and leave track active.
 //   - "initial":           resolve via `git rev-list --max-parents=0 HEAD` (last line); suppress track.
 //   - explicit ref/SHA:    pass through unchanged; suppress track.
 func (m *WorktreeManager) resolveStartPoint(basePath, startPoint, defaultBranch string) (resolved string, suppressTrack bool) {
