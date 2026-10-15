@@ -27,6 +27,7 @@ type addPlan struct {
 	branch        string
 	worktreePath  string
 	startPoint    string
+	startWhy      addStartPoint
 	defaultBranch string
 	fetch         bool
 	task          string
@@ -46,6 +47,7 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	res := previewAddResult(g, p)
 	previewRefusals(wm, p)
 
+	output.Info("[dry-run] Start-point: %s", p.startWhy.Describe(p.defaultBranch))
 	if p.fetch {
 		output.Info("[dry-run] Would fetch origin")
 	}
@@ -212,9 +214,17 @@ func describeStartPoint(startPoint, defaultBranch string) string {
 		return "default branch '" + defaultBranch + "'"
 	case hop.StartPointInitial:
 		return "the root commit ('initial')"
-	default:
-		return "'" + startPoint + "'"
 	}
+	if b, ok := strings.CutPrefix(startPoint, "refs/heads/"); ok {
+		if b == defaultBranch {
+			return "default branch '" + b + "'"
+		}
+		return "branch '" + b + "'"
+	}
+	if r, ok := strings.CutPrefix(startPoint, "refs/remotes/"); ok {
+		return "'" + r + "'"
+	}
+	return "'" + startPoint + "'"
 }
 
 func refExists(g git.GitInterface, dir, ref string) bool {

@@ -96,17 +96,40 @@ git hop add [&lt;branch&gt;] --task &lt;id&gt; [flags]
 
 | Flag | Description |
 |------|-------------|
-| `--from <ref>` | Start-point for a new branch: branch name, ref, SHA, or `initial` for the root commit. Defaults to the tip of the repo's default branch (or `hop.add.defaultStartPoint`). If the branch already exists locally, an explicit `--from` fast-forwards it to `<ref>` (setting the upstream when `<ref>` is a remote-tracking branch) and refuses when the local branch is ahead of or has diverged from `<ref>`; without `--from` the existing branch is used as-is. |
+| `--from <ref>` | Start-point for a new branch: a ref, a SHA, or one of the keywords `cwd`, `default-branch`, `origin-default`, `initial` (see [Start-point](#start-point)). Without it, `GIT_HOP_ADD_FROM` and then `hop.add.defaultStartPoint` decide; the built-in default is `cwd`, the branch of the worktree you are in, else the local default branch. If the branch already exists locally, an explicit `--from` fast-forwards it to `<ref>` (setting the upstream when `<ref>` is a remote-tracking branch) and refuses when the local branch is ahead of or has diverged from `<ref>`; without `--from` the existing branch is used as-is. |
 | `--copy-ignored` / `--no-copy-ignored` | Copy the git-ignored local files from the fork-source worktree into the new one. Default follows `hop.add.copyIgnored` (`true`). |
 | `--task <id>` | Record a task id for the worktree as `branches.<branch>.task` in `hop.json`, export it to the add hooks as `GIT_HOP_TASK`, and include it as `task` in the `--format json` result. Metadata only: the id is never part of the branch name. Without `<branch>`, the branch is derived as `<type>/<slug>` from the task (see [Branch from a task](#branch-from-a-task)). |
 | `--env-start` / `--no-env-start` | Start the new worktree's environment once it exists, through the same code as `git hop env start`. Default follows `GIT_HOP_AUTO_ENV_START`, then `hop.env.autoStart` (`false`). Skipped silently when the worktree has no environment; a failed start prints a warning and a hint, and add still exits 0. The start's output goes to stderr, as `git hop env start`'s does. |
-| `--fetch` / `--no-fetch` | Run `git fetch origin` before resolving the start-point, or skip it. Default follows `hop.add.fetch`; unset, add fetches only when the start-point is an origin ref (the default branch or an explicit `origin/<branch>`). A requested fetch that fails is fatal; the automatic one only warns. |
-| `--dry-run` | Preview the branch, start-point, worktree path, task, hooks and environment start without writing anything or running any hook. An add the real run would refuse (the worktree exists, a file or non-empty directory is in its way, the branch name is invalid or checked out in another worktree, the start-point is not a commit, `--from` cannot move the existing branch) fails with exit status 1 and `[dry-run] would refuse to add '<branch>': <reason>` on stderr, the reason the real run gives. |
+| `--fetch` / `--no-fetch` | Run `git fetch origin` before resolving the start-point, or skip it. Default follows `hop.add.fetch`; unset, add fetches only when the start-point is an origin ref: `origin-default`, an explicit `origin/<branch>`, or `default-branch` when there is no local default branch. A requested fetch that fails is fatal; the automatic one only warns. |
+| `--dry-run` | Preview the start-point (and the setting that picked it), the branch, worktree path, task, hooks and environment start without writing anything or running any hook. An add the real run would refuse (the worktree exists, a file or non-empty directory is in its way, the branch name is invalid or checked out in another worktree, the start-point is not a commit, `--from` cannot move the existing branch) fails with exit status 1 and `[dry-run] would refuse to add '<branch>': <reason>` on stderr, the reason the real run gives. |
+
+### Start-point
+
+A new branch starts from the first of these that is set: `--from`, `GIT_HOP_ADD_FROM`, `git config hop.add.defaultStartPoint`. Each one takes a ref or a SHA, or one of four keywords:
+
+| Keyword | Start-point |
+|---------|-------------|
+| `cwd` | The branch checked out in the worktree you run `add` from, as a local ref. Run from the hub root, or anywhere outside a worktree of the repository, it falls back to `default-branch`. On a detached HEAD it is the commit HEAD points at, as with `git switch -c`, and no base branch is recorded. This is the built-in default. |
+| `default-branch` | The local default branch: `repo.defaultBranch` from `hop.json`, or the branch `origin/HEAD` names when `hop.json` has none. When there is no local branch of that name, `origin/<default>`. |
+| `origin-default` | `origin/<default>`, or the local branch when origin has none. This was the default before `cwd`. |
+| `initial` | The root commit. |
+
+So `git hop add feat/child` inside `hops/feat/api` branches from `feat/api`, and the same command at the hub root branches from your local `main`. A branch started from a local ref gets no upstream, the same as with `git switch -c`; use `--from origin-default` (or set it in config) to start from origin's default branch, which also sets `origin/<default>` as the upstream.
+
+The ignored local files the new worktree is seeded with come from the worktree the start-point came from: the one you ran `add` in for `cwd`, otherwise the worktree of the named branch or of the default branch.
+
+`--dry-run` prints the resolved start-point and the setting that picked it, for example `[dry-run] Start-point: branch 'feat/api' (the current branch of the worktree at /src/repo/hops/feat/api; hop.add.defaultStartPoint=cwd)`.
+
+> **Behaviour change.** Before `cwd`, a new branch started from `origin/<default>`, fetched first, whatever worktree you ran `add` in. Run `git config --global hop.add.defaultStartPoint origin-default` to keep that.
 
 ### Examples
 
 ```bash
 git hop add feature-x
+```
+
+```bash tab="From Origin"
+git hop add feature-x --from origin-default
 ```
 
 ```bash tab="From a Tag"

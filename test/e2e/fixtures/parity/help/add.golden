@@ -3,6 +3,23 @@ Add a new worktree and environment for a branch.
 Creates the branch (if missing) from the start-point, checks it out under
 hops/<branch>, and sets up shared dependencies.
 
+The start-point is the first of --from, GIT_HOP_ADD_FROM and 'git config
+hop.add.defaultStartPoint' that is set. Each takes a ref or SHA, or one
+of these keywords:
+
+    cwd             the branch checked out in the worktree add runs in;
+                    outside every worktree (the hub root), as
+                    default-branch. The built-in default.
+    default-branch  the local default branch (repo.defaultBranch in
+                    hop.json, else the branch origin/HEAD names);
+                    origin/<default> when there is no local one
+    origin-default  origin/<default>, the local branch when origin has
+                    none; the default before cwd
+    initial         the root commit
+
+Inside a worktree with a detached HEAD, cwd is the commit it points at,
+as with 'git switch -c'; no base branch is recorded for the new branch.
+
 The environment is not started unless asked: --env-start starts it once
 the worktree exists, through the same code as 'git hop env start'. 'git
 config hop.env.autoStart true' (or GIT_HOP_AUTO_ENV_START=true) makes that
@@ -39,9 +56,10 @@ part of the pattern.
 
 Before resolving the start-point, add runs 'git fetch origin' so a new
 branch does not start from a stale origin/<branch>. By default it does so
-only when the start-point is an origin ref: the default branch or an
-explicit origin/<branch>. 'git config hop.add.fetch true|false' makes that
-a standing choice; --fetch / --no-fetch decide for one run. When the
+only when the start-point is an origin ref: origin-default, an explicit
+origin/<branch>, or default-branch when there is no local default
+branch. 'git config hop.add.fetch true|false' makes that a standing
+choice; --fetch / --no-fetch decide for one run. When the
 fetch was asked for (--fetch, hop.add.fetch true) a failure is fatal; the
 automatic one only warns and carries on from the refs already present.
 A hub with no origin remote has nothing to fetch: a requested fetch is
@@ -51,8 +69,9 @@ add never deletes what it finds at the worktree path: a file or a
 non-empty directory there is refused, and an empty directory is reused,
 as 'git worktree add' does.
 
-With --dry-run, add reports the fetch, branch, start-point, worktree path,
-hooks and environment start it would run, then stops: nothing is fetched,
+With --dry-run, add reports the resolved start-point and the setting
+that picked it, then the fetch, branch, worktree path, hooks and
+environment start it would run, and stops: nothing is fetched,
 created or written and no hook runs. An add the real run would refuse
 (the worktree exists, a file or non-empty directory is in its way, the
 branch name is invalid or checked out in another worktree, the
@@ -70,7 +89,7 @@ Flags:
       --copy-ignored      copy git-ignored files from the source worktree into the new one (default true)
       --env-start         start the new worktree's environment (default: hop.env.autoStart)
       --fetch             fetch origin before resolving the start-point (default: when it is an origin ref)
-      --from string       start-point: branch name, ref, SHA, or 'initial' for the root commit; an existing branch is fast-forwarded to it
+      --from string       start-point: ref, SHA, or cwd|default-branch|origin-default|initial (default: hop.add.defaultStartPoint, else cwd); an existing branch is fast-forwarded to it
   -h, --help              help for add
       --no-copy-ignored   do not copy git-ignored files into the new worktree
       --no-env-start      do not start the new worktree's environment
