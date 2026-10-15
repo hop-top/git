@@ -278,6 +278,7 @@ after `hop`, is [ignored with a warning](#configjson-is-not-read).
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
 | `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, add fetches only when the start-point is an origin ref: `origin-default`, an explicit `origin/<branch>`, or `default-branch` when there is no local default branch. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. In a hub with no `origin` remote a requested fetch is skipped with a hint. |
+| `hop.add.miseTrust` | string | `auto` | Trust the new worktree's mise config after `git hop add`: `auto` (when the source worktree's is trusted and the config files match byte for byte), `always` (whenever it has mise config), `never`. `--mise-trust` / `--no-mise-trust` override it. See [`hop.add.miseTrust`](#hopaddmisetrust) |
 | `hop.gitflow.enabled` | boolean | `false` | Let `git hop add` / `git hop remove` run `git flow <type> start` / `git flow <type> finish` for branches whose prefix matches a git-flow-next type. Off, git-hop only detects the branch type (for the `GIT_HOP_BRANCH_*` hook variables) and runs no git-flow command. See [`hop.gitflow.enabled`](#hopgitflowenabled). |
 | `hop.events.sink` | `jsonl` \| `none` | `none` | Append every lifecycle event (worktree created/removed/merged/moved/switched, env started/stopped, ...) to a JSONL file, so external tools can react without file hooks. See [`hop.events.sink`](#hopeventssink). |
 | `hop.events.path` | path | `$XDG_STATE_HOME/git-hop/events.jsonl` | File `hop.events.sink=jsonl` appends to. `~/` is expanded the way git expands path values. |
@@ -395,6 +396,31 @@ git hop add feature-x --fetch
 # Always fetch, whatever the start-point; skip it for one add
 git config --global hop.add.fetch true
 git hop add feature-x --no-fetch
+```
+
+### `hop.add.miseTrust`
+
+mise refuses to load a config file it has not been told to trust, and its own trust sharing between git worktrees does not reach a git-hop hub. In a bare hub every worktree, `hops/main` included, is a linked one, and the "main checkout" mise compares against is the bare repository. So a fresh worktree used to start with an untrusted `mise.toml`, and every mise-backed hook, make target and shim failed in it until someone ran `mise trust`.
+
+`git hop add` now does that for you, right after it copies the ignored files and before the environment set-up and `post-worktree-add`, so those already find a trusted config. With the default, `auto`, it trusts the new worktree's mise config only when all of these hold:
+
+- mise is on `PATH`;
+- the new worktree has mise config;
+- the source worktree's mise config is trusted (the worktree the new one forked from, the same one the ignored files come from);
+- the new worktree has exactly the source's config files, byte for byte. A file that differs, or one only one side has, is a change you have not reviewed.
+
+Otherwise it trusts nothing and says why on a `hint:` line. mise does the work: `mise trust --show` reads the trust, its paranoid-mode listing names the config files without parsing them, and `mise trust <worktree>` records the trust.
+
+`always` trusts the new worktree's mise config whenever it has one, without looking at the source; `never` leaves mise alone. `--mise-trust` (always) and `--no-mise-trust` (never) decide for one run. `--dry-run` reports what it would do, checking the source side only, as the new worktree does not exist yet.
+
+The listing follows your environment: a `mise.<env>.toml` is only compared when `MISE_ENV` names that environment.
+
+```bash
+# Never touch mise trust in this repo
+git config hop.add.miseTrust never
+
+# Trust new worktrees' mise config without the source checks, once
+git hop add feature-x --mise-trust
 ```
 
 ### `hop.merge.deleteRemote`

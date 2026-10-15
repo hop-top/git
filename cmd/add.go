@@ -103,13 +103,22 @@ automatic one only warns and carries on from the refs already present.
 A hub with no origin remote has nothing to fetch: a requested fetch is
 skipped with a hint.
 
+Once the ignored files are copied, add trusts the new worktree's mise
+config ('mise trust <worktree>') when the source worktree's is trusted
+and the new worktree has exactly its config files, byte for byte, as
+mise's own listing names them. Otherwise it trusts nothing and says why
+in a hint: mise not on PATH, no mise config, an untrusted source, or a
+config that differs. 'git config hop.add.miseTrust always' trusts it
+whenever it has mise config, 'never' leaves mise alone; --mise-trust /
+--no-mise-trust decide for one run.
+
 add never deletes what it finds at the worktree path: a file or a
 non-empty directory there is refused, and an empty directory is reused,
 as 'git worktree add' does.
 
 With --dry-run, add reports the resolved start-point and the setting
-that picked it, then the fetch, branch, worktree path, hooks and
-environment start it would run, and stops: nothing is fetched,
+that picked it, then the fetch, branch, worktree path, mise trust, hooks
+and environment start it would run, and stops: nothing is fetched,
 created or written and no hook runs. An add the real run would refuse
 (the worktree exists, a file or non-empty directory is in its way, the
 branch name is invalid or checked out in another worktree, the
@@ -187,6 +196,8 @@ before the real run's reason.`,
 			cli.NegatableFlag(cmd, "fetch", addFetchFlag, addNoFetchFlag),
 			hubPath, startPoint, defaultBranch)
 		hintNoOrigin(fetch)
+		miseMode := miseTrustMode(config.NewGitConfig(),
+			cli.NegatableFlag(cmd, "mise-trust", addMiseTrustFlag, addNoMiseTrustFlag))
 		envStart := cli.DecideAutoEnvStart(
 			cli.NegatableFlag(cmd, "env-start", addEnvStartFlag, addNoEnvStartFlag), globalConfig)
 
@@ -207,6 +218,8 @@ before the real run's reason.`,
 				defaultBranch: defaultBranch,
 				task:          taskID,
 				envStart:      envStart,
+				miseTrust:     miseMode,
+				miseSource:    forkSource(fs, hub, start),
 			})
 			if output.IsStructured() {
 				emitResult(cmd, res)
@@ -284,6 +297,11 @@ before the real run's reason.`,
 		copyIgnoredIntoWorktree(fs, g, hub, hopspacePath, worktreePath, start,
 			globalConfig, config.NewGitConfig(),
 			copyIgnoredOverride(cmd, addCopyIgnoredFlag, addNoCopyIgnoredFlag))
+
+		// Trust the new worktree's mise config when its source's is
+		// trusted and the same (mise.local.toml may have just been
+		// copied), before the set-up and hooks below run mise. Never fatal.
+		trustWorktreeMise(execMise{}, miseMode, forkSource(fs, hub, start), worktreePath)
 
 		// Environment and shared deps before post-worktree-add, so the hook
 		// finds .env, the compose override and linked deps. Never fatal.
@@ -402,6 +420,10 @@ func init() {
 		"fetch origin before resolving the start-point (default: when it is an origin ref)")
 	addCmd.Flags().BoolVar(&addNoFetchFlag, "no-fetch", false,
 		"do not fetch origin before resolving the start-point")
+	addCmd.Flags().BoolVar(&addMiseTrustFlag, "mise-trust", false,
+		"trust the new worktree's mise config whenever it has one (default: hop.add.miseTrust, auto)")
+	addCmd.Flags().BoolVar(&addNoMiseTrustFlag, "no-mise-trust", false,
+		"do not trust the new worktree's mise config")
 	cli.AddEnvStartFlags(addCmd.Flags(), &addEnvStartFlag, &addNoEnvStartFlag)
 	addCmd.Flags().StringVar(&addTaskFlag, "task", "",
 		"record a task id for the worktree (metadata only); without <branch>, derive the branch from the task via tlc")

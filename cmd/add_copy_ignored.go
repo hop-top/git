@@ -63,6 +63,16 @@ func resolveCopySource(fs afero.Fs, hub *hop.Hub, startPoint string) string {
 	return ""
 }
 
+// forkSource is the worktree the new one forks from: the one the
+// start-point came from (cwd), else resolveCopySource's pick. "" when
+// there is none.
+func forkSource(fs afero.Fs, hub *hop.Hub, start addStartPoint) string {
+	if start.Source != "" {
+		return start.Source
+	}
+	return resolveCopySource(fs, hub, start.Spec)
+}
+
 // copyIgnoredIntoWorktree seeds dstWorktree with the git-ignored local
 // state present in the fork source, subject to the size ceiling, the
 // deps-managed skip list, the #-hop-# marker opt-out, and the no-overwrite
@@ -84,10 +94,7 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 		return
 	}
 
-	srcWorktree := start.Source
-	if srcWorktree == "" {
-		srcWorktree = resolveCopySource(fs, hub, start.Spec)
-	}
+	srcWorktree := forkSource(fs, hub, start)
 	if srcWorktree == "" {
 		output.Warn("could not determine a source worktree to copy ignored files from; skipping (disable this message with 'git config %s false')",
 			config.KeyAddCopyIgnored)

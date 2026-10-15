@@ -26,6 +26,7 @@ const (
 	KeyAddCopyIgnored         = "hop.add.copyIgnored"
 	KeyAddCopyIgnoredMaxSize  = "hop.add.copyIgnoredMaxSize"
 	KeyAddFetch               = "hop.add.fetch"
+	KeyAddMiseTrust           = "hop.add.miseTrust"
 	KeyMergeDeleteRemote      = "hop.merge.deleteRemote"
 	KeyShellIntegrationStatus = "hop.shellIntegration.status"
 	KeyShellIntegrationShell  = "hop.shellIntegration.shell"
@@ -48,6 +49,7 @@ var defaults = map[string]string{
 	KeyAddDefaultStartPoint:   "cwd",
 	KeyAddCopyIgnored:         "true",
 	KeyAddCopyIgnoredMaxSize:  "10m",
+	KeyAddMiseTrust:           "auto",
 	KeyShellIntegrationStatus: "unknown",
 	KeyBackupKeepBackup:       "false",
 	KeyBackupMaxBackups:       "3",
