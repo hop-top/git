@@ -32,6 +32,8 @@ type addPlan struct {
 	fetch         bool
 	task          string
 	envStart      bool
+	miseTrust     string
+	miseSource    string
 }
 
 // addHooks are the lifecycle hooks add dispatches, in order.
@@ -67,6 +69,8 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	if p.task != "" {
 		output.Info("[dry-run] Would record task '%s' for '%s'", p.task, p.branch)
 	}
+
+	previewMiseTrust(execMise{}, p.miseTrust, p.miseSource)
 
 	for _, name := range addHooks {
 		if f := hookRunner.FindHookFile(name, p.worktreePath, p.repoID); f != "" {

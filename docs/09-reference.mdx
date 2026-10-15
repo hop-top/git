@@ -88,6 +88,8 @@ git hop add &lt;branch&gt; [flags]
 | `--no-env-start` | Do not start it, whatever `hop.env.autoStart` says |
 | `--fetch` | Run `git fetch origin` before resolving the start-point; a failed fetch is fatal |
 | `--no-fetch` | Do not fetch. Without either, `hop.add.fetch` decides; unset, add fetches (warning on failure) only when the start-point is an origin ref |
+| `--mise-trust` | Trust the new worktree's mise config whenever it has one |
+| `--no-mise-trust` | Leave mise trust alone. Without either, `hop.add.miseTrust` (`auto`) decides: trust it when the source worktree's is trusted and the config files match |
 | `--task <id>` | Record a task id for the worktree (metadata only); without `<branch>`, derive the branch from the task via `tlc` |
 
 Without either env-start flag, `$GIT_HOP_AUTO_ENV_START` and then
@@ -96,7 +98,7 @@ skipped silently when the worktree has no environment; a failed start
 prints `warning:` and a `hint:` to run `git hop env start`, and add still
 exits 0. `--dry-run` reports `Would start environment` when it would try.
 
-**Related git config:** `hop.add.defaultStartPoint`, `hop.add.fetch`, `hop.env.autoStart`, `hop.add.copyIgnored`, `hop.add.copyIgnoredMaxSize`
+**Related git config:** `hop.add.defaultStartPoint`, `hop.add.fetch`, `hop.add.miseTrust`, `hop.env.autoStart`, `hop.add.copyIgnored`, `hop.add.copyIgnoredMaxSize`
 — see [Configuration](configuration.md#hopaddcopyignored). A `#-hop-#`
 comment line directly above a `.gitignore` pattern excludes that pattern's
 entries from the copy.
