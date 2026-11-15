@@ -286,6 +286,7 @@ func (c *pruneCounts) addTempFiles(records []pruneRecord) {
 // tell us which files to visit, and pruneOrphanedHubs drops those same
 // entries from st in the pass right after.
 func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, edits *stateEdits) pruneCounts {
+	gitWorktrees := pruneGitWorktrees(fs, g, st, dryRun)
 	hopJSON := pruneOrphanedHubBranches(fs, g, st, dryRun)
 	shared := pruneGoneHubRecords(fs, st, dryRun)
 	worktrees, hubs := runPruneFS(fs, g, st, dryRun, edits)
@@ -294,7 +295,7 @@ func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, 
 	temps := pruneHubTemps(fs, st, dryRun)
 
 	counts := pruneCounts{
-		worktrees:         prunedCount(worktrees),
+		worktrees:         prunedCount(worktrees) + prunedCount(gitWorktrees),
 		hubs:              len(hubs),
 		hopJSONEntries:    prunedCount(hopJSON),
 		repairBackups:     len(backups),
@@ -311,7 +312,7 @@ func runPruneAll(fs afero.Fs, g git.GitInterface, st *state.State, dryRun bool, 
 			counts.volumesEntries++
 		}
 	}
-	passes := [][]pruneRecord{hopJSON, shared, worktrees, hubs, backups, conversions, temps}
+	passes := [][]pruneRecord{gitWorktrees, hopJSON, shared, worktrees, hubs, backups, conversions, temps}
 	n := 0
 	for _, pass := range passes {
 		n += len(pass)
@@ -329,6 +330,9 @@ const (
 	pruneKindWorktree     = "worktree"
 	pruneKindHub          = "hub"
 	pruneKindHopJSONEntry = "hop-json-entry"
+	// pruneKindGitWorktree is git's record of a plain-git worktree whose
+	// directory is gone and that hop.json never listed.
+	pruneKindGitWorktree  = "git-worktree"
 	pruneKindRepairBackup = "repair-backup"
 	// pruneKindConversionBackup is a backup 'git hop init' took before
 	// converting a repository.

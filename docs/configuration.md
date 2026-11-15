@@ -275,6 +275,7 @@ after `hop`, is [ignored with a warning](#configjson-is-not-read).
 | `hop.backup.maxBackups` | integer | `3` | Conversion backups `git hop prune` keeps per repository, newest first. `0` turns the count limit off. |
 | `hop.backup.cleanupAgeDays` | integer | `30` | Age in days past which `git hop prune` removes a conversion backup. `0` turns the age limit off. |
 | `hop.merge.deleteRemote` | boolean | `false` | Make `git hop merge` delete the merged source branch on `origin` by default, as if `--delete-remote` were passed. An explicit `--delete-remote` / `--delete-remote=false` on the command line overrides this. |
+| `hop.remove.keepBranch` | boolean | `false` | Make `git hop remove` keep the local branch of the worktree it removes, as if `--keep-branch` were passed. An explicit `--keep-branch` / `--keep-branch=false` on the command line overrides this. See [`hop.remove.keepBranch`](#hopremovekeepbranch). |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
 | `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, add fetches only when the start-point is an origin ref: `origin-default`, an explicit `origin/<branch>`, or `default-branch` when there is no local default branch. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. In a hub with no `origin` remote a requested fetch is skipped with a hint. |
@@ -421,6 +422,23 @@ git config hop.add.miseTrust never
 
 # Trust new worktrees' mise config without the source checks, once
 git hop add feature-x --mise-trust
+```
+
+### `hop.remove.keepBranch`
+
+`git hop remove` deletes the local branch of the worktree it removes.
+Set this key to keep it by default, for a workflow where branches outlive
+their worktrees:
+
+```bash
+git config --global hop.remove.keepBranch true
+```
+
+The flag wins over the key in both directions, so a repo configured to
+keep branches can still delete one:
+
+```bash
+git hop remove feature-x --keep-branch=false
 ```
 
 ### `hop.merge.deleteRemote`

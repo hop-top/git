@@ -51,6 +51,8 @@ type MockGit struct {
 	// DeleteLocalBranchErr lets tests inject a `git branch -D` failure
 	// on a branch that does exist (permission denied, locked ref).
 	DeleteLocalBranchErr error
+	// BranchExistsErr makes BranchExists fail, as a probe git cannot run.
+	BranchExistsErr error
 
 	// Repair-related call recorders + injectable errors.
 	WorktreeRepairCalls []string
@@ -365,4 +367,13 @@ func NewMockGit() *MockGit {
 		},
 		CreatedWorktrees: []string{},
 	}
+}
+
+// BranchExists mocks the error-aware branch probe. BranchExistsErr lets
+// tests inject a failed probe.
+func (m *MockGit) BranchExists(dir, branch string) (bool, error) {
+	if m.BranchExistsErr != nil {
+		return false, m.BranchExistsErr
+	}
+	return m.LocalBranchExists(dir, branch), nil
 }

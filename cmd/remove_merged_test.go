@@ -389,11 +389,11 @@ func TestCollectMergedCandidates_RealGit_MergedFeature(t *testing.T) {
 func TestRemoveMerged_MissingPathSkipMessageOnce(t *testing.T) {
 	for name, run := range map[string]func(afero.Fs, git.GitInterface, string) []removeRecord{
 		"run": func(fs afero.Fs, g git.GitInterface, cwd string) []removeRecord {
-			recs, _ := runRemoveMerged(fs, g, cwd, false, false, true, false)
+			recs, _ := runRemoveMerged(fs, g, cwd, false, false, true, removeOptions{})
 			return recs
 		},
 		"preview": func(fs afero.Fs, g git.GitInterface, cwd string) []removeRecord {
-			recs, _ := previewRemoveMerged(fs, g, cwd, false, false, true, false)
+			recs, _ := previewRemoveMerged(fs, g, cwd, false, false, true, removeOptions{})
 			return recs
 		},
 	} {

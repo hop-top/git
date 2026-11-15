@@ -18,6 +18,21 @@ first, but its worktree must be clean whatever the flags.
 --no-prompt only skips the confirmation prompt; it never satisfies the
 gate. --no-verify does not skip pre-/post-worktree-remove hooks.
 
+The worktree's local branch goes with it: the branch the worktree has
+checked out, which is not always the name hop.json lists it under. The
+gate above has vouched for it, so it is deleted outright (git branch -D),
+once git's record of the worktree is pruned. --keep-branch, or
+hop.remove.keepBranch, keeps it. Whenever the branch stays, remove says
+which and why: kept by the flag or config, already absent, the default
+branch, or git's own error when the check or the deletion failed; the
+result's branch_kept_reason says the same. A branch that stays because
+git refused to delete it still exits 0: the worktree is gone.
+
+Worktrees made with plain git (git worktree add) are in git's registry but
+not in hop.json. Remove takes them by branch name or path, and --merged
+takes the merged ones, under the same gate and the same branch deletion;
+hop.json is left as it is.
+
 Removing a hub keeps its volume data: the volume directories in the hub,
 and in a --global hopspace removed with it, are moved aside to
 $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
@@ -33,6 +48,7 @@ Flags:
       --delete-remote    Also delete the branch on origin; without it removal stays local and never contacts the network
       --delete-volumes   Removing a hub, also delete its volume data; without it the data is kept, moved aside under the data home
   -h, --help             help for remove
+      --keep-branch      Keep the local branch after removing its worktree; without it the branch goes with the worktree (default via hop.remove.keepBranch)
       --merged           Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)
       --no-prompt        Skip the confirmation prompt only; does NOT bypass the safety gate
       --no-verify        Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)

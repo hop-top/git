@@ -28,6 +28,7 @@ const (
 	KeyAddFetch               = "hop.add.fetch"
 	KeyAddMiseTrust           = "hop.add.miseTrust"
 	KeyMergeDeleteRemote      = "hop.merge.deleteRemote"
+	KeyRemoveKeepBranch       = "hop.remove.keepBranch"
 	KeyShellIntegrationStatus = "hop.shellIntegration.status"
 	KeyShellIntegrationShell  = "hop.shellIntegration.shell"
 	KeyBackupMaxBackups       = "hop.backup.maxBackups"

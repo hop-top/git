@@ -95,8 +95,13 @@ exec git-hop remove feat/moved -n --no-prompt --no-verify
 stdout '\[dry-run\] Would remove worktree at .*/hub/hops/feat/moved$'
 exists hops/feat/moved
 exec git-hop remove feat/moved --no-prompt --no-verify
-stdout 'Successfully removed feat/moved'
+# The branch is checked out at $WORK/elsewhere, so git keeps it: said, not
+# buried under a bare success line.
+stderr 'Removed worktree feat/moved; local branch feat/moved kept: .*feat/moved'
+! stdout 'Successfully removed feat/moved'
 ! exists hops/feat/moved
+exec git branch --list feat/moved
+stdout 'feat/moved'
 
 -- keep.txt --
 keep me
