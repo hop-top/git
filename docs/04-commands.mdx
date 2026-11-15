@@ -663,7 +663,9 @@ Piping an answer works as expected, so `yes | git hop remove …` and
 ### What Gets Removed
 
 - Worktree (its directory, through `git worktree remove`)
-- Local branch
+- Local branch: the one the worktree has checked out, which is not always
+  the name `hop.json` lists the worktree under (see
+  [`--keep-branch`](#--keep-branch))
 - Its records: the hub's and the hopspace's `hop.json` entries and its
   state entry
 - Its port and volume allocations: its `ports.json` and `volumes.json`
@@ -764,6 +766,56 @@ Docker named volumes are Docker's: `git hop` never runs
 `docker compose down -v` or `docker volume rm`, so they survive every
 removal, with or without `--delete-volumes`. `git hop env stop` runs
 `docker compose stop`.
+
+### `--keep-branch`
+
+Keep the local branch after removing its worktree:
+
+```bash
+git hop remove feature-x --keep-branch
+```
+
+Without it the branch goes with the worktree. It is the branch the
+worktree has checked out, read from `git worktree list --porcelain`
+before the worktree is removed (the `hop.json` key when git does not say,
+e.g. a detached worktree), so a worktree switched to another branch
+takes that branch, not the one it was added for. The gate the removal
+passed covers the deletion, so a branch merged by squash or rebase goes
+too, though `git branch -d` would refuse it. It is deleted after git's
+record of the worktree is pruned, which would otherwise make git refuse
+it as used by a worktree. The default branch is never deleted.
+
+`hop.remove.keepBranch` (a boolean; see
+[`hop.remove.keepBranch`](./configuration.md#hopremovekeepbranch)) makes
+keeping the default; `--keep-branch=false` overrides it for one run.
+
+Whenever the branch stays, `remove` says which and why, in the output and
+in the result's `branch_kept_reason`:
+
+| Reason | Meaning |
+|--------|---------|
+| `kept by --keep-branch` / `kept by hop.remove.keepBranch` | You asked for it |
+| `already absent` | No local branch of that name |
+| `it is the default branch` | The default branch is never deleted |
+| `worktree has no branch checked out` | Nothing to delete |
+| `could not check whether it exists: <cause>` | The probe failed; the branch may well exist |
+| `git branch -D failed: <cause>` | git refused, e.g. a locked ref or a branch checked out in another worktree |
+
+The last two close the output with a warning
+(`Removed worktree <name>; local branch <branch> kept: <cause>`) in place
+of `Successfully removed`. The worktree is gone either way, so the exit
+status stays 0.
+
+### Worktrees made with plain git
+
+A worktree added with `git worktree add` is in git's registry but not in
+`hop.json`. `remove <branch>` (or `remove <path>`) and `remove --merged`
+take those too, under the same safety gate and branch deletion as a
+registered worktree; `--dry-run` previews them alike. They are not
+adopted into `hop.json`: nothing is written there, so a removal the gate
+refuses leaves it as it was. `--merged` leaves a detached unregistered
+worktree in place and says why (it has no branch to compare), and so one
+whose directory is gone (run `git hop prune`).
 
 ### `--delete-remote`
 
@@ -896,7 +948,7 @@ as `repository not found`.
 
 ### What It Does
 
-For the repositories in scope, `prune` cleans up seven classes of stale
+For the repositories in scope, `prune` cleans up eight classes of stale
 data, and with `--all` two more:
 
 - **Orphan worktrees** — state entries whose paths no longer exist on
@@ -910,6 +962,11 @@ data, and with `--all` two more:
   their `ports.json` and `volumes.json` entries, freeing the ports. Only
   the records go: the volume directories they name, and the data in
   them, are left alone. The other hubs' records stay.
+- **Git records of deleted plain-git worktrees** — worktrees made with
+  `git worktree add`, which `hop.json` never listed, whose directory was
+  then deleted: `git worktree prune` drops git's record of them, as
+  `git-worktree` records. A worktree git has locked is kept and reported
+  skipped. The branch such a worktree held is left alone.
 - **Orphan `hop.json` entries** — branch rows in a hub's `hop.json`
   whose worktree directory is gone. These are the rows
   [`git hop status`](#git-hop-status) renders as `State: Missing`;

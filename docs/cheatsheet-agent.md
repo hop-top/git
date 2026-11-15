@@ -134,6 +134,7 @@ exits 0 without prompting.
 # the command exits 1.
 /usr/bin/git hop remove <branch> --no-prompt              # non-interactive delete (gate must already be satisfied)
 /usr/bin/git hop remove <branch> --dry-run                # preview
+/usr/bin/git hop remove <branch> --keep-branch            # keep the local branch (or set hop.remove.keepBranch true)
 /usr/bin/git hop remove <branch> --force                  # unmerged but pushed, clean (never unlocks a dirty worktree)
 /usr/bin/git hop remove <branch> --no-verify              # merged but dirty (never unlocks an unmerged branch)
 /usr/bin/git hop remove <branch> --force --no-verify      # unmerged AND (unpushed OR dirty)
@@ -147,7 +148,8 @@ exits 0 without prompting.
 /usr/bin/git hop remove <hub-path> --no-prompt
 /usr/bin/git hop remove <hub-path> --no-prompt --delete-volumes   # also delete volume data (hub only; else exit 129)
 
-# Result: [{kind, branch, path, removed, branch_deleted, remote_deleted, reason?, dry_run?, volumes?, volume_paths?}]
+# Result: [{kind, branch, path, removed, local_branch?, branch_deleted, branch_kept_reason?, remote_deleted, reason?, dry_run?, volumes?, volume_paths?}]
+# Worktrees made with plain git (not in hop.json) are removed by branch name or path, and by --merged
 # volumes (hub/hopspace records): kept | deleted; absent when there is no volume data
 # kind: worktree | hub | hopspace; one record per branch, --merged candidate, or hub entry
 # --merged leaving any candidate in place: records still printed, exit 1
@@ -187,7 +189,7 @@ exits 0 without prompting.
 /usr/bin/git hop prune --all          # sweep every registered repo (+ aged state backups, state.json temp files); state removals are not undoable
 /usr/bin/git hop prune --dry-run --json  # [{action, kind, repository, branch, path, reason?}]
 # action: pruned | would-prune | skipped (locked worktree kept; reason says why)
-# kind: worktree | hub | hop-json-entry | hopspace-record | ports-entry | volumes-entry | repair-backup | conversion-backup | state-backup | temp-file
+# kind: worktree | hub | hop-json-entry | git-worktree | hopspace-record | ports-entry | volumes-entry | repair-backup | conversion-backup | state-backup | temp-file
 # hopspace-record/ports-entry/volumes-entry = orphaned --global hub's records in the shared hopspace; volume dirs kept
 # conversion-backup = init backup beyond hop.backup.maxBackups (3) / cleanupAgeDays (30)
 # temp-file = hop.json (or, --all, state.json) temp file an interrupted save left, 1h+ old; kept while a save holds the lock

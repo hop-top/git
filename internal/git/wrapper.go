@@ -43,6 +43,7 @@ type GitInterface interface {
 	WorktreeMove(basePath, oldPath, newPath string) error
 	RenameBranch(dir, oldBranch, newBranch string) error
 	LocalBranchExists(dir, branch string) bool
+	BranchExists(dir, branch string) (bool, error)
 }
 
 // Git wraps git command execution
@@ -488,10 +489,34 @@ func (g *Git) RenameBranch(dir, oldBranch, newBranch string) error {
 	return err
 }
 
-// LocalBranchExists reports whether a local branch exists
+// LocalBranchExists reports whether a local branch exists. A failed probe
+// reads as "no": callers that must tell absent from unknowable use
+// BranchExists.
 func (g *Git) LocalBranchExists(dir, branch string) bool {
-	out, err := g.Runner.RunInDir(dir, "git", "branch", "--list", branch)
-	return err == nil && strings.TrimSpace(out) != ""
+	ok, err := g.BranchExists(dir, branch)
+	return err == nil && ok
+}
+
+// BranchExists reports whether refs/heads/<branch> exists. Absent is
+// (false, nil); a probe that could not run (not a repository, unreadable
+// refs) is an error, never "absent".
+//
+// for-each-ref lists the ref exactly (it matches path prefixes, so the
+// listing is compared whole) and exits zero for both outcomes, which the
+// runner's error text cannot otherwise separate from a failure the way
+// show-ref --verify's exit status would.
+func (g *Git) BranchExists(dir, branch string) (bool, error) {
+	ref := "refs/heads/" + branch
+	out, err := g.Runner.RunInDir(dir, "git", "for-each-ref", "--format=%(refname)", ref)
+	if err != nil {
+		return false, err
+	}
+	for _, line := range strings.Split(out, "\n") {
+		if strings.TrimSpace(line) == ref {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // RunGitFlowStart executes `git flow <type> start <name> [<base>]

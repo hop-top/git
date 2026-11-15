@@ -66,6 +66,21 @@ first, but its worktree must be clean whatever the flags.
 --no-prompt only skips the confirmation prompt; it never satisfies the
 gate. --no-verify does not skip pre-/post-worktree-remove hooks.
 
+The worktree's local branch goes with it: the branch the worktree has
+checked out, which is not always the name hop.json lists it under. The
+gate above has vouched for it, so it is deleted outright (git branch -D),
+once git's record of the worktree is pruned. --keep-branch, or
+hop.remove.keepBranch, keeps it. Whenever the branch stays, remove says
+which and why: kept by the flag or config, already absent, the default
+branch, or git's own error when the check or the deletion failed; the
+result's branch_kept_reason says the same. A branch that stays because
+git refused to delete it still exits 0: the worktree is gone.
+
+Worktrees made with plain git (git worktree add) are in git's registry but
+not in hop.json. Remove takes them by branch name or path, and --merged
+takes the merged ones, under the same gate and the same branch deletion;
+hop.json is left as it is.
+
 Removing a hub keeps its volume data: the volume directories in the hub,
 and in a --global hopspace removed with it, are moved aside to
 $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
@@ -93,14 +108,14 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 		// caller learns what did go.
 		if merged {
 			if dryRun {
-				recs, refused := previewRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
+				recs, refused := previewRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, removeOptionsFor(cmd, cwd, deleteRemote))
 				emitRemoveResult(cmd, markDryRun(recs))
 				if refused > 0 {
 					output.Fatal("[dry-run] would fail: %d merged worktree(s) could not be removed", refused)
 				}
 				return
 			}
-			recs, failed := runRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, deleteRemote)
+			recs, failed := runRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, removeOptionsFor(cmd, cwd, deleteRemote))
 			emitRemoveResult(cmd, recs)
 			if failed > 0 {
 				// Mirror single-target remove's exit convention: bubble
@@ -121,6 +136,15 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 				output.Fatal("Failed to load hub: %v", err)
 			}
 
+			// A worktree made with plain git is in git's registry, not
+			// hop.json: remove it all the same, under its branch name.
+			if _, ok := hub.Config.Branches[target]; !ok {
+				if wt, found := findUnregisteredWorktree(fs, g, hub, hubPath, cwd, target); found {
+					target = wt.key()
+					adoptTransiently(hub, target, wt.Path)
+				}
+			}
+
 			// Check if target is a branch in the hub
 			if _, ok := hub.Config.Branches[target]; ok {
 				if deleteVolumes {
@@ -139,8 +163,9 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 					output.Fatal("Cannot remove branch '%s': you are currently inside its worktree. Change to a different worktree first.", target)
 				}
 
+				opts := removeOptionsFor(cmd, hubPath, deleteRemote)
 				if dryRun {
-					rec := previewRemoveBranch(fs, g, hub, hubPath, target, force, noVerify, noPrompt, deleteRemote)
+					rec := previewRemoveBranch(fs, g, hub, hubPath, target, force, noVerify, noPrompt, opts)
 					emitRemoveResult(cmd, markDryRun([]removeRecord{rec}))
 					return
 				}
@@ -150,7 +175,7 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 				// when the worktree is missing on disk (nothing to lose).
 				gateRequired := false
 				if _, err := fs.Stat(absWorktree); err == nil {
-					safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, target, hub.Config.Repo.DefaultBranch)
+					safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, resolveWorktreeBranch(g, absWorktree, absWorktree, target), hub.Config.Repo.DefaultBranch)
 					if err := removeGate(safety, force, noVerify); err != nil {
 						output.Fatal("%s", err.Error())
 					}
@@ -175,7 +200,7 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 					}
 				}
 
-				rec, err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, target, deleteRemote)
+				rec, err := removeBranchWorktreeOpts(fs, g, hub, hubPath, target, opts)
 				if err != nil {
 					output.Fatal("%s", err.Error())
 				}
@@ -307,6 +332,23 @@ func removeBranchWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 // The returned record says what the removal did; it is meaningful only
 // when the error is nil.
 func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, deleteRemote bool) (removeRecord, error) {
+	return removeBranchWorktreeOpts(fs, g, hub, hubPath, branch, removeOptions{DeleteRemote: deleteRemote})
+}
+
+// removeBranchWorktreeOpts is removeBranchWorktreeWithRemote taking the
+// whole of the removal's options (see removeOptions).
+//
+// The local branch deleted is the one the worktree has checked out, read
+// before the worktree goes (the hop.json key when git does not say). It
+// goes only after the worktree is removed and git's worktree metadata
+// pruned, which would otherwise make git refuse it as "used by worktree".
+// The safety gate the removal passed covers the deletion: a branch
+// merged by content (squash, rebase) is not reachable from default, so
+// the deletion forces (-D) where git branch -d would refuse. Whatever
+// leaves the branch in place is said, in the human lines and in the
+// record's branch_kept_reason.
+func removeBranchWorktreeOpts(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, branch string, opts removeOptions) (removeRecord, error) {
+	deleteRemote := opts.DeleteRemote
 	output.Info("Removing branch %s from hub...", branch)
 
 	// Get the worktree path from the hub config BEFORE removing from config
@@ -316,6 +358,12 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	rec := removeRecord{Kind: removeKindWorktree, Branch: branch, Path: worktreePath}
 
 	repoID := repoid.For(hubPath, hub.Config.Repo)
+
+	// The branch the worktree holds is read before anything runs in it: a
+	// git flow finish (the detector's pre-remove) leaves the worktree on
+	// the branch it merged into, which is not the one to delete.
+	absBasePath := removalBasePath(fs, hub, hubPath, branch)
+	localBranch := resolveWorktreeBranch(g, absBasePath, worktreePath, branch)
 
 	// Create detector manager and register detectors
 	detectorMgr := newBranchDetectors(fs, g, hubPath)
@@ -334,8 +382,6 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 		return rec, fmt.Errorf("hook pre-worktree-remove failed: %v", err)
 	}
 
-	absBasePath := removalBasePath(fs, hub, hubPath, branch)
-
 	// Only `git worktree remove` deletes a worktree's files. When it
 	// cannot, or the directory is not a worktree git has registered and
 	// holds anything, the removal stops here: the files, the hop.json
@@ -353,19 +399,22 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 		output.Warn("Failed to remove empty parent directory: %v", err)
 	}
 
-	// Delete the local branch, but only if it still exists. `git branch
-	// -D` on an absent branch fails ("branch not found"), which is the
-	// desired end state rather than an error. A branch that exists but
-	// cannot be deleted (locked ref, permission denied) still warns.
-	if g.LocalBranchExists(absBasePath, branch) {
-		if err := g.DeleteLocalBranch(absBasePath, branch); err != nil {
-			output.Warn("Failed to delete local branch: %v", err)
-		} else {
-			rec.BranchDeleted = true
-		}
-	} else {
-		output.Debug("local branch %s already absent; skipping git branch -D", branch)
+	// Git's metadata for the removed worktree goes before its branch:
+	// while it stays, git refuses the branch as used by a worktree.
+	if err := hop.NewCleanupManager(fs, g).PruneWorktrees(hubPath); err != nil {
+		output.Warn("Failed to prune worktrees: %v", err)
 	}
+
+	outcome := planBranchDeletion(g, absBasePath, localBranch, hub.Config.Repo.DefaultBranch, opts)
+	if outcome.Delete {
+		if err := g.DeleteLocalBranch(absBasePath, outcome.Branch); err != nil {
+			outcome.Delete = false
+			outcome.Failed = true
+			outcome.KeptReason = "git branch -D failed: " + errorCause(err)
+		}
+	}
+	applyBranchOutcome(&rec, outcome)
+	reportKeptBranch(outcome)
 
 	// Remote deletion is opt-in. Both calls below reach the network, so
 	// they run only when the user explicitly asked for them.
@@ -388,17 +437,13 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 	if err := hub.RemoveBranch(branch); err != nil {
 		output.Warn("Failed to update hub config: %v", err)
 	}
+	delete(hub.Config.Branches, branch) // an adopted-in-memory entry too
 
 	// Load Hopspace to unregister
 	hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
 	if hopspace, err := hop.LoadHopspace(fs, hopspacePath); err == nil {
 		// Unregister from hopspace (silent if branch doesn't exist)
 		hopspace.UnregisterBranch(hubPath, branch, worktreePath)
-	}
-
-	// Prune the hub's stale git metadata
-	if err := hop.NewCleanupManager(fs, g).PruneWorktrees(hubPath); err != nil {
-		output.Warn("Failed to prune worktrees: %v", err)
 	}
 
 	// Update global state
@@ -435,7 +480,11 @@ func removeBranchWorktreeWithRemote(fs afero.Fs, g git.GitInterface, hub *hop.Hu
 		},
 	))
 
-	output.Info("Successfully removed %s", branch)
+	if outcome.Failed {
+		output.Warn("Removed worktree %s; local branch %s kept: %s", branch, outcome.Branch, outcome.KeptReason)
+	} else {
+		output.Info("Successfully removed %s", branch)
+	}
 	return rec, nil
 }
 
@@ -508,6 +557,19 @@ type mergedCandidate struct {
 	WorktreePath string
 	Skip         bool
 	Reason       string
+	// GitBranch is the branch checked out in the worktree, which the gate
+	// probes and the removal deletes; Branch is the name it is reported under.
+	GitBranch string
+	// Unregistered marks a worktree git lists and hop.json does not.
+	Unregistered bool
+}
+
+// adopt shows the candidate to the removal pipeline as a hub entry, when
+// hop.json has none (see adoptTransiently).
+func (c mergedCandidate) adopt(hub *hop.Hub) {
+	if c.Unregistered {
+		adoptTransiently(hub, c.Branch, c.WorktreePath)
+	}
 }
 
 // collectMergedCandidates iterates hub branches, skips the default branch
@@ -554,7 +616,8 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 		}
 
 		// Probe merge state. inspectBranchSafety is read-only.
-		safety := inspectBranchSafety(g, absWorktree, branch, defaultBranch)
+		gitBranch := resolveWorktreeBranch(g, absWorktree, absWorktree, branch)
+		safety := inspectBranchSafety(g, absWorktree, gitBranch, defaultBranch)
 		if !safety.Merged {
 			continue
 		}
@@ -562,7 +625,32 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 		toRemove = append(toRemove, mergedCandidate{
 			Branch:       branch,
 			WorktreePath: worktreePath,
+			GitBranch:    gitBranch,
 		})
+	}
+
+	// Worktrees made with plain git are in git's registry and not in
+	// hop.json; they are candidates like any other.
+	for _, wt := range unregisteredWorktrees(fs, g, hub, hubPath) {
+		c := mergedCandidate{Branch: wt.key(), WorktreePath: wt.Path, GitBranch: wt.Branch, Unregistered: true}
+		absWorktree, _ := filepath.Abs(wt.Path)
+		switch {
+		case wt.Branch == defaultBranch:
+			continue
+		case absCwd == absWorktree || strings.HasPrefix(absCwd, absWorktree+string(filepath.Separator)):
+			c.Skip, c.Reason = true, "currently inside this worktree"
+		case wt.Missing:
+			c.Skip, c.Reason = true, "worktree path missing; run 'git hop prune' first"
+		case wt.Detached:
+			c.Skip, c.Reason = true, "detached HEAD; no branch to compare with the default branch"
+		default:
+			if !inspectBranchSafety(g, absWorktree, wt.Branch, defaultBranch).Merged {
+				continue
+			}
+			toRemove = append(toRemove, c)
+			continue
+		}
+		skipped = append(skipped, c)
 	}
 	return toRemove, skipped
 }
@@ -574,7 +662,7 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 // It returns one record per candidate and pre-iteration skip, in branch
 // order, and how many candidates the safety gate refused or failed to
 // remove; the caller turns a non-zero count into the exit status.
-func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt, deleteRemote bool) ([]removeRecord, int) {
+func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerify, noPrompt bool, opts removeOptions) ([]removeRecord, int) {
 	hubPath, err := hop.FindHub(fs, cwd)
 	if err != nil {
 		output.Fatal("Not in a hub: %v", err)
@@ -619,7 +707,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 		// Re-check the gate per-candidate. The earlier collection only
 		// confirmed Merged=true; the gate also enforces the dirty-state
 		// rule when --no-verify isn't set.
-		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.Branch, hub.Config.Repo.DefaultBranch)
+		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.GitBranch, hub.Config.Repo.DefaultBranch)
 		if err := removeGate(safety, force, noVerify); err != nil {
 			reason := fmt.Sprintf("%s: %s", c.Branch, err.Error())
 			output.Warn("Skipping %s", reason)
@@ -628,8 +716,10 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 			continue
 		}
 
-		rec, err := removeBranchWorktreeWithRemote(fs, g, hub, hubPath, c.Branch, deleteRemote)
+		c.adopt(hub)
+		rec, err := removeBranchWorktreeOpts(fs, g, hub, hubPath, c.Branch, opts)
 		if err != nil {
+			delete(hub.Config.Branches, c.Branch)
 			reason := fmt.Sprintf("%s: %s", c.Branch, err.Error())
 			output.Warn("Failed to remove %s", reason)
 			skippedReasons = append(skippedReasons, reason)
@@ -667,6 +757,7 @@ func init() {
 	removeCmd.Flags().Bool("no-prompt", false, "Skip the confirmation prompt only; does NOT bypass the safety gate")
 	removeCmd.Flags().Bool("no-verify", false, "Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)")
 	removeCmd.Flags().Bool("merged", false, "Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)")
+	removeCmd.Flags().Bool("keep-branch", false, "Keep the local branch after removing its worktree; without it the branch goes with the worktree (default via hop.remove.keepBranch)")
 	removeCmd.Flags().Bool("delete-remote", false, "Also delete the branch on origin; without it removal stays local and never contacts the network")
 	removeCmd.Flags().Bool("delete-volumes", false, "Removing a hub, also delete its volume data; without it the data is kept, moved aside under the data home")
 	removeCmd.ValidArgsFunction = completeBranchNames

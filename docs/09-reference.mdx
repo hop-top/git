@@ -513,7 +513,9 @@ gate, failure) the records still print and the exit status is 1.
 | `branch` | string | Branch of a `worktree` record; empty for `hub` and `hopspace` |
 | `path` | string | Absolute path of the worktree, hub or hopspace |
 | `removed` | bool | `true` when removed (or, under `--dry-run`, would be); `false` when left in place (see `reason`) |
-| `branch_deleted` | bool | `true` when the local branch was deleted; `false` when it was already absent, or for a hub's worktrees (the hub goes with its repository) |
+| `local_branch` | string | *json/yaml only*; the local branch the removal looked at: the one the worktree had checked out, which differs from `branch` when the worktree was switched to another branch; absent for `hub` and `hopspace` and for a hub's worktrees |
+| `branch_deleted` | bool | `true` when the local branch was deleted (or, under `--dry-run`, would be); `false` when it stayed (see `branch_kept_reason`), or for a hub's worktrees (the hub goes with its repository) |
+| `branch_kept_reason` | string | *json/yaml only*; why the local branch stayed when its worktree was removed: `kept by --keep-branch` / `kept by hop.remove.keepBranch`, `already absent`, `it is the default branch`, `worktree has no branch checked out`, `could not check whether it exists: <cause>`, or `git branch -D failed: <cause>`; absent when it was deleted |
 | `remote_deleted` | bool | `true` when the branch was deleted on origin (`--delete-remote`); under `--dry-run`, `true` when `--delete-remote` would try (origin is not probed) |
 | `reason` | string | *json/yaml only*; why the entry was left in place: the safety gate's refusal, a failure, a `--merged` skip (current worktree, missing path), a hopspace still used by another hub; absent when removed |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
@@ -700,9 +702,9 @@ with or without `--dry-run`.
 | Field | Type | Meaning |
 |-------|------|---------|
 | `action` | string | `pruned`, or `would-prune` under `--dry-run`; `skipped` for an entry left in place (see `reason`) |
-| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup), `state-backup` (an expired copy of `state.json`, `--all` only), `temp-file` (a temp file an interrupted save of `hop.json`, or with `--all` of `state.json`, left behind), `hopspace-record`, `ports-entry` and `volumes-entry` (an orphaned `--global` hub's worktree record in the shared hopspace's `hop.json`, `ports.json` or `volumes.json`; the volume directories stay) |
+| `kind` | string | `worktree` or `hub` (state file entries), `hop-json-entry` (a hub's `hop.json` branch entry), `git-worktree` (git's record of a plain-git worktree whose directory is gone and which `hop.json` does not list), `repair-backup` (an expired repair snapshot), `conversion-backup` (an expired `git hop init` backup), `state-backup` (an expired copy of `state.json`, `--all` only), `temp-file` (a temp file an interrupted save of `hop.json`, or with `--all` of `state.json`, left behind), `hopspace-record`, `ports-entry` and `volumes-entry` (an orphaned `--global` hub's worktree record in the shared hopspace's `hop.json`, `ports.json` or `volumes.json`; the volume directories stay) |
 | `repository` | string | Repository id the entry belongs to; empty for `state-backup` and a `state.json` `temp-file` |
-| `branch` | string | Branch of a `worktree`, `hop-json-entry` or hopspace record; empty otherwise |
+| `branch` | string | Branch of a `worktree`, `hop-json-entry`, `git-worktree` or hopspace record; empty otherwise |
 | `path` | string | Worktree, hub, backup or temp file path the entry pointed at; for a hopspace record, the worktree path it is keyed by |
 | `reason` | string | *json/yaml only*, `skipped` entries only: why it was left in place, e.g. `locked in git: on the usb drive` |
 
