@@ -9,6 +9,14 @@ permissions:
   contents: write
   pull-requests: write
 
+# One run per ref, newest wins. Overlapping runs race: a run started before a
+# release-PR merge still sees the old latest release, finishes after the
+# merge, no longer finds that PR open, and re-opens a release PR for the
+# version just tagged.
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   release-please:
     runs-on: ubuntu-latest
