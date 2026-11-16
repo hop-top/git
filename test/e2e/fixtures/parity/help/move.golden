@@ -6,6 +6,14 @@ Like add, move refuses a destination a file or a non-empty directory
 occupies, with exit status 1: 'git worktree move' would put the
 worktree inside the directory. An empty directory is taken.
 
+The default branch is renamed only with --default-branch: the branch,
+its worktree, repo.defaultBranch in hop.json and the hopspace, the state
+record, the 'current' link when it points there, and the recorded bases
+(hop.json base, settings.compareBranch, git-flow's) that named it all
+take the new name. It is a local rename: origin, remote-tracking refs
+and upstream settings are left alone, and the output lists what is left
+to do on the remote.
+
 Usage:
   git-hop move [old-branch] <new-branch> [flags]
 
@@ -13,7 +21,8 @@ Aliases:
   move, rename, mv
 
 Flags:
-  -h, --help   help for move
+      --default-branch   Rename the default branch (refused without it); local only, origin is left alone
+  -h, --help             help for move
 
 Global Flags:
   -n, --dry-run         preview changes without applying

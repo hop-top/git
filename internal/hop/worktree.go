@@ -240,11 +240,29 @@ func (m *WorktreeManager) resolveStartPoint(basePath, startPoint, defaultBranch 
 // while hop.json recorded the directory itself. An empty directory is
 // taken (MoveWorktree removes it first).
 func CheckMove(fs afero.Fs, hub *Hub, g git.GitInterface, oldBranch, newBranch, newPath string) error {
+	return CheckMoveWith(fs, hub, g, oldBranch, newBranch, newPath, MoveOptions{})
+}
+
+// MoveOptions are the choices of a move beyond its two names.
+type MoveOptions struct {
+	// DefaultBranch opts in to renaming the hub's default branch, which a
+	// move refuses without it. It is then the only branch the move takes.
+	DefaultBranch bool
+}
+
+// CheckMoveWith is CheckMove under opts.
+func CheckMoveWith(fs afero.Fs, hub *Hub, g git.GitInterface, oldBranch, newBranch, newPath string, opts MoveOptions) error {
 	if oldBranch == "" || newBranch == "" {
 		return fmt.Errorf("branch names cannot be empty")
 	}
-	if oldBranch == hub.Config.Repo.DefaultBranch {
-		return fmt.Errorf("cannot move the default branch '%s'", oldBranch)
+	isDefault := oldBranch == hub.Config.Repo.DefaultBranch
+	if isDefault && !opts.DefaultBranch {
+		return fmt.Errorf("cannot move the default branch '%s'\n"+
+			"hint: --default-branch renames it, and records the new name as the hub's default", oldBranch)
+	}
+	if opts.DefaultBranch && !isDefault {
+		return fmt.Errorf("'%s' is not the default branch '%s'; --default-branch renames only the default branch",
+			oldBranch, hub.Config.Repo.DefaultBranch)
 	}
 	entry, exists := hub.Config.Branches[oldBranch]
 	if !exists {
@@ -257,6 +275,11 @@ func CheckMove(fs afero.Fs, hub *Hub, g git.GitInterface, oldBranch, newBranch, 
 	// it checked out (the branch was renamed outside git-hop); any other
 	// branch by that name is unrelated, and git branch -m would refuse it.
 	oldPath := config.ResolveWorktreePath(entry.Path, hub.Path)
+	// git worktree move never moves a repository's main working tree, and
+	// would fail after the branch was renamed.
+	if opts.DefaultBranch && isMainWorkingTree(fs, oldPath) {
+		return fmt.Errorf("the worktree of '%s' at %s is the repository's main working tree, which git cannot move", oldBranch, oldPath)
+	}
 	if g.LocalBranchExists(oldPath, newBranch) {
 		if cur, err := g.GetCurrentBranch(oldPath); err != nil || cur != newBranch {
 			return fmt.Errorf("branch '%s' already exists and is not checked out in '%s'", newBranch, oldBranch)
@@ -273,6 +296,13 @@ func CheckMove(fs afero.Fs, hub *Hub, g git.GitInterface, oldBranch, newBranch, 
 // and updates hub and hopspace configs.
 // Returns (oldPath, newPath, error).
 func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, newBranch string, locationPattern, org, repo string) (string, string, error) {
+	return m.MoveWorktreeWith(hopspace, hub, oldBranch, newBranch, locationPattern, org, repo, MoveOptions{})
+}
+
+// MoveWorktreeWith is MoveWorktree under opts. Renaming the default branch
+// also records the new name as the default in hop.json and the hopspace,
+// and as the recorded base of the worktrees that were based on the old one.
+func (m *WorktreeManager) MoveWorktreeWith(hopspace *Hopspace, hub *Hub, oldBranch, newBranch string, locationPattern, org, repo string, opts MoveOptions) (string, string, error) {
 	// Compute new path from location pattern
 	dataHome := GetGitHopDataHome()
 	ctx := WorktreeLocationContext{
@@ -285,7 +315,7 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 	}
 	newPath := filepath.Clean(ExpandWorktreeLocation(locationPattern, ctx))
 
-	if err := CheckMove(m.fs, hub, m.git, oldBranch, newBranch, newPath); err != nil {
+	if err := CheckMoveWith(m.fs, hub, m.git, oldBranch, newBranch, newPath, opts); err != nil {
 		return "", "", err
 	}
 	oldPath := config.ResolveWorktreePath(hub.Config.Branches[oldBranch].Path, hub.Path)
@@ -324,7 +354,59 @@ func (m *WorktreeManager) MoveWorktree(hopspace *Hopspace, hub *Hub, oldBranch, 
 		return oldPath, newPath, fmt.Errorf("failed to update hopspace config: %w", err)
 	}
 
+	if opts.DefaultBranch {
+		if err := m.renameDefault(hopspace, hub, oldBranch, newBranch); err != nil {
+			return oldPath, newPath, err
+		}
+	}
+
 	return oldPath, newPath, nil
+}
+
+// renameDefault records newBranch as the default branch in place of
+// oldBranch: repo.defaultBranch of hop.json and of the hopspace, and every
+// recorded base (a worktree's, the hub-wide compare branch) that named it.
+func (m *WorktreeManager) renameDefault(hopspace *Hopspace, hub *Hub, oldBranch, newBranch string) error {
+	err := hub.Update(func(cfg *config.HubConfig) error {
+		cfg.Repo.DefaultBranch = newBranch
+		for name, b := range cfg.Branches {
+			if b.Base != nil && *b.Base == oldBranch {
+				base := newBranch
+				b.Base = &base
+				cfg.Branches[name] = b
+			}
+		}
+		if c := cfg.Settings.CompareBranch; c != nil && *c == oldBranch {
+			cb := newBranch
+			cfg.Settings.CompareBranch = &cb
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to record the new default branch in hop.json: %w", err)
+	}
+	if hopspace == nil || hopspace.Config == nil || hopspace.Config.Repo.DefaultBranch != oldBranch {
+		return nil
+	}
+	err = hopspace.Update(hub.Path, func(cfg *config.HopspaceConfig) error {
+		if cfg.Repo.DefaultBranch != oldBranch {
+			return errUnchanged
+		}
+		cfg.Repo.DefaultBranch = newBranch
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("failed to record the new default branch in the hopspace: %w", err)
+	}
+	return nil
+}
+
+// isMainWorkingTree reports whether dir is a repository's own working
+// tree: its .git is the repository directory, not the file a linked
+// worktree has.
+func isMainWorkingTree(fs afero.Fs, dir string) bool {
+	fi, err := fs.Stat(filepath.Join(dir, ".git"))
+	return err == nil && fi.IsDir()
 }
 
 // hopspaceURI returns the origin URL hopspace records, "" when there is

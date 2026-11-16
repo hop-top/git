@@ -267,3 +267,66 @@ func TestMoveWorktree_Destination(t *testing.T) {
 		})
 	}
 }
+
+func TestMoveWorktreeWith_DefaultBranchRecordsNewDefault(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hub"
+	fs.MkdirAll(hubPath+"/hops/main", 0755)
+	fs.MkdirAll(hubPath+"/hops/feat", 0755)
+	hopspace := setupMoveTestHopspace(fs, hubPath, "main", hubPath+"/hops/main")
+	hub := setupMoveTestHub(fs, hubPath, "main", "feat", hubPath+"/hops/feat")
+	base, other := "main", "feat"
+	if err := hub.Update(func(cfg *config.HubConfig) error {
+		b := cfg.Branches["feat"]
+		b.Base = &base
+		cfg.Branches["feat"] = b
+		cfg.Settings.CompareBranch = &other
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	wm := hop.NewWorktreeManager(fs, mocks.NewMockGit())
+	_, _, err := wm.MoveWorktreeWith(hopspace, hub, "main", "next", "{hubPath}/hops/{branch}", "org", "repo", hop.MoveOptions{DefaultBranch: true})
+	if err != nil {
+		t.Fatalf("MoveWorktreeWith: %v", err)
+	}
+	if hub.Config.Repo.DefaultBranch != "next" {
+		t.Errorf("hub default = %q, want next", hub.Config.Repo.DefaultBranch)
+	}
+	if hopspace.Config.Repo.DefaultBranch != "next" {
+		t.Errorf("hopspace default = %q, want next", hopspace.Config.Repo.DefaultBranch)
+	}
+	if b := hub.Config.Branches["feat"].Base; b == nil || *b != "next" {
+		t.Errorf("feat base = %v, want next", b)
+	}
+	if c := hub.Config.Settings.CompareBranch; c == nil || *c != "feat" {
+		t.Errorf("compareBranch = %v, want feat (it did not name the default)", c)
+	}
+}
+
+func TestMoveWorktreeWith_DefaultBranchFlagOnOtherBranchRefused(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hub"
+	fs.MkdirAll(hubPath+"/hops/feat", 0755)
+	hopspace := setupMoveTestHopspace(fs, hubPath, "feat", hubPath+"/hops/feat")
+	hub := setupMoveTestHub(fs, hubPath, "main", "feat", hubPath+"/hops/feat")
+
+	wm := hop.NewWorktreeManager(fs, mocks.NewMockGit())
+	_, _, err := wm.MoveWorktreeWith(hopspace, hub, "feat", "feat2", "{hubPath}/hops/{branch}", "org", "repo", hop.MoveOptions{DefaultBranch: true})
+	if err == nil || !strings.Contains(err.Error(), "not the default branch") {
+		t.Fatalf("err = %v, want not-the-default-branch refusal", err)
+	}
+}
+
+func TestCheckMoveWith_MainWorkingTreeRefused(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hub"
+	fs.MkdirAll(hubPath+"/hops/main/.git", 0755) // a directory: the repository itself
+	hub := setupMoveTestHub(fs, hubPath, "main", "feat", hubPath+"/hops/feat")
+
+	err := hop.CheckMoveWith(fs, hub, mocks.NewMockGit(), "main", "next", hubPath+"/hops/next", hop.MoveOptions{DefaultBranch: true})
+	if err == nil || !strings.Contains(err.Error(), "main working tree") {
+		t.Fatalf("err = %v, want main-working-tree refusal", err)
+	}
+}
