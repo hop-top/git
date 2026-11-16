@@ -35,20 +35,20 @@ func TestCopyIgnored_MarkedPatternSkipsItsEntries(t *testing.T) {
 	gitignore := strings.Join([]string{
 		"# local task state, hub-owned",
 		IgnoredCopyMarker,
-		".tlc/",
+		".scratch/",
 		".env",
 		"",
 		"#-hop-# build output",
 		"dist/",
 	}, "\n")
 	fs, src, dst, g := markerFixture(t, gitignore, map[string]string{
-		".tlc/db.sqlite": "x",
-		".env":           "SECRET=1\n",
-		"dist/app.js":    "js",
+		".scratch/db.sqlite": "x",
+		".env":               "SECRET=1\n",
+		"dist/app.js":        "js",
 	}, map[string]fakeIgnoreRule{
-		".tlc": {source: ".gitignore", line: 3, pattern: ".tlc/"},
-		".env": {source: ".gitignore", line: 4, pattern: ".env"},
-		"dist": {source: ".gitignore", line: 7, pattern: "dist/"},
+		".scratch": {source: ".gitignore", line: 3, pattern: ".scratch/"},
+		".env":     {source: ".gitignore", line: 4, pattern: ".env"},
+		"dist":     {source: ".gitignore", line: 7, pattern: "dist/"},
 	})
 
 	res, err := CopyIgnored(fs, g, src, dst, IgnoredCopyOptions{})
@@ -56,7 +56,7 @@ func TestCopyIgnored_MarkedPatternSkipsItsEntries(t *testing.T) {
 		t.Fatalf("CopyIgnored: %v", err)
 	}
 
-	for _, rel := range []string{".tlc/db.sqlite", "dist/app.js"} {
+	for _, rel := range []string{".scratch/db.sqlite", "dist/app.js"} {
 		if exists, _ := afero.Exists(fs, filepath.Join(dst, rel)); exists {
 			t.Errorf("%s was copied despite its ignore rule carrying %s", rel, IgnoredCopyMarker)
 		}
@@ -72,7 +72,7 @@ func TestCopyIgnored_MarkedPatternSkipsItsEntries(t *testing.T) {
 		}
 	}
 	if len(marked) != 2 {
-		t.Errorf("Skipped(marked) = %v, want [.tlc dist]", marked)
+		t.Errorf("Skipped(marked) = %v, want [.scratch dist]", marked)
 	}
 	if len(res.Warnings) != 0 {
 		t.Errorf("unexpected warnings: %v", res.Warnings)

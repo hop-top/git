@@ -34,6 +34,8 @@ type addPlan struct {
 	envStart      bool
 	miseTrust     string
 	miseSource    string
+	// copyPreview, when set, prints the ignored-copy plan.
+	copyPreview func()
 }
 
 // addHooks are the lifecycle hooks add dispatches, in order.
@@ -68,6 +70,10 @@ func previewAdd(g git.GitInterface, wm *hop.WorktreeManager, hookRunner *hooks.R
 	output.Info("[dry-run] Would create worktree at %s", displayPath(p.cwd, p.worktreePath))
 	if p.task != "" {
 		output.Info("[dry-run] Would record task '%s' for '%s'", p.task, p.branch)
+	}
+
+	if p.copyPreview != nil {
+		p.copyPreview()
 	}
 
 	previewMiseTrust(execMise{}, p.miseTrust, p.miseSource)
