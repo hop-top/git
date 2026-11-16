@@ -92,6 +92,12 @@ directly above its pattern in any ignore file:
 The marker must be on its own comment line: git reads a mid-line '#' as
 part of the pattern.
 
+Tool-state directories (.tlc/, .hop/) are never copied, at any depth,
+marker or not. 'git config --add hop.add.copyIgnoredExclude <pattern>'
+(repeatable) leaves more out: a name matches at any depth, a pattern with
+a '/' matches from the worktree root, '*' and '?' glob. A leading '!'
+removes a pattern, built-in ones included: '!.tlc' copies .tlc/ again.
+
 Before resolving the start-point, add runs 'git fetch origin' so a new
 branch does not start from a stale origin/<branch>. By default it does so
 only when the start-point is an origin ref: origin-default, an explicit
@@ -126,7 +132,12 @@ created or written and no hook runs. An add the real run would refuse
 branch name is invalid or checked out in another worktree, the
 start-point is not a commit, --from cannot move the existing branch)
 fails with exit status 1 and "[dry-run] would refuse to add '<branch>':"
-before the real run's reason.`,
+before the real run's reason.
+
+--dry-run also lists the ignored entries the run will copy and those it
+will skip, each with its reason (built-in default, hop.add.copyIgnoredExclude,
+#-hop-# marker, size limit, deps layer). A normal run prints only a count;
+-V names the entries.`,
 	Args: addArgs,
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
@@ -222,6 +233,10 @@ before the real run's reason.`,
 				envStart:      envStart,
 				miseTrust:     miseMode,
 				miseSource:    forkSource(fs, hub, start),
+				copyPreview: func() {
+					previewCopyIgnored(fs, g, hub, hopspacePath, worktreePath, start, globalConfig,
+						config.NewGitConfig(), copyIgnoredOverride(cmd, addCopyIgnoredFlag, addNoCopyIgnoredFlag))
+				},
 			})
 			if output.IsStructured() {
 				emitResult(cmd, res)

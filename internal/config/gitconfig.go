@@ -25,6 +25,7 @@ const (
 	KeyAddDefaultStartPoint   = "hop.add.defaultStartPoint"
 	KeyAddCopyIgnored         = "hop.add.copyIgnored"
 	KeyAddCopyIgnoredMaxSize  = "hop.add.copyIgnoredMaxSize"
+	KeyAddCopyIgnoredExclude  = "hop.add.copyIgnoredExclude"
 	KeyAddFetch               = "hop.add.fetch"
 	KeyAddMiseTrust           = "hop.add.miseTrust"
 	KeyMergeDeleteRemote      = "hop.merge.deleteRemote"
@@ -116,6 +117,26 @@ func (gc *GitConfig) GetInt(key string) (int, error) {
 // Missing keys return ("", ErrKeyNotFound).
 func (gc *GitConfig) GetPath(key string) (string, error) {
 	return gc.get(key, "--type=path")
+}
+
+// GetAll returns every value of a multi-valued key across all scopes,
+// lowest precedence first (`git config --get-all`). A key set nowhere
+// yields (nil, nil).
+func (gc *GitConfig) GetAll(key string) ([]string, error) {
+	out, err := gc.RunCmd("config", "--get-all", key)
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("git config --get-all %s: %w", key, err)
+	}
+	var vals []string
+	for _, line := range strings.Split(out, "\n") {
+		if line = strings.TrimSpace(line); line != "" {
+			vals = append(vals, line)
+		}
+	}
+	return vals, nil
 }
 
 // Set writes a key to --global scope.

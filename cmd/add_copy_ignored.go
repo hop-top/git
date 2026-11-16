@@ -86,11 +86,25 @@ func forkSource(fs afero.Fs, hub *hop.Hub, start addStartPoint) string {
 // source is start.Source when the start-point came from a worktree (cwd),
 // else resolveCopySource's pick.
 func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath, dstWorktree string, start addStartPoint, globalConfig *config.GlobalConfig, gc *config.GitConfig, override *bool) {
+	runCopyIgnored(fs, g, hub, hopspacePath, dstWorktree, start, globalConfig, gc, override, false)
+}
+
+// previewCopyIgnored is the dry-run twin of copyIgnoredIntoWorktree: same
+// source, same filters, same decisions, nothing written. It lists every
+// entry the real run will copy and every one it will skip with the reason.
+func previewCopyIgnored(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath, dstWorktree string, start addStartPoint, globalConfig *config.GlobalConfig, gc *config.GitConfig, override *bool) {
+	runCopyIgnored(fs, g, hub, hopspacePath, dstWorktree, start, globalConfig, gc, override, true)
+}
+
+func runCopyIgnored(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspacePath, dstWorktree string, start addStartPoint, globalConfig *config.GlobalConfig, gc *config.GitConfig, override *bool, dryRun bool) {
 	enabled := gc.GetBoolOrDefault(config.KeyAddCopyIgnored)
 	if override != nil {
 		enabled = *override
 	}
 	if !enabled {
+		if dryRun {
+			output.Info("[dry-run] Would not copy ignored entries (disabled)")
+		}
 		return
 	}
 
@@ -100,7 +114,7 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 			config.KeyAddCopyIgnored)
 		return
 	}
-	if srcWorktree == dstWorktree {
+	if srcWorktree == dstWorktree && !dryRun {
 		return
 	}
 
@@ -114,9 +128,16 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 		managed = services.DepsManagedPaths(dm, srcWorktree)
 	}
 
+	exclude, err := gc.GetAll(config.KeyAddCopyIgnoredExclude)
+	if err != nil {
+		output.Warn("could not read %s: %v", config.KeyAddCopyIgnoredExclude, err)
+	}
+
 	res, err := services.CopyIgnored(fs, g, srcWorktree, dstWorktree, services.IgnoredCopyOptions{
 		MaxBytes:    maxBytes,
 		DepsManaged: managed,
+		Exclude:     exclude,
+		DryRun:      dryRun,
 	})
 	if err != nil {
 		output.Warn("could not copy ignored files: %v", err)
@@ -125,6 +146,11 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 
 	for _, w := range res.Warnings {
 		output.Warn("copy ignored: %s", w)
+	}
+
+	if dryRun {
+		reportCopyIgnoredPreview(res, srcWorktree)
+		return
 	}
 
 	// Skips must never be silent — a user who does not see the message
@@ -140,6 +166,8 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 			output.Debug("skipped %s (already present in the new worktree)", s.Path)
 		case services.SkipMarked:
 			output.Debug("skipped %s (ignore rule marked %s)", s.Path, services.IgnoredCopyMarker)
+		case services.SkipExcludedDefault, services.SkipExcludedConfig:
+			output.Debug("skipped %s (%s)", s.Path, skipDescription(s))
 		}
 	}
 
@@ -151,6 +179,38 @@ func copyIgnoredIntoWorktree(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hops
 				output.Debug("copied %s", p)
 			}
 		}
+	}
+}
+
+// skipDescription says why an entry is skipped, in terms a user can act on.
+func skipDescription(s services.IgnoredSkip) string {
+	switch s.Reason {
+	case services.SkipTooLarge:
+		return fmt.Sprintf("%s, over the size limit: %s", humanBytes(s.Bytes), config.KeyAddCopyIgnoredMaxSize)
+	case services.SkipDepsManaged:
+		return "managed by the dependency layer"
+	case services.SkipExists:
+		return "already present in the new worktree"
+	case services.SkipMarked:
+		return "ignore rule marked " + services.IgnoredCopyMarker
+	case services.SkipExcludedDefault:
+		return "built-in default exclusion; opt back in with '!" + s.Path + "' in " + config.KeyAddCopyIgnoredExclude
+	case services.SkipExcludedConfig:
+		return config.KeyAddCopyIgnoredExclude
+	}
+	return string(s.Reason)
+}
+
+// reportCopyIgnoredPreview prints the dry-run listing: the entries the real
+// run copies, then those it skips with the reason.
+func reportCopyIgnoredPreview(res *services.IgnoredCopyResult, src string) {
+	output.Info("[dry-run] Would copy %d ignored %s from %s", len(res.Copied),
+		pluralEntries(len(res.Copied)), src)
+	for _, p := range res.Copied {
+		output.Info("[dry-run]   copy %s", p)
+	}
+	for _, s := range res.Skipped {
+		output.Info("[dry-run]   skip %s (%s)", s.Path, skipDescription(s))
 	}
 }
 

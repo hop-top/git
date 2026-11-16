@@ -67,6 +67,12 @@ const (
 	// SkipMarked marks a path whose ignore rule carries IgnoredCopyMarker
 	// on the comment line above it — the user opted it out of copying.
 	SkipMarked SkipReason = "marked"
+	// SkipExcludedDefault marks a path matched by
+	// DefaultIgnoredCopyExcludes.
+	SkipExcludedDefault SkipReason = "excluded-default"
+	// SkipExcludedConfig marks a path matched by a
+	// hop.add.copyIgnoredExclude pattern.
+	SkipExcludedConfig SkipReason = "excluded-config"
 )
 
 // IgnoredSkip is a single skipped entry plus the reason and, for size
@@ -86,6 +92,12 @@ type IgnoredCopyOptions struct {
 	// owns. Supplied by DepsManagedPaths so the list is asked for, never
 	// re-derived here.
 	DepsManaged map[string]bool
+	// Exclude holds user patterns (hop.add.copyIgnoredExclude) layered on
+	// DefaultIgnoredCopyExcludes; see NewIgnoredCopyExcluder.
+	Exclude []string
+	// DryRun runs every check and fills the result exactly as a real run
+	// would, but writes nothing.
+	DryRun bool
 }
 
 // DepsManagedPaths returns the worktree-relative paths that the deps layer
@@ -205,6 +217,21 @@ func CopyIgnored(fs afero.Fs, g StatusRunner, srcWorktree, dstWorktree string, o
 		return res, err
 	}
 
+	excluder := NewIgnoredCopyExcluder(opts.Exclude)
+	var candidates []string
+	for _, rel := range entries {
+		if m, builtin := excluder.Match(filepath.ToSlash(rel)); m {
+			reason := SkipExcludedConfig
+			if builtin {
+				reason = SkipExcludedDefault
+			}
+			res.Skipped = append(res.Skipped, IgnoredSkip{Path: rel, Reason: reason})
+			continue
+		}
+		candidates = append(candidates, rel)
+	}
+	entries = candidates
+
 	marked, warnings := markedIgnoredEntries(fs, g, srcWorktree, entries)
 	res.Warnings = append(res.Warnings, warnings...)
 
@@ -245,10 +272,12 @@ func CopyIgnored(fs afero.Fs, g StatusRunner, srcWorktree, dstWorktree string, o
 		// would risk pulling in an unbounded tree (or a cycle) through a
 		// link that points at a parent directory.
 		if info.Mode()&os.ModeSymlink != 0 {
-			if err := copySymlink(fs, srcPath, dstPath); err != nil {
-				res.Warnings = append(res.Warnings,
-					fmt.Sprintf("could not copy symlink %s: %v", rel, err))
-				continue
+			if !opts.DryRun {
+				if err := copySymlink(fs, srcPath, dstPath); err != nil {
+					res.Warnings = append(res.Warnings,
+						fmt.Sprintf("could not copy symlink %s: %v", rel, err))
+					continue
+				}
 			}
 			res.Copied = append(res.Copied, rel)
 			continue
@@ -266,6 +295,11 @@ func CopyIgnored(fs afero.Fs, g StatusRunner, srcWorktree, dstWorktree string, o
 			continue
 		}
 
+		if opts.DryRun {
+			res.Copied = append(res.Copied, rel)
+			continue
+		}
+
 		if err := fs.MkdirAll(filepath.Dir(dstPath), 0o755); err != nil {
 			res.Warnings = append(res.Warnings,
 				fmt.Sprintf("could not create parent for %s: %v", rel, err))
@@ -273,7 +307,7 @@ func CopyIgnored(fs afero.Fs, g StatusRunner, srcWorktree, dstWorktree string, o
 		}
 
 		if info.IsDir() {
-			err = copyIgnoredDir(fs, srcPath, dstPath, info.Mode().Perm())
+			err = copyIgnoredDir(fs, srcPath, dstPath, rel, info.Mode().Perm(), excluder)
 		} else {
 			err = copyIgnoredFile(fs, srcPath, dstPath, info.Mode().Perm())
 		}
@@ -323,7 +357,10 @@ func entrySize(fs afero.Fs, path string, info os.FileInfo, limit int64) (int64, 
 // copyIgnoredDir recursively copies src to dst preserving permission bits
 // on directories and files, and reproducing symlinks as symlinks. It never
 // overwrites an existing destination entry.
-func copyIgnoredDir(fs afero.Fs, src, dst string, perm os.FileMode) error {
+//
+// rel is src's worktree-relative path; children matching excluder are left
+// out.
+func copyIgnoredDir(fs afero.Fs, src, dst, rel string, perm os.FileMode, excluder *IgnoredCopyExcluder) error {
 	if err := fs.MkdirAll(dst, perm); err != nil {
 		return err
 	}
@@ -340,7 +377,11 @@ func copyIgnoredDir(fs afero.Fs, src, dst string, perm os.FileMode) error {
 	for _, e := range entries {
 		srcPath := filepath.Join(src, e.Name())
 		dstPath := filepath.Join(dst, e.Name())
+		childRel := filepath.Join(rel, e.Name())
 
+		if excluder.Excluded(filepath.ToSlash(childRel)) {
+			continue
+		}
 		if exists, err := lexists(fs, dstPath); err == nil && exists {
 			continue
 		}
@@ -355,7 +396,7 @@ func copyIgnoredDir(fs afero.Fs, src, dst string, perm os.FileMode) error {
 				return err
 			}
 		case info.IsDir():
-			if err := copyIgnoredDir(fs, srcPath, dstPath, info.Mode().Perm()); err != nil {
+			if err := copyIgnoredDir(fs, srcPath, dstPath, childRel, info.Mode().Perm(), excluder); err != nil {
 				return err
 			}
 		default:

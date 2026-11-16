@@ -278,6 +278,7 @@ after `hop`, is [ignored with a warning](#configjson-is-not-read).
 | `hop.remove.keepBranch` | boolean | `false` | Make `git hop remove` keep the local branch of the worktree it removes, as if `--keep-branch` were passed. An explicit `--keep-branch` / `--keep-branch=false` on the command line overrides this. See [`hop.remove.keepBranch`](#hopremovekeepbranch). |
 | `hop.add.copyIgnored` | boolean | `true` | Make `git hop add` seed the new worktree with the git-ignored local files (`.env`, tool config, small caches) present in the worktree it forks from. `--copy-ignored` / `--no-copy-ignored` on the command line override this. |
 | `hop.add.copyIgnoredMaxSize` | size | `10m` | Per-entry ceiling for that copy. An ignored file or directory above it is skipped and reported. |
+| `hop.add.copyIgnoredExclude` | pattern, repeatable | `.tlc`, `.hop` built in | Ignored paths `git hop add` leaves out of that copy, on top of the built-in tool-state directories `.tlc` and `.hop`. Set it with `git config --add`, once per pattern. A leading `!` removes a pattern, built-in ones included. See [`hop.add.copyIgnoredExclude`](#hopaddcopyignoredexclude). |
 | `hop.add.fetch` | boolean | unset (auto) | Make `git hop add` run `git fetch origin` before resolving the start-point (`true`) or never (`false`). Unset, add fetches only when the start-point is an origin ref: `origin-default`, an explicit `origin/<branch>`, or `default-branch` when there is no local default branch. `--fetch` / `--no-fetch` on the command line override this. A failed fetch is fatal when requested (`true` or `--fetch`) and only a warning under the automatic default. In a hub with no `origin` remote a requested fetch is skipped with a hint. |
 | `hop.add.miseTrust` | string | `auto` | Optional; only applies when mise is on `PATH` and the new worktree has mise config. Trust that config after `git hop add`: `auto` (when the source worktree's is trusted and the config files match byte for byte), `always` (whenever it has mise config), `never`. `--mise-trust` / `--no-mise-trust` override it. See [`hop.add.miseTrust`](#hopaddmisetrust) |
 | `hop.gitflow.enabled` | boolean | `false` | Let `git hop add` / `git hop remove` run `git flow <type> start` / `git flow <type> finish` for branches whose prefix matches a git-flow-next type. Off, git-hop only detects the branch type (for the `GIT_HOP_BRANCH_*` hook variables) and runs no git-flow command. See [`hop.gitflow.enabled`](#hopgitflowenabled). |
@@ -360,6 +361,39 @@ checks that rule's file.
 The marker cannot share the pattern's own line. Git only treats `#` as a
 comment at the start of a line, so `.tlc/ #-hop-#` would become a pattern
 matching a path literally named `.tlc/ #-hop-#` and stop ignoring `.tlc/`.
+
+### `hop.add.copyIgnoredExclude`
+
+Tool-state directories hold per-worktree state: copying a source's `.tlc/`
+or `.hop/` into a new worktree makes a task tracker there open the
+source's store, or read a config that shadows the hub's. `git hop add`
+therefore never copies `.tlc` or `.hop`, at any depth, with no ignore-file
+marker needed. `git hop` writes nothing of its own under a worktree's
+`.hop/`.
+
+`hop.add.copyIgnoredExclude` adds patterns. It is multi-valued: one
+`git config --add` per pattern, read across every scope.
+
+```bash
+git config --add hop.add.copyIgnoredExclude scratch
+git config --add hop.add.copyIgnoredExclude 'tmp/cache'
+git config --add hop.add.copyIgnoredExclude '*.sqlite'
+
+# Opt a built-in back in
+git config --add hop.add.copyIgnoredExclude '!.tlc'
+```
+
+- A pattern with no `/` matches a name at any depth (`scratch` matches
+  `scratch/` and `pkg/scratch/`, and everything inside).
+- A pattern with a `/`, or a leading `/`, matches from the worktree root.
+- `*`, `?` and `[...]` glob; a trailing `/` is ignored.
+- `!pattern` removes an earlier pattern with the same text.
+
+It composes with `#-hop-#`: an entry is left behind when the built-in list,
+this key or a marked ignore rule says so.
+
+`git hop add --dry-run` lists the entries it will copy and those it will
+skip, each with the reason. A normal run prints a count; `-V` names them.
 
 ### `hop.add.fetch`
 
