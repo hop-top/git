@@ -49,8 +49,14 @@ var removeCmd = &cobra.Command{
 	Long: `Remove a hub, hopspace, or branch.
 
 Removing a branch worktree runs a safety gate first. A branch merged into
-the default branch (merge commit, squash, or rebase) with a clean worktree
-is removed silently. Anything else needs explicit flags:
+the branch its worktree was made from (merge commit, squash, or rebase)
+with a clean worktree is removed silently. That branch is the worktree's
+recorded base, else settings.compareBranch, else the default branch, the
+same one status shows; a base that no longer exists falls to the next
+choice, and the output says so. --base <branch> checks every candidate
+against <branch> instead. The current directory never picks it.
+
+Anything else needs explicit flags:
 
   merged, uncommitted or untracked files         --no-verify
   not merged, pushed to origin, clean            --force
@@ -107,6 +113,9 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 		// records go out before a partial failure's exit status, so a
 		// caller learns what did go.
 		if merged {
+			if hubPath, err := hop.FindHub(fs, cwd); err == nil {
+				checkBaseOverride(g, hubPath, baseOverride(cmd))
+			}
 			if dryRun {
 				recs, refused := previewRemoveMerged(fs, g, cwd, force, noVerify, noPrompt, removeOptionsFor(cmd, cwd, deleteRemote))
 				emitRemoveResult(cmd, markDryRun(recs))
@@ -164,6 +173,7 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 				}
 
 				opts := removeOptionsFor(cmd, hubPath, deleteRemote)
+				checkBaseOverride(g, hubPath, opts.Base)
 				if dryRun {
 					rec := previewRemoveBranch(fs, g, hub, hubPath, target, force, noVerify, noPrompt, opts)
 					emitRemoveResult(cmd, markDryRun([]removeRecord{rec}))
@@ -174,8 +184,10 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 				// --no-verify based on merged/pushed/dirty state. Skip
 				// when the worktree is missing on disk (nothing to lose).
 				gateRequired := false
+				var checked compareTarget
 				if _, err := fs.Stat(absWorktree); err == nil {
-					safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, resolveWorktreeBranch(g, absWorktree, absWorktree, target), hub.Config.Repo.DefaultBranch)
+					checked = targetFor(g, hub, absWorktree, target, opts.Base)
+					safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, resolveWorktreeBranch(g, absWorktree, absWorktree, target), checked)
 					if err := removeGate(safety, force, noVerify); err != nil {
 						output.Fatal("%s", err.Error())
 					}
@@ -204,7 +216,7 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 				if err != nil {
 					output.Fatal("%s", err.Error())
 				}
-				emitRemoveResult(cmd, []removeRecord{rec})
+				emitRemoveResult(cmd, []removeRecord{rec.withTarget(checked)})
 				return
 			}
 		}
@@ -217,6 +229,9 @@ $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, and a hint says where.
 
 		// Check if target is a hub
 		if hop.IsHub(fs, targetPath) {
+			if baseOverride(cmd) != "" {
+				output.FatalCode(exitUsage, "--base applies only to removing a branch worktree")
+			}
 			if dryRun {
 				emitRemoveResult(cmd, markDryRun(previewRemoveHub(fs, targetPath, noPrompt, deleteVolumes)))
 				return
@@ -562,6 +577,8 @@ type mergedCandidate struct {
 	GitBranch string
 	// Unregistered marks a worktree git lists and hop.json does not.
 	Unregistered bool
+	// Target is the branch the candidate's merge was checked against.
+	Target compareTarget
 }
 
 // adopt shows the candidate to the removal pipeline as a hub entry, when
@@ -580,7 +597,7 @@ func (c mergedCandidate) adopt(hub *hop.Hub) {
 //
 // The hub map is read but never mutated here — callers act on a stable
 // snapshot.
-func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, cwd string) (toRemove []mergedCandidate, skipped []mergedCandidate) {
+func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, cwd, override string) (toRemove []mergedCandidate, skipped []mergedCandidate) {
 	defaultBranch := hub.Config.Repo.DefaultBranch
 	absCwd, _ := filepath.Abs(cwd)
 
@@ -617,7 +634,8 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 
 		// Probe merge state. inspectBranchSafety is read-only.
 		gitBranch := resolveWorktreeBranch(g, absWorktree, absWorktree, branch)
-		safety := inspectBranchSafety(g, absWorktree, gitBranch, defaultBranch)
+		target := targetFor(g, hub, absWorktree, branch, override)
+		safety := inspectBranchSafety(g, absWorktree, gitBranch, target.Branch)
 		if !safety.Merged {
 			continue
 		}
@@ -626,6 +644,7 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 			Branch:       branch,
 			WorktreePath: worktreePath,
 			GitBranch:    gitBranch,
+			Target:       target,
 		})
 	}
 
@@ -644,7 +663,8 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 		case wt.Detached:
 			c.Skip, c.Reason = true, "detached HEAD; no branch to compare with the default branch"
 		default:
-			if !inspectBranchSafety(g, absWorktree, wt.Branch, defaultBranch).Merged {
+			c.Target = resolveMergeTarget(g, absWorktree, hub.Config, config.HubBranch{}, override)
+			if !inspectBranchSafety(g, absWorktree, wt.Branch, c.Target.Branch).Merged {
 				continue
 			}
 			toRemove = append(toRemove, c)
@@ -674,7 +694,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 
 	// Snapshot the candidate list FIRST. We do not mutate the hub config
 	// during iteration; each removal is performed against the snapshot.
-	toRemove, preSkipped := collectMergedCandidates(fs, g, hub, hubPath, cwd)
+	toRemove, preSkipped := collectMergedCandidates(fs, g, hub, hubPath, cwd, opts.Base)
 
 	// Surface pre-iteration skips (cwd-inside, missing path) up front so
 	// the user knows why something they expected to disappear didn't.
@@ -691,7 +711,10 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 	// Show the candidate list.
 	output.Info("Merged worktrees to remove:")
 	for _, c := range toRemove {
-		output.Info("  %s  %s", c.Branch, c.WorktreePath)
+		output.Info("  %s  %s  (merged into %s)", c.Branch, c.WorktreePath, c.Target)
+		if c.Target.Note != "" {
+			output.Info("    %s", c.Target.Note)
+		}
 	}
 
 	if !noPrompt {
@@ -707,7 +730,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 		// Re-check the gate per-candidate. The earlier collection only
 		// confirmed Merged=true; the gate also enforces the dirty-state
 		// rule when --no-verify isn't set.
-		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.GitBranch, hub.Config.Repo.DefaultBranch)
+		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.GitBranch, c.Target)
 		if err := removeGate(safety, force, noVerify); err != nil {
 			reason := fmt.Sprintf("%s: %s", c.Branch, err.Error())
 			output.Warn("Skipping %s", reason)
@@ -726,7 +749,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 			recs = append(recs, keptRemoveRecord(c, err.Error()))
 			continue
 		}
-		recs = append(recs, rec)
+		recs = append(recs, rec.withTarget(c.Target))
 		removed++
 	}
 
@@ -739,7 +762,7 @@ func runRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noVerif
 // keptRemoveRecord is the record of a --merged candidate left in place,
 // and why.
 func keptRemoveRecord(c mergedCandidate, reason string) removeRecord {
-	return removeRecord{Kind: removeKindWorktree, Branch: c.Branch, Path: c.WorktreePath, Reason: reason}
+	return removeRecord{Kind: removeKindWorktree, Branch: c.Branch, Path: c.WorktreePath, Reason: reason}.withTarget(c.Target)
 }
 
 // skippedRemoveRecords are the records of the candidates --merged set
@@ -756,7 +779,8 @@ func init() {
 	cli.RootCmd.AddCommand(removeCmd)
 	removeCmd.Flags().Bool("no-prompt", false, "Skip the confirmation prompt only; does NOT bypass the safety gate")
 	removeCmd.Flags().Bool("no-verify", false, "Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)")
-	removeCmd.Flags().Bool("merged", false, "Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)")
+	removeCmd.Flags().Bool("merged", false, "Remove all worktrees whose branch is merged into the branch it was made from (its base; see --base) (skips the default branch itself and the active worktree)")
+	removeCmd.Flags().String("base", "", "Branch to check every candidate's merge against, in place of each worktree's own base (compareBranch, then the default branch, when it has none)")
 	removeCmd.Flags().Bool("keep-branch", false, "Keep the local branch after removing its worktree; without it the branch goes with the worktree (default via hop.remove.keepBranch)")
 	removeCmd.Flags().Bool("delete-remote", false, "Also delete the branch on origin; without it removal stays local and never contacts the network")
 	removeCmd.Flags().Bool("delete-volumes", false, "Removing a hub, also delete its volume data; without it the data is kept, moved aside under the data home")

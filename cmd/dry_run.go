@@ -38,6 +38,9 @@ func describeSafety(s branchSafety) string {
 	if s.Merged {
 		parts[0] = "merged"
 	}
+	if s.Target.Branch != "" {
+		parts[0] += " into " + s.Target.String()
+	}
 	if s.Pushed {
 		parts[1] = "pushed"
 	}
@@ -46,6 +49,9 @@ func describeSafety(s branchSafety) string {
 	}
 	if s.Finishes {
 		parts = append(parts, "git flow finish merges it")
+	}
+	if s.Target.Note != "" {
+		parts = append(parts, s.Target.Note)
 	}
 	return strings.Join(parts, ", ")
 }

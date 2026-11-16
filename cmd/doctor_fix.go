@@ -261,13 +261,14 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 			// Try to determine a git dir to run branch-merged check.
 			// Prefer the hub path recorded in state; fall back to hopspace.
 			gitDir := findGitDirForRepo(fs, repoID, repo.URI, wt.HubPath)
-			merged := gitDir != "" && mergedIntoDefault(g, gitDir, branch, repo.DefaultBranch)
+			target := stateMergeTarget(fs, g, gitDir, wt.HubPath, branch, repo.DefaultBranch)
+			merged := gitDir != "" && mergedIntoDefault(g, gitDir, branch, target.Branch)
 
 			if dryRun {
 				if merged {
-					output.Info("  [dry-run] Would remove entry: branch '%s' is merged into '%s'",
-						branch, repo.DefaultBranch)
-					r.repaired(opts, doctorCheckState, subject, "remove entry: branch is merged into %s", repo.DefaultBranch)
+					output.Info("  [dry-run] Would remove entry: branch '%s' is merged into %s",
+						branch, target.doctorQuoted())
+					r.repaired(opts, doctorCheckState, subject, "remove entry: branch is merged into %s", target.doctorLabel())
 					resolved++
 				} else {
 					output.Info("  [dry-run] Would prompt to relocate, delete, or keep entry for '%s'", branch)
@@ -277,9 +278,9 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 			}
 
 			if merged {
-				output.Info("  Branch '%s' is merged into '%s'; auto-removing entry.", branch, repo.DefaultBranch)
+				output.Info("  Branch '%s' is merged into %s; auto-removing entry.", branch, target.doctorQuoted())
 				edits.dropWorktree(st, repoID, key)
-				r.repaired(opts, doctorCheckState, subject, "remove entry: branch is merged into %s", repo.DefaultBranch)
+				r.repaired(opts, doctorCheckState, subject, "remove entry: branch is merged into %s", target.doctorLabel())
 				resolved++
 				continue
 			}
@@ -329,6 +330,27 @@ func fixMissingWorktrees(fs afero.Fs, g git.GitInterface, st *state.State, hubKe
 	}
 
 	return resolved, kept
+}
+
+// stateMergeTarget is the branch a missing worktree's merge is checked
+// against: what resolveMergeTarget picks from the hub at hubPath, the
+// same rule the hub check, remove and status use. State records no base,
+// so a hub that cannot be loaded, or holds no row for branch, leaves the
+// repository's default branch (a row without a base resolves the same).
+func stateMergeTarget(fs afero.Fs, g git.GitInterface, gitDir, hubPath, branch, defaultBranch string) compareTarget {
+	fallback := compareTarget{Branch: defaultBranch, Source: compareSourceDefault}
+	if gitDir == "" || hubPath == "" {
+		return fallback
+	}
+	hub, err := hop.LoadHub(fs, hubPath)
+	if err != nil || hub.Config == nil {
+		return fallback
+	}
+	entry, ok := hub.Config.Branches[branch]
+	if !ok {
+		return fallback
+	}
+	return resolveMergeTarget(g, gitDir, hub.Config, entry, "")
 }
 
 // findGitDirForRepo returns a usable git directory for running git commands

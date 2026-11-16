@@ -69,7 +69,7 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 			output.Error("Worktree path for branch %s is occupied by a non-directory: %s", name, linkPath)
 			// --fix cannot check a worktree out over what is there
 			// (recreateBlocker); it can only drop a merged branch's row.
-			if _, merged := mergedMissingBranch(g, hub, b.HopspaceBranch); merged {
+			if _, merged := mergedMissingBranch(g, hub, b, b.HopspaceBranch); merged {
 				r.fixableIssue(doctorCheckHub, name, "worktree path occupied by a non-directory: %s", linkPath)
 			} else {
 				r.unfixableIssue(doctorCheckHub, name, "worktree path occupied by a non-directory: %s", linkPath)
@@ -82,8 +82,8 @@ func checkBranchWorktrees(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hopspac
 			continue
 		}
 
-		if base, merged := mergedMissingBranch(g, hub, b.HopspaceBranch); merged {
-			output.Info("Branch %s is merged into %s; not recreating its worktree", name, base)
+		if target, merged := mergedMissingBranch(g, hub, b, b.HopspaceBranch); merged {
+			output.Info("Branch %s is merged into %s; not recreating its worktree", name, target.doctorLabel())
 			clearStaleRegistration(fs, g, hub.Path, linkPath, opts, r)
 			continue
 		}
@@ -105,16 +105,18 @@ func warnLockedWorktree(r *doctorReport, check, subject, path, reason string) {
 	r.record(doctorKindWarning, check, subject, "%s; %s", msg, unlockHint(path))
 }
 
-// mergedMissingBranch reports whether branch is merged into the hub's
-// default branch, and names that branch. It is the state check's test
-// (mergedIntoDefault, run in the hub), so both checks agree on which
-// missing worktrees are cleanup.
-func mergedMissingBranch(g git.GitInterface, hub *hop.Hub, branch string) (string, bool) {
-	base := hub.Config.Repo.DefaultBranch
-	return base, mergedIntoDefault(g, hub.Path, branch, base)
+// mergedMissingBranch reports whether branch is merged into the branch
+// its worktree was made from, and names that target. The target is the
+// one remove, status and the state check resolve (resolveMergeTarget: the
+// entry's base, then compareBranch, then the default branch), so every
+// check agrees on which missing worktrees are cleanup.
+func mergedMissingBranch(g git.GitInterface, hub *hop.Hub, entry config.HubBranch, branch string) (compareTarget, bool) {
+	t := resolveMergeTarget(g, hub.Path, hub.Config, entry, "")
+	return t, mergedIntoDefault(g, hub.Path, branch, t.Branch)
 }
 
-// mergedIntoDefault reports whether branch's work is on defaultBranch,
+// mergedIntoDefault reports whether branch's work is on defaultBranch (any
+// compare target; the name predates per-worktree bases),
 // run in the repository at dir. It is how both the hub check and the
 // state check decide that a missing worktree is cleanup rather than work
 // to keep. The branch counts as merged when its tip is reachable from

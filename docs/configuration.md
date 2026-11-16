@@ -804,7 +804,7 @@ A command that waits more than 30 seconds for the lock fails.
 | `branches[].fork` | string | Fork URI if this is a fork branch |
 | `branches[].task` | string | Task id recorded by `git hop add --task`; omitted when none |
 | `branches[].base` | string | Branch the worktree was created from; `status` and `list` compare against it |
-| `settings.compareBranch` | string | Comparison branch for worktrees without a `base`; default `repo.defaultBranch` |
+| `settings.compareBranch` | string | Comparison branch for worktrees without a `base` (`status`, `list`, `remove`, `doctor`); default `repo.defaultBranch` |
 | `settings.environmentManager` | string | Environment manager `env start`/`stop` use, by name (built-in `docker-compose` or one from `managers.json`); `none` disables it. Unset: detected from the worktree's files |
 | `settings.environmentConfig.hooks` | object | Command lists `preStart`, `postStart`, `preStop`, `postStop` run around `env start`/`stop` |
 | `repo.mode` | string | `global` when cloned with `--global`: the hopspace lives in `$GIT_HOP_DATA_HOME/<org>/<repo>`. Omitted by default, when the hub is its own hopspace |

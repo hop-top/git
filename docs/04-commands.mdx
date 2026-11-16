@@ -579,10 +579,31 @@ lists no `+` commit), which still holds once later commits on default
 changed the same lines again. `status` and `remove --merged` use the
 same test.
 
+"Merged" means merged into the branch the worktree was made from: its
+`base` in `hop.json`, which `add` records from the start point. Without a
+recorded base (a detached start, a worktree made with plain git, an older
+entry) it is `settings.compareBranch`, then the default branch. The same
+rule picks the branch `status` and `list` show as `Base`, and `doctor`
+uses it for a missing worktree's merged check. A worktree stacked on
+`next`, or on another feature branch, is therefore judged against `next`
+or that branch, never against the default branch. A base that no longer
+exists locally (it was merged and removed itself) is passed over for the
+next choice, and the output says so. The current directory never picks the
+branch. `--base <branch>` overrides all of it for every candidate.
+
+The refusal, the human output, `--dry-run` and the structured records name
+the branch checked against and where it came from (`checked_against`,
+`checked_against_source`: `override`, `base`, `compareBranch` or
+`default`):
+
+```text
+branch is not merged into 'main' (base), and worktree has uncommitted changes ...
+```
+
 | Branch state | Required flags |
 |--------------|----------------|
-| Merged into default, clean | (none — silent pass) |
-| Merged into default, dirty (uncommitted or untracked) | `--no-verify` |
+| Merged into its base, clean | (none — silent pass) |
+| Merged into its base, dirty (uncommitted or untracked) | `--no-verify` |
 | Not merged, pushed to `origin/<branch>`, clean | `--force` |
 | Not merged, pushed to `origin/<branch>`, dirty (uncommitted or untracked) | `--force --no-verify` |
 | Not merged and not pushed | `--force --no-verify` |
@@ -622,7 +643,7 @@ These three flags do **different** things. They are not interchangeable.
 
 | Flag | Purpose | Bypasses gate? |
 |------|---------|----------------|
-| `--force` | Allow removing a branch that is **not merged** into the default branch | Yes — for the unmerged case only; **never** for a dirty worktree |
+| `--force` | Allow removing a branch that is **not merged** into its base (the branch it was made from) | Yes — for the unmerged case only; **never** for a dirty worktree |
 | `--no-verify` | Allow removing a worktree with **uncommitted/untracked files** (merged or not) or **unpushed commits** | Yes — for the dirty/unpushed case only; **never** for the unmerged case |
 | `--no-prompt` | Skip the post-gate "Really delete?" confirmation. Useful in scripts | **No** — never bypasses the gate |
 
@@ -839,8 +860,12 @@ retention window has passed; see
 
 ### `--merged`
 
-Remove every worktree whose branch is merged into the hub's default
-branch in one pass. Useful after a sprint of squash-merged PRs.
+Remove every worktree whose branch is merged into the branch it was made
+from (its recorded `base`; `settings.compareBranch`, then the default
+branch, when it records none) in one pass. Each candidate is judged
+against its own base, so one run mixes bases. Useful after a sprint of
+squash-merged PRs, or of PRs merged into an integration or stack parent
+branch.
 
 ```bash
 git hop remove --merged
@@ -859,6 +884,13 @@ candidate.
 
 `--merged` and a positional `<target>` are mutually exclusive — pass
 one or the other.
+
+`--base <branch>` checks every candidate (and a single target) against
+`<branch>`, a local branch, instead of its own base:
+
+```bash
+git hop remove --merged --base next
+```
 
 ### `--dry-run`
 
@@ -1308,7 +1340,8 @@ doctor run that is not repairing never mutates.
 
 When `--fix` finds a hub branch whose worktree directory is gone (for
 example removed with `rm -rf`), it checks whether the branch is merged
-into the hub's default branch. Squash- and rebase-merged branches count
+into the branch its worktree was made from (its `base`; `compareBranch`,
+then the default branch, without one). Squash- and rebase-merged branches count
 as merged, by the same test `remove` and `status` use: the branch tip is
 reachable from default, its content is already there, or every one of
 its commits has a patch-equivalent commit there. A branch whose ref no

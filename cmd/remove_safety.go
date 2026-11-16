@@ -11,8 +11,9 @@ import (
 
 // branchSafety captures the three signals that decide whether `git hop
 // remove` may proceed without --force / --no-verify:
-//   - Merged: branch tip is reachable from defaultBranch, OR its work
-//     landed on defaultBranch under rewritten commits (squash- and
+//   - Merged: branch tip is reachable from the compare target (its
+//     recorded base; see resolveMergeTarget), OR its work
+//     landed on the target under rewritten commits (squash- and
 //     rebase-merges, never reachable from default; see
 //     branchWorkLandedIn)
 //   - Pushed: branch tip is reachable from origin/<branch>
@@ -29,12 +30,17 @@ type branchSafety struct {
 	Pushed   bool
 	Clean    bool
 	Finishes bool
+	// Target is the branch Merged was judged against and why: the
+	// worktree's own base, not a hub-wide default. Zero when the safety
+	// was built without a probe.
+	Target compareTarget
 }
 
-// inspectRemoveSafety is inspectBranchSafety plus whether the removal of
-// branch from the hub at hubPath runs git flow finish.
-func inspectRemoveSafety(fs afero.Fs, g git.GitInterface, hubPath, dir, branch, defaultBranch string) branchSafety {
-	s := inspectBranchSafety(g, dir, branch, defaultBranch)
+// inspectRemoveSafety is inspectBranchSafety against target, plus whether
+// the removal of branch from the hub at hubPath runs git flow finish.
+func inspectRemoveSafety(fs afero.Fs, g git.GitInterface, hubPath, dir, branch string, target compareTarget) branchSafety {
+	s := inspectBranchSafety(g, dir, branch, target.Branch)
+	s.Target = target
 	s.Finishes = gitflowFinishes(fs, g, hubPath, branch)
 	return s
 }
@@ -50,7 +56,8 @@ func (s branchSafety) risky() bool {
 
 // inspectBranchSafety probes the worktree at dir to populate
 // branchSafety. dir must be a real worktree on disk; defaultBranch is
-// the hub's default and may be empty (in which case Merged is reported
+// the branch Merged is judged against (the worktree's resolved compare
+// target; see resolveMergeTarget) and may be empty (in which case Merged is reported
 // false, since we can't compare).
 func inspectBranchSafety(g git.GitInterface, dir, branch, defaultBranch string) branchSafety {
 	s := branchSafety{}
@@ -242,12 +249,19 @@ func removeGate(s branchSafety, force, noVerify bool) error {
 		return nil
 	}
 
+	into := "default"
+	if s.Target.Branch != "" {
+		into = s.Target.String()
+	}
 	var reasons []string
 	switch {
 	case !s.Merged && !s.Pushed:
-		reasons = append(reasons, "branch is not merged into default and not pushed to origin")
+		reasons = append(reasons, "branch is not merged into "+into+" and not pushed to origin")
 	case !s.Merged:
-		reasons = append(reasons, "branch is not merged into default")
+		reasons = append(reasons, "branch is not merged into "+into)
+	}
+	if !s.Merged && s.Target.Note != "" {
+		reasons = append(reasons, s.Target.Note)
 	}
 	if dirty {
 		reasons = append(reasons, "worktree has uncommitted changes or untracked files")

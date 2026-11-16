@@ -143,6 +143,7 @@ exits 0 without prompting.
 # Bulk removal of merged branches (skips default + current)
 /usr/bin/git hop remove --merged                                  # interactive
 /usr/bin/git hop remove --merged --no-prompt                      # non-interactive
+/usr/bin/git hop remove --merged --base next                      # judge every candidate against next, not its own base
 
 # Remove a whole hub: volume data kept (moved to $GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/, hint says where)
 /usr/bin/git hop remove <hub-path> --no-prompt

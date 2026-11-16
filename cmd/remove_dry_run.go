@@ -29,8 +29,10 @@ func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath,
 	absWorktree, _ := filepath.Abs(worktreePath)
 
 	gateRequired := false
+	var checked compareTarget
 	if _, err := fs.Stat(absWorktree); err == nil {
-		safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, resolveWorktreeBranch(g, absWorktree, absWorktree, branch), hub.Config.Repo.DefaultBranch)
+		checked = targetFor(g, hub, absWorktree, branch, opts.Base)
+		safety := inspectRemoveSafety(fs, g, hubPath, absWorktree, resolveWorktreeBranch(g, absWorktree, absWorktree, branch), checked)
 		output.Info("[dry-run] Safety check for '%s': %s", branch, describeSafety(safety))
 		if err := removeGate(safety, force, noVerify); err != nil {
 			refuseDryRun(fmt.Sprintf("remove '%s'", branch), err)
@@ -48,7 +50,7 @@ func previewRemoveBranch(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath,
 	if err != nil {
 		refuseDryRun(fmt.Sprintf("remove '%s'", branch), err)
 	}
-	return rec
+	return rec.withTarget(checked)
 }
 
 // previewBranchRemoval reports the steps removeBranchWorktreeWithRemote
@@ -101,7 +103,7 @@ func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noV
 		output.Fatal("Failed to load hub: %v", err)
 	}
 
-	toRemove, preSkipped := collectMergedCandidates(fs, g, hub, hubPath, cwd)
+	toRemove, preSkipped := collectMergedCandidates(fs, g, hub, hubPath, cwd, opts.Base)
 	recs := skippedRemoveRecords(preSkipped)
 	for _, sk := range preSkipped {
 		output.Info("Skipping %s: %s", sk.Branch, sk.Reason)
@@ -119,7 +121,7 @@ func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noV
 
 	refused := 0
 	for _, c := range toRemove {
-		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.GitBranch, hub.Config.Repo.DefaultBranch)
+		safety := inspectRemoveSafety(fs, g, hubPath, c.WorktreePath, c.GitBranch, c.Target)
 		output.Info("[dry-run] Safety check for '%s': %s", c.Branch, describeSafety(safety))
 		if err := removeGate(safety, force, noVerify); err != nil {
 			output.Info("[dry-run] Would skip %s: %v", c.Branch, err)
@@ -136,7 +138,7 @@ func previewRemoveMerged(fs afero.Fs, g git.GitInterface, cwd string, force, noV
 			refused++
 			continue
 		}
-		recs = append(recs, rec)
+		recs = append(recs, rec.withTarget(c.Target))
 	}
 
 	sortRemoveRecords(recs)

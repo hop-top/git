@@ -74,7 +74,7 @@ func TestGitflowRemoveGate_OtherBranchesStillGated(t *testing.T) {
 			e.commitInWorktree(t, wt, "work.txt")
 
 			_, stderr := e.gitHopFails(t, "remove", c.branch, "--no-prompt")
-			if !strings.Contains(stderr, "not merged into default") || !strings.Contains(stderr, "--force --no-verify") {
+			if !strings.Contains(stderr, "not merged into 'main' (default)") || !strings.Contains(stderr, "--force --no-verify") {
 				t.Errorf("refusal does not ask for --force --no-verify:\n%s", stderr)
 			}
 			if _, err := os.Stat(wt); err != nil {
