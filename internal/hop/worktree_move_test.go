@@ -330,3 +330,27 @@ func TestCheckMoveWith_MainWorkingTreeRefused(t *testing.T) {
 		t.Fatalf("err = %v, want main-working-tree refusal", err)
 	}
 }
+
+func TestMoveWorktreeWith_DefaultBranchRewritesCompareBranch(t *testing.T) {
+	fs := afero.NewMemMapFs()
+	hubPath := "/hub"
+	fs.MkdirAll(hubPath+"/hops/main", 0755)
+	fs.MkdirAll(hubPath+"/hops/feat", 0755)
+	hopspace := setupMoveTestHopspace(fs, hubPath, "main", hubPath+"/hops/main")
+	hub := setupMoveTestHub(fs, hubPath, "main", "feat", hubPath+"/hops/feat")
+	cmp := "main"
+	if err := hub.Update(func(cfg *config.HubConfig) error {
+		cfg.Settings.CompareBranch = &cmp
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	wm := hop.NewWorktreeManager(fs, mocks.NewMockGit())
+	if _, _, err := wm.MoveWorktreeWith(hopspace, hub, "main", "next", "{hubPath}/hops/{branch}", "org", "repo", hop.MoveOptions{DefaultBranch: true}); err != nil {
+		t.Fatalf("MoveWorktreeWith: %v", err)
+	}
+	if c := hub.Config.Settings.CompareBranch; c == nil || *c != "next" {
+		t.Errorf("compareBranch = %v, want next", c)
+	}
+}
