@@ -64,7 +64,7 @@ func TestCollectMergedCandidates_SingleMerged(t *testing.T) {
 	stubMergedCommands(mock, filepath.Join(hubPath, "hops", "feature"), "feature", "main", true)
 
 	// cwd is somewhere outside any worktree.
-	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere", "")
 
 	require.Len(t, toRemove, 1)
 	assert.Equal(t, "feature", toRemove[0].Branch)
@@ -82,7 +82,7 @@ func TestCollectMergedCandidates_MergedDirty(t *testing.T) {
 	mock.StatusOverride = &git.Status{Branch: "feature", Clean: false, Files: []string{"? x"}}
 	stubMergedCommands(mock, filepath.Join(hubPath, "hops", "feature"), "feature", "main", true)
 
-	toRemove, _ := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+	toRemove, _ := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere", "")
 	require.Len(t, toRemove, 1, "merged+dirty must still be collected; gate decides per-removal")
 }
 
@@ -97,7 +97,7 @@ func TestCollectMergedCandidates_NotMerged(t *testing.T) {
 	mock.StatusOverride = &git.Status{Branch: "feature", Clean: true}
 	stubMergedCommands(mock, filepath.Join(hubPath, "hops", "feature"), "feature", "main", false)
 
-	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere", "")
 	assert.Empty(t, toRemove, "non-merged branches must not be collected")
 	assert.Empty(t, skipped, "non-merged branches are silently excluded, not skipped-with-reason")
 }
@@ -112,7 +112,7 @@ func TestCollectMergedCandidates_EmptyHub(t *testing.T) {
 	hub := newHubWithBranches(t, fs, hubPath, []string{"main"}, nil)
 
 	mock := mocks.NewMockGit()
-	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere", "")
 	assert.Empty(t, toRemove)
 	assert.Empty(t, skipped)
 }
@@ -128,7 +128,7 @@ func TestCollectMergedCandidates_DefaultBranchExcluded(t *testing.T) {
 	mock.StatusOverride = &git.Status{Branch: "main", Clean: true}
 	stubMergedCommands(mock, filepath.Join(hubPath, "hops", "main"), "main", "main", true)
 
-	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere", "")
 	assert.Empty(t, toRemove, "default branch must never be a candidate")
 	assert.Empty(t, skipped, "default branch is silently filtered, not skipped-with-reason")
 }
@@ -146,7 +146,7 @@ func TestCollectMergedCandidates_CwdInsideExcluded(t *testing.T) {
 	stubMergedCommands(mock, filepath.Join(hubPath, "hops", "feature"), "feature", "main", true)
 
 	cwd := filepath.Join(hubPath, "hops", "feature", "src")
-	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, cwd)
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, cwd, "")
 
 	assert.Empty(t, toRemove)
 	require.Len(t, skipped, 1)
@@ -166,7 +166,7 @@ func TestCollectMergedCandidates_MissingPathSkipped(t *testing.T) {
 	mock.StatusOverride = &git.Status{Branch: "feature", Clean: true}
 	// stub responses are irrelevant; collection should bail before probing.
 
-	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere", "")
 
 	assert.Empty(t, toRemove)
 	require.Len(t, skipped, 1)
@@ -195,7 +195,7 @@ func TestCollectMergedCandidates_SquashMerged(t *testing.T) {
 	mock.Runner.Responses[featureDir+":git merge-tree --write-tree main feature"] = "sametree"
 	mock.Runner.Responses[featureDir+":git rev-parse main^{tree}"] = "sametree"
 
-	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere")
+	toRemove, skipped := collectMergedCandidates(fs, mock, hub, hubPath, "/elsewhere", "")
 
 	require.Len(t, toRemove, 1, "squash-merged branch must be collected despite being ahead in topology")
 	assert.Equal(t, "feature", toRemove[0].Branch)
@@ -255,7 +255,7 @@ func TestCollectMergedCandidates_RealGit_SquashMerged(t *testing.T) {
 	require.NoError(t, hub.AddBranch("feature", "feature", filepath.Join("hops", "feature")))
 
 	g := git.New()
-	toRemove, skipped := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree")
+	toRemove, skipped := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree", "")
 
 	require.Len(t, toRemove, 1, "squash-merged feature must be collected")
 	assert.Equal(t, "feature", toRemove[0].Branch)
@@ -300,7 +300,7 @@ func TestCollectMergedCandidates_RealGit_UnmergedNotCollected(t *testing.T) {
 	require.NoError(t, hub.AddBranch("live", "live", filepath.Join("hops", "live")))
 
 	g := git.New()
-	toRemove, _ := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree")
+	toRemove, _ := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree", "")
 
 	assert.Empty(t, toRemove, "a branch with unshipped work must never be a removal candidate")
 }
@@ -368,7 +368,7 @@ func TestCollectMergedCandidates_RealGit_MergedFeature(t *testing.T) {
 	require.NoError(t, hub.AddBranch("feature", "feature", filepath.Join("hops", "feature")))
 
 	g := git.New()
-	toRemove, skipped := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree")
+	toRemove, skipped := collectMergedCandidates(fs, g, hub, hubPath, "/tmp/elsewhere-not-a-worktree", "")
 
 	require.Len(t, toRemove, 1, "feature must be the only candidate after merging into main")
 	assert.Equal(t, "feature", toRemove[0].Branch)

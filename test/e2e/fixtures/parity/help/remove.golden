@@ -1,8 +1,14 @@
 Remove a hub, hopspace, or branch.
 
 Removing a branch worktree runs a safety gate first. A branch merged into
-the default branch (merge commit, squash, or rebase) with a clean worktree
-is removed silently. Anything else needs explicit flags:
+the branch its worktree was made from (merge commit, squash, or rebase)
+with a clean worktree is removed silently. That branch is the worktree's
+recorded base, else settings.compareBranch, else the default branch, the
+same one status shows; a base that no longer exists falls to the next
+choice, and the output says so. --base <branch> checks every candidate
+against <branch> instead. The current directory never picks it.
+
+Anything else needs explicit flags:
 
   merged, uncommitted or untracked files         --no-verify
   not merged, pushed to origin, clean            --force
@@ -45,11 +51,12 @@ Aliases:
   remove, rm, delete, del
 
 Flags:
+      --base string      Branch to check every candidate's merge against, in place of each worktree's own base (compareBranch, then the default branch, when it has none)
       --delete-remote    Also delete the branch on origin; without it removal stays local and never contacts the network
       --delete-volumes   Removing a hub, also delete its volume data; without it the data is kept, moved aside under the data home
   -h, --help             help for remove
       --keep-branch      Keep the local branch after removing its worktree; without it the branch goes with the worktree (default via hop.remove.keepBranch)
-      --merged           Remove all worktrees whose branch is merged into the default branch (skips the default branch itself and the active worktree)
+      --merged           Remove all worktrees whose branch is merged into the branch it was made from (its base; see --base) (skips the default branch itself and the active worktree)
       --no-prompt        Skip the confirmation prompt only; does NOT bypass the safety gate
       --no-verify        Allow removal despite uncommitted/untracked files or unpushed commits; does NOT bypass the not-merged check (needs --force)
 

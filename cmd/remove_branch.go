@@ -22,6 +22,9 @@ type removeOptions struct {
 	DeleteRemote bool
 	// KeepReason is why the local branch stays; empty means it goes.
 	KeepReason string
+	// Base is --base: the branch every candidate's merge is checked
+	// against, in place of its own base. Empty means each worktree's own.
+	Base string
 }
 
 // resolveRemoveKeepBranch decides whether remove leaves the local branch
@@ -47,7 +50,28 @@ func removeOptionsFor(cmd *cobra.Command, dir string, deleteRemote bool) removeO
 	return removeOptions{
 		DeleteRemote: deleteRemote,
 		KeepReason:   resolveRemoveKeepBranch(cmd, config.NewGitConfigIn(dir)),
+		Base:         baseOverride(cmd),
 	}
+}
+
+// baseOverride is --base, "" when not passed.
+func baseOverride(cmd *cobra.Command) string {
+	b, _ := cmd.Flags().GetString("base")
+	return b
+}
+
+// checkBaseOverride fails when --base names no local branch: a typo must
+// not quietly turn every candidate into "not merged".
+func checkBaseOverride(g git.GitInterface, dir, base string) {
+	if base != "" && !localBranchExists(g, dir, base) {
+		output.Fatal("--base: no local branch '%s'", base)
+	}
+}
+
+// targetFor resolves the compare target of the hub entry branch, as an
+// unregistered worktree adopted in memory is shown to the pipeline too.
+func targetFor(g git.GitInterface, hub *hop.Hub, dir, branch, override string) compareTarget {
+	return resolveMergeTarget(g, dir, hub.Config, hub.Config.Branches[branch], override)
 }
 
 // resolveWorktreeBranch is the branch checked out in the worktree at

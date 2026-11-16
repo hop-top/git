@@ -40,7 +40,7 @@ cp stdout $WORK/worktrees.before
 
 # --- merged, clean branch: gate passes, removal previewed ---
 exec git-hop remove feat/done --dry-run --no-prompt
-stdout '\[dry-run\] Safety check for ''feat/done'': merged, not pushed, clean'
+stdout '\[dry-run\] Safety check for ''feat/done'': merged into ''main'' \(default\), not pushed, clean'
 stdout '\[dry-run\] Would run hook pre-worktree-remove'
 stdout '\[dry-run\] Would remove worktree at .*hops/feat/done'
 stdout '\[dry-run\] Would delete local branch ''feat/done'''
@@ -60,8 +60,8 @@ stdout '\[dry-run\] Would delete branch ''feat/done'' on origin, if it exists'
 
 # --- unmerged, unpushed branch: the gate verdict is a refusal ---
 ! exec git-hop remove feat/wip --dry-run --no-prompt
-stdout '\[dry-run\] Safety check for ''feat/wip'': not merged, not pushed, clean'
-stderr '\[dry-run\] would refuse to remove ''feat/wip'': branch is not merged into default and not pushed to origin'
+stdout '\[dry-run\] Safety check for ''feat/wip'': not merged into ''main'' \(default\), not pushed, clean'
+stderr '\[dry-run\] would refuse to remove ''feat/wip'': branch is not merged into ''main'' \(default\) and not pushed to origin'
 ! stdout 'Would remove worktree'
 exists $WORK/hub/hops/feat/wip
 

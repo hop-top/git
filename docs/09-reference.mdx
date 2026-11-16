@@ -235,10 +235,11 @@ git hop remove --merged [flags]
 **Flags:**
 | Flag | Description |
 |------|-------------|
-| `--force` | Global flag; allows removing a branch not merged into the default branch. Never covers a dirty worktree |
+| `--force` | Global flag; allows removing a branch not merged into its base (default branch when it records none). Never covers a dirty worktree |
 | `--no-verify` | Allow removal despite uncommitted or untracked files or unpushed commits. Never covers an unmerged branch |
 | `--no-prompt` | Skip the confirmation prompt only; never bypasses the safety gate |
-| `--merged` | Remove every worktree whose branch is merged into the default branch (skips the default branch and the active worktree) |
+| `--merged` | Remove every worktree whose branch is merged into the branch it was made from (its recorded base; see `--base`), skipping the default branch and the active worktree |
+| `--base <branch>` | Check every candidate's merge against `<branch>`, in place of each worktree's own base. A local branch; a usage error with a hub target |
 | `--delete-remote` | Also delete the branch on `origin`; without it removal stays local |
 
 With `hop.gitflow.enabled`, a branch `git flow finish` handles needs
@@ -517,6 +518,9 @@ gate, failure) the records still print and the exit status is 1.
 | `branch_deleted` | bool | `true` when the local branch was deleted (or, under `--dry-run`, would be); `false` when it stayed (see `branch_kept_reason`), or for a hub's worktrees (the hub goes with its repository) |
 | `branch_kept_reason` | string | *json/yaml only*; why the local branch stayed when its worktree was removed: `kept by --keep-branch` / `kept by hop.remove.keepBranch`, `already absent`, `it is the default branch`, `worktree has no branch checked out`, `could not check whether it exists: <cause>`, or `git branch -D failed: <cause>`; absent when it was deleted |
 | `remote_deleted` | bool | `true` when the branch was deleted on origin (`--delete-remote`); under `--dry-run`, `true` when `--delete-remote` would try (origin is not probed) |
+| `checked_against` | string | *json/yaml only*; `worktree` records: the branch the merged check compared the worktree's branch against; absent when no check ran (worktree missing on disk, or skipped before the check) |
+| `checked_against_source` | string | *json/yaml only*; why `checked_against` was picked: `override` (`--base`), `base` (the worktree's recorded base), `compareBranch` (the hub's `compareBranch` setting) or `default` (the hub's default branch) |
+| `checked_against_note` | string | *json/yaml only*; set when the first choice was passed over: the recorded base (or `compareBranch`) no longer exists locally, so the next one was used |
 | `reason` | string | *json/yaml only*; why the entry was left in place: the safety gate's refusal, a failure, a `--merged` skip (current worktree, missing path), a hopspace still used by another hub; absent when removed |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 | `volumes` | string | *json/yaml only*; `hub` and `hopspace` records: what the removal did (under `--dry-run`, would do) with the volume data in it: `kept` (the default: moved aside to `$GIT_HOP_DATA_HOME/orphaned-volumes/<org>/<repo>/`, or left in place when it cannot be moved or the hopspace stays) or `deleted` (`--delete-volumes`); absent when it holds none |

@@ -26,6 +26,9 @@ type removeRecord struct {
 	BranchKeptReason string `json:"branch_kept_reason,omitempty" yaml:"branch_kept_reason,omitempty" jsonschema:"description=Why the local branch stayed when its worktree was removed: kept by --keep-branch or hop.remove.keepBranch / already absent / the default branch / no branch checked out / the probe or git branch -D failed (git's cause); absent when it was deleted"`
 	RemoteDeleted    bool   `json:"remote_deleted" yaml:"remote_deleted" table:"remote_deleted" jsonschema:"description=True when the branch was deleted on origin (--delete-remote); with --dry-run true when --delete-remote would try (origin is not probed)"`
 	Reason           string `json:"reason,omitempty" yaml:"reason,omitempty" jsonschema:"description=Why the entry was left in place: the safety gate's refusal / a failure / a --merged skip / the hopspace still in use; absent when removed"`
+	CheckedAgainst   string `json:"checked_against,omitempty" yaml:"checked_against,omitempty" jsonschema:"description=Worktree records: the branch the merged check compared the worktree's branch against; absent when no check ran (worktree missing on disk, skipped before the check)"`
+	CheckedSource    string `json:"checked_against_source,omitempty" yaml:"checked_against_source,omitempty" jsonschema:"enum=override,enum=base,enum=compareBranch,enum=default,description=Why checked_against was picked: override (--base); base (the worktree's recorded base); compareBranch (hop.json compareBranch setting); default (the hub's default branch)"`
+	CheckedNote      string `json:"checked_against_note,omitempty" yaml:"checked_against_note,omitempty" jsonschema:"description=Set when the first choice was passed over: the recorded base or compareBranch no longer exists locally, so the next one in the chain was used"`
 	DryRun           bool   `json:"dry_run,omitempty" yaml:"dry_run,omitempty" jsonschema:"description=True under --dry-run: the record is what the run would produce; absent otherwise"`
 	// Volumes and VolumePaths say what a hub or hopspace removal did
 	// with the volume data in it.
@@ -38,6 +41,12 @@ const (
 	removeKindHub      = "hub"
 	removeKindHopspace = "hopspace"
 )
+
+// withTarget records the branch the merged check used on rec.
+func (r removeRecord) withTarget(t compareTarget) removeRecord {
+	r.CheckedAgainst, r.CheckedSource, r.CheckedNote = t.Branch, t.Source, t.Note
+	return r
+}
 
 func init() {
 	declareOutputSchema(removeCmd, &[]removeRecord{})

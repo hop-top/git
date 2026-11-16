@@ -87,7 +87,7 @@ stdout '--no-verify .*does NOT bypass the not-merged check'
 
 # --- the reported case: --no-verify does not unlock an unmerged branch ---
 ! exec git-hop remove feat/pushed --no-verify --no-prompt
-stderr 'not merged into default; pass --force'
+stderr 'not merged into ''main'' \(default\); pass --force'
 exists $WORK/hub/hops/feat/pushed
 exec git-hop remove feat/pushed --force --no-prompt
 ! exists $WORK/hub/hops/feat/pushed
@@ -97,7 +97,7 @@ exec git-hop remove feat/pushed --force --no-prompt
 stderr 'uncommitted changes or untracked files; pass --force --no-verify'
 exists $WORK/hub/hops/feat/wip/scratch.txt
 ! exec git-hop remove feat/wip --no-verify --no-prompt
-stderr 'not merged into default.*; pass --force --no-verify'
+stderr 'not merged into ''main'' \(default\).*; pass --force --no-verify'
 exists $WORK/hub/hops/feat/wip/scratch.txt
 exec git-hop remove feat/wip --force --no-verify --no-prompt
 ! exists $WORK/hub/hops/feat/wip

@@ -206,13 +206,8 @@ func hubBranchStatusRecord(fs afero.Fs, g git.GitInterface, hub *hop.Hub, name s
 // hub has no usable comparison target — callers receive "default" from
 // getBranchSyncStatus in that case (see its first branch).
 func resolveCompareBranch(cfg *config.HubConfig, b config.HubBranch) string {
-	if b.Base != nil && *b.Base != "" {
-		return *b.Base
-	}
-	if cfg.Settings.CompareBranch != nil && *cfg.Settings.CompareBranch != "" {
-		return *cfg.Settings.CompareBranch
-	}
-	return cfg.Repo.DefaultBranch
+	name, _ := resolveCompareSource(cfg, b)
+	return name
 }
 
 // getBranchSyncStatus reports a worktree's branch position relative to
