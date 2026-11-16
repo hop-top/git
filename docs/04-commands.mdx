@@ -1809,6 +1809,36 @@ move '<branch>'`): `git worktree move` would put the worktree inside the
 directory. An empty directory is taken; the worktree lands at the path
 itself.
 
+### Flags
+
+| Flag | Description |
+|------|-------------|
+| `--default-branch` | Rename the hub's default branch, which move refuses without it. Local only: `origin`, remote-tracking refs and upstream settings are left alone |
+
+### Renaming the default branch
+
+```bash
+git hop move --default-branch main next
+```
+
+Besides what any move does (the branch, its worktree directory, the
+`hop.json` and hopspace entries, the state record, and `current` when it
+points at the worktree), the rename records `next` as `repo.defaultBranch`
+in `hop.json` and in the hopspace and state, and as the base of every
+worktree whose recorded `base` was `main`, of `settings.compareBranch`
+when that was `main`, and, with git-flow enabled, of each
+`gitflow.branch.<name>.base` that was `main`. The flag is refused for
+any branch but the default one; the worktree of a repository's own main
+working tree (not a linked worktree) is refused, as git cannot move it.
+`-n` previews all of it. Uncommitted work moves with the worktree.
+
+The rename never contacts the remote, and its output lists what is left
+to do there: push the new branch, make it the origin repository's default
+branch, delete the old one, and refresh `origin/HEAD`
+(`git remote set-head origin --auto`). Until then a worktree's upstream
+may still name `origin/main`. Values you set yourself, such as a literal
+`hop.add.defaultStartPoint` naming the old branch, are not rewritten.
+
 ## git hop merge
 
 Merge a worktree's branch into a receiving branch, then remove the source

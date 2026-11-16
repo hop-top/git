@@ -52,3 +52,33 @@ func rekeyGitflowBranchConfig(g git.GitInterface, dir, oldBranch, newBranch stri
 	}
 	return true, nil
 }
+
+// gitflowBaseKeys are the gitflow.branch.<name>.base keys recording
+// base as their value.
+func gitflowBaseKeys(g git.GitInterface, dir, base string) []string {
+	out, err := g.RunInDir(dir, "git", "config", "--get-regexp", `^gitflow\.branch\..*\.base$`)
+	if err != nil {
+		return nil
+	}
+	var keys []string
+	for _, line := range strings.Split(strings.TrimSpace(out), "\n") {
+		key, value, ok := strings.Cut(line, " ")
+		if ok && value == base {
+			keys = append(keys, key)
+		}
+	}
+	return keys
+}
+
+// rebaseGitflowBranchConfig points every gitflow.branch.<name>.base that
+// records oldBase at newBase, as renaming the default branch has to: git
+// flow finish merges into the recorded base. It reports how many it set.
+func rebaseGitflowBranchConfig(g git.GitInterface, dir, oldBase, newBase string) (int, error) {
+	keys := gitflowBaseKeys(g, dir, oldBase)
+	for i, key := range keys {
+		if _, err := g.RunInDir(dir, "git", "config", key, newBase); err != nil {
+			return i, err
+		}
+	}
+	return len(keys), nil
+}

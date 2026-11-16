@@ -34,7 +34,15 @@ With one argument, renames the current worktree's branch.
 
 Like add, move refuses a destination a file or a non-empty directory
 occupies, with exit status 1: 'git worktree move' would put the
-worktree inside the directory. An empty directory is taken.`,
+worktree inside the directory. An empty directory is taken.
+
+The default branch is renamed only with --default-branch: the branch,
+its worktree, repo.defaultBranch in hop.json and the hopspace, the state
+record, the 'current' link when it points there, and the recorded bases
+(hop.json base, settings.compareBranch, git-flow's) that named it all
+take the new name. It is a local rename: origin, remote-tracking refs
+and upstream settings are left alone, and the output lists what is left
+to do on the remote.`,
 	Args: cobra.RangeArgs(1, 2),
 	Run: func(cmd *cobra.Command, args []string) {
 		fs := afero.NewOsFs()
@@ -79,9 +87,11 @@ worktree inside the directory. An empty directory is taken.`,
 			newBranch = args[1]
 		}
 
-		// Guard: default branch
-		if oldBranch == hub.Config.Repo.DefaultBranch {
-			output.Fatal("Cannot move the default branch '%s'.", oldBranch)
+		// Guard: default branch; --default-branch is the opt-in
+		opts := hop.MoveOptions{}
+		opts.DefaultBranch, _ = cmd.Flags().GetBool("default-branch")
+		if oldBranch == hub.Config.Repo.DefaultBranch && !opts.DefaultBranch {
+			output.Fatal("Cannot move the default branch '%s'.\nhint: --default-branch renames it, and records the new name as the hub's default", oldBranch)
 		}
 
 		// Resolve old path
@@ -115,6 +125,7 @@ worktree inside the directory. An empty directory is taken.`,
 			newBranch: newBranch,
 			oldPath:   oldPath,
 			newPath:   newPath,
+			opts:      opts,
 		}
 
 		// Everything below writes or runs hooks; the preview stops here.
@@ -142,7 +153,7 @@ worktree inside the directory. An empty directory is taken.`,
 
 		// Execute move
 		wm := hop.NewWorktreeManager(fs, g)
-		actualOldPath, actualNewPath, err := wm.MoveWorktree(hopspace, hub, oldBranch, newBranch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo)
+		actualOldPath, actualNewPath, err := wm.MoveWorktreeWith(hopspace, hub, oldBranch, newBranch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, opts)
 		if err != nil {
 			output.Fatal("Failed to move worktree: %v", err)
 		}
@@ -153,13 +164,19 @@ worktree inside the directory. An empty directory is taken.`,
 			if _, err := rekeyGitflowBranchConfig(g, hubPath, oldBranch, newBranch); err != nil {
 				output.Warn("Failed to move git-flow config: %v", err)
 			}
+			if opts.DefaultBranch {
+				if _, err := rebaseGitflowBranchConfig(g, hubPath, oldBranch, newBranch); err != nil {
+					output.Warn("Failed to update git-flow bases: %v", err)
+				}
+			}
 		}
 
 		res := moveResult{
-			OldBranch: oldBranch,
-			NewBranch: newBranch,
-			OldPath:   actualOldPath,
-			NewPath:   actualNewPath,
+			OldBranch:     oldBranch,
+			NewBranch:     newBranch,
+			OldPath:       actualOldPath,
+			NewPath:       actualNewPath,
+			DefaultBranch: opts.DefaultBranch,
 		}
 
 		// Update current symlink if it pointed to old path
@@ -179,6 +196,9 @@ worktree inside the directory. An empty directory is taken.`,
 		if err := state.Update(fs, func(st *state.State) error {
 			if st.Repositories[repoID] == nil {
 				return fmt.Errorf("repository not found: %s", repoID)
+			}
+			if opts.DefaultBranch {
+				st.Repositories[repoID].DefaultBranch = newBranch
 			}
 			_ = st.RemoveWorktreeAt(repoID, actualOldPath)
 			return st.PutWorktree(repoID, &state.WorktreeState{
@@ -222,6 +242,9 @@ worktree inside the directory. An empty directory is taken.`,
 
 		output.Info("Moved '%s' -> '%s'", oldBranch, newBranch)
 		output.Info("Worktree: %s", actualNewPath)
+		if opts.DefaultBranch {
+			printDefaultBranchRemoteHint(oldBranch, newBranch)
+		}
 		emitMoveResult(cmd, res)
 	},
 }
@@ -232,12 +255,13 @@ type movePlan struct {
 	hubPath, repoID      string
 	oldBranch, newBranch string
 	oldPath, newPath     string
+	opts                 hop.MoveOptions
 }
 
 // prepare settles every refusal the move can check before its first side
 // effect, and returns the hopspace the move will update.
 func (p movePlan) prepare(fs afero.Fs, g git.GitInterface) (*hop.Hopspace, error) {
-	if err := hop.CheckMove(fs, p.hub, g, p.oldBranch, p.newBranch, p.newPath); err != nil {
+	if err := hop.CheckMoveWith(fs, p.hub, g, p.oldBranch, p.newBranch, p.newPath, p.opts); err != nil {
 		return nil, err
 	}
 	hopspacePath := hop.ResolveHopspacePath(p.hubPath, p.hub.Config.Repo)
@@ -269,6 +293,18 @@ func (p movePlan) hookEnv(fs afero.Fs, g git.GitInterface) (map[string]string, e
 }
 
 func init() {
+	moveCmd.Flags().Bool("default-branch", false, "Rename the default branch (refused without it); local only, origin is left alone")
 	cli.RootCmd.AddCommand(moveCmd)
 	moveCmd.ValidArgsFunction = completeBranchNames
+}
+
+// printDefaultBranchRemoteHint says what renaming the default branch
+// locally leaves to do on the remote. The rename never contacts it.
+func printDefaultBranchRemoteHint(oldBranch, newBranch string) {
+	output.Hint("the rename is local; origin still has '%s'. To follow it on the remote:\n"+
+		"  git push -u origin %s\n"+
+		"  set '%s' as the default branch of the origin repository\n"+
+		"  git push origin --delete %s\n"+
+		"  git remote set-head origin --auto",
+		oldBranch, newBranch, newBranch, oldBranch)
 }

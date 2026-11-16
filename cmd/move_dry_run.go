@@ -3,6 +3,7 @@ package cmd
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/afero"
 
@@ -40,6 +41,16 @@ func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) moveResult {
 	}
 	output.Info("[dry-run] Would move worktree %s -> %s", p.oldPath, p.newPath)
 	output.Info("[dry-run] Would rekey '%s' to '%s' in hop.json, hopspace, state, ports and volumes", p.oldBranch, p.newBranch)
+	if p.opts.DefaultBranch {
+		output.Info("[dry-run] Would record '%s' as the default branch in hop.json, hopspace and state, and as the base recorded for worktrees based on '%s'",
+			p.newBranch, p.oldBranch)
+		if gitflowEnabled(p.hubPath) {
+			if keys := gitflowBaseKeys(g, p.hubPath, p.oldBranch); len(keys) > 0 {
+				output.Info("[dry-run] Would set git config %s to '%s'", strings.Join(keys, ", "), p.newBranch)
+			}
+		}
+		printDefaultBranchRemoteHint(p.oldBranch, p.newBranch)
+	}
 	if gitflowEnabled(p.hubPath) && hasGitflowBranchConfig(g, p.hubPath, p.oldBranch) {
 		output.Info("[dry-run] Would move git config %s.* to %s.*",
 			gitflowBranchSection(p.oldBranch), gitflowBranchSection(p.newBranch))
@@ -51,6 +62,8 @@ func previewMove(fs afero.Fs, g git.GitInterface, p movePlan) moveResult {
 		OldPath:   p.oldPath,
 		NewPath:   p.newPath,
 		DryRun:    true,
+
+		DefaultBranch: p.opts.DefaultBranch,
 	}
 	if target, err := hop.GetCurrentSymlink(fs, p.hubPath); err == nil {
 		absTarget, _ := filepath.Abs(filepath.Join(p.hubPath, target))

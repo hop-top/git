@@ -548,6 +548,7 @@ One object.
 | `old_path` | string | Absolute worktree path before the move |
 | `new_path` | string | Absolute worktree path after the move |
 | `current_updated` | bool | `true` when the hub's `current` symlink pointed at the worktree and now follows it (or, under `--dry-run`, would) |
+| `default_branch` | bool | *json/yaml only*; `true` when the move renamed the hub's default branch (`--default-branch`), absent otherwise |
 | `dry_run` | bool | *json/yaml only*; `true` under `--dry-run`, absent otherwise |
 
 ```json
