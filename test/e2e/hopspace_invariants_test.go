@@ -58,6 +58,15 @@ func AssertHopspaceShape(t *testing.T, hubPath, defaultBranch string) {
 		if allowed[e.Name()] {
 			continue
 		}
+		// Empty legacy "branches" dir: git itself creates it from its
+		// template dir in some builds (e.g. Debian git 2.47, for both
+		// `git init --bare` and `git clone --bare`); other builds omit it.
+		// git-hop never creates it, so only an empty one is tolerated.
+		if e.Name() == "branches" && e.IsDir() {
+			if sub, err := os.ReadDir(filepath.Join(hubPath, e.Name())); err == nil && len(sub) == 0 {
+				continue
+			}
+		}
 		t.Errorf("hub root must contain only git internals + hops/hop.json/current; "+
 			"found leaked entry: %s", e.Name())
 	}
