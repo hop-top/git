@@ -308,14 +308,50 @@ func resolveConfirmation(confirmed bool, err error) bool {
 
 // updateCurrentToDefault updates the "current" symlink to point to the defaultBranch worktree.
 // Called after removing a branch so the symlink stays valid.
+//
+// A default branch with no worktree (it exists only as origin/<default>,
+// say) gives the link nowhere to go. The link is then dropped when it
+// dangles, the removed worktree being what it pointed at: a missing link
+// is valid, a dangling one breaks every consumer that follows it.
 func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string) error {
 	defaultBranch := hub.Config.Repo.DefaultBranch
 	branchCfg, ok := hub.Config.Branches[defaultBranch]
 	if !ok {
+		if currentDangles(fs, hubPath) {
+			if err := hop.RemoveCurrentSymlink(fs, hubPath); err != nil {
+				return err
+			}
+			output.Info("Removed 'current': it pointed at the removed worktree and default branch %q has no worktree", defaultBranch)
+			return nil
+		}
 		return fmt.Errorf("default branch %q not found in hub", defaultBranch)
 	}
 	defaultPath := config.ResolveWorktreePath(branchCfg.Path, hubPath)
 	return hop.UpdateCurrentSymlink(fs, hubPath, defaultPath)
+}
+
+// currentTarget is the absolute path the hub's "current" symlink names,
+// and whether there is one.
+func currentTarget(fs afero.Fs, hubPath string) (string, bool) {
+	target, err := hop.GetCurrentSymlink(fs, hubPath)
+	if err != nil {
+		return "", false
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(hubPath, target)
+	}
+	return target, true
+}
+
+// currentDangles reports whether the hub has a "current" symlink whose
+// target is gone.
+func currentDangles(fs afero.Fs, hubPath string) bool {
+	target, ok := currentTarget(fs, hubPath)
+	if !ok {
+		return false
+	}
+	_, err := fs.Stat(target)
+	return os.IsNotExist(err)
 }
 
 // removeBranchWorktree executes the actual removal pipeline for a single

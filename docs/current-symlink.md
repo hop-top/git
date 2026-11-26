@@ -25,6 +25,11 @@ The `current` symlink updates automatically whenever you run:
 - `git hop clone <uri>` - Clone repository
 - `git hop init` - Initialize repository
 
+`git hop remove` points `current` at the default branch's worktree. When
+the default branch has no worktree (it exists only as `origin/<default>`),
+`remove` drops a `current` that pointed at the removed worktree rather than
+leave it dangling, and leaves any other `current` as it is.
+
 ### A file or directory named `current`
 
 git-hop only ever replaces a symlink. When the hub holds a regular file
