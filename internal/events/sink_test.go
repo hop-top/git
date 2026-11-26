@@ -76,16 +76,15 @@ func TestFileSink_AppendsToExistingFile(t *testing.T) {
 }
 
 func TestFileSink_UnwritablePathReturnsError(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission bits")
-	}
-	dir := t.TempDir()
-	if err := os.Chmod(dir, 0o500); err != nil {
+	// A parent that is a regular file makes MkdirAll fail with ENOTDIR for
+	// every user, root included; a chmod'd directory would still be
+	// writable when running as root.
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
 
-	s := NewFileSink(filepath.Join(dir, "sub", "events.jsonl"), time.Second)
+	s := NewFileSink(filepath.Join(blocker, "sub", "events.jsonl"), time.Second)
 	if err := s.Drain(context.Background(), bus.NewEvent(WorktreeCreated, Source, WorktreeEvent{})); err == nil {
 		t.Fatal("Drain into unwritable dir returned nil error")
 	}
