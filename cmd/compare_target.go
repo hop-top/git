@@ -55,7 +55,9 @@ func resolveCompareSource(cfg *config.HubConfig, b config.HubBranch) (string, st
 // A recorded base or compare branch that no longer exists locally (it was
 // itself merged and removed) is passed over for the next rung, and Note
 // says so. dir is any directory of the repository. The default branch is
-// the last rung and is used as it stands.
+// the last rung and is used as it stands, except that one with no local
+// branch but a remote-tracking ref on origin is named by that ref
+// (origin/next).
 func resolveMergeTarget(g git.GitInterface, dir string, cfg *config.HubConfig, b config.HubBranch, override string) compareTarget {
 	if override != "" {
 		return compareTarget{Branch: override, Source: compareSourceOverride}
@@ -73,6 +75,14 @@ func resolveMergeTarget(g git.GitInterface, dir string, cfg *config.HubConfig, b
 		}
 		t.Note += fmt.Sprintf("compareBranch '%s' does not exist", name)
 		t.Branch, t.Source = cfg.Repo.DefaultBranch, compareSourceDefault
+	}
+	if t.Source == compareSourceDefault && t.Branch != "" && !localBranchExists(g, dir, t.Branch) {
+		// A default branch kept only as a remote-tracking ref (no local
+		// branch, no worktree) is still where merged work lands. Left bare,
+		// the name resolves to nothing and every branch reads as unmerged.
+		if remote := "origin/" + t.Branch; refExists(g, dir, "refs/remotes/"+remote) {
+			t.Branch = remote
+		}
 	}
 	return t
 }
