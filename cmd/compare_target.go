@@ -76,15 +76,25 @@ func resolveMergeTarget(g git.GitInterface, dir string, cfg *config.HubConfig, b
 		t.Note += fmt.Sprintf("compareBranch '%s' does not exist", name)
 		t.Branch, t.Source = cfg.Repo.DefaultBranch, compareSourceDefault
 	}
-	if t.Source == compareSourceDefault && t.Branch != "" && !localBranchExists(g, dir, t.Branch) {
-		// A default branch kept only as a remote-tracking ref (no local
-		// branch, no worktree) is still where merged work lands. Left bare,
-		// the name resolves to nothing and every branch reads as unmerged.
-		if remote := "origin/" + t.Branch; refExists(g, dir, "refs/remotes/"+remote) {
-			t.Branch = remote
-		}
+	if t.Source == compareSourceDefault {
+		t.Branch = remoteOnlyRef(g, dir, t.Branch)
 	}
 	return t
+}
+
+// remoteOnlyRef names a branch with no local branch but a remote-tracking
+// ref on origin by that ref (next -> origin/next). A branch kept only as a
+// remote-tracking ref (no local branch, no worktree) is still where merged
+// work lands; left bare, the name resolves to nothing and every branch
+// reads as unmerged or unknown. Any other name is returned as it stands.
+func remoteOnlyRef(g git.GitInterface, dir, name string) string {
+	if name == "" || localBranchExists(g, dir, name) {
+		return name
+	}
+	if remote := "origin/" + name; refExists(g, dir, "refs/remotes/"+remote) {
+		return remote
+	}
+	return name
 }
 
 // doctorQuoted is doctorLabel with the branch quoted, as doctor's

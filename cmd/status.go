@@ -255,6 +255,9 @@ func getBranchSyncStatus(g git.GitInterface, dir, branch, defaultBranch string) 
 	if defaultBranch == "" || branch == defaultBranch {
 		return "default"
 	}
+	// A compare branch kept only as a remote-tracking ref has no bare name
+	// git can resolve.
+	defaultBranch = remoteOnlyRef(g, dir, defaultBranch)
 
 	// rev-list --left-right --count <branch>...<default>
 	// Output: "<ahead>\t<behind>"
