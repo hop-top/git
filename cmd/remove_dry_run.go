@@ -76,7 +76,7 @@ func previewBranchRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath
 	output.Info("[dry-run] Would remove '%s' from hop.json, hopspace and state", branch)
 	cli.PreviewHook(runner, "post-worktree-remove", worktreePath, repoID)
 	if !cli.PreviewCurrentBlocked(fs, hubPath) {
-		previewCurrentAfterRemoval(fs, hub, hubPath, worktreePath)
+		previewCurrentAfterRemoval(fs, g, hub, hubPath, worktreePath)
 	}
 	rec := removeRecord{
 		Kind:          removeKindWorktree,
@@ -207,15 +207,20 @@ func previewRemoveHub(fs afero.Fs, hubPath string, noPrompt, deleteVolumes bool)
 
 // previewCurrentAfterRemoval says what removing the worktree at
 // worktreePath does to 'current' (see updateCurrentToDefault): points it
-// at the default branch's worktree, or, with none, drops it when it names
-// the worktree being removed.
-func previewCurrentAfterRemoval(fs afero.Fs, hub *hop.Hub, hubPath, worktreePath string) {
+// at the default branch's worktree, or, with none and 'current' naming the
+// worktree being removed, creates the default branch's worktree and
+// points it there, or drops it when there is nothing to create one from.
+func previewCurrentAfterRemoval(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubPath, worktreePath string) {
 	def := hub.Config.Repo.DefaultBranch
 	if _, ok := hub.Config.Branches[def]; ok {
 		output.Info("[dry-run] Would point 'current' at '%s'", def)
 		return
 	}
 	if target, ok := currentTarget(fs, hubPath); ok && state.SamePath(target, worktreePath) {
-		output.Info("[dry-run] Would remove 'current': default branch '%s' has no worktree", def)
+		if defaultBranchHasSource(g, hubPath, def) {
+			output.Info("[dry-run] Would create worktree for default branch '%s' and point 'current' at it", def)
+			return
+		}
+		output.Info("[dry-run] Would remove 'current': default branch '%s' has no worktree and exists neither locally nor on origin", def)
 	}
 }

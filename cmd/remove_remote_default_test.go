@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -96,8 +97,9 @@ func TestRemoveSafety_RebaseMergedIntoOriginOnlyDefault(t *testing.T) {
 	assert.Error(t, removeGate(s, false, false))
 }
 
-// With no worktree for the default branch, the removal of the worktree
-// "current" names must not leave "current" dangling.
+// With no worktree for the default branch that can be created, the
+// removal of the worktree "current" names must not leave "current"
+// dangling.
 func TestUpdateCurrentToDefault_NoDefaultWorktreeDropsDanglingCurrent(t *testing.T) {
 	fs := afero.NewOsFs()
 	hubPath := t.TempDir()
@@ -116,7 +118,9 @@ func TestUpdateCurrentToDefault_NoDefaultWorktreeDropsDanglingCurrent(t *testing
 	require.NoError(t, os.RemoveAll(featPath))
 	require.NoError(t, hub.RemoveBranch("feat"))
 
-	require.NoError(t, updateCurrentToDefault(fs, hub, hubPath))
+	require.NoError(t, updateCurrentToDefault(fs, hub, hubPath, func(*hop.Hub, string) error {
+		return errors.New("no such branch")
+	}))
 
 	_, err = os.Lstat(filepath.Join(hubPath, "current"))
 	assert.True(t, os.IsNotExist(err), "current must not be left dangling, got err=%v", err)
@@ -135,7 +139,7 @@ func TestUpdateCurrentToDefault_NoDefaultWorktreeKeepsLiveCurrent(t *testing.T) 
 	require.NoError(t, hub.AddBranch("main", "main", mainPath))
 	require.NoError(t, hop.UpdateCurrentSymlink(fs, hubPath, mainPath))
 
-	assert.Error(t, updateCurrentToDefault(fs, hub, hubPath))
+	assert.Error(t, updateCurrentToDefault(fs, hub, hubPath, nil))
 	target, err := os.Readlink(filepath.Join(hubPath, "current"))
 	require.NoError(t, err)
 	assert.Equal(t, "hops/main", target)

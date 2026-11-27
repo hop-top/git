@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
+	"hop.top/git/internal/docker"
 	"hop.top/git/internal/events"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
@@ -309,25 +310,48 @@ func resolveConfirmation(confirmed bool, err error) bool {
 // updateCurrentToDefault updates the "current" symlink to point to the defaultBranch worktree.
 // Called after removing a branch so the symlink stays valid.
 //
-// A default branch with no worktree (it exists only as origin/<default>,
-// say) gives the link nowhere to go. The link is then dropped when it
-// dangles, the removed worktree being what it pointed at: a missing link
-// is valid, a dangling one breaks every consumer that follows it.
-func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string) error {
+// A default branch with no worktree gives the link nowhere to go. When
+// the link dangles, the removed worktree being what it pointed at, create
+// is called to make the default branch's worktree (as 'git hop add' would)
+// and the link moves to it. If that fails, or create is nil, the link is
+// dropped with a warning naming the reason: a missing link is valid, a
+// dangling one breaks every consumer that follows it. A link that still
+// resolves is left alone.
+func updateCurrentToDefault(fs afero.Fs, hub *hop.Hub, hubPath string, create defaultWorktreeCreator) error {
 	defaultBranch := hub.Config.Repo.DefaultBranch
 	branchCfg, ok := hub.Config.Branches[defaultBranch]
 	if !ok {
 		if currentDangles(fs, hubPath) {
-			if err := hop.RemoveCurrentSymlink(fs, hubPath); err != nil {
-				return err
-			}
-			output.Info("Removed 'current': it pointed at the removed worktree and default branch %q has no worktree", defaultBranch)
-			return nil
+			return createDefaultOrDropCurrent(fs, hub, hubPath, create)
 		}
 		return fmt.Errorf("default branch %q not found in hub", defaultBranch)
 	}
 	defaultPath := config.ResolveWorktreePath(branchCfg.Path, hubPath)
 	return hop.UpdateCurrentSymlink(fs, hubPath, defaultPath)
+}
+
+// createDefaultOrDropCurrent makes the default branch's worktree and
+// points "current" at it; when it cannot, it says why and drops "current".
+func createDefaultOrDropCurrent(fs afero.Fs, hub *hop.Hub, hubPath string, create defaultWorktreeCreator) error {
+	defaultBranch := hub.Config.Repo.DefaultBranch
+	err := errors.New("no way to create it")
+	if create != nil {
+		if err = create(hub, hubPath); err == nil {
+			branchCfg, ok := hub.Config.Branches[defaultBranch]
+			if ok {
+				defaultPath := config.ResolveWorktreePath(branchCfg.Path, hubPath)
+				output.Info("Created worktree for default branch %q at %s and pointed 'current' at it", defaultBranch, defaultPath)
+				return hop.UpdateCurrentSymlink(fs, hubPath, defaultPath)
+			}
+			err = errors.New("it was not recorded in the hub")
+		}
+	}
+	output.Warn("Could not create a worktree for default branch %q: %v", defaultBranch, err)
+	if err := hop.RemoveCurrentSymlink(fs, hubPath); err != nil {
+		return err
+	}
+	output.Info("Removed 'current': it pointed at the removed worktree and default branch %q has no worktree", defaultBranch)
+	return nil
 }
 
 // currentTarget is the absolute path the hub's "current" symlink names,
@@ -510,7 +534,7 @@ func removeBranchWorktreeOpts(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hub
 	}
 
 	// Update current symlink to point back to defaultBranch worktree
-	if err := updateCurrentToDefault(fs, hub, hubPath); err != nil {
+	if err := updateCurrentToDefault(fs, hub, hubPath, newDefaultWorktreeCreator(fs, g)); err != nil {
 		output.Warn("Failed to update current symlink: %v", err)
 	}
 
@@ -821,4 +845,63 @@ func init() {
 	removeCmd.Flags().Bool("delete-remote", false, "Also delete the branch on origin; without it removal stays local and never contacts the network")
 	removeCmd.Flags().Bool("delete-volumes", false, "Removing a hub, also delete its volume data; without it the data is kept, moved aside under the data home")
 	removeCmd.ValidArgsFunction = completeBranchNames
+}
+
+// defaultWorktreeCreator creates the default branch's worktree in the
+// hub, registering it as 'git hop add' does. Injected so tests can stand
+// in for it.
+type defaultWorktreeCreator func(hub *hop.Hub, hubPath string) error
+
+// defaultBranchHasSource reports whether the default branch exists to
+// make a worktree from: locally, or as origin/<default>. No fetch.
+func defaultBranchHasSource(g git.GitInterface, hubPath, defaultBranch string) bool {
+	return defaultBranch != "" && (localBranchExists(g, hubPath, defaultBranch) ||
+		refExists(g, hubPath, "refs/remotes/origin/"+defaultBranch))
+}
+
+// newDefaultWorktreeCreator is the real creator: createHopWorktree, the
+// code 'git hop add <default>' runs from the hub root, with the settings
+// add resolves when no flag is given. The branch comes from the local
+// default branch, else origin/<default>; nothing is fetched. A default
+// branch found in neither is refused here, since add's own fallback would
+// start a new branch from HEAD.
+func newDefaultWorktreeCreator(fs afero.Fs, g git.GitInterface) defaultWorktreeCreator {
+	return func(hub *hop.Hub, hubPath string) error {
+		def := hub.Config.Repo.DefaultBranch
+		if !defaultBranchHasSource(g, hubPath, def) {
+			return fmt.Errorf("branch %q exists neither locally nor on origin", def)
+		}
+		hopspacePath := hop.ResolveHopspacePath(hubPath, hub.Config.Repo)
+		hopspace, err := hop.LoadHopspace(fs, hopspacePath)
+		if err != nil {
+			return fmt.Errorf("cannot load the hopspace at %s: %v", hopspacePath, err)
+		}
+		globalConfig := config.NewGlobalLoader().Load()
+		start, err := resolveAddStartPoint(g, hubPath, hubPath, hop.StartPointDefaultBranch,
+			"removing the worktree 'current' named", def)
+		if err != nil {
+			return err
+		}
+		_, err = createHopWorktree(context.Background(), addCreateParams{
+			FS:            fs,
+			Git:           g,
+			Docker:        docker.New(),
+			Hub:           hub,
+			HubPath:       hubPath,
+			Hopspace:      hopspace,
+			HopspacePath:  hopspacePath,
+			HookRunner:    hooks.NewRunner(fs).ForRepo(hub.Config.Repo.URI, hubPath),
+			WM:            hop.NewWorktreeManager(fs, g),
+			GlobalConfig:  globalConfig,
+			RepoID:        repoid.For(hubPath, hub.Config.Repo),
+			Branch:        def,
+			WorktreePath:  expandAddWorktreePath(hub, hubPath, def, globalConfig),
+			StartPoint:    start.Spec,
+			Start:         start,
+			DefaultBranch: def,
+			MiseMode:      miseTrustMode(config.NewGitConfig(), nil),
+			EnvStart:      cli.DecideAutoEnvStart(nil, globalConfig),
+		})
+		return err
+	}
 }

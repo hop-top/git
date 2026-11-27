@@ -3,7 +3,6 @@ package cmd
 import (
 	"context"
 	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -171,17 +170,7 @@ will skip, each with its reason (built-in default, hop.add.copyIgnoredExclude,
 		branch, taskID := mustResolveAddTarget(args)
 
 		// Calculate worktree path (needed for pre-worktree-add hook)
-		dataHome := hop.GetGitHopDataHome()
-		ctx := hop.WorktreeLocationContext{
-			HubPath:  hubPath,
-			Branch:   branch,
-			Org:      hub.Config.Repo.Org,
-			Repo:     hub.Config.Repo.Repo,
-			DataHome: dataHome,
-			URI:      hub.Config.Repo.URI,
-		}
-		worktreePath := hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx)
-		worktreePath = filepath.Clean(worktreePath)
+		worktreePath := expandAddWorktreePath(hub, hubPath, branch, globalConfig)
 
 		repoID := repoid.For(hubPath, hub.Config.Repo)
 
