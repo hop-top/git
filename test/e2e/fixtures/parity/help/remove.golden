@@ -7,6 +7,10 @@ recorded base, else settings.compareBranch, else the default branch, the
 same one status shows; a base that no longer exists falls to the next
 choice, and the output says so. --base <branch> checks every candidate
 against <branch> instead. The current directory never picks it.
+On the default branch either ref counts: with no local branch it is checked
+as origin/<default>; a local one behind origin/<default> is checked against
+both, and merged into either is merged. A base, compareBranch and --base are
+checked as given. remove never fetches.
 
 Anything else needs explicit flags:
 
