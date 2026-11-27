@@ -49,7 +49,7 @@ git hop remove <branch>               # delete worktree + env (aliases: rm, dele
 git hop remove <branch> --no-prompt   # skip confirmation prompt only — does NOT bypass safety gate
 git hop remove <branch> --force       # allow unmerged branch removal (real guardrail bypass; not for dirty worktrees)
 git hop remove <branch> --no-verify   # allow dirty worktree / unpushed commits, merged or not (real guardrail bypass)
-git hop remove --merged               # remove every branch merged into default (skips default + current)
+git hop remove --merged               # remove every branch merged into its base (skips default + current)
 git hop remove --merged --no-prompt   # same, scripted
 git hop list                          # show all worktrees (aliases: ls, all)
 git hop list --json                   # machine-readable
@@ -153,10 +153,10 @@ Available hooks:
 | Orphaned worktrees in state | `git hop prune` |
 | Stale state after manual branch delete | `git hop doctor --fix` |
 | Services still up after worktree remove | `git hop env stop` first |
-| `remove` blocked: "not merged into default" | `--force` (only if you really want to lose those commits) |
+| `remove` blocked: `not merged into '<branch>' (<source>)` | `--force` (only if you really want to lose those commits). Merged on the remote since your last fetch? `git fetch` first: merged into `origin/<default>` counts |
 | `remove` blocked: "uncommitted changes or untracked files" | `--no-verify` |
-| `remove` blocked: "not merged and not pushed" | `--force --no-verify` |
-| `remove` blocked: "not merged into default, and worktree has uncommitted changes" | `--force --no-verify` (`--force` alone never discards uncommitted files) |
+| `remove` blocked: `not merged into '<branch>' (<source>) and not pushed to origin` | `--force --no-verify` |
+| `remove` blocked: `not merged into '<branch>' (<source>), and worktree has uncommitted changes` | `--force --no-verify` (`--force` alone never discards uncommitted files) |
 | `remove --no-prompt` exited 1 on a risky branch | Add `--force` / `--no-verify`; `--no-prompt` is **not** a gate bypass |
 | `env gc` exited 129: "cannot prompt for confirmation" | Same cause — add `--no-prompt`. |
 | `remove` exited 129: "cannot prompt for confirmation" | Prompt could not read stdin (script / non-TTY) — add `--no-prompt` |

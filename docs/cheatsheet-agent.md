@@ -306,11 +306,11 @@ cd <path from list>
 |-----------|----------|
 | `remove` fails: worktree still in state | `git hop doctor --fix` |
 | Orphaned dirs in state after manual delete | `git hop prune` |
-| `remove` blocked: "not merged into default" | add `--force --no-prompt` (loses unmerged commits) |
+| `remove` blocked: `not merged into '<branch>' (<source>)` | add `--force --no-prompt` (loses unmerged commits). `<source>`: `base`, `compareBranch`, `default` or `override`; local default behind origin: `git fetch` first, a branch merged into `origin/<default>` passes |
 | `remove` blocked: "uncommitted changes or untracked files" | add `--no-verify --no-prompt` |
-| `remove` blocked: "not merged and not pushed" | add `--force --no-verify --no-prompt` |
-| `remove` blocked: "not merged into default" (with `--no-verify` set) | `--no-verify` does not cover unmerged; add `--force` |
-| `remove` blocked: "not merged into default, and worktree has uncommitted changes" | add `--force --no-verify --no-prompt` (loses unmerged commits AND uncommitted files); `--force` alone never discards dirty files |
+| `remove` blocked: `not merged into '<branch>' (<source>) and not pushed to origin` | add `--force --no-verify --no-prompt` |
+| `remove` blocked: `not merged into '<branch>' (<source>)` (with `--no-verify` set) | `--no-verify` does not cover unmerged; add `--force` |
+| `remove` blocked: `not merged into '<branch>' (<source>), and worktree has uncommitted changes` | add `--force --no-verify --no-prompt` (loses unmerged commits AND uncommitted files); `--force` alone never discards dirty files |
 | `remove` blocked: "git flow finish runs in it" (`hop.gitflow.enabled`) | commit or stash; no flag covers it. Unfinished removal: `git -c hop.gitflow.enabled=false hop remove <b> --force --no-verify` |
 | `remove --no-prompt` exited 1 | `--no-prompt` is NOT a gate bypass — combine with `--force` / `--no-verify` |
 | `remove` exited 129: "cannot prompt for confirmation" | prompt hit a non-interactive stdin — add `--no-prompt` |
