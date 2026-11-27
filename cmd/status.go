@@ -291,7 +291,13 @@ func getBranchSyncStatus(g git.GitInterface, dir, branch, defaultBranch string) 
 		// to consult here precisely because ahead > 0 — the unborn/reset branches
 		// that make the ahead==0 case ambiguous (see above) all have zero
 		// commits of their own and never reach this branch.
-		if branchWorkLandedIn(g, dir, branch, defaultBranch) {
+		// A local default behind origin's does not hold work merged there
+		// since: either ref having it counts (see resolveMergeTargetFor).
+		landed := branchWorkLandedIn(g, dir, branch, defaultBranch)
+		if origin := originOfLocal(g, dir, defaultBranch); !landed && origin != "" {
+			landed = branchWorkLandedIn(g, dir, branch, origin)
+		}
+		if landed {
 			if behind == "0" {
 				label = "merged"
 			} else {

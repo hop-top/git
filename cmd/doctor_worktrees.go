@@ -111,7 +111,7 @@ func warnLockedWorktree(r *doctorReport, check, subject, path, reason string) {
 // entry's base, then compareBranch, then the default branch), so every
 // check agrees on which missing worktrees are cleanup.
 func mergedMissingBranch(g git.GitInterface, hub *hop.Hub, entry config.HubBranch, branch string) (compareTarget, bool) {
-	t := resolveMergeTarget(g, hub.Path, hub.Config, entry, "")
+	t := resolveMergeTargetFor(g, hub.Path, hub.Config, entry, "", branch)
 	return t, mergedIntoDefault(g, hub.Path, branch, t.Branch)
 }
 

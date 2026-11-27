@@ -63,23 +63,7 @@ func inspectBranchSafety(g git.GitInterface, dir, branch, defaultBranch string) 
 	s := branchSafety{}
 
 	if defaultBranch != "" && branch != defaultBranch {
-		// Branch is merged into default when it has no commits ahead of
-		// default. Use rev-list --count <branch> --not <default>.
-		out, err := g.RunInDir(dir, "git", "rev-list", "--count", branch, "--not", defaultBranch)
-		if err == nil && strings.TrimSpace(out) == "0" {
-			s.Merged = true
-		}
-
-		// Topology is necessary for a merge-commit merge but not for a
-		// squash- or rebase-merge: those land rewritten commits on
-		// default, so the branch tip is never reachable and the count
-		// above stays > 0 even though the work has shipped. Fall back to
-		// the rewritten-merge probes before declaring the branch
-		// unmerged. Ordered second because they are the more expensive
-		// probes and only the topology answer can be trusted to be cheap.
-		if !s.Merged {
-			s.Merged = branchWorkLandedIn(g, dir, branch, defaultBranch)
-		}
+		s.Merged = branchMergedInto(g, dir, branch, defaultBranch)
 	}
 
 	// Pushed: origin/<branch> exists AND branch has no commits ahead of it.
@@ -96,6 +80,24 @@ func inspectBranchSafety(g git.GitInterface, dir, branch, defaultBranch string) 
 	}
 
 	return s
+}
+
+// branchMergedInto reports whether branch's work is on target: its tip is
+// reachable from it (no commits ahead, rev-list --count <branch> --not
+// <target>), or it landed under rewritten commits (branchWorkLandedIn).
+// The rewritten-merge probes run second: they are the more expensive, and
+// only the topology answer is cheap.
+//
+// Topology is necessary for a merge-commit merge but not for a squash- or
+// rebase-merge: those land rewritten commits on the target, so the branch
+// tip is never reachable and the count stays > 0 even though the work
+// has shipped.
+func branchMergedInto(g git.GitInterface, dir, branch, target string) bool {
+	out, err := g.RunInDir(dir, "git", "rev-list", "--count", branch, "--not", target)
+	if err == nil && strings.TrimSpace(out) == "0" {
+		return true
+	}
+	return branchWorkLandedIn(g, dir, branch, target)
 }
 
 // branchWorkLandedIn reports whether branch's work is on defaultBranch
