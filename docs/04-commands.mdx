@@ -385,8 +385,16 @@ Status values:
 | `behind (N)` | Default has moved on by N commits and the branch has none of its own |
 | `N ahead` | Branch has N commits not yet on default |
 | `diverged (N ahead, M behind)` | Branch and default have both moved |
-| `unknown` | Couldn't compute (e.g. default branch ref missing locally) |
+| `unknown` | Couldn't compute (e.g. the compare branch exists neither locally nor as `origin/<branch>`) |
 | `-` | Worktree directory is not on disk (state `Missing` or `Occupied`) |
+
+"Default" in this table is the branch in the `Base` column. When that
+branch has no local branch, `status` measures against `origin/<branch>`
+if that ref exists; the `Base` column still shows the bare name. When it
+has a local branch that is behind `origin/<branch>` (its worktree was not
+pulled after a PR merged), work that landed in either one counts as
+`merged`; the ahead and behind numbers are still counted against the
+local branch. Refs are read as they are: `status` never fetches.
 
 A `Missing` row means `hop.json` still lists a branch whose worktree
 directory is gone. Run [`git hop prune`](#git-hop-prune) to drop those
@@ -598,13 +606,23 @@ exists locally (it was merged and removed itself) is passed over for the
 next choice, and the output says so. The current directory never picks the
 branch. `--base <branch>` overrides all of it for every candidate.
 
+When the choice falls to the default branch, either of its refs counts.
+A default branch with no local branch is checked as `origin/<default>`.
+One whose local branch is behind `origin/<default>` (its worktree was not
+pulled after the PR merged) is checked against both, and a branch merged
+into either is merged. `remove` reads the refs as they are and never
+fetches, so run `git fetch` first when the merge is newer than your last
+fetch. A recorded base, `settings.compareBranch` and `--base` are always
+checked as given.
+
 The refusal, the human output, `--dry-run` and the structured records name
 the branch checked against and where it came from (`checked_against`,
 `checked_against_source`: `override`, `base`, `compareBranch` or
-`default`):
+`default`). A check satisfied by origin's default names that ref:
 
 ```text
 branch is not merged into 'main' (base), and worktree has uncommitted changes ...
+merged into 'origin/main' (default), not pushed, clean
 ```
 
 | Branch state | Required flags |
@@ -1351,8 +1369,10 @@ into the branch its worktree was made from (its `base`; `compareBranch`,
 then the default branch, without one). Squash- and rebase-merged branches count
 as merged, by the same test `remove` and `status` use: the branch tip is
 reachable from default, its content is already there, or every one of
-its commits has a patch-equivalent commit there. A branch whose ref no
-longer exists cannot be checked and counts as not merged.
+its commits has a patch-equivalent commit there. For the default branch,
+`origin/<default>` counts as well as the local branch, as in `remove`. A
+branch whose ref no longer exists cannot be checked and counts as not
+merged.
 
 - **Merged**: the worktree is not recreated. Doctor drops the branch's
   `hop.json` row and state entry without prompting. The reasoning: the
