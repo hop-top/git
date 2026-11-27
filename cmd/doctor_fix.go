@@ -350,7 +350,7 @@ func stateMergeTarget(fs afero.Fs, g git.GitInterface, gitDir, hubPath, branch, 
 	if !ok {
 		return fallback
 	}
-	return resolveMergeTarget(g, gitDir, hub.Config, entry, "")
+	return resolveMergeTargetFor(g, gitDir, hub.Config, entry, "", branch)
 }
 
 // findGitDirForRepo returns a usable git directory for running git commands

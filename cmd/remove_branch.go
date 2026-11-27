@@ -71,7 +71,8 @@ func checkBaseOverride(g git.GitInterface, dir, base string) {
 // targetFor resolves the compare target of the hub entry branch, as an
 // unregistered worktree adopted in memory is shown to the pipeline too.
 func targetFor(g git.GitInterface, hub *hop.Hub, dir, branch, override string) compareTarget {
-	return resolveMergeTarget(g, dir, hub.Config, hub.Config.Branches[branch], override)
+	return resolveMergeTargetFor(g, dir, hub.Config, hub.Config.Branches[branch], override,
+		resolveWorktreeBranch(g, dir, dir, branch))
 }
 
 // resolveWorktreeBranch is the branch checked out in the worktree at

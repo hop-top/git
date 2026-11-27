@@ -115,3 +115,41 @@ func (t compareTarget) doctorLabel() string {
 	}
 	return fmt.Sprintf("%s (%s)", t.Branch, t.Source)
 }
+
+// resolveMergeTargetFor is resolveMergeTarget for a known branch, which
+// lets the default rung be judged against either of its refs. The local
+// default branch can lag origin's (its worktree never pulled after the PR
+// merged), and a branch merged into origin/<default> is merged: its work
+// lives on a branch that outlasts the worktree. So when branch is not
+// merged into the local default but is into origin/<default>, the target
+// is origin/<default>, which names the ref that satisfied the check. In
+// every other case the target is resolveMergeTarget's. It reads refs as
+// they are and never fetches.
+func resolveMergeTargetFor(g git.GitInterface, dir string, cfg *config.HubConfig, b config.HubBranch, override, branch string) compareTarget {
+	t := resolveMergeTarget(g, dir, cfg, b, override)
+	if t.Source != compareSourceDefault || t.Branch == "" || branch == "" || branch == t.Branch {
+		return t
+	}
+	origin := originOfLocal(g, dir, t.Branch)
+	if origin == "" {
+		return t
+	}
+	if !branchMergedInto(g, dir, branch, t.Branch) && branchMergedInto(g, dir, branch, origin) {
+		t.Branch = origin
+	}
+	return t
+}
+
+// originOfLocal names the remote-tracking ref on origin of a branch that
+// also exists locally (next -> origin/next), or "" when either is missing.
+// It is the other place a local branch's work can live, and the one that
+// runs ahead of it when the local branch was never pulled.
+func originOfLocal(g git.GitInterface, dir, name string) string {
+	if name == "" || !localBranchExists(g, dir, name) {
+		return ""
+	}
+	if remote := "origin/" + name; refExists(g, dir, "refs/remotes/"+remote) {
+		return remote
+	}
+	return ""
+}
