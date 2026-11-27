@@ -11,14 +11,12 @@ import (
 	"github.com/spf13/cobra"
 	"hop.top/git/internal/cli"
 	"hop.top/git/internal/config"
-	"hop.top/git/internal/detector"
 	"hop.top/git/internal/docker"
 	"hop.top/git/internal/git"
 	"hop.top/git/internal/hooks"
 	"hop.top/git/internal/hop"
 	"hop.top/git/internal/output"
 	"hop.top/git/internal/repoid"
-	"hop.top/git/internal/services"
 )
 
 // addFromFlag holds the --from CLI flag value.
@@ -250,35 +248,30 @@ will skip, each with its reason (built-in default, hop.add.copyIgnoredExclude,
 			fetchOrigin(g, hubPath, fetch)
 		}
 
-		// Detect the branch type; its action runs once the worktree exists.
-		gitflow := newGitflowDetector(g, hubPath, detector.WithStartBase(
-			gitflowStartBase(g, hubPath, explicitStartPoint(startPoint), defaultBranch)))
-		detectorMgr := branchDetectors(fs, g, gitflow)
-		branchInfo, err := detectorMgr.DetectBranch(branch, hubPath)
-		if err != nil {
-			output.Fatal("Branch type detector failed: %v", err)
-		}
-
-		// Execute pre-worktree-add hook with detector env vars
-		detectorEnv := detectorMgr.GetDetectorEnvVars(branchInfo)
-		addTaskEnv(detectorEnv, taskID)
-		if _, err := hookRunner.ExecuteHookWithDetector("pre-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
-			output.Fatal("Hook pre-worktree-add failed: %v", err)
-		}
-
-		// Probed before creation: afterwards the branch exists either way.
-		branchExisted := localBranchExists(g, hubPath, branch)
-
-		// A new git-flow branch is created by git flow start, run in its
-		// worktree: git-hop creates that worktree detached and leaves the
-		// branch to git-flow, so it is created once and the hub, a bare
-		// repository git-flow cannot run in, is never its working
-		// directory.
-		gitflowStarts := gitflowStartsNewBranch(g, gitflow, branchInfo, hubPath, branch)
-		wm.Detach = gitflowStarts
-
-		// Create Worktree in the current hub
-		worktreePath, err = wm.CreateWorktreeTransactional(hopspace, hubPath, branch, globalConfig.Defaults.WorktreeLocation, hub.Config.Repo.Org, hub.Config.Repo.Repo, defaultBranch, startPoint)
+		created, err := createHopWorktree(context.Background(), addCreateParams{
+			FS:            fs,
+			Git:           g,
+			Docker:        d,
+			Hub:           hub,
+			HubPath:       hubPath,
+			Hopspace:      hopspace,
+			HopspacePath:  hopspacePath,
+			HookRunner:    hookRunner,
+			WM:            wm,
+			GlobalConfig:  globalConfig,
+			RepoID:        repoID,
+			Branch:        branch,
+			TaskID:        taskID,
+			WorktreePath:  worktreePath,
+			StartPoint:    startPoint,
+			Start:         start,
+			DefaultBranch: defaultBranch,
+			FromFlag:      addFromFlag,
+			CopyIgnored:   copyIgnoredOverride(cmd, addCopyIgnoredFlag, addNoCopyIgnoredFlag),
+			MiseMode:      miseMode,
+			EnvStart:      envStart,
+			RefreshRoots:  func() { refreshRootsCache(fs, hub, hubPath) },
+		})
 		if err != nil {
 			// Check if it's a state error
 			if stateErr, ok := err.(*hop.StateError); ok {
@@ -287,101 +280,10 @@ will skip, each with its reason (built-in default, hop.add.copyIgnoredExclude,
 				output.Info("\nRun 'git hop doctor --fix' to resolve these issues")
 				os.Exit(1)
 			}
-			refuseAdd(err)
+			output.Fatal("%s", err.Error())
 		}
-
-		// The detector's add action: git flow start for a new git-flow
-		// branch, the opt-in hint when git-flow actions are off. An
-		// existing branch has nothing to start.
-		if gitflowStarts || !gitflow.StartsBranch(branchInfo) {
-			err := detectorMgr.ExecuteAdd(context.Background(), branchInfo, hubPath, worktreePath)
-			if err == nil && gitflowStarts {
-				err = checkGitflowStarted(g, worktreePath, branch)
-			}
-			if err != nil {
-				if gitflowStarts {
-					undoGitflowWorktree(fs, g, hubPath, worktreePath, branch)
-				}
-				output.Fatal("Branch type detector failed: %v", err)
-			}
-		}
-
-		// Seed the new worktree with the ignored local state (.env files,
-		// tool config, local caches) of the worktree it was forked from.
-		// Runs before the set-up below so any deps-managed path is still
-		// absent here and the symlink EnsureDeps creates lands on a clean
-		// name. Never fatal — see copyIgnoredIntoWorktree.
-		copyIgnoredIntoWorktree(fs, g, hub, hopspacePath, worktreePath, start,
-			globalConfig, config.NewGitConfig(),
-			copyIgnoredOverride(cmd, addCopyIgnoredFlag, addNoCopyIgnoredFlag))
-
-		// Trust the new worktree's mise config when its source's is
-		// trusted and the same (mise.local.toml may have just been
-		// copied), before the set-up and hooks below run mise. Never fatal.
-		trustWorktreeMise(execMise{}, miseMode, forkSource(fs, hub, start), worktreePath)
-
-		// Environment and shared deps before post-worktree-add, so the hook
-		// finds .env, the compose override and linked deps. Never fatal.
-		envTarget := services.EnvTarget{
-			Root:         worktreePath,
-			Branch:       branch,
-			HubPath:      hubPath,
-			HopspacePath: hopspacePath,
-			Hub:          hub.Config,
-		}
-		setup := services.SetUpWorktree(fs, d, envTarget, globalConfig)
-		var branchPorts *config.BranchPorts
-		if setup.Env != nil {
-			branchPorts = setup.Env.Ports
-		}
-
-		// Execute post-worktree-add hook
-		if _, err := hookRunner.ExecuteHookWithDetector("post-worktree-add", worktreePath, repoID, branch, detectorEnv); err != nil {
-			output.Warn("Hook post-worktree-add failed: %v", err)
-		}
-
-		// Register in Hopspace
-		if err := hopspace.RegisterBranch(hubPath, branch, worktreePath); err != nil {
-			output.Fatal("Failed to register branch in hopspace: %v", err)
-		}
-
-		// Add to Hub
-		if err := hub.AddBranch(branch, branch, worktreePath); err != nil {
-			output.Fatal("Failed to add branch to hub: %v", err)
-		}
-
-		// Record the comparison base when the worktree was forked from a
-		// non-default branch. status/list use this for accurate ahead/behind
-		// labels (default-branch forks fall through to the hub default).
-		// Skip "initial" (root commit, not a branch) and any input that
-		// doesn't resolve to a local or remote branch ref (raw SHA, tag).
-		if base := resolveBranchBase(g, worktreePath, startPoint, defaultBranch); base != "" {
-			if err := hub.SetBranchBase(branch, base); err != nil {
-				output.Warn("Failed to record branch base: %v", err)
-			}
-		}
-		recordAddTask(hub, branch, taskID)
-
-		recordAddedWorktree(fs, hub, repoID, hubPath, branch, worktreePath)
-
-		// Update current symlink to point to new worktree
-		if err := hop.UpdateCurrentSymlink(fs, hubPath, worktreePath); err != nil {
-			// Don't fail on symlink error, just warn
-			output.Warn("Failed to update current symlink: %v", err)
-		}
-
-		// The worktree set just grew. Restate it for the shell integration
-		// so a plain cd into the new worktree is detected -- without this
-		// the handler stays blind to it for the rest of the session.
-		refreshRootsCache(fs, hub, hubPath)
-
-		setup.PublishCreated(context.Background(), cli.EventBus, hubPath)
-
-		// Last, once the worktree is complete: a failed start only warns.
-		// The start is progress beside add's result, so it goes to stderr.
-		startTarget := envTarget
-		startTarget.Progress = os.Stderr
-		envStarted := envStart && services.StartNewWorktreeEnv(fs, startTarget, globalConfig, cli.EventBus)
+		worktreePath = created.Path
+		branchPorts, envStarted, branchExisted := created.Ports, created.EnvStarted, created.BranchExisted
 
 		if output.IsStructured() {
 			emitResult(cmd, newAddResult(g, hub, branch, worktreePath, !branchExisted, branchPorts, envStarted))
@@ -451,14 +353,9 @@ func init() {
 // explicitStartPoint is the start-point git flow start gets as its
 // [base]: the resolved one when --from named it, none otherwise (the
 // branch type picks its own).
-func explicitStartPoint(resolved string) string {
-	if addFromFlag == "" {
+func explicitStartPoint(fromFlag, resolved string) string {
+	if fromFlag == "" {
 		return ""
 	}
 	return resolved
-}
-
-// refuseAdd ends add the way a refused worktree creation does.
-func refuseAdd(err error) {
-	output.Fatal("Failed to create worktree: %v", err)
 }
