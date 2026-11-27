@@ -723,7 +723,7 @@ func collectMergedCandidates(fs afero.Fs, g git.GitInterface, hub *hop.Hub, hubP
 		case wt.Detached:
 			c.Skip, c.Reason = true, "detached HEAD; no branch to compare with the default branch"
 		default:
-			c.Target = resolveMergeTarget(g, absWorktree, hub.Config, config.HubBranch{}, override)
+			c.Target = resolveMergeTargetFor(g, absWorktree, hub.Config, config.HubBranch{}, override, wt.Branch)
 			if !inspectBranchSafety(g, absWorktree, wt.Branch, c.Target.Branch).Merged {
 				continue
 			}
