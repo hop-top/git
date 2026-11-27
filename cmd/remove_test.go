@@ -399,7 +399,7 @@ func TestUpdateCurrentToDefault(t *testing.T) {
 
 	// Simulate remove: call updateCurrentToDefault after removing feature
 	require.NoError(t, hub.RemoveBranch("feature"))
-	err = updateCurrentToDefault(fs, hub, hubPath)
+	err = updateCurrentToDefault(fs, hub, hubPath, nil)
 	require.NoError(t, err)
 
 	// current symlink must now point to main (relative path)
@@ -417,6 +417,6 @@ func TestUpdateCurrentToDefault_MissingDefault(t *testing.T) {
 	require.NoError(t, err)
 
 	// Don't add the default branch to the hub — simulate corrupt/empty state
-	err = updateCurrentToDefault(fs, hub, hubPath)
+	err = updateCurrentToDefault(fs, hub, hubPath, nil)
 	assert.ErrorContains(t, err, "main")
 }

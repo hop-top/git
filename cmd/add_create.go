@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/afero"
 	"hop.top/git/internal/cli"
@@ -221,4 +222,18 @@ func createHopWorktree(ctx context.Context, p addCreateParams) (addCreateResult,
 		EnvStarted:    envStarted,
 		EnvTarget:     envTarget,
 	}, nil
+}
+
+// expandAddWorktreePath is where add puts the worktree for branch, as the
+// pre-worktree-add hook is told before the worktree exists.
+func expandAddWorktreePath(hub *hop.Hub, hubPath, branch string, globalConfig *config.GlobalConfig) string {
+	ctx := hop.WorktreeLocationContext{
+		HubPath:  hubPath,
+		Branch:   branch,
+		Org:      hub.Config.Repo.Org,
+		Repo:     hub.Config.Repo.Repo,
+		DataHome: hop.GetGitHopDataHome(),
+		URI:      hub.Config.Repo.URI,
+	}
+	return filepath.Clean(hop.ExpandWorktreeLocation(globalConfig.Defaults.WorktreeLocation, ctx))
 }

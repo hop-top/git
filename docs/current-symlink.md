@@ -25,10 +25,25 @@ The `current` symlink updates automatically whenever you run:
 - `git hop clone <uri>` - Clone repository
 - `git hop init` - Initialize repository
 
-`git hop remove` points `current` at the default branch's worktree. When
-the default branch has no worktree (it exists only as `origin/<default>`),
-`remove` drops a `current` that pointed at the removed worktree rather than
-leave it dangling, and leaves any other `current` as it is.
+`git hop remove` points `current` at the default branch's worktree.
+
+When the default branch has no worktree (it exists only as a local branch
+without one, or as `origin/<default>`) and `current` pointed at the worktree
+being removed, `remove` creates the default branch's worktree, as
+`git hop add <default>` would, and points `current` at it. The branch comes
+from the local default branch, else `origin/<default>`; nothing is fetched.
+Everything `add` runs for a new worktree runs here too: hooks, ignored-file
+copying, mise trust, dependency and environment set-up, and the environment
+start when `hop.env.autoStart` is on.
+
+If the worktree cannot be created (the default branch exists neither locally
+nor on origin, its path is occupied, a hook fails), the removal still
+succeeds: `remove` warns with the reason and drops `current` rather than
+leave it dangling. A `current` that still resolves to another worktree is
+left as it is, and `remove` warns that the default branch is not in the hub.
+
+`git hop remove --dry-run` says `Would create worktree for default branch
+'<default>' and point 'current' at it` and creates nothing.
 
 ### A file or directory named `current`
 
@@ -187,7 +202,7 @@ hop.RemoveCurrentSymlink(fs, hubPath)
 | `git hop init` | ✅ Yes |
 | `git hop list` | ❌ No |
 | `git hop status` | ❌ No |
-| `git hop remove` | ❌ No |
+| `git hop remove` | ✅ Yes, to the default branch's worktree (created if missing) |
 | `git hop prune` | ❌ No |
 | `git hop doctor` | ❌ No |
 | `git hop env` | ❌ No |
